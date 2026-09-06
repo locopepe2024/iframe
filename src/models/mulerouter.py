@@ -116,8 +116,6 @@ def _use_cli_backend() -> bool:
     """Determine whether to use CLI or HTTP API backend.
 
     MuleRouter/MuleRun can be disabled explicitly for server deployments.
-    """
-
     Priority: MULEROUTER_API_KEY (HTTP) > CLI fallback.
     CLI is used only when no API key is configured and mulerun is logged in.
     """
