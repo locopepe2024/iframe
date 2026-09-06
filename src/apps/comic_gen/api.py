@@ -3947,6 +3947,7 @@ def get_env_config():
             "OSS_ENDPOINT": os.getenv("OSS_ENDPOINT", ""),
             "OSS_BASE_PATH": os.getenv("OSS_BASE_PATH", ""),
             "OSS_ENABLE": is_oss_enabled(),
+            "MANAGED_COS_CONFIGURED": bool(os.getenv("MANAGED_STORAGE_BASE_URL") and os.getenv("MANAGED_STORAGE_SERVICE_TOKEN")),
             "MULERUN_CLI_LOGGED_IN": _check_mulerun_cli_status(),
             "KLING_PROVIDER_MODE": _normalize_provider_mode(os.getenv("KLING_PROVIDER_MODE")),
             "VIDU_PROVIDER_MODE": _normalize_provider_mode(os.getenv("VIDU_PROVIDER_MODE")),

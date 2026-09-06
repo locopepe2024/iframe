@@ -92,6 +92,7 @@ export interface EnvConfigPayload {
     OSS_ENDPOINT?: string;
     OSS_BASE_PATH?: string;
     OSS_ENABLE?: boolean;
+    MANAGED_COS_CONFIGURED?: boolean;
     KLING_PROVIDER_MODE?: ProviderMode;
     VIDU_PROVIDER_MODE?: ProviderMode;
     PIXVERSE_PROVIDER_MODE?: ProviderMode;
