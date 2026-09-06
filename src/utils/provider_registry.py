@@ -246,6 +246,7 @@ def get_default_provider_registry() -> ProviderRegistry:
         families.extend([
             ProviderFamilyConfig(model_family="uniart/gpt-image-", backend_default="uniart", supported_modalities=("t2i", "i2i", "image"), credential_sources={"uniart": ("UNIART_API_KEY", "OPENAI_API_KEY")}),
             ProviderFamilyConfig(model_family="uniart/seedance-", backend_default="uniart", supported_modalities=("t2v", "i2v", "r2v"), credential_sources={"uniart": ("UNIART_API_KEY", "OPENAI_API_KEY")}),
+            ProviderFamilyConfig(model_family="uniart/minimax-h3-", backend_default="uniart", supported_modalities=("t2v", "i2v", "r2v"), credential_sources={"uniart": ("UNIART_API_KEY", "OPENAI_API_KEY")}),
         ])
         return ProviderRegistry(families)
     except Exception:

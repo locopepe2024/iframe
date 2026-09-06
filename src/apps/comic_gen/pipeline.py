@@ -3275,7 +3275,7 @@ class ComicGenPipeline:
                 or model_name_lower.startswith("viduq3")
                 or model_name_lower.startswith("vidu/vidu")
             )
-            use_uniart = backend == "uniart" and model_name_lower.startswith("uniart/seedance-")
+            use_uniart = backend == "uniart" and (model_name_lower.startswith("uniart/seedance-") or model_name_lower.startswith("uniart/minimax-h3-"))
             use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
             if use_uniart:

@@ -19,6 +19,7 @@
       "seedance-2.0-r2v": "seedance/seedance-2.0-video#r2v",
       "seedance-2.0-t2v": "seedance/seedance-2.0-video#t2v",
       "uniart/gpt-image-2": "uniart/uniart/gpt-image-2#image",
+      "uniart/minimax-h3-vip": "uniart/uniart/minimax-h3-vip#i2v",
       "uniart/seedance-2.5-vip": "uniart/uniart/seedance-2.5-vip#i2v",
       "viduq3-pro-i2v": "vidu/viduq3-pro-video#i2v",
       "viduq3-pro-r2v": "vidu/viduq3-pro-video#r2v",
@@ -353,6 +354,7 @@
       "family": "uniart",
       "models": [
         "uniart/gpt-image-2",
+        "uniart/minimax-h3-vip",
         "uniart/seedance-2.5-vip"
       ],
       "provider": "uniart",
@@ -1244,6 +1246,68 @@
       "runtime": {
         "uniart": {
           "api_model_id": "gpt-image-2",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      }
+    },
+    "uniart/uniart/minimax-h3-vip": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Minimax H3 video generation through the UniArt gateway",
+      "display_name": "UniArt Minimax H3 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/minimax-h3"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/minimax-h3-vip",
+      "legacy_model_ids": [
+        "uniart/minimax-h3-vip"
+      ],
+      "modes": [
+        "uniart/uniart/minimax-h3-vip#i2v"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "minimax-h3-vip",
           "gateway": "uniart"
         }
       },
@@ -3788,6 +3852,95 @@
         "visible_in": [
           "project_settings",
           "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/minimax-h3-vip": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Minimax H3 video generation through the UniArt gateway",
+      "display_name": "UniArt Minimax H3 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/minimax-h3"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/minimax-h3-vip",
+      "inputs": {},
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556,
+            61,
+            243,
+            184
+          ]
+        },
+        "resolution": {
+          "default": "2k",
+          "options": [
+            "720p",
+            "2k"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 25,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
           "global_settings"
         ]
       }
@@ -7142,6 +7295,104 @@
         "visible_in": [
           "project_settings",
           "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/uniart/minimax-h3-vip#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Minimax H3 video generation through the UniArt gateway",
+      "display_name": "UniArt Minimax H3 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/minimax-h3"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/minimax-h3-vip#i2v",
+      "inputs": {},
+      "legacy_model_id": "uniart/minimax-h3-vip",
+      "mode": "i2v",
+      "model_line_id": "uniart/uniart/minimax-h3-vip",
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556,
+            61,
+            243,
+            184
+          ]
+        },
+        "resolution": {
+          "default": "2k",
+          "options": [
+            "720p",
+            "2k"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "minimax-h3-vip",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 25,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
           "global_settings"
         ]
       }

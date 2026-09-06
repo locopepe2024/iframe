@@ -280,7 +280,7 @@ class PlaygroundService:
             out_path = os.path.join(VIDEO_OUTPUT_DIR, out_filename)
 
             try:
-                if model_lower.startswith("seedance"):
+                if model_lower.startswith("seedance") or model_lower.startswith("uniart/seedance") or model_lower.startswith("minimax") or model_lower.startswith("uniart/minimax"):
                     self._generate_video_mulerouter(gen, out_path)
                 elif model_lower.startswith("kling"):
                     self._generate_video_kling(gen, out_path)
