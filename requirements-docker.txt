@@ -21,3 +21,4 @@ alibabacloud-videoenhan20200320>=1.0.0
 alibabacloud-tea-openapi>=0.3.0
 alibabacloud-tea-util>=0.3.0
 oss2>=2.18.0
+cos-python-sdk-v5>=1.9.30

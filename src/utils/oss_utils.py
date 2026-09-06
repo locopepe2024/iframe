@@ -9,6 +9,15 @@ from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJE
 
 logger = get_logger(__name__)
 
+# Canvas-compatible Tencent COS is the managed default. Alibaba OSS remains
+# available as an explicit fallback for user-owned storage.
+try:
+    from .cos_storage import COSImageUploader, is_cos_configured
+except Exception:  # pragma: no cover
+    COSImageUploader = None
+    def is_cos_configured() -> bool:
+        return False
+
 # Default configuration
 DEFAULT_OSS_BASE_PATH = "lumenx"
 SIGN_URL_EXPIRES_DISPLAY = 7200  # 2 hours for frontend display
@@ -17,6 +26,8 @@ SIGN_URL_EXPIRES_API = 1800      # 30 minutes for AI API calls
 
 def is_oss_configured() -> bool:
     """Check if OSS is properly configured."""
+    if is_cos_configured():
+        return True
     required = [
         os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"),
         os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
@@ -76,6 +87,8 @@ class OSSImageUploader:
     _instance = None
     
     def __new__(cls):
+        if is_cos_configured() and COSImageUploader is not None:
+            return COSImageUploader()
         """Singleton pattern to reuse OSS connection."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -124,6 +137,8 @@ class OSSImageUploader:
     def reset_instance(cls):
         """Reset singleton instance (useful when credentials change)."""
         cls._instance = None
+        if COSImageUploader is not None:
+            COSImageUploader.reset_instance()
     
     @property
     def is_configured(self) -> bool:
