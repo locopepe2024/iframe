@@ -224,6 +224,7 @@ class PlaygroundService:
             "seed": params.get("seed"),
             "prompt_extend": params.get("prompt_extend", True),
             "watermark": params.get("watermark", False),
+            "model": gen.model_id,
         }
 
         # i2i: attach reference images from input_media
@@ -240,9 +241,11 @@ class PlaygroundService:
     def _generate_image_mulerouter(self, gen: PlaygroundGeneration, out_path: str, _idx: int) -> None:
         """Delegate to :class:`MuleRouterImageModel` (GPT-Image-2)."""
         from ...models.mulerouter import MuleRouterImageModel
+        from ...models.uniart import UniArtImageModel
 
         if self._mulerouter_image_model is None:
-            self._mulerouter_image_model = MuleRouterImageModel({})
+            use_uniart = "uniart.fun" in (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "")
+            self._mulerouter_image_model = UniArtImageModel({}) if use_uniart else MuleRouterImageModel({})
 
         params = gen.parameters
         kwargs = {
@@ -258,6 +261,7 @@ class PlaygroundService:
         self._mulerouter_image_model.generate(
             prompt=gen.prompt,
             output_path=out_path,
+            model_name=gen.model_id,
             **kwargs,
         )
 
@@ -346,9 +350,11 @@ class PlaygroundService:
     def _generate_video_mulerouter(self, gen: PlaygroundGeneration, out_path: str) -> None:
         """Delegate to :class:`MuleRouterVideoModel` (Seedance 2.0)."""
         from ...models.mulerouter import MuleRouterVideoModel
+        from ...models.uniart import UniArtVideoModel
 
         if self._mulerouter_video_model is None:
-            self._mulerouter_video_model = MuleRouterVideoModel({})
+            use_uniart = "uniart.fun" in (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "")
+            self._mulerouter_video_model = UniArtVideoModel({}) if use_uniart else MuleRouterVideoModel({})
 
         params = gen.parameters
         img_path, img_url = self._resolve_first_input_media(gen)
