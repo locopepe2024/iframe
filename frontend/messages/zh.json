@@ -702,7 +702,7 @@
     "configSaveFailed": "保存配置失败，请重试。",
     "configLoadFailed": "加载配置失败。后端是否正在运行？",
     "requiredFields": "请填写必填字段：",
-    "requiredHint": "在使用应用前需要 DashScope API Key。OSS 和供应商密钥是可选的，除非您选择供应商直连模式。",
+    "requiredHint": "使用应用前需要 UniArt/OpenAI 兼容 API Key；当前已配置 UniArt。OSS 和供应商密钥是可选的。",
     "cannotClose": "在必填字段有效之前，此对话框不能关闭。",
     "ossLocalFirst": "默认使用本地存储。OSS 凭证可选，仅作为云端镜像使用。",
     "ossMirror": "OSS 镜像（可选）",

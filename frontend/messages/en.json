@@ -702,7 +702,7 @@
     "configSaveFailed": "Failed to save configuration. Please try again.",
     "configLoadFailed": "Failed to load configuration. Is the backend running?",
     "requiredFields": "Please fill in required fields:",
-    "requiredHint": "DashScope API Key is required before using the app. OSS and vendor keys are optional unless you select vendor-direct mode.",
+    "requiredHint": "A UniArt/OpenAI-compatible API key is required. OSS and vendor keys are optional.",
     "cannotClose": "This dialog cannot be closed until required fields are valid.",
     "ossLocalFirst": "Storage is local-first by default. OSS credentials are optional and only used as a cloud mirror.",
     "ossMirror": "OSS Mirror (Optional)",
