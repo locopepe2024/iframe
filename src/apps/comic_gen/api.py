@@ -3884,6 +3884,8 @@ SECRET_FIELDS = {
     "KLING_SECRET_KEY",
     "VIDU_API_KEY",
     "MULEROUTER_API_KEY",
+    "OPENAI_API_KEY",
+    "UNIART_API_KEY",
 }
 
 # Bullet sentinel: never appears in a real key, so the save path can detect an
