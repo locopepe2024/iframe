@@ -102,6 +102,7 @@ class ComicGenPipeline:
         self._kling_model = None
         self._vidu_model = None
         self._mulerouter_video_model = None
+        self._uniart_video_model = None
 
         # Pre-download Demucs model in background so first dub request is fast
         self._demucs_ready = threading.Event()
@@ -3274,11 +3275,19 @@ class ComicGenPipeline:
                 or model_name_lower.startswith("viduq3")
                 or model_name_lower.startswith("vidu/vidu")
             )
-            use_mulerouter = backend == "mulerouter" and (
-                model_name_lower.startswith("seedance")
-            )
+            use_uniart = backend == "uniart" and model_name_lower.startswith("uniart/seedance-")
+            use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
-            if use_mulerouter:
+            if use_uniart:
+                if self._uniart_video_model is None:
+                    from ...models.uniart import UniArtVideoModel
+                    self._uniart_video_model = UniArtVideoModel({})
+                video_path, _ = self._uniart_video_model.generate(
+                    prompt=task.prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
+                    model=task.model, generation_mode=task.generation_mode,
+                )
+            elif use_mulerouter:
                 if self._mulerouter_video_model is None:
                     from ...models.mulerouter import MuleRouterVideoModel
                     self._mulerouter_video_model = MuleRouterVideoModel({})

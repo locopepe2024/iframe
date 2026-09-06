@@ -51,10 +51,16 @@ class AssetGenerator:
         self.config = config or {}
         self.model = WanxImageModel(self.config.get('model', {}))
         self._mulerouter_image_model = None
+        self._uniart_image_model = None
         self.output_dir = self.config.get('output_dir', 'output/assets')
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
+        if model_name and model_name.startswith("uniart/gpt-image-"):
+            if self._uniart_image_model is None:
+                from ...models.uniart import UniArtImageModel
+                self._uniart_image_model = UniArtImageModel({})
+            return self._uniart_image_model
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel

@@ -242,7 +242,12 @@ DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
 def get_default_provider_registry() -> ProviderRegistry:
     try:
         catalog = load_generated_model_catalog()
-        return ProviderRegistry(build_provider_family_configs(catalog))
+        families = list(build_provider_family_configs(catalog))
+        families.extend([
+            ProviderFamilyConfig(model_family="uniart/gpt-image-", backend_default="uniart", supported_modalities=("t2i", "i2i", "image"), credential_sources={"uniart": ("UNIART_API_KEY", "OPENAI_API_KEY")}),
+            ProviderFamilyConfig(model_family="uniart/seedance-", backend_default="uniart", supported_modalities=("t2v", "i2v", "r2v"), credential_sources={"uniart": ("UNIART_API_KEY", "OPENAI_API_KEY")}),
+        ])
+        return ProviderRegistry(families)
     except Exception:
         return ProviderRegistry(DEFAULT_PROVIDER_FAMILIES)
 
