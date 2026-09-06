@@ -16,6 +16,7 @@ type EnvConfig = EnvConfigPayload & {
   DASHSCOPE_API_KEY: string;
   OPENAI_API_KEY?: string;
   UNIART_API_KEY?: string;
+  UNIART_BASE_URL?: string;
   LLM_PROVIDER?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
@@ -36,9 +37,7 @@ type EnvConfig = EnvConfigPayload & {
 };
 
 const ENDPOINT_PROVIDERS = [
-  { key: "DASHSCOPE_BASE_URL", label: "DashScope", placeholder: "https://dashscope.aliyuncs.com" },
-  { key: "KLING_BASE_URL", label: "Kling", placeholder: "https://api-beijing.klingai.com/v1" },
-  { key: "VIDU_BASE_URL", label: "Vidu", placeholder: "https://api.vidu.cn/ent/v2" },
+  { key: "UNIART_BASE_URL", label: "UniArt", placeholder: "https://uniart.fun/v1" },
   { key: "MULEROUTER_BASE_URL", label: "MuleRouter", placeholder: "https://api.mulerouter.ai" },
 ];
 
@@ -231,14 +230,14 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
               <>
                 <div>
                   <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                    <span>DashScope API Key <span className="text-red-500">*</span></span>
+                    <span>UniArt API Key <span className="text-red-500">*</span></span>
                     <span className="text-text-muted font-normal text-xs">e.g. sk-xxx</span>
                   </label>
                   <input
                     type="password"
-                    value={config.DASHSCOPE_API_KEY}
-                    onChange={(e) => handleChange("DASHSCOPE_API_KEY", e.target.value)}
-                    placeholder="Required for DashScope-first model routing"
+                    value={config.OPENAI_API_KEY || config.UNIART_API_KEY || ""}
+                    onChange={(e) => handleChange("OPENAI_API_KEY", e.target.value)}
+                    placeholder="Required for UniArt model routing"
                     className={inputClass}
                   />
                 </div>
@@ -335,107 +334,6 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-glass-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-foreground">Kling Provider</h3>
-                    <span className="text-[0.625rem] text-text-muted">{t("chooseProvider")}</span>
-                  </div>
-                  <div className="bg-glass border border-glass-border rounded-lg p-4 space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleChange("KLING_PROVIDER_MODE", "dashscope")}
-                        className={modeButtonClass(config.KLING_PROVIDER_MODE === "dashscope")}
-                      >
-                        DashScope
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleChange("KLING_PROVIDER_MODE", "vendor")}
-                        className={modeButtonClass(config.KLING_PROVIDER_MODE === "vendor")}
-                      >
-                        Vendor Direct
-                      </button>
-                    </div>
-                    <p className="text-xs text-text-muted">
-                      {t("dashscopeMode")} {t("vendorMode")}
-                    </p>
-
-                    {config.KLING_PROVIDER_MODE === "vendor" && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-foreground mb-2">
-                            Kling Access Key <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="password"
-                            value={config.KLING_ACCESS_KEY}
-                            onChange={(e) => handleChange("KLING_ACCESS_KEY", e.target.value)}
-                            placeholder="Kling API Access Key"
-                            className={inputClass}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-foreground mb-2">
-                            Kling Secret Key <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="password"
-                            value={config.KLING_SECRET_KEY}
-                            onChange={(e) => handleChange("KLING_SECRET_KEY", e.target.value)}
-                            placeholder="Kling API Secret Key"
-                            className={inputClass}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-glass-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-foreground">Vidu Provider</h3>
-                    <span className="text-[0.625rem] text-text-muted">{t("chooseProvider")}</span>
-                  </div>
-                  <div className="bg-input-bg border border-glass-border rounded-lg p-4 space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleChange("VIDU_PROVIDER_MODE", "dashscope")}
-                        className={modeButtonClass(config.VIDU_PROVIDER_MODE === "dashscope")}
-                      >
-                        DashScope
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleChange("VIDU_PROVIDER_MODE", "vendor")}
-                        className={modeButtonClass(config.VIDU_PROVIDER_MODE === "vendor")}
-                      >
-                        Vendor Direct
-                      </button>
-                    </div>
-                    <p className="text-xs text-text-muted">
-                      {t("dashscopeMode")} {t("vendorMode")}
-                    </p>
-
-                    {config.VIDU_PROVIDER_MODE === "vendor" && (
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          Vidu API Key <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="password"
-                          value={config.VIDU_API_KEY}
-                          onChange={(e) => handleChange("VIDU_API_KEY", e.target.value)}
-                          placeholder="Vidu API Key"
-                          className={inputClass}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {/* MuleRun / MuleRouter */}
                 <div className="space-y-3 pt-4 border-t border-glass-border">
                   <h4 className="text-sm font-medium text-text-secondary">MuleRun / MuleRouter</h4>
@@ -503,7 +401,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
                           </label>
                           <input
                             type="text"
-                            value={config.endpoint_overrides[key] || ""}
+                            value={config.endpoint_overrides[key] || (key === "UNIART_BASE_URL" ? config.OPENAI_BASE_URL || "" : "")}
                             onChange={(e) => handleEndpointChange(key, e.target.value)}
                             placeholder={placeholder}
                             className={inputClass + " text-sm"}
