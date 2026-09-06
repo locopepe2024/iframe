@@ -1,0 +1,39 @@
+family: uniart
+ display_name: "UniArt Gateway"
+provider: uniart
+routing_prefixes:
+  - uniart/gpt-image-
+  - uniart/seedance-
+supported_backends: [uniart]
+default_backend: uniart
+credential_sources:
+  uniart: [UNIART_API_KEY, OPENAI_API_KEY]
+supported_modalities: [t2i, i2i, t2v, i2v, r2v]
+docs:
+  official_snapshot_ids: [uniart/models/2026-09-07]
+models:
+  - id: uniart/gpt-image-2
+    display_name: UniArt GPT Image 2
+    description: GPT Image 2 through the UniArt gateway
+    status: active
+    release_stage: stable
+    capabilities: [t2i, i2i]
+    docs: {context_hub_doc_ids: [uniart/gpt-image-2]}
+    runtime: {uniart: {gateway: uniart, api_model_id: gpt-image-2}}
+    ui: {selection_group: image, visible_in: [project_settings, series_settings, global_settings], order: 20, recommended: true, badges: [UniArt]}
+    params:
+      size: {options: [1024x1024, 1536x1024, 1024x1536], default: 1024x1024}
+      quality: {options: [low, medium, high], default: high}
+  - id: uniart/seedance-2.5-vip
+    display_name: UniArt Seedance 2.5 VIP
+    description: Seedance 2.5 video generation through the UniArt gateway
+    status: active
+    release_stage: stable
+    capabilities: [t2v, i2v, r2v]
+    docs: {context_hub_doc_ids: [uniart/seedance-2.5]}
+    runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.5-vip}}
+    ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 20, recommended: true, badges: [UniArt]}
+    duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
+    params:
+      resolution: {options: [480p, 720p], default: 720p}
+      ratio: {options: [16:9, 9:16], default: 16:9}
