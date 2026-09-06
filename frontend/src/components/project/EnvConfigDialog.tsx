@@ -14,6 +14,11 @@ interface EnvConfigDialogProps {
 
 type EnvConfig = EnvConfigPayload & {
   DASHSCOPE_API_KEY: string;
+  OPENAI_API_KEY?: string;
+  UNIART_API_KEY?: string;
+  LLM_PROVIDER?: string;
+  OPENAI_BASE_URL?: string;
+  OPENAI_MODEL?: string;
   ALIBABA_CLOUD_ACCESS_KEY_ID: string;
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: string;
   OSS_BUCKET_NAME: string;
@@ -68,8 +73,10 @@ const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvCo
 const getValidationErrors = (env: EnvConfig): string[] => {
   const errors: string[] = [];
 
-  if (!env.DASHSCOPE_API_KEY?.trim()) {
-    errors.push("DashScope API Key");
+  const configured = env.secrets_configured || {};
+  const hasOpenAICompatible = Boolean(env.OPENAI_API_KEY?.trim() || env.UNIART_API_KEY?.trim() || configured.OPENAI_API_KEY || configured.UNIART_API_KEY);
+  if (env.LLM_PROVIDER === "openai" ? !hasOpenAICompatible : !env.DASHSCOPE_API_KEY?.trim()) {
+    errors.push(env.LLM_PROVIDER === "openai" ? "UniArt/OpenAI API Key" : "DashScope API Key");
   }
   if (env.KLING_PROVIDER_MODE === "vendor") {
     if (!env.KLING_ACCESS_KEY?.trim()) {

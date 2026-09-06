@@ -22,7 +22,11 @@ export default function EnvConfigChecker() {
       const config = await api.getEnvConfig();
       // 空值和空字符串都视为未配置
       const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
-      const hasRequired = dashscopeKey && dashscopeKey.length > 0;
+      const openaiKey = config.OPENAI_API_KEY?.trim();
+      const uniartKey = config.UNIART_API_KEY?.trim();
+      const configured = config.secrets_configured || {};
+      const hasOpenAICompatible = Boolean(openaiKey || uniartKey || configured.OPENAI_API_KEY || configured.UNIART_API_KEY);
+      const hasRequired = config.LLM_PROVIDER === "openai" ? hasOpenAICompatible : Boolean(dashscopeKey);
       
       if (!hasRequired) {
         setEnvRequired(true);

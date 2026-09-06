@@ -3929,6 +3929,11 @@ def get_env_config():
         return {
             # Masked secrets — never plaintext.
             "DASHSCOPE_API_KEY": _mask_secret(os.getenv("DASHSCOPE_API_KEY")),
+            "OPENAI_API_KEY": _mask_secret(os.getenv("OPENAI_API_KEY")),
+            "UNIART_API_KEY": _mask_secret(os.getenv("UNIART_API_KEY")),
+            "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "dashscope"),
+            "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", ""),
+            "OPENAI_MODEL": os.getenv("OPENAI_MODEL", ""),
             "ALIBABA_CLOUD_ACCESS_KEY_ID": _mask_secret(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")),
             "ALIBABA_CLOUD_ACCESS_KEY_SECRET": _mask_secret(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
             "KLING_ACCESS_KEY": _mask_secret(os.getenv("KLING_ACCESS_KEY")),

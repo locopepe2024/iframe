@@ -81,6 +81,11 @@ export interface CustomVoice {
 
 export interface EnvConfigPayload {
     DASHSCOPE_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    UNIART_API_KEY?: string;
+    LLM_PROVIDER?: string;
+    OPENAI_BASE_URL?: string;
+    OPENAI_MODEL?: string;
     ALIBABA_CLOUD_ACCESS_KEY_ID?: string;
     ALIBABA_CLOUD_ACCESS_KEY_SECRET?: string;
     OSS_BUCKET_NAME?: string;
