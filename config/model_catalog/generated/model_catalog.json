@@ -18,6 +18,8 @@
       "seedance-2.0-i2v": "seedance/seedance-2.0-video#i2v",
       "seedance-2.0-r2v": "seedance/seedance-2.0-video#r2v",
       "seedance-2.0-t2v": "seedance/seedance-2.0-video#t2v",
+      "uniart/gpt-image-2": "uniart/uniart/gpt-image-2#image",
+      "uniart/seedance-2.5-vip": "uniart/uniart/seedance-2.5-vip#i2v",
       "viduq3-pro-i2v": "vidu/viduq3-pro-video#i2v",
       "viduq3-pro-r2v": "vidu/viduq3-pro-video#r2v",
       "viduq3-turbo-i2v": "vidu/viduq3-turbo-video#i2v",
@@ -330,6 +332,53 @@
         },
         "reference_video_input_mode": {
           "mulerouter": "mulerouter_video_url"
+        }
+      }
+    },
+    "uniart": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "display_name": "UniArt Gateway",
+      "docs": {
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "models": [
+        "uniart/gpt-image-2",
+        "uniart/seedance-2.5-vip"
+      ],
+      "provider": "uniart",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
         }
       }
     },
@@ -1156,6 +1205,130 @@
         },
         "reference_video_input_mode": {
           "mulerouter": "mulerouter_video_url"
+        }
+      }
+    },
+    "uniart/uniart/gpt-image-2": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2 through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/gpt-image-2",
+      "legacy_model_ids": [
+        "uniart/gpt-image-2"
+      ],
+      "modes": [
+        "uniart/uniart/gpt-image-2#image"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "gpt-image-2",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      }
+    },
+    "uniart/uniart/seedance-2.5-vip": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.5-vip",
+      "legacy_model_ids": [
+        "uniart/seedance-2.5-vip"
+      ],
+      "modes": [
+        "uniart/uniart/seedance-2.5-vip#i2v"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.5-vip",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
         }
       }
     },
@@ -3531,6 +3704,172 @@
         "order": 85,
         "recommended": false,
         "selection_group": "t2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/gpt-image-2": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i",
+        "i2i"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2 through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": null,
+      "family": "uniart",
+      "id": "uniart/gpt-image-2",
+      "inputs": {},
+      "params": {
+        "quality": {
+          "default": "high",
+          "options": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "size": {
+          "default": "1024x1024",
+          "options": [
+            "1024x1024",
+            "1536x1024",
+            "1024x1536"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 20,
+        "recommended": true,
+        "selection_group": "image",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/seedance-2.5-vip": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/seedance-2.5-vip",
+      "inputs": {},
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 20,
+        "recommended": true,
+        "selection_group": "i2v",
         "visible_in": [
           "project_settings",
           "series_settings",
@@ -6710,6 +7049,190 @@
         "order": 85,
         "recommended": false,
         "selection_group": "t2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/uniart/gpt-image-2#image": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i",
+        "i2i"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2 through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": null,
+      "family": "uniart",
+      "id": "uniart/uniart/gpt-image-2#image",
+      "inputs": {},
+      "legacy_model_id": "uniart/gpt-image-2",
+      "mode": "image",
+      "model_line_id": "uniart/uniart/gpt-image-2",
+      "params": {
+        "quality": {
+          "default": "high",
+          "options": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "size": {
+          "default": "1024x1024",
+          "options": [
+            "1024x1024",
+            "1536x1024",
+            "1024x1536"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "gpt-image-2",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 20,
+        "recommended": true,
+        "selection_group": "image",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/uniart/seedance-2.5-vip#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.5-vip#i2v",
+      "inputs": {},
+      "legacy_model_id": "uniart/seedance-2.5-vip",
+      "mode": "i2v",
+      "model_line_id": "uniart/uniart/seedance-2.5-vip",
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.5-vip",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 20,
+        "recommended": true,
+        "selection_group": "i2v",
         "visible_in": [
           "project_settings",
           "series_settings",

@@ -1,5 +1,5 @@
 family: uniart
- display_name: "UniArt Gateway"
+display_name: "UniArt Gateway"
 provider: uniart
 routing_prefixes:
   - uniart/gpt-image-
@@ -9,6 +9,10 @@ default_backend: uniart
 credential_sources:
   uniart: [UNIART_API_KEY, OPENAI_API_KEY]
 supported_modalities: [t2i, i2i, t2v, i2v, r2v]
+transport:
+  image_input_mode: {uniart: uniart_base64_image}
+  audio_input_mode: {uniart: uniart_audio_url}
+  reference_video_input_mode: {uniart: uniart_video_url}
 docs:
   official_snapshot_ids: [uniart/models/2026-09-07]
 models:
