@@ -55,3 +55,30 @@ models:
     params:
       resolution: {options: [720p, 2k], default: 2k}
       ratio: {options: [16:9, 9:16, 1:1, 4:3, 3:4], default: 16:9}
+
+  - id: uniart/seedance-2.0-vip
+    display_name: UniArt Seedance 2.0 VIP
+    description: Seedance 2.0 video generation through the UniArt gateway
+    status: active
+    release_stage: stable
+    capabilities: [t2v, i2v, r2v]
+    docs: {context_hub_doc_ids: [uniart/seedance-2.0]}
+    runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.0-vip}}
+    ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 30, badges: [UniArt]}
+    duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
+    params:
+      resolution: {options: [480p, 720p, 1080p], default: 720p}
+      ratio: {options: [16:9, 9:16, 1:1, 4:3, 3:4], default: 16:9}
+  - id: uniart/seedance-2.5-special
+    display_name: UniArt Seedance 2.5 Special
+    description: Seedance 2.5 video generation through the UniArt gateway
+    status: active
+    release_stage: stable
+    capabilities: [t2v, i2v, r2v]
+    docs: {context_hub_doc_ids: [uniart/seedance-2.5]}
+    runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.5-special}}
+    ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 35, badges: [UniArt]}
+    duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
+    params:
+      resolution: {options: [480p, 720p], default: 720p}
+      ratio: {options: [16:9, 9:16], default: 16:9}

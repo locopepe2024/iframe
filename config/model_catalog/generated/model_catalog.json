@@ -20,6 +20,8 @@
       "seedance-2.0-t2v": "seedance/seedance-2.0-video#t2v",
       "uniart/gpt-image-2": "uniart/uniart/gpt-image-2#image",
       "uniart/minimax-h3-vip": "uniart/uniart/minimax-h3-vip#i2v",
+      "uniart/seedance-2.0-vip": "uniart/uniart/seedance-2.0-vip#i2v",
+      "uniart/seedance-2.5-special": "uniart/uniart/seedance-2.5-special#i2v",
       "uniart/seedance-2.5-vip": "uniart/uniart/seedance-2.5-vip#i2v",
       "viduq3-pro-i2v": "vidu/viduq3-pro-video#i2v",
       "viduq3-pro-r2v": "vidu/viduq3-pro-video#r2v",
@@ -355,6 +357,8 @@
       "models": [
         "uniart/gpt-image-2",
         "uniart/minimax-h3-vip",
+        "uniart/seedance-2.0-vip",
+        "uniart/seedance-2.5-special",
         "uniart/seedance-2.5-vip"
       ],
       "provider": "uniart",
@@ -708,7 +712,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -777,7 +781,7 @@
           "gateway": "kling"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -841,7 +845,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -954,7 +958,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -1013,7 +1017,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -1071,7 +1075,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -1128,7 +1132,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -1334,6 +1338,130 @@
         }
       }
     },
+    "uniart/uniart/seedance-2.0-vip": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.0 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.0 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.0"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.0-vip",
+      "legacy_model_ids": [
+        "uniart/seedance-2.0-vip"
+      ],
+      "modes": [
+        "uniart/uniart/seedance-2.0-vip#i2v"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.0-vip",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      }
+    },
+    "uniart/uniart/seedance-2.5-special": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 Special",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.5-special",
+      "legacy_model_ids": [
+        "uniart/seedance-2.5-special"
+      ],
+      "modes": [
+        "uniart/uniart/seedance-2.5-special#i2v"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.5-special",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      }
+    },
     "uniart/uniart/seedance-2.5-vip": {
       "backend_env_key": null,
       "credential_sources": {
@@ -1442,7 +1570,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -1513,7 +1641,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -2222,7 +2350,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -2285,7 +2413,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -2353,7 +2481,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -2585,7 +2713,7 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -2667,7 +2795,7 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -2837,7 +2965,7 @@
         "kling-",
         "kling/kling-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -2940,7 +3068,7 @@
         "kling-",
         "kling/kling-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -3030,7 +3158,7 @@
         "pixverse-",
         "pixverse/pixverse-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3113,7 +3241,7 @@
         "pixverse-",
         "pixverse/pixverse-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3251,7 +3379,7 @@
         "pixverse-",
         "pixverse/pixverse-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3344,7 +3472,7 @@
         "pixverse-",
         "pixverse/pixverse-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3422,7 +3550,7 @@
       "routing_prefixes": [
         "qwen-image-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3497,7 +3625,7 @@
       "routing_prefixes": [
         "qwen-image-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -3945,6 +4073,182 @@
         ]
       }
     },
+    "uniart/seedance-2.0-vip": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.0 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.0 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.0"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/seedance-2.0-vip",
+      "inputs": {},
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556,
+            61,
+            243,
+            184
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 30,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/seedance-2.5-special": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 Special",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/seedance-2.5-special",
+      "inputs": {},
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 35,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
     "uniart/seedance-2.5-vip": {
       "backend_env_key": null,
       "capabilities": [
@@ -4101,7 +4405,7 @@
         "vidu",
         "vidu/vidu"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -4195,7 +4499,7 @@
         "vidu",
         "vidu/vidu"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -4297,7 +4601,7 @@
         "vidu",
         "vidu/vidu"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -4389,7 +4693,7 @@
         "vidu",
         "vidu/vidu"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -5273,7 +5577,7 @@
         "wan2.6-",
         "wan2.7-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -5360,7 +5664,7 @@
         "wan2.6-",
         "wan2.7-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -5444,7 +5748,7 @@
         "wan2.6-",
         "wan2.7-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -5530,7 +5834,7 @@
         "wan2.6-",
         "wan2.7-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -5972,7 +6276,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6062,7 +6366,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6177,7 +6481,7 @@
           "gateway": "kling"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -6292,7 +6596,7 @@
           "gateway": "kling"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -6391,7 +6695,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6483,7 +6787,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6634,7 +6938,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6736,7 +7040,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6823,7 +7127,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -6907,7 +7211,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -7397,6 +7701,200 @@
         ]
       }
     },
+    "uniart/uniart/seedance-2.0-vip#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.0 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.0 VIP",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.0"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.0-vip#i2v",
+      "inputs": {},
+      "legacy_model_id": "uniart/seedance-2.0-vip",
+      "mode": "i2v",
+      "model_line_id": "uniart/uniart/seedance-2.0-vip",
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556,
+            61,
+            243,
+            184
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.0-vip",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 30,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/uniart/seedance-2.5-special#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "Seedance 2.5 video generation through the UniArt gateway",
+      "display_name": "UniArt Seedance 2.5 Special",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/seedance-2.5"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 4,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/seedance-2.5-special#i2v",
+      "inputs": {},
+      "legacy_model_id": "uniart/seedance-2.5-special",
+      "mode": "i2v",
+      "model_line_id": "uniart/uniart/seedance-2.5-special",
+      "params": {
+        "ratio": {
+          "default": 969,
+          "options": [
+            969,
+            556
+          ]
+        },
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "480p",
+            "720p"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "seedance-2.5-special",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 35,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
     "uniart/uniart/seedance-2.5-vip#i2v": {
       "backend_env_key": null,
       "capabilities": [
@@ -7574,7 +8072,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -7680,7 +8178,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -7794,7 +8292,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -7898,7 +8396,7 @@
           "gateway": "vidu"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope",
         "vendor"
@@ -8837,7 +9335,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -8930,7 +9428,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -9034,7 +9532,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
@@ -9129,7 +9627,7 @@
           "gateway": "dashscope"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "dashscope"
       ],
