@@ -26,7 +26,7 @@ models:
   - id: gpt-image-2
     display_name: GPT Image 2
     description: OpenAI GPT-Image-2 via MuleRouter (T2I + I2I editing)
-    status: active
+    status: hidden
     release_stage: stable
     capabilities: [t2i, i2i]
     docs:

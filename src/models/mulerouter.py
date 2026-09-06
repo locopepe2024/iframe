@@ -115,10 +115,15 @@ _cli_available_cache: Optional[bool] = None
 def _use_cli_backend() -> bool:
     """Determine whether to use CLI or HTTP API backend.
 
+    MuleRouter/MuleRun can be disabled explicitly for server deployments.
+    """
+
     Priority: MULEROUTER_API_KEY (HTTP) > CLI fallback.
     CLI is used only when no API key is configured and mulerun is logged in.
     """
     global _cli_available_cache
+    if os.getenv("MULEROUTER_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
     if os.getenv("MULEROUTER_API_KEY"):
         return False
     if _cli_available_cache is None:
@@ -193,6 +198,8 @@ def _resolve_local_image_path(img_url: Optional[str] = None, img_path: Optional[
 # ---------------------------------------------------------------------------
 
 def _get_api_key() -> str:
+    if os.getenv("MULEROUTER_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        raise RuntimeError("MuleRouter/MuleRun disabled; use a UniArt model")
     key = os.getenv("MULEROUTER_API_KEY", "")
     if not key:
         raise RuntimeError("MULEROUTER_API_KEY not set in environment")

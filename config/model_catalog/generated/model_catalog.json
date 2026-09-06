@@ -47,18 +47,18 @@
   },
   "defaults": {
     "canonical_model_settings": {
-      "i2i_model": "wan/wan2.7-image-pro#image",
-      "i2v_model": "happyhorse/happyhorse-1.1-video#i2v",
-      "image_model": "wan/wan2.7-image-pro#image",
-      "r2v_model": "happyhorse/happyhorse-1.1-video#r2v",
-      "t2i_model": "wan/wan2.7-image-pro#image"
+      "i2i_model": "uniart/uniart/gpt-image-2#image",
+      "i2v_model": "uniart/uniart/seedance-2.5-vip#i2v",
+      "image_model": "uniart/uniart/gpt-image-2#image",
+      "r2v_model": "uniart/uniart/seedance-2.5-vip#i2v",
+      "t2i_model": "uniart/uniart/gpt-image-2#image"
     },
     "model_settings": {
-      "i2i_model": "wan2.7-image-pro",
-      "i2v_model": "happyhorse-1.1-i2v",
-      "image_model": "wan2.7-image-pro",
-      "r2v_model": "happyhorse-1.1-r2v",
-      "t2i_model": "wan2.7-image-pro"
+      "i2i_model": "uniart/gpt-image-2",
+      "i2v_model": "uniart/seedance-2.5-vip",
+      "image_model": "uniart/gpt-image-2",
+      "r2v_model": "uniart/seedance-2.5-vip",
+      "t2i_model": "uniart/gpt-image-2"
     }
   },
   "families": {
@@ -539,7 +539,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -1189,7 +1189,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -2435,7 +2435,7 @@
       "routing_prefixes": [
         "gpt-image-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -3581,7 +3581,7 @@
         "seedance-2.0-",
         "seedance/seedance-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -3666,7 +3666,7 @@
         "seedance-2.0-",
         "seedance/seedance-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -3746,7 +3746,7 @@
         "seedance-2.0-",
         "seedance/seedance-"
       ],
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -5739,7 +5739,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -6999,7 +6999,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -7092,7 +7092,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
@@ -7180,7 +7180,7 @@
           "gateway": "mulerouter"
         }
       },
-      "status": "active",
+      "status": "hidden",
       "supported_backends": [
         "mulerouter"
       ],
