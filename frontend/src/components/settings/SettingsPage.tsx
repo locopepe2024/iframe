@@ -34,6 +34,11 @@ const APP_VERSION = "v0.2.0";
 
 type EnvConfig = EnvConfigPayload & {
   DASHSCOPE_API_KEY: string;
+  OPENAI_API_KEY?: string;
+  UNIART_API_KEY?: string;
+  UNIART_BASE_URL?: string;
+  OPENAI_BASE_URL?: string;
+  LLM_PROVIDER?: string;
   ALIBABA_CLOUD_ACCESS_KEY_ID: string;
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: string;
   OSS_ENABLE: boolean;
@@ -52,9 +57,7 @@ type EnvConfig = EnvConfigPayload & {
 };
 
 const ENDPOINT_PROVIDERS = [
-  { key: "DASHSCOPE_BASE_URL", label: "DashScope", placeholder: "https://dashscope.aliyuncs.com" },
-  { key: "KLING_BASE_URL", label: "Kling", placeholder: "https://api-beijing.klingai.com/v1" },
-  { key: "VIDU_BASE_URL", label: "Vidu", placeholder: "https://api.vidu.cn/ent/v2" },
+  { key: "UNIART_BASE_URL", label: "UniArt", placeholder: "https://uniart.fun/v1" },
   { key: "MULEROUTER_BASE_URL", label: "MuleRouter", placeholder: "https://api.mulerouter.ai" },
 ];
 
@@ -89,7 +92,11 @@ const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvCo
 
 const getValidationErrors = (env: EnvConfig): string[] => {
   const errors: string[] = [];
-  if (!env.DASHSCOPE_API_KEY?.trim()) errors.push("DashScope API Key");
+  const configured = env.secrets_configured || {};
+  const hasUniArt = Boolean(env.UNIART_API_KEY?.trim() || env.OPENAI_API_KEY?.trim() || configured.UNIART_API_KEY || configured.OPENAI_API_KEY);
+  if ((env.LLM_PROVIDER || "openai") === "openai" ? !hasUniArt : !env.DASHSCOPE_API_KEY?.trim()) {
+    errors.push((env.LLM_PROVIDER || "openai") === "openai" ? "UniArt API Key" : "DashScope API Key");
+  }
   if (env.KLING_PROVIDER_MODE === "vendor") {
     if (!env.KLING_ACCESS_KEY?.trim()) errors.push("Kling Access Key (vendor mode)");
     if (!env.KLING_SECRET_KEY?.trim()) errors.push("Kling Secret Key (vendor mode)");
@@ -677,17 +684,27 @@ export default function SettingsPage() {
         </div>
       ) : (
         <div className="space-y-1">
-          <FormRow label={t("dashscopeKeyLabel")} hint={t("dashscopeKeyHint")}>
-            <FieldLabel>DASHSCOPE_API_KEY *</FieldLabel>
+          <FormRow label="UniArt API Key" hint="用于文字、图片和视频模型调用">
+            <FieldLabel>UNIART_API_KEY *</FieldLabel>
             <KeyField
-              value={config.DASHSCOPE_API_KEY}
-              onChange={(v) => handleChange("DASHSCOPE_API_KEY", v)}
+              value={config.UNIART_API_KEY || config.OPENAI_API_KEY || ""}
+              onChange={(v) => handleChange("OPENAI_API_KEY", v)}
               placeholder="sk-..."
               status={
-                config.DASHSCOPE_API_KEY?.trim()
+                (config.UNIART_API_KEY || config.OPENAI_API_KEY || config.secrets_configured?.UNIART_API_KEY || config.secrets_configured?.OPENAI_API_KEY)
                   ? { kind: "ok", text: t("filled") }
                   : { kind: "warn", text: t("notConfiguredUnavailable") }
               }
+            />
+          </FormRow>
+
+          <FormRow label="UniArt Base URL" hint="OpenAI 兼容接口端点">
+            <FieldLabel>UNIART_BASE_URL</FieldLabel>
+            <input
+              value={config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1"}
+              onChange={(e) => handleChange("OPENAI_BASE_URL", e.target.value)}
+              placeholder="https://uniart.fun/v1"
+              className={settingsInputClass}
             />
           </FormRow>
 
