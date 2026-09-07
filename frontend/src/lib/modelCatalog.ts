@@ -176,8 +176,8 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
             const isImage = capabilities.includes('t2i');
             MODEL_CATALOG.models[id] = {
                 id,
-                display_name: id.replace(/^uniart\\//, ''),
-                description: `UniArt ${id.replace(/^uniart\\//, '')}`,
+                display_name: id.replace(/^uniart\//, ''),
+                description: `UniArt ${id.replace(/^uniart\//, '')}`,
                 family: isImage ? 'uniart-image' : 'uniart-video',
                 status: 'active',
                 capabilities,
