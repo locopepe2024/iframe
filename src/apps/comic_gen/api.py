@@ -37,6 +37,7 @@ import shutil
 import uuid
 import logging
 import traceback
+from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError
 from .models import (
     ArtDirection,
@@ -3928,6 +3929,7 @@ def get_env_config():
             for field in SECRET_FIELDS
         }
 
+
         return {
             # Masked secrets — never plaintext.
             "DASHSCOPE_API_KEY": _mask_secret(os.getenv("DASHSCOPE_API_KEY")),
@@ -3960,6 +3962,38 @@ def get_env_config():
 
 
 
+
+
+@app.get("/config/uniart/models")
+def get_uniart_models():
+    """Fetch the current UniArt OpenAI-compatible model list.
+
+    The upstream response is normalized into the capability vocabulary used by
+    LumenX selectors; credentials stay server-side.
+    """
+    base = (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "https://uniart.fun/v1").rstrip("/")
+    key = os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+    req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
+    try:
+        with urlopen(req, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
+    items = payload.get("data", payload if isinstance(payload, list) else [])
+    models = []
+    for item in items:
+        model_id = str(item.get("id", "")).strip() if isinstance(item, dict) else str(item).strip()
+        if not model_id:
+            continue
+        low = model_id.lower()
+        if "gpt-image" in low or "image" in low:
+            capabilities = ["t2i", "i2i"]
+        elif any(token in low for token in ("seedance", "minimax", "video", "h3")):
+            capabilities = ["t2v", "i2v", "r2v"]
+        else:
+            capabilities = ["text"]
+        models.append({"id": f"uniart/{model_id}", "api_model_id": model_id, "capabilities": capabilities})
+    return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
 # ============================================
