@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import { api } from "@/lib/api";
+import { refreshUniArtModelCatalog } from "@/lib/modelCatalog";
 
 export default function EnvConfigChecker() {
   const [isEnvDialogOpen, setIsEnvDialogOpen] = useState(false);
@@ -14,6 +15,12 @@ export default function EnvConfigChecker() {
     if (typeof window === 'undefined' || hasChecked) return;
     
     checkEnvConfig();
+    refreshUniArtModelCatalog().then((count) => {
+      if (count > 0 && !sessionStorage.getItem("lumenx_uniart_catalog_reloaded")) {
+        sessionStorage.setItem("lumenx_uniart_catalog_reloaded", "1");
+        window.location.reload();
+      }
+    });
     setHasChecked(true);
   }, [hasChecked]);
 
