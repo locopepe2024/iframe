@@ -589,9 +589,19 @@ class ScriptProcessor:
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
 
+        # RAG-style map/reduce for long scripts: retain coverage and stable
+        # entities instead of silently truncating after 80k characters.
         MAX_TEXT_LENGTH = 80000
         if len(text) > MAX_TEXT_LENGTH:
-            text = text[:MAX_TEXT_LENGTH] + "\n\n[文本已截断，请基于已有内容进行划分]"
+            chunk_size = 12000
+            chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+            chunk_notes = []
+            for idx, chunk in enumerate(chunks):
+                note_prompt = f"""提取这段剧本文本的连续性事实，输出不超过300字：角色、地点、时间线、关键事件、未解决悬念。不要改写剧情。\n\n片段 {idx + 1}/{len(chunks)}：\n{chunk}"""
+                note = self.llm.chat(messages=[{"role": "user", "content": note_prompt}])
+                chunk_notes.append(f"片段{idx + 1}：{note}")
+            text = "\n\n".join(chunk_notes)
+            text += "\n\n[以上为全文分块检索摘要；请依据事实摘要划分，避免跨片段角色和时间线不一致]"
 
         prompt = f"""你是一名专业的剧本编剧和分集策划师。
 
@@ -630,6 +640,12 @@ class ScriptProcessor:
             episodes = data.get("episodes", [])
             if not episodes:
                 raise RuntimeError("LLM 未返回任何分集数据")
+            # Deterministic consistency guard: episode numbering must be
+            # contiguous and markers must be present for later retrieval.
+            for index, episode in enumerate(episodes, start=1):
+                episode["episode_number"] = index
+                episode.setdefault("start_marker", "")
+                episode.setdefault("end_marker", "")
             return episodes
         except json.JSONDecodeError as e:
             raise RuntimeError(f"LLM 返回的分集数据格式错误: {e}")
