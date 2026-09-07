@@ -192,13 +192,14 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
             };
         }
         localStorage.setItem('lumenx_uniart_model_snapshot', JSON.stringify({ fetched_at: payload.fetched_at, models }));
+        rebuildDynamicModelLists();
         window.dispatchEvent(new CustomEvent('lumenx:uniart-catalog-refreshed', { detail: models.length }));
         return models.length;
     } catch {
         return 0;
     }
 }
-const CATALOG_MODELS = Object.values(MODEL_CATALOG.models);
+let CATALOG_MODELS = Object.values(MODEL_CATALOG.models);
 const LEGACY_MODEL_ID_ALIASES = MODEL_CATALOG.compat.legacy_model_ids;
 const CANONICAL_MODEL_ID_ALIASES = Object.freeze(
     Object.fromEntries(
@@ -262,7 +263,7 @@ export const DEFAULT_MODEL_SETTINGS: FrontendModelSettings = Object.freeze({
     ...DEFAULT_ASPECT_RATIOS,
 });
 
-const SORTED_MODEL_ENTRIES = [...CATALOG_MODELS].sort((left, right) => {
+let SORTED_MODEL_ENTRIES = [...CATALOG_MODELS].sort((left, right) => {
     const orderDelta = (right.ui.order ?? 0) - (left.ui.order ?? 0);
     if (orderDelta !== 0) {
         return orderDelta;
@@ -290,13 +291,13 @@ function getVisibleModels(group: SelectionGroup, surface: VisibilitySurface): Ca
     // capability. Without this, resolveModelId() always falls through to
     // catalog defaults — meaning user-picked t2i/i2i selections silently
     // revert on the next render. (See PR-3* assembly model picker bug.)
-    if (direct.length > 0 || (group !== 't2i' && group !== 'i2i')) {
+    if (direct.length > 0 || (group !== 't2i' && group !== 'i2i' && group !== 'r2v')) {
         return direct;
     }
-    const capability = group; // 't2i' | 'i2i'
+    const capability = group; // 't2i' | 'i2i' | 'r2v'
     return SORTED_MODEL_ENTRIES.filter(
         (model) =>
-            model.ui.selection_group === 'image' &&
+            (model.ui.selection_group === 'image' || model.ui.selection_group === 'i2v') &&
             model.capabilities.includes(capability) &&
             isVisibleModel(model, surface)
     );
@@ -451,6 +452,26 @@ export const I2I_MODELS = PROJECT_I2I_MODELS;
 export const IMAGE_MODELS = PROJECT_IMAGE_MODELS;
 export const I2V_MODELS = PROJECT_I2V_MODELS;
 export const VIDEO_SIDEBAR_I2V_MODELS = VIDEO_I2V_MODELS;
+
+function rebuildDynamicModelLists(): void {
+    CATALOG_MODELS = Object.values(MODEL_CATALOG.models);
+    SORTED_MODEL_ENTRIES = [...CATALOG_MODELS].sort((left, right) => (right.ui.order ?? 0) - (left.ui.order ?? 0) || left.display_name.localeCompare(right.display_name));
+    const refresh = (target: any[], values: any[]) => { target.splice(0, target.length, ...values); };
+    refresh(PROJECT_T2I_MODELS, getVisibleModels('t2i', 'project_settings').map(toSelectableModel));
+    refresh(SERIES_T2I_MODELS, getVisibleModels('t2i', 'series_settings').map(toSelectableModel));
+    refresh(GLOBAL_T2I_MODELS, getVisibleModels('t2i', 'global_settings').map(toSelectableModel));
+    refresh(PROJECT_I2I_MODELS, getVisibleModels('i2i', 'project_settings').map(toSelectableModel));
+    refresh(SERIES_I2I_MODELS, getVisibleModels('i2i', 'series_settings').map(toSelectableModel));
+    refresh(GLOBAL_I2I_MODELS, getVisibleModels('i2i', 'global_settings').map(toSelectableModel));
+    refresh(PROJECT_IMAGE_MODELS, getVisibleModels('image', 'project_settings').map(toSelectableModel));
+    refresh(SERIES_IMAGE_MODELS, getVisibleModels('image', 'series_settings').map(toSelectableModel));
+    refresh(GLOBAL_IMAGE_MODELS, getVisibleModels('image', 'global_settings').map(toSelectableModel));
+    refresh(PROJECT_I2V_MODELS, getVisibleModels('i2v', 'project_settings').map(toI2VModel));
+    refresh(SERIES_I2V_MODELS, getVisibleModels('i2v', 'series_settings').map(toI2VModel));
+    refresh(GLOBAL_I2V_MODELS, getVisibleModels('i2v', 'global_settings').map(toI2VModel));
+    refresh(GLOBAL_R2V_MODELS, getVisibleModels('r2v', 'global_settings').map(toI2VModel));
+    refresh(VIDEO_I2V_MODELS, getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
+}
 
 export const DEFAULT_I2V_MODEL_ID = resolveModelId('i2v', undefined, 'video_sidebar');
 
