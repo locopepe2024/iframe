@@ -12,6 +12,7 @@ import {
   GLOBAL_IMAGE_MODELS,
   normalizeModelSettings,
   type FrontendModelSettings,
+  refreshUniArtModelCatalog,
 } from "@/lib/modelCatalog";
 import { useSettingsStore, type Locale, type ThemePreset } from "@/store/settingsStore";
 import { toast } from "@/store/toastStore";
@@ -241,6 +242,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadConfig();
+    refreshUniArtModelCatalog().then((count) => {
+      if (count > 0 && typeof window !== "undefined" && !sessionStorage.getItem("lumenx_uniart_catalog_reloaded")) {
+        sessionStorage.setItem("lumenx_uniart_catalog_reloaded", "1");
+        window.location.reload();
+      }
+    });
   }, [loadConfig]);
 
   // Pre-fill the prompt fields with the real built-in defaults so users can see

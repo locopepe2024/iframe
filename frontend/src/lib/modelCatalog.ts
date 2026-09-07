@@ -143,6 +143,61 @@ interface ModelCatalog {
 }
 
 const MODEL_CATALOG = rawCatalog as ModelCatalog;
+if (typeof window !== 'undefined') {
+    try {
+        const snapshot = JSON.parse(localStorage.getItem('lumenx_uniart_model_snapshot') || '{}');
+        for (const entry of (snapshot.models || [])) {
+            const id = String(entry.id || '');
+            if (!id.startsWith('uniart/')) continue;
+            const caps = Array.isArray(entry.capabilities) ? entry.capabilities : [];
+            const image = caps.includes('t2i');
+            MODEL_CATALOG.models[id] = {
+                id, display_name: id.slice(7), description: `UniArt ${id.slice(7)}`,
+                family: image ? 'uniart-image' : 'uniart-video', status: 'active', capabilities: caps,
+                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: 10, badges: ['UniArt'] },
+            };
+        }
+    } catch { /* ignore invalid local snapshot */ }
+}
+
+/** Fetch and persist the current UniArt catalog snapshot. Callers can refresh
+ * the page after this promise resolves to make all selector surfaces rebuild. */
+export async function refreshUniArtModelCatalog(): Promise<number> {
+    if (typeof window === 'undefined') return 0;
+    try {
+        const response = await fetch('/config/uniart/models', { cache: 'no-store' });
+        if (!response.ok) return 0;
+        const payload = await response.json();
+        const models = Array.isArray(payload.models) ? payload.models : [];
+        for (const entry of models) {
+            const id = String(entry.id || '');
+            if (!id.startsWith('uniart/')) continue;
+            const capabilities = Array.isArray(entry.capabilities) ? entry.capabilities : [];
+            const isImage = capabilities.includes('t2i');
+            MODEL_CATALOG.models[id] = {
+                id,
+                display_name: id.replace(/^uniart\\//, ''),
+                description: `UniArt ${id.replace(/^uniart\\//, '')}`,
+                family: isImage ? 'uniart-image' : 'uniart-video',
+                status: 'active',
+                capabilities,
+                ui: {
+                    selection_group: isImage ? 'image' : 'i2v',
+                    visible_in: isImage
+                        ? ['project_settings', 'series_settings', 'global_settings']
+                        : ['project_settings', 'series_settings', 'video_sidebar', 'global_settings'],
+                    order: 10,
+                    badges: ['UniArt'],
+                },
+            };
+        }
+        localStorage.setItem('lumenx_uniart_model_snapshot', JSON.stringify({ fetched_at: payload.fetched_at, models }));
+        window.dispatchEvent(new CustomEvent('lumenx:uniart-catalog-refreshed', { detail: models.length }));
+        return models.length;
+    } catch {
+        return 0;
+    }
+}
 const CATALOG_MODELS = Object.values(MODEL_CATALOG.models);
 const LEGACY_MODEL_ID_ALIASES = MODEL_CATALOG.compat.legacy_model_ids;
 const CANONICAL_MODEL_ID_ALIASES = Object.freeze(
