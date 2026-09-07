@@ -1057,7 +1057,15 @@ async def import_file_preview(
         raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
     try:
         content_bytes = await file.read()
-        text = content_bytes.decode("utf-8")
+        if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
+            raise HTTPException(status_code=400, detail="请上传 TXT、Markdown 或 Fountain 文本文件，不能上传图片或视频")
+        try:
+            text = content_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                text = content_bytes.decode("utf-16")
+            except UnicodeDecodeError:
+                text = content_bytes.decode("gb18030", errors="replace")
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
@@ -4421,7 +4429,17 @@ def import_document(project_id: str, req: ImportDocRequest):
 
     try:
         raw_bytes = base64.b64decode(req.content)
-        text = raw_bytes.decode("utf-8")
+        # Script formats are text; detect common binary media early so a JPEG
+        # header (0xff 0xd8) is never surfaced as a confusing UTF-8 traceback.
+        if raw_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
+            raise ValueError("binary media was submitted to the document importer; choose a TXT, Fountain, or FDX file")
+        try:
+            text = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                text = raw_bytes.decode("utf-16")
+            except UnicodeDecodeError:
+                text = raw_bytes.decode("gb18030", errors="replace")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to decode file content: {e}")
 
