@@ -1502,6 +1502,7 @@ export const api = {
         formData.append('file', file);
         const response = await axios.post(`${API_URL}/series/import/preview?suggested_episodes=${suggestedEpisodes}`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 300000,
         });
         return response.data;
     },

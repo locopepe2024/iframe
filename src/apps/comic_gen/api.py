@@ -1057,6 +1057,8 @@ async def import_file_preview(
         raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
     try:
         content_bytes = await file.read()
+        if len(content_bytes) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="TXT 文件超过 2 MB。请拆分文件后分别导入；分集分析上下文上限为约 80,000 字符。")
         if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
             raise HTTPException(status_code=400, detail="请上传 TXT、Markdown 或 Fountain 文本文件，不能上传图片或视频")
         try:
