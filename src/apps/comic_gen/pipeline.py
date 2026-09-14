@@ -19,6 +19,7 @@ from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
+from ..studio_access import StudioOwnerMixin
 
 logger = get_logger(__name__)
 
@@ -69,7 +70,7 @@ class LibraryAssetInUseError(Exception):
         )
 
 
-class ComicGenPipeline:
+class ComicGenPipeline(StudioOwnerMixin):
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.script_processor = ScriptProcessor()
@@ -85,6 +86,7 @@ class ComicGenPipeline:
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
+        self._migrate_legacy_studio_owners()
         # Project-independent global asset library (lowest resolver layer).
         self.library_store: GlobalAssetLibrary = self._load_library_data()
         self._repair_series_bindings()
@@ -96,8 +98,9 @@ class ComicGenPipeline:
         # Format: { task_id: { status: str, progress: int, error: str, script_id: str, asset_id: str, created_at: float } }
         self.asset_generation_tasks: Dict[str, Dict[str, Any]] = {}
         self.video_generation_tasks: Dict[str, Dict[str, Any]] = {}
-        # Temporary cache for file import previews (import_id -> text)
-        self._import_cache: Dict[str, str] = {}
+        # Temporary cache for file import previews
+        # (import_id -> (owner_profile_id, text))
+        self._import_cache: Dict[str, Tuple[str, str]] = {}
         # Cached model instances (lazily initialized)
         self._kling_model = None
         self._vidu_model = None
@@ -383,9 +386,6 @@ class ComicGenPipeline:
         export_url = self.export_manager.render_project(script, options)
         return export_url
 
-    def get_script(self, script_id: str) -> Optional[Script]:
-        return self.scripts.get(script_id)
-
     def _load_data(self) -> Dict[str, Script]:
         if not os.path.exists(self.data_file):
             return {}
@@ -422,7 +422,16 @@ class ComicGenPipeline:
         if repaired:
             self._save_data()
 
-    def create_project(self, title: str, text: str, skip_analysis: bool = False, workflow_mode: str = "i2v_legacy", series_id: Optional[str] = None) -> Script:
+    def create_project(
+        self,
+        title: str,
+        text: str,
+        skip_analysis: bool = False,
+        workflow_mode: str = "i2v_legacy",
+        series_id: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        owner_profile_id: Optional[str] = None,
+    ) -> Script:
         """Step 1: Parse novel and create project.
 
         When `series_id` is provided the new project is bound as the next
@@ -432,12 +441,17 @@ class ComicGenPipeline:
         is None the behavior is the original standalone-project path,
         bit-for-bit unchanged.
         """
+        if series_id and not self.get_series(series_id, owner_profile_id):
+            raise ValueError("Series not found")
+
         if skip_analysis:
             script = self.script_processor.create_draft_script(title, text)
         else:
             script = self.script_processor.parse_novel(title, text)
 
         script.workflow_mode = workflow_mode
+        script.owner_user_id = owner_user_id
+        script.owner_profile_id = owner_profile_id
         self.scripts[script.id] = script
         self._save_data()
 
@@ -447,12 +461,14 @@ class ComicGenPipeline:
         # mutates the in-memory script in place (same object reference) and
         # persists both projects.json and series.json.
         if series_id:
-            series = self.series_store.get(series_id)
-            if not series:
-                raise ValueError("Series not found")
             existing = self.get_series_episodes(series_id)
             max_ep = max([ep.episode_number for ep in existing if ep.episode_number] or [0])
-            self.add_episode_to_series(series_id, script.id, episode_number=max_ep + 1)
+            self.add_episode_to_series(
+                series_id,
+                script.id,
+                episode_number=max_ep + 1,
+                owner_profile_id=owner_profile_id,
+            )
         return script
     
     def extract_preview(self, script_id: str, text: str) -> Script:
@@ -3590,9 +3606,6 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def get_script(self, script_id: str) -> Optional[Script]:
-        return self.scripts.get(script_id)
-
     def _select_variant_in_asset(self, image_asset: Any, variant_id: str) -> Any:
         """Helper to select a variant in an ImageAsset. Returns the selected variant if found."""
         if not image_asset or not image_asset.variants:
@@ -4179,11 +4192,22 @@ class ComicGenPipeline:
             self._save_data()
             return new_asset
 
-    def create_series(self, title: str, description: str = "", workflow_mode: str = "i2v_legacy", content_mode: str = "scripted", default_generation_mode: str = "r2v") -> Series:
+    def create_series(
+        self,
+        title: str,
+        description: str = "",
+        workflow_mode: str = "i2v_legacy",
+        content_mode: str = "scripted",
+        default_generation_mode: str = "r2v",
+        owner_user_id: Optional[str] = None,
+        owner_profile_id: Optional[str] = None,
+    ) -> Series:
         """Create a new Series."""
         with self._save_lock:
             series = Series(
                 id=str(uuid.uuid4()),
+                owner_user_id=owner_user_id,
+                owner_profile_id=owner_profile_id,
                 title=title,
                 description=description,
                 workflow_mode=workflow_mode,
@@ -4196,16 +4220,10 @@ class ComicGenPipeline:
             self._save_series_data_unlocked()
             return series
 
-    def get_series(self, series_id: str) -> Optional[Series]:
-        return self.series_store.get(series_id)
-
-    def list_series(self) -> List[Series]:
-        return list(self.series_store.values())
-
     def update_series(self, series_id: str, updates: Dict[str, Any]) -> Series:
         """Update Series fields (title, description, etc.)."""
         with self._save_lock:
-            series = self.series_store.get(series_id)
+            series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
             for key, value in updates.items():
@@ -4221,7 +4239,7 @@ class ComicGenPipeline:
     def delete_series(self, series_id: str) -> None:
         """Delete a Series and disassociate its episodes."""
         with self._save_lock:
-            series = self.series_store.get(series_id)
+            series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
             # Disassociate episodes
@@ -4234,18 +4252,25 @@ class ComicGenPipeline:
             del self.series_store[series_id]
             self._save_series_data_unlocked()
 
-    def add_episode_to_series(self, series_id: str, script_id: str, episode_number: Optional[int] = None) -> Series:
+    def add_episode_to_series(
+        self,
+        series_id: str,
+        script_id: str,
+        episode_number: Optional[int] = None,
+        owner_profile_id: Optional[str] = None,
+    ) -> Series:
         """Add an existing Script/Project as an Episode to a Series."""
         with self._save_lock:
-            series = self.series_store.get(series_id)
+            requested_owner = self._requested_owner_profile_id(owner_profile_id)
+            series = self.get_series(series_id, requested_owner)
             if not series:
                 raise ValueError("Series not found")
-            script = self.scripts.get(script_id)
+            script = self.get_script(script_id, requested_owner)
             if not script:
                 raise ValueError("Script not found")
             # If script already belongs to another series, remove it from the old one
             if script.series_id and script.series_id != series_id:
-                old_series = self.series_store.get(script.series_id)
+                old_series = self.get_series(script.series_id, requested_owner)
                 if old_series and script_id in old_series.episode_ids:
                     old_series.episode_ids.remove(script_id)
             if script_id not in series.episode_ids:
@@ -4260,12 +4285,12 @@ class ComicGenPipeline:
     def remove_episode_from_series(self, series_id: str, script_id: str) -> Series:
         """Remove an Episode from a Series (does not delete the project)."""
         with self._save_lock:
-            series = self.series_store.get(series_id)
+            series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
             if script_id in series.episode_ids:
                 series.episode_ids.remove(script_id)
-            script = self.scripts.get(script_id)
+            script = self.get_script(script_id)
             if script:
                 script.series_id = None
                 script.episode_number = None
@@ -4358,7 +4383,7 @@ class ComicGenPipeline:
     def list_custom_voices(self, series_id: str) -> List['CustomVoice']:
         """Return all custom voices in a series (clones + designs).
         Empty list if series has none or doesn't exist."""
-        series = self.series_store.get(series_id)
+        series = self.get_series(series_id)
         if not series:
             return []
         return list(series.custom_voices or [])
@@ -4571,7 +4596,7 @@ class ComicGenPipeline:
             raise ValueError("Series not found")
         episodes = []
         for ep_id in series.episode_ids:
-            script = self.scripts.get(ep_id)
+            script = self.get_script(ep_id)
             if script:
                 episodes.append(script)
         return episodes
@@ -4633,12 +4658,24 @@ class ComicGenPipeline:
         """Split text into episodes using LLM. Returns episode preview data."""
         return self.script_processor.split_into_episodes(text, suggested_episodes)
 
-    def create_series_from_import(self, title: str, text: str, episodes_data: List[Dict],
-                                   description: str = "") -> Dict:
+    def create_series_from_import(
+        self,
+        title: str,
+        text: str,
+        episodes_data: List[Dict],
+        description: str = "",
+        owner_user_id: Optional[str] = None,
+        owner_profile_id: Optional[str] = None,
+    ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
         # Create the Series (already acquires lock internally)
-        series = self.create_series(title, description)
+        series = self.create_series(
+            title,
+            description,
+            owner_user_id=owner_user_id,
+            owner_profile_id=owner_profile_id,
+        )
 
         # Split text into episode chunks based on markers
         episode_texts = self._split_text_by_markers(text, episodes_data)
@@ -4653,6 +4690,8 @@ class ComicGenPipeline:
 
                 # Create draft script (no LLM analysis yet — user can trigger later)
                 script = self.script_processor.create_draft_script(ep_title, ep_text)
+                script.owner_user_id = owner_user_id
+                script.owner_profile_id = owner_profile_id
                 script.series_id = series.id
                 script.episode_number = episode_number
                 self.scripts[script.id] = script

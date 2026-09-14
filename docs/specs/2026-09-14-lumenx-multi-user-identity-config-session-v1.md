@@ -95,7 +95,8 @@
 
 ## Follow-Up Phases
 
-- Phase 2: owner-scope Studio projects, series, library assets, voices, uploads, and video tasks.
+- Phase 2a: owner-scope Studio projects and series, including episode linking and all ID-addressed project/series routes.
+- Phase 2b: partition library assets, voices, uploads, documents, task caches, and static media by owner profile.
 - Phase 3: migrate JSON persistence to transactional SQLite/PostgreSQL repositories.
 - Phase 4: team/workspace sharing and explicit resource grants.
 - Phase 5: remove the legacy environment credential fallback from user-facing production routes.
@@ -103,3 +104,41 @@
 ## Hypothesis
 
 - Reusing UniArt identity while keeping LumenX business data separate should provide the fastest compatible migration path. Production endpoint compatibility and token lifetime behavior still require deployment validation.
+
+## Phase 2a Studio Boundary
+
+### Observed
+
+- Studio projects and series are loaded into process-wide dictionaries from `output/projects.json` and `output/series.json`.
+- Most project routes address a project by URL identifier, but individual pipeline methods frequently read `self.scripts` directly.
+- Series episode linking accepts a client-supplied project identifier.
+- Several Studio handlers run blocking work in an executor, so request-local context cannot be assumed to propagate into worker threads.
+
+### Direct Implication
+
+- Authentication alone is insufficient: every addressed project and series must be checked against the authenticated profile before the handler runs.
+- Project and series creation must persist immutable owner identifiers supplied by the authenticated server context.
+- Cross-owner episode linking must fail as not found, even when both identifiers exist globally.
+- Worker-thread creation paths must receive owner identifiers explicitly.
+
+### Migration Rule
+
+- Existing ownerless Studio records are not assigned to the first user who logs in.
+- Ownerless records remain inaccessible by default.
+- They are assigned only when both `LUMENX_LEGACY_OWNER_USER_ID` and `LUMENX_LEGACY_OWNER_PROFILE_ID` are explicitly configured.
+- Migration writes the assigned owner fields back to the existing JSON files once during pipeline startup.
+
+### Phase 2a Success Criteria
+
+1. Anonymous `/projects*` and `/series*` requests return 401.
+2. Lists contain only records owned by the authenticated profile.
+3. A user cannot read or mutate another user's project or series by identifier.
+4. A project can only be attached to a series owned by the same profile.
+5. New projects and series persist both `owner_user_id` and `owner_profile_id`.
+6. Ownerless legacy data remains invisible unless an explicit legacy owner is configured.
+
+### Not Yet Proven
+
+- Global library assets and Studio media files are not isolated by this slice.
+- Background task dictionaries and document/snapshot files may still require owner-aware storage paths.
+- Production UniArt identity latency and outage behavior require deployment observation.

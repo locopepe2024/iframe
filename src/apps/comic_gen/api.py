@@ -71,6 +71,12 @@ if os.path.exists(env_path):
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
 from ..identity import router as identity_router, UserContext, require_user_context
+from ..studio_access import (
+    require_studio_user,
+    reset_studio_user,
+    set_studio_user,
+    verify_studio_resource_path,
+)
 from ..user_config import router as user_config_router
 from ..playground.api import router as playground_router
 app.include_router(identity_router)
@@ -124,6 +130,39 @@ app.mount("/files/playground", StaticFiles(directory="output/playground"), name=
 
 # Initialize pipeline
 pipeline = ComicGenPipeline()
+
+
+@app.middleware("http")
+async def enforce_studio_owner_boundary(request: Request, call_next):
+    """Authenticate Studio routes and reject cross-profile resource IDs."""
+    path = request.url.path
+    protected = path == "/projects" or path.startswith("/projects/") or path == "/series" or path.startswith("/series/")
+    if not protected or request.method == "OPTIONS":
+        return await call_next(request)
+
+    try:
+        user = await asyncio.to_thread(
+            require_user_context,
+            request.headers.get("Authorization"),
+        )
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    try:
+        verify_studio_resource_path(
+            path,
+            user.owner_profile_id,
+            pipeline.scripts,
+            pipeline.series_store,
+        )
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    context_token = set_studio_user(user)
+    try:
+        return await call_next(request)
+    finally:
+        reset_studio_user(context_token)
 
 # Allow-list map for uploaded file extensions: keys come from the (untrusted)
 # client filename, values are trusted literals safe to embed in server paths.
@@ -380,7 +419,11 @@ class CreateProjectRequest(BaseModel):
 
 
 @app.post("/projects", response_model=Script)
-async def create_project(request: CreateProjectRequest, skip_analysis: bool = False):
+async def create_project(
+    request: CreateProjectRequest,
+    skip_analysis: bool = False,
+    user: UserContext = Depends(require_studio_user),
+):
     """Creates a new project from a novel text.
 
     When `series_id` is provided the project is bound as the next episode
@@ -392,7 +435,16 @@ async def create_project(request: CreateProjectRequest, skip_analysis: bool = Fa
     try:
         result = await loop.run_in_executor(
             None,  # Use default executor
-            partial(pipeline.create_project, request.title, request.text, skip_analysis, request.workflow_mode, request.series_id)
+            partial(
+                pipeline.create_project,
+                request.title,
+                request.text,
+                skip_analysis,
+                request.workflow_mode,
+                request.series_id,
+                user.user_id,
+                user.owner_profile_id,
+            )
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -464,9 +516,9 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
 
 
 @app.get("/projects/", response_model=List[dict])
-def list_projects():
+def list_projects(user: UserContext = Depends(require_studio_user)):
     """Lists all projects from backend storage."""
-    scripts = list(pipeline.scripts.values())
+    scripts = pipeline.list_scripts(user.owner_profile_id)
     return signed_response(scripts)
 
 
@@ -510,7 +562,10 @@ class UpdateSeriesRequest(BaseModel):
 
 
 @app.post("/series")
-def create_series(request: CreateSeriesRequest):
+def create_series(
+    request: CreateSeriesRequest,
+    user: UserContext = Depends(require_studio_user),
+):
     """Create a new Series."""
     series = pipeline.create_series(
         request.title,
@@ -518,14 +573,16 @@ def create_series(request: CreateSeriesRequest):
         request.workflow_mode,
         request.content_mode,
         request.default_generation_mode,
+        user.user_id,
+        user.owner_profile_id,
     )
     return signed_response(series)
 
 
 @app.get("/series")
-def list_series():
+def list_series(user: UserContext = Depends(require_studio_user)):
     """List all Series."""
-    series_list = pipeline.list_series()
+    series_list = pipeline.list_series(user.owner_profile_id)
     return signed_response(series_list)
 
 
@@ -1059,6 +1116,7 @@ def fork_asset_from_library(script_id: str, request: ForkFromLibraryRequest):
 async def import_file_preview(
     file: UploadFile = File(...),
     suggested_episodes: int = 3,
+    user: UserContext = Depends(require_studio_user),
 ):
     """Upload a txt/md file and get LLM episode split preview."""
     if suggested_episodes < 1 or suggested_episodes > 50:
@@ -1086,7 +1144,7 @@ async def import_file_preview(
         )
         # Store text in pipeline cache, return import_id instead of full text
         import_id = str(uuid.uuid4())
-        pipeline._import_cache[import_id] = text
+        pipeline._import_cache[import_id] = (user.owner_profile_id, text)
         return {
             "filename": file.filename,
             "text_length": len(text),
@@ -1110,13 +1168,21 @@ class ConfirmImportRequest(BaseModel):
 
 
 @app.post("/series/import/confirm")
-async def import_file_confirm(request: ConfirmImportRequest):
+async def import_file_confirm(
+    request: ConfirmImportRequest,
+    user: UserContext = Depends(require_studio_user),
+):
     """Confirm the episode split and create Series + Episodes."""
     try:
         # Prefer import_id from cache, fallback to request.text
         text = None
         if request.import_id:
-            text = pipeline._import_cache.pop(request.import_id, None)
+            cached = pipeline._import_cache.pop(request.import_id, None)
+            if cached:
+                cached_owner, cached_text = cached
+                if cached_owner != user.owner_profile_id:
+                    raise ValueError("Import preview not found")
+                text = cached_text
         if not text:
             text = request.text
         if not text:
@@ -1130,6 +1196,8 @@ async def import_file_confirm(request: ConfirmImportRequest):
                 text,
                 request.episodes,
                 request.description,
+                user.user_id,
+                user.owner_profile_id,
             )
         )
         return signed_response(result)
