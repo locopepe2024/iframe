@@ -110,3 +110,11 @@ def test_uniart_content_download_keeps_bearer(monkeypatch, tmp_path):
 
 def test_uniart_result_url_accepts_content_metadata():
     assert uniart._result_url({"content": {"video_url": "https://example.com/video.mp4"}}, "video") == "https://example.com/video.mp4"
+
+
+def test_uniart_result_url_prefers_signed_storage_artifact():
+    signed = "https://storage.iyishow.com/result.png?sign=abc"
+    assert uniart._result_url(
+        {"result_url": "https://uniart.fun/v1/images/task-1/content", "output": {"image_url": signed}},
+        "image",
+    ) == signed

@@ -7,7 +7,7 @@ content are read from /v1/videos/{task_id}.
 from __future__ import annotations
 import base64, mimetypes, os, time
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import requests
 from .base import VideoGenModel
 from .image import ImageGenModel
@@ -116,34 +116,44 @@ def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int 
 
 
 def _result_url(data: Dict[str, Any], kind: str) -> str:
-    url = (
-        data.get("result_url")
-        or data.get("url")
-        or data.get(f"{kind}_url")
-        or data.get("content_url")
-    )
-    if url:
-        return url
+    candidates: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value.startswith(("http://", "https://")):
+            candidates.append(value)
+
+    add(data.get("result_url"))
+    add(data.get("url"))
+    add(data.get(f"{kind}_url"))
+    add(data.get("content_url"))
     output = data.get("output") or data.get("data") or {}
     if isinstance(output, dict):
-        url = output.get(f"{kind}_url") or output.get("url") or output.get("content_url")
-        if url:
-            return url
+        add(output.get(f"{kind}_url"))
+        add(output.get("url"))
+        add(output.get("content_url"))
     content = data.get("content")
-    if isinstance(content, str) and content.startswith(("http://", "https://")):
-        return content
+    add(content)
     if isinstance(content, dict):
-        url = content.get(f"{kind}_url") or content.get("url") or content.get("content_url")
-        if url:
-            return url
+        add(content.get(f"{kind}_url"))
+        add(content.get("url"))
+        add(content.get("content_url"))
     if isinstance(content, list):
         for item in content:
-            if isinstance(item, str) and item.startswith(("http://", "https://")):
-                return item
+            add(item)
             if isinstance(item, dict):
-                url = item.get(f"{kind}_url") or item.get("url") or item.get("content_url")
-                if url:
-                    return url
+                add(item.get(f"{kind}_url"))
+                add(item.get("url"))
+                add(item.get("content_url"))
+
+    # A signed object-storage URL is the durable media artifact. Prefer it
+    # over a gateway /content URL when both are present: the latter may be a
+    # transient proxy endpoint that returns 502 after the task is complete.
+    for candidate in candidates:
+        query = parse_qs(urlsplit(candidate).query)
+        if "sign" in query:
+            return candidate
+    if candidates:
+        return candidates[0]
     raise RuntimeError(f"UniArt task has no {kind} result URL: {data}")
 
 
