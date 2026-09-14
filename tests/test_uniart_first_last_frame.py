@@ -72,5 +72,41 @@ def test_uniart_media_download_retries_transient_502(monkeypatch, tmp_path):
     assert output.read_bytes() == b"video"
 
 
+def test_uniart_signed_storage_download_does_not_forward_bearer(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_get(_url, **kwargs):
+        captured["headers"] = kwargs["headers"]
+        return _DownloadResponse(200, b"image")
+
+    monkeypatch.setattr(uniart.requests, "get", fake_get)
+    output = tmp_path / "result.png"
+    uniart._download(
+        {"api_key": "test-key", "base_url": "https://uniart.fun/v1"},
+        "https://storage.iyishow.com/uniart-cache/images/result.png?sign=test",
+        str(output),
+    )
+
+    assert "Authorization" not in captured["headers"]
+
+
+def test_uniart_content_download_keeps_bearer(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_get(_url, **kwargs):
+        captured["headers"] = kwargs["headers"]
+        return _DownloadResponse(200, b"video")
+
+    monkeypatch.setattr(uniart.requests, "get", fake_get)
+    output = tmp_path / "result.mp4"
+    uniart._download(
+        {"api_key": "test-key", "base_url": "https://uniart.fun/v1"},
+        "https://uniart.fun/v1/videos/task-1/content",
+        str(output),
+    )
+
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+
+
 def test_uniart_result_url_accepts_content_metadata():
     assert uniart._result_url({"content": {"video_url": "https://example.com/video.mp4"}}, "video") == "https://example.com/video.mp4"

@@ -7,6 +7,7 @@ content are read from /v1/videos/{task_id}.
 from __future__ import annotations
 import base64, mimetypes, os, time
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlsplit
 import requests
 from .base import VideoGenModel
 from .image import ImageGenModel
@@ -79,7 +80,15 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900) -> Dict[str
 
 def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int = 6) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    headers = {"Authorization": _headers(config)["Authorization"], "Accept": "video/*,image/*,application/octet-stream,*/*"}
+    # UniArt's signed COS URLs authenticate through their query string. Sending
+    # the UniArt Bearer token to the storage host is unnecessary and can make
+    # the CDN/COS request fail even though the signed URL is valid. Keep the
+    # Bearer header only for UniArt-owned content endpoints.
+    headers = {"Accept": "video/*,image/*,application/octet-stream,*/*"}
+    target_host = urlsplit(url).netloc.lower()
+    uniart_host = urlsplit(_base_url(config)).netloc.lower()
+    if target_host and target_host == uniart_host:
+        headers["Authorization"] = _headers(config)["Authorization"]
     partial_path = f"{output_path}.part"
     last_error: Exception | None = None
     for attempt in range(attempts):
