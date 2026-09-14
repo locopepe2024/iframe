@@ -17,6 +17,7 @@ const MODE_LABELS: Record<string, string> = {
   t2v: 'T2V',
   i2v: 'I2V',
   r2v: 'R2V',
+  f2v: 'F2V',
   v2v: 'V2V',
 };
 

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from src.apps.playground.models import GenerateRequest, PlaygroundDraft, PlaygroundGeneration, PlaygroundMode
 from src.apps.playground.service import PlaygroundService
 from src.apps.playground.storage import PlaygroundStorage
@@ -57,3 +59,21 @@ def test_legacy_history_moves_into_history_session(tmp_path: Path):
     assert session.title == "历史创作"
     assert storage.list_history(session_id=session.id)[0].id == "legacy-run"
     assert session.draft == PlaygroundDraft(mode=PlaygroundMode.T2I, model_id="image-a", prompt="legacy prompt", parent_generation_id="legacy-run")
+
+
+def test_first_last_frame_requires_exactly_two_images():
+    with pytest.raises(ValueError, match="exactly two images"):
+        GenerateRequest(
+            mode=PlaygroundMode.F2V,
+            model_id="uniart/minimax-h3-vip",
+            prompt="transition",
+            input_media=["first.png"],
+        )
+
+    request = GenerateRequest(
+        mode=PlaygroundMode.F2V,
+        model_id="uniart/minimax-h3-vip",
+        prompt="transition",
+        input_media=["first.png", "last.png"],
+    )
+    assert request.input_media == ["first.png", "last.png"]

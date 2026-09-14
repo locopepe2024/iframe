@@ -374,7 +374,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1262,7 +1263,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1324,7 +1326,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1386,7 +1389,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1448,7 +1452,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1510,7 +1515,8 @@
         "i2i",
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -3989,7 +3995,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -4078,7 +4085,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -4168,7 +4176,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -4254,7 +4263,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -7608,7 +7618,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -7706,7 +7717,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -7805,7 +7817,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [
@@ -7900,7 +7913,8 @@
       "capabilities": [
         "t2v",
         "i2v",
-        "r2v"
+        "r2v",
+        "f2v"
       ],
       "credential_sources": {
         "uniart": [

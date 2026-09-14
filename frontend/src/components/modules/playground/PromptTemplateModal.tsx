@@ -21,7 +21,7 @@ function categoryMeta(cat: string) {
 
 function modeToCategory(mode: string): CategoryValue {
   if (mode === "t2i" || mode === "i2i") return "image";
-  if (mode === "t2v" || mode === "i2v" || mode === "r2v" || mode === "v2v") return "video";
+  if (mode === "t2v" || mode === "i2v" || mode === "r2v" || mode === "f2v" || mode === "v2v") return "video";
   return "general";
 }
 

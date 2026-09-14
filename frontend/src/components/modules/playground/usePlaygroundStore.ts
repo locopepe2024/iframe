@@ -54,7 +54,7 @@ let queueSeq = 0;
 // Types
 // ---------------------------------------------------------------------------
 
-export type PlaygroundMode = 't2i' | 'i2i' | 't2v' | 'i2v' | 'r2v' | 'v2v';
+export type PlaygroundMode = 't2i' | 'i2i' | 't2v' | 'i2v' | 'r2v' | 'f2v' | 'v2v';
 
 export interface PlaygroundOutput {
   id: string;

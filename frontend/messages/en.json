@@ -1632,6 +1632,7 @@
       "parametersLabel": "Parameters",
       "mediaReference": "Reference image",
       "mediaFirstFrame": "First frame",
+      "mediaFirstLastFrame": "First and last frames",
       "mediaRefMaterial": "Reference material",
       "mediaSourceVideo": "Source video",
       "generate": "Generate",
@@ -1691,6 +1692,7 @@
       "t2v": "Text to video",
       "i2v": "Image to video",
       "r2v": "Omni reference",
+      "f2v": "First / last frame",
       "v2v": "Edit"
     },
     "results": {
@@ -1735,11 +1737,14 @@
         "i2i": "JPG / PNG / WebP supported; recommended at least 512px",
         "i2v": "JPG / PNG / WebP supported; recommended at least 720px",
         "r2v": "JPG / PNG / WebP supported; up to 9 reference images",
+        "f2v": "Upload exactly two images: first frame, then last frame",
         "v2v": "MP4 / MOV / WebM supported",
         "r2vSeedance": "Seedance accepts image, video, and audio as reference material"
       },
       "labelReferenceOptional": "Reference image (optional)",
-      "labelRefMaterialAV": "Reference material (image/video/audio)"
+      "labelRefMaterialAV": "Reference material (image/video/audio)",
+      "firstFrame": "First frame",
+      "lastFrame": "Last frame"
     },
     "prompt": {
       "placeholder": "Describe what you want to generate…",

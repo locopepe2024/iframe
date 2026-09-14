@@ -106,9 +106,19 @@ class UniArtVideoModel(VideoGenModel):
         for key in ("duration", "resolution", "size", "ratio", "aspect_ratio", "watermark", "generate_audio"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
-        image = _media(kwargs.get("img_url") or kwargs.get("img_path"))
-        if image:
-            body["input_reference"] = image
+        first_frame = _media(kwargs.get("first_frame"))
+        last_frame = _media(kwargs.get("last_frame"))
+        if first_frame or last_frame:
+            if not first_frame or not last_frame:
+                raise ValueError("UniArt first/last-frame mode requires both frames")
+            body["content"] = [
+                {"type": "image_url", "role": "first_frame", "image_url": {"url": first_frame}},
+                {"type": "image_url", "role": "last_frame", "image_url": {"url": last_frame}},
+            ]
+        else:
+            image = _media(kwargs.get("img_url") or kwargs.get("img_path"))
+            if image:
+                body["input_reference"] = image
         task = _post("/videos", body)
         result = _poll(task.get("task_id") or task.get("id"))
         _download(_result_url(result, "video"), output_path)

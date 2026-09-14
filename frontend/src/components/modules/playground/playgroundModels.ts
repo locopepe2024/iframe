@@ -77,7 +77,7 @@ const allModels = Object.entries(catalog.models);
 // Family priority maps (lower number = higher priority)
 // ---------------------------------------------------------------------------
 
-const VIDEO_MODES = new Set<string>(['t2v', 'i2v', 'r2v', 'v2v']);
+const VIDEO_MODES = new Set<string>(['t2v', 'i2v', 'r2v', 'f2v', 'v2v']);
 
 const VIDEO_FAMILY_PRIORITY: Record<string, number> = {
   happyhorse: 1,
@@ -319,7 +319,7 @@ export function getModelCapabilities(modelId: string): PlaygroundMode[] {
   const model = catalog.models[modelId];
   if (!model) return [];
   return model.capabilities.filter((capability): capability is PlaygroundMode =>
-    ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'v2v'].includes(capability),
+    ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability),
   );
 }
 

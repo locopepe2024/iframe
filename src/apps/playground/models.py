@@ -1,6 +1,6 @@
 from typing import List, Optional
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PlaygroundMode(str, Enum):
@@ -9,6 +9,7 @@ class PlaygroundMode(str, Enum):
     T2V = "t2v"
     I2V = "i2v"
     R2V = "r2v"
+    F2V = "f2v"
     V2V = "v2v"
 
 
@@ -79,6 +80,12 @@ class GenerateRequest(BaseModel):
     batch_size: Optional[int] = Field(1, ge=1, le=4, description="Number of outputs to generate (1-4)")
     session_id: Optional[str] = Field(None, description="Creation session for this generation")
     parent_generation_id: Optional[str] = Field(None, description="Generation being edited and continued")
+
+    @model_validator(mode="after")
+    def validate_mode_media(self):
+        if self.mode == PlaygroundMode.F2V and len(self.input_media or []) != 2:
+            raise ValueError("f2v requires exactly two images: first frame and last frame")
+        return self
 
 
 class CreateSessionRequest(BaseModel):

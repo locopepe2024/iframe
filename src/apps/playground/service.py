@@ -99,7 +99,7 @@ class PlaygroundService:
             mode = gen.mode
             if mode in (PlaygroundMode.T2I, PlaygroundMode.I2I):
                 self._process_image_generation(gen)
-            elif mode in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V, PlaygroundMode.V2V):
+            elif mode in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V, PlaygroundMode.F2V, PlaygroundMode.V2V):
                 self._process_video_generation(gen)
             else:
                 raise ValueError(f"Unsupported playground mode: {mode}")
@@ -387,6 +387,13 @@ class PlaygroundService:
         if gen.mode == PlaygroundMode.R2V and gen.input_media:
             kwargs["generation_mode"] = "r2v"
             kwargs["ref_image_urls"] = list(gen.input_media)
+
+        if gen.mode == PlaygroundMode.F2V:
+            if len(gen.input_media) != 2:
+                raise ValueError("First/last-frame generation requires exactly two images")
+            kwargs["generation_mode"] = "first_last_frame"
+            kwargs["first_frame"] = gen.input_media[0]
+            kwargs["last_frame"] = gen.input_media[1]
 
         self._mulerouter_video_model.generate(
             prompt=gen.prompt,

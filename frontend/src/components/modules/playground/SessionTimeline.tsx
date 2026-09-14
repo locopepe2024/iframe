@@ -7,7 +7,7 @@ import ResultCard from './ResultCard';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
 const MODE_LABELS: Record<string, string> = {
-  t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', v2v: 'V2V',
+  t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', f2v: 'F2V', v2v: 'V2V',
 };
 
 function parameterSummary(parameters: Record<string, any>): string {

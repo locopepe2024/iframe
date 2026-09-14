@@ -217,7 +217,8 @@ export default function PlaygroundPage() {
   useEffect(() => { pump(); }, [activeCount, maxConcurrent, pump, queue]);
 
   const resultCount = history.reduce((count, item) => count + item.outputs.length, 0);
-  const canGenerate = Boolean(activeSessionId && prompt.trim());
+  const hasRequiredMedia = mode !== 'f2v' || inputMedia.length === 2;
+  const canGenerate = Boolean(activeSessionId && prompt.trim() && hasRequiredMedia);
   const outputType = getOutputType(mode);
 
   return (

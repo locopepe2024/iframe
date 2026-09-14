@@ -10,7 +10,7 @@ import { useTranslations } from 'next-intl';
 // Constants
 // ---------------------------------------------------------------------------
 
-const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'v2v']);
+const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'f2v', 'v2v']);
 const BATCH_OPTIONS = [1, 2, 4] as const;
 
 const FALLBACK_RATIOS = ['16:9', '9:16', '1:1'];

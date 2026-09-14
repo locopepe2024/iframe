@@ -7,7 +7,7 @@ import {
 
 describe('playground composer catalog controls', () => {
   it('uses the selected SKU capabilities for creation methods', () => {
-    expect(getModelCapabilities('uniart/minimax-h3-vip')).toEqual(['t2v', 'i2v', 'r2v']);
+    expect(getModelCapabilities('uniart/minimax-h3-vip')).toEqual(['t2v', 'i2v', 'r2v', 'f2v']);
     expect(getModelCapabilities('uniart/gpt-image-2')).toEqual(['t2i', 'i2i']);
   });
 

@@ -8,7 +8,7 @@ supported_backends: [uniart]
 default_backend: uniart
 credential_sources:
   uniart: [UNIART_API_KEY, OPENAI_API_KEY]
-supported_modalities: [t2i, i2i, t2v, i2v, r2v]
+supported_modalities: [t2i, i2i, t2v, i2v, r2v, f2v]
 transport:
   image_input_mode: {uniart: uniart_base64_image}
   audio_input_mode: {uniart: uniart_audio_url}
@@ -33,7 +33,7 @@ models:
     description: Seedance 2.5 video generation through the UniArt gateway
     status: active
     release_stage: stable
-    capabilities: [t2v, i2v, r2v]
+    capabilities: [t2v, i2v, r2v, f2v]
     docs: {context_hub_doc_ids: [uniart/seedance-2.5]}
     runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.5-vip}}
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 20, recommended: true, badges: [UniArt]}
@@ -47,7 +47,7 @@ models:
     description: Minimax H3 video generation through the UniArt gateway
     status: active
     release_stage: stable
-    capabilities: [t2v, i2v, r2v]
+    capabilities: [t2v, i2v, r2v, f2v]
     docs: {context_hub_doc_ids: [uniart/minimax-h3]}
     runtime: {uniart: {gateway: uniart, api_model_id: minimax-h3-vip}}
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 25, badges: [UniArt]}
@@ -61,7 +61,7 @@ models:
     description: Seedance 2.0 video generation through the UniArt gateway
     status: active
     release_stage: stable
-    capabilities: [t2v, i2v, r2v]
+    capabilities: [t2v, i2v, r2v, f2v]
     docs: {context_hub_doc_ids: [uniart/seedance-2.0]}
     runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.0-vip}}
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 30, badges: [UniArt]}
@@ -74,7 +74,7 @@ models:
     description: Seedance 2.5 video generation through the UniArt gateway
     status: active
     release_stage: stable
-    capabilities: [t2v, i2v, r2v]
+    capabilities: [t2v, i2v, r2v, f2v]
     docs: {context_hub_doc_ids: [uniart/seedance-2.5]}
     runtime: {uniart: {gateway: uniart, api_model_id: seedance-2.5-special}}
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 35, badges: [UniArt]}

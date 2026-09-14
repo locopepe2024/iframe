@@ -1632,6 +1632,7 @@
       "parametersLabel": "参数",
       "mediaReference": "参考图片",
       "mediaFirstFrame": "首帧图片",
+      "mediaFirstLastFrame": "首尾帧图片",
       "mediaRefMaterial": "参考素材",
       "mediaSourceVideo": "源视频",
       "generate": "生成",
@@ -1691,6 +1692,7 @@
       "t2v": "文生",
       "i2v": "图生",
       "r2v": "全能",
+      "f2v": "首尾帧",
       "v2v": "编辑"
     },
     "results": {
@@ -1735,11 +1737,14 @@
         "i2i": "支持 JPG / PNG / WebP，建议尺寸不小于 512px",
         "i2v": "支持 JPG / PNG / WebP，建议尺寸不小于 720px",
         "r2v": "支持 JPG / PNG / WebP，最多 9 张参考图",
+        "f2v": "依次上传首帧和尾帧两张图片",
         "v2v": "支持 MP4 / MOV / WebM",
         "r2vSeedance": "Seedance 支持图片、视频、音频作为参考素材"
       },
       "labelReferenceOptional": "参考图片（可选）",
-      "labelRefMaterialAV": "参考素材（图片/视频/音频）"
+      "labelRefMaterialAV": "参考素材（图片/视频/音频）",
+      "firstFrame": "首帧",
+      "lastFrame": "尾帧"
     },
     "prompt": {
       "placeholder": "描述你想生成的内容...",

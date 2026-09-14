@@ -53,6 +53,14 @@ const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
     maxFiles: 9,
     icon: 'image',
   },
+  f2v: {
+    labelKey: 'compose.mediaFirstLastFrame',
+    accept: 'image/*',
+    hintKey: 'f2v',
+    multiple: true,
+    maxFiles: 2,
+    icon: 'image',
+  },
   v2v: {
     labelKey: 'compose.mediaSourceVideo',
     accept: 'video/*',
@@ -430,6 +438,12 @@ export default function MediaInput() {
                 >
                   <X className="w-3 h-3" />
                 </button>
+
+                {mode === 'f2v' && (
+                  <div className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[0.5625rem] font-medium text-white">
+                    {t(index === 0 ? 'media.firstFrame' : 'media.lastFrame')}
+                  </div>
+                )}
 
                 {/* File name — bottom gradient scrim (functional, theme-agnostic) */}
                 <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-gradient-to-t from-black/75 to-transparent text-[0.5625rem] text-white truncate">

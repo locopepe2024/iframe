@@ -12,7 +12,7 @@ import QueuePanel from './QueuePanel';
 
 type FilterType = 'all' | 'image' | 'video';
 
-const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'v2v']);
+const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'f2v', 'v2v']);
 
 function formatSessionLabel(
   dateStr: string,

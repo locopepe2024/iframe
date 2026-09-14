@@ -5,7 +5,7 @@ import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import { getModelCapabilities } from './playgroundModels';
 
 const IMAGE_MODES: PlaygroundMode[] = ['t2i', 'i2i'];
-const VIDEO_MODES: PlaygroundMode[] = ['t2v', 'i2v', 'r2v', 'v2v'];
+const VIDEO_MODES: PlaygroundMode[] = ['t2v', 'i2v', 'r2v', 'f2v'];
 
 export type PlaygroundOutputType = 'image' | 'video';
 

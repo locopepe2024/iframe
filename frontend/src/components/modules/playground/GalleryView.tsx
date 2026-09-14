@@ -31,7 +31,7 @@ function formatTime(dateStr: string): string {
   return `${hh}:${mm}`;
 }
 
-const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'v2v']);
+const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'f2v', 'v2v']);
 
 // ---------------------------------------------------------------------------
 // Component
