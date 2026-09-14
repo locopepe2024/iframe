@@ -1,0 +1,128 @@
+# LumenX Session-first 创作台设计
+
+## 目标
+
+在不替换现有 Playground 模型适配、队列和素材组件的前提下，将“单次生成结果画廊”升级为可持续编辑的 Session 创作历史。
+
+每个 Session 保存独立的当前草稿和生成历史。用户可以：
+
+- 新建并保存多个 Session；
+- 点击历史 Session 恢复该创作上下文；
+- 在时间线中查看每次提示词、参数、参考素材和生成结果；
+- 点击任一历史轮次，将其完整输入恢复到编辑面板；
+- 以历史图片或视频为参考素材继续生成；
+- 保存新生成与来源轮次之间的父子关系。
+
+## Evidence Boundary
+
+### Code fact
+
+- 当前 `PlaygroundGeneration` 已保存生成所需的模式、模型、提示词、参考素材、参数和输出。
+- 当前历史为扁平 `playground_history.json`，不存在 Session 聚合。
+- 当前前端已经支持将生成结果放回参考素材输入。
+
+### Direct implication
+
+Phase 1 不需要修改 provider adapter。只需要增加 Session 聚合、生成归属和历史恢复动作，即可复用当前生成链路。
+
+### Not yet proven
+
+- Agent 自动改写提示词和自动选择模型是否提升完成率，尚无运行数据支持。
+- 因此 Phase 1 只建立 Agent-like 时间线交互，不引入自动决策或隐式参数修改。
+
+## Domain Model
+
+### PlaygroundSession
+
+```text
+id
+title
+draft
+created_at
+updated_at
+```
+
+`draft` 保存当前未提交或最近使用的：
+
+```text
+mode
+model_id
+prompt
+negative_prompt
+input_media[]
+parameters{}
+batch_size
+parent_generation_id?
+```
+
+### PlaygroundGeneration 增量字段
+
+```text
+session_id
+parent_generation_id?
+```
+
+- `session_id`：生成所属 Session。
+- `parent_generation_id`：用户从哪一轮“编辑并继续”；为空表示 Session 根轮次。
+
+## API
+
+```text
+GET    /playground/sessions
+POST   /playground/sessions
+GET    /playground/sessions/{id}
+PATCH  /playground/sessions/{id}
+GET    /playground/history?session_id={id}
+POST   /playground/generate
+```
+
+`POST /playground/generate` 接收 `session_id` 和可选 `parent_generation_id`。创建任务时保存完整输入快照，并同步 Session 草稿与更新时间。
+
+## UI Contract
+
+桌面端：
+
+```text
+┌──────────────┬──────────────────┬────────────────────────────┐
+│ Compose      │ Session history  │ Conversation timeline      │
+│ prompt       │ + New Session    │ user request               │
+│ references   │ Session A        │ assistant generation       │
+│ model/params │ Session B        │ user refinement            │
+│ Generate     │ Session C        │ assistant generation       │
+└──────────────┴──────────────────┴────────────────────────────┘
+```
+
+- Session 列表始终显示清晰的选中态、更新时间和生成轮数。
+- 时间线按旧到新排列，避免历史生成倒序造成对话阅读方向混乱。
+- 用户输入卡显示提示词、模式、模型和参考素材数量。
+- 生成结果紧跟对应用户输入，不拆散到全局画廊。
+- “编辑并继续”恢复完整输入快照，不立即生成。
+- “作为图片参考”“生成视频”继续复用现有素材动作。
+- 运行中、失败和完成状态必须显示在对应轮次内。
+
+窄屏：Session 列表折叠为顶部选择器；编辑面板与时间线允许上下切换，不能产生横向滚动。
+
+## Persistence
+
+- Session 存储：`output/playground_sessions.json`。
+- Generation 继续存储在 `output/playground_history.json`。
+- 现有无 `session_id` 的历史首次加载时归入一个“历史创作”Session，保留原生成记录。
+- Session 草稿采用后端持久化；前端切换 Session 前和编辑停止后更新草稿。
+
+## Phase 1 Success Criteria
+
+1. 空数据首次进入时自动创建一个 Session。
+2. 可以创建至少两个 Session，并分别保存草稿与生成历史。
+3. 切换 Session 后只显示该 Session 的时间线。
+4. 点击历史轮次可以恢复完整输入，不只恢复提示词。
+5. 从历史轮次再次生成时保存 `parent_generation_id`。
+6. 刷新页面后 Session、草稿、生成历史和进行中任务仍可恢复。
+7. 现有图片/视频生成 API、素材上传、收藏和下载行为不回归。
+
+## Deferred
+
+- 自然语言 Agent 自动拆解任务；
+- 多 Session 跨会话素材引用图；
+- Session 分支树可视化；
+- 多人协作、权限和云同步；
+- 自动总结长 Session。
