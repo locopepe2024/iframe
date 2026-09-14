@@ -23,7 +23,7 @@ from .models import (
 )
 from .service import PlaygroundService
 from .storage import PlaygroundStorage
-from ..identity import UserContext, require_user_context
+from ..identity import UserContext, _resolve_request_context, require_user_context
 from ..user_config import get_user_config_store
 from ...utils import get_logger
 
@@ -174,7 +174,7 @@ def get_generation_media(
     authorization: str | None = Header(default=None),
 ):
     if authorization:
-        identity = require_user_context(authorization)
+        identity, _ = _resolve_request_context(authorization, None)
     else:
         if expires < int(time.time()):
             raise HTTPException(status_code=401, detail="Media URL expired")

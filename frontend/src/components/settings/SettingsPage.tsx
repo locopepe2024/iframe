@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw, LogOut } from "lucide-react";
+import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
 import { ASPECT_RATIOS } from "@/store/projectStore";
@@ -21,7 +21,6 @@ import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import LumenXBranding from "@/components/layout/LumenXBranding";
 import UpdateChecker from "./UpdateChecker";
-import { useAuth } from "@/components/auth/AuthProvider";
 type SettingsCategory = "general" | "models" | "prompts" | "apikeys" | "storage" | "about";
 import {
   FormRow,
@@ -186,7 +185,6 @@ function Section({
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const { locale, theme, animations, setLocale, setTheme, setAnimations } = useSettingsStore();
-  const { profile, logout } = useAuth();
 
   const [active, setActive] = useState<SettingsCategory>("general");
 
@@ -735,17 +733,9 @@ export default function SettingsPage() {
         <div className="space-y-1">
           <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-glass-border bg-glass px-4 py-3">
             <div>
-              <div className="text-sm font-medium text-foreground">{profile?.display_name || "UniArt 用户"}</div>
-              <div className="mt-0.5 text-xs text-text-muted">个人配置仅对当前账户生效</div>
+              <div className="text-sm font-medium text-foreground">当前浏览器配置</div>
+              <div className="mt-0.5 text-xs text-text-muted">配置、会话和素材仅对当前浏览器生效</div>
             </div>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
-            >
-              <LogOut size={16} aria-hidden="true" />
-              退出登录
-            </button>
           </div>
           <FormRow label="UniArt API Key" hint="用于文字、图片和视频模型调用">
             <FieldLabel>UNIART_API_KEY *</FieldLabel>

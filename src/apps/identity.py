@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass
 from typing import Any, Dict
 
 import requests
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
 
@@ -22,6 +23,10 @@ class UserContext:
 class LoginRequest(BaseModel):
     login_name: str
     password: str
+
+
+BROWSER_PROFILE_COOKIE = "lumenx-browser-profile"
+BROWSER_PROFILE_MAX_AGE = 60 * 60 * 24 * 365
 
 
 class UniArtIdentityClient:
@@ -106,10 +111,62 @@ def _context_from_payload(payload: Dict[str, Any], token: str) -> UserContext:
     )
 
 
-def require_user_context(authorization: str | None = Header(default=None)) -> UserContext:
-    token = _extract_bearer(authorization)
-    payload = UniArtIdentityClient().me(token)
-    return _context_from_payload(payload, token)
+def _browser_context(profile_id: str) -> UserContext:
+    normalized = profile_id.strip()
+    return UserContext(
+        user_id=f"browser-{normalized}",
+        owner_profile_id=f"browser-{normalized}",
+        display_name="本地浏览器用户",
+        access_token="",
+    )
+
+
+def _new_browser_context() -> UserContext:
+    return _browser_context(secrets.token_urlsafe(32))
+
+
+def _resolve_request_context(
+    authorization: str | None,
+    browser_profile: str | None,
+) -> tuple[UserContext, bool]:
+    if authorization:
+        token = _extract_bearer(authorization)
+        payload = UniArtIdentityClient().me(token)
+        return _context_from_payload(payload, token), False
+    if browser_profile:
+        return _browser_context(browser_profile), False
+    return _new_browser_context(), True
+
+
+def _set_browser_profile_cookie(response: Response, request: Request, identity: UserContext) -> None:
+    profile_id = identity.owner_profile_id.removeprefix("browser-")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    secure = (forwarded_proto or request.url.scheme).lower() == "https"
+    response.set_cookie(
+        BROWSER_PROFILE_COOKIE,
+        profile_id,
+        max_age=BROWSER_PROFILE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        path="/",
+    )
+
+
+def require_user_context(
+    request: Request,
+    response: Response,
+    authorization: str | None = Header(default=None),
+    browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
+) -> UserContext:
+    existing = getattr(request.state, "lumenx_identity", None)
+    if existing is not None:
+        return existing
+    identity, should_set_cookie = _resolve_request_context(authorization, browser_profile)
+    request.state.lumenx_identity = identity
+    if should_set_cookie:
+        _set_browser_profile_cookie(response, request, identity)
+    return identity
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -121,11 +178,24 @@ def login(request: LoginRequest):
 
 
 @router.get("/me")
-def me(authorization: str | None = Header(default=None)):
-    token = _extract_bearer(authorization)
-    payload = UniArtIdentityClient().me(token)
-    _context_from_payload(payload, token)
-    return payload
+def me(
+    request: Request,
+    response: Response,
+    authorization: str | None = Header(default=None),
+    browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
+):
+    identity, should_set_cookie = _resolve_request_context(authorization, browser_profile)
+    if should_set_cookie:
+        _set_browser_profile_cookie(response, request, identity)
+    return {
+        "user": {"user_id": identity.user_id, "login_name": None},
+        "profile": {
+            "profile_id": identity.owner_profile_id,
+            "owner_user_id": identity.user_id,
+            "display_name": identity.display_name,
+        },
+        "auth_mode": "bearer" if identity.access_token else "browser",
+    }
 
 
 @router.post("/logout", status_code=204)

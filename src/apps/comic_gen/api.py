@@ -71,7 +71,14 @@ if os.path.exists(env_path):
     load_dotenv(env_path, override=True)
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
-from ..identity import router as identity_router, UserContext, require_user_context
+from ..identity import (
+    BROWSER_PROFILE_COOKIE,
+    UserContext,
+    _resolve_request_context,
+    _set_browser_profile_cookie,
+    identity_router,
+    require_user_context,
+)
 from ..studio_access import (
     current_studio_user,
     require_studio_user,
@@ -171,10 +178,12 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         return await call_next(request)
 
     try:
-        user = await asyncio.to_thread(
-            require_user_context,
+        user, should_set_cookie = await asyncio.to_thread(
+            _resolve_request_context,
             request.headers.get("Authorization"),
+            request.cookies.get(BROWSER_PROFILE_COOKIE),
         )
+        request.state.lumenx_identity = user
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
@@ -190,7 +199,10 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
 
     context_token = set_studio_user(user)
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        if should_set_cookie:
+            _set_browser_profile_cookie(response, request, user)
+        return response
     finally:
         reset_studio_user(context_token)
 
