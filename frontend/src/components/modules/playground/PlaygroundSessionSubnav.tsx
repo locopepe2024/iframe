@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageSquare, Plus } from 'lucide-react';
+import { History, LayoutTemplate, MessageSquare, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { createPlaygroundSession, openPlaygroundSession } from './playgroundSessionController';
@@ -17,6 +17,8 @@ export default function PlaygroundSessionSubnav() {
   const t = useTranslations('playground.sessions');
   const sessions = usePlaygroundStore((state) => state.sessions);
   const activeSessionId = usePlaygroundStore((state) => state.activeSessionId);
+  const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
+  const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
 
   const handleCreate = async () => {
     try {
@@ -36,6 +38,29 @@ export default function PlaygroundSessionSubnav() {
         <Plus size={15} aria-hidden="true" />
         <span>{t('new')}</span>
       </button>
+
+      <div className="mt-1 grid grid-cols-2 gap-1 border-y border-border-subtle py-2">
+        <button
+          type="button"
+          onClick={() => setShowHistoryDrawer(true)}
+          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.625rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <History size={15} aria-hidden="true" />
+          <span>{t('allHistory')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowTemplateModal(true)}
+          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.625rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <LayoutTemplate size={15} aria-hidden="true" />
+          <span>{t('templates')}</span>
+        </button>
+      </div>
+
+      <div className="px-2.5 pb-1 pt-3 font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-text-muted">
+        {t('recent')}
+      </div>
 
       <div className="mt-1 space-y-0.5">
         {sessions.map((session) => {

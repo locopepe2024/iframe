@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { X, Copy, BookmarkPlus, Search, History } from 'lucide-react';
 import { usePlaygroundStore } from './usePlaygroundStore';
+import { playgroundApi } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,13 +60,45 @@ export default function PromptHistoryDrawer() {
   const t = useTranslations('playground');
   const showHistoryDrawer = usePlaygroundStore((s) => s.showHistoryDrawer);
   const setShowHistoryDrawer = usePlaygroundStore((s) => s.setShowHistoryDrawer);
-  const history = usePlaygroundStore((s) => s.history);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
   const setShowTemplateModal = usePlaygroundStore((s) => s.setShowTemplateModal);
 
   const [search, setSearch] = useState('');
   const [visible, setVisible] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showHistoryDrawer) return;
+    let cancelled = false;
+    setLoading(true);
+    playgroundApi.getHistory(200, 0)
+      .then((items) => {
+        if (cancelled) return;
+        setHistoryEntries(items.map((item) => ({
+          prompt: item.prompt,
+          mode: item.mode,
+          model_id: item.model_id,
+          created_at: item.created_at,
+        })));
+      })
+      .catch((error) => {
+        console.error('[Playground] Failed to load global prompt history:', error);
+        if (!cancelled) {
+          setHistoryEntries(usePlaygroundStore.getState().history.map((item) => ({
+            prompt: item.prompt,
+            mode: item.mode,
+            model_id: item.model_id,
+            created_at: item.created_at,
+          })));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showHistoryDrawer]);
 
   // Animate in after mount
   useEffect(() => {
@@ -84,11 +117,11 @@ export default function PromptHistoryDrawer() {
     setTimeout(() => setShowHistoryDrawer(false), 250);
   }, [setShowHistoryDrawer]);
 
-  // Deduplicate by prompt text, keep the most recent occurrence (history is newest-first)
+  // Deduplicate by prompt text, keep the most recent occurrence (API is newest-first).
   const deduplicated = useMemo<HistoryEntry[]>(() => {
     const seen = new Set<string>();
     const results: HistoryEntry[] = [];
-    for (const gen of history) {
+    for (const gen of historyEntries) {
       const key = gen.prompt.trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -100,7 +133,7 @@ export default function PromptHistoryDrawer() {
       });
     }
     return results;
-  }, [history]);
+  }, [historyEntries]);
 
   // Filter by search query
   const filtered = useMemo(() => {
@@ -171,7 +204,11 @@ export default function PromptHistoryDrawer() {
 
         {/* ── List ───────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto px-6 py-2">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex h-full items-center justify-center font-mono text-xs text-text-muted">
+              {t('history.loading')}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-6">
               <History className="w-7 h-7 text-text-muted/50 mb-3" />
               <p className="font-display italic text-[0.9375rem] text-text-secondary leading-relaxed">

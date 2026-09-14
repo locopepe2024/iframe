@@ -1641,6 +1641,9 @@
       "new": "新建会话",
       "selectLabel": "选择创作会话",
       "navigationLabel": "创作台会话",
+      "allHistory": "全部历史",
+      "templates": "模板库",
+      "recent": "最近会话",
       "saving": "正在保存草稿…"
     },
     "timeline": {
@@ -1749,7 +1752,8 @@
       "save": "保存模板"
     },
     "history": {
-      "title": "Prompt 历史",
+      "title": "全部 Prompt 历史",
+      "loading": "正在加载历史…",
       "searchPlaceholder": "搜索历史 prompt...",
       "noMatch": "无匹配结果",
       "empty": "暂无生成历史",

@@ -35,7 +35,7 @@ export default function PromptInput() {
         <button
           type="button"
           onClick={() => setShowTemplateModal(true)}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[0.6875rem] font-medium text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground md:hidden"
         >
           <Copy size={12} />
           {t('prompt.templates')}
@@ -43,7 +43,7 @@ export default function PromptInput() {
         <button
           type="button"
           onClick={() => setShowHistoryDrawer(true)}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[0.6875rem] font-medium text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground md:hidden"
         >
           <Clock size={12} />
           {t('prompt.history')}

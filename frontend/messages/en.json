@@ -1641,6 +1641,9 @@
       "new": "New session",
       "selectLabel": "Select creation session",
       "navigationLabel": "Playground sessions",
+      "allHistory": "All history",
+      "templates": "Templates",
+      "recent": "Recent sessions",
       "saving": "Saving draft…"
     },
     "timeline": {
@@ -1749,7 +1752,8 @@
       "save": "Save template"
     },
     "history": {
-      "title": "Prompt history",
+      "title": "All prompt history",
+      "loading": "Loading history…",
       "searchPlaceholder": "Search prompt history…",
       "noMatch": "No matching results",
       "empty": "No history yet",
