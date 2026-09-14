@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check } from "lucide-react";
+import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, type EnvConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
 import { ASPECT_RATIOS } from "@/store/projectStore";
@@ -59,7 +59,6 @@ type EnvConfig = EnvConfigPayload & {
 
 const ENDPOINT_PROVIDERS = [
   { key: "UNIART_BASE_URL", label: "UniArt", placeholder: "https://uniart.fun/v1" },
-  { key: "MULEROUTER_BASE_URL", label: "MuleRouter", placeholder: "https://api.mulerouter.ai" },
 ];
 
 const DEFAULT_CONFIG: EnvConfig = {
@@ -97,13 +96,6 @@ const getValidationErrors = (env: EnvConfig): string[] => {
   const hasUniArt = Boolean(env.UNIART_API_KEY?.trim() || env.OPENAI_API_KEY?.trim() || configured.UNIART_API_KEY || configured.OPENAI_API_KEY);
   if ((env.LLM_PROVIDER || "openai") === "openai" ? !hasUniArt : !env.DASHSCOPE_API_KEY?.trim()) {
     errors.push((env.LLM_PROVIDER || "openai") === "openai" ? "UniArt API Key" : "DashScope API Key");
-  }
-  if (env.KLING_PROVIDER_MODE === "vendor") {
-    if (!env.KLING_ACCESS_KEY?.trim()) errors.push("Kling Access Key (vendor mode)");
-    if (!env.KLING_SECRET_KEY?.trim()) errors.push("Kling Secret Key (vendor mode)");
-  }
-  if (env.VIDU_PROVIDER_MODE === "vendor" && !env.VIDU_API_KEY?.trim()) {
-    errors.push("Vidu API Key (vendor mode)");
   }
   return errors;
 };
@@ -226,6 +218,8 @@ export default function SettingsPage() {
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemChecked, setSystemChecked] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const [catalogModelCount, setCatalogModelCount] = useState<number | null>(null);
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -243,10 +237,7 @@ export default function SettingsPage() {
   useEffect(() => {
     loadConfig();
     refreshUniArtModelCatalog().then((count) => {
-      if (count > 0 && typeof window !== "undefined" && !sessionStorage.getItem("lumenx_uniart_catalog_reloaded")) {
-        sessionStorage.setItem("lumenx_uniart_catalog_reloaded", "1");
-        window.location.reload();
-      }
+      if (count > 0) setCatalogModelCount(count);
     });
   }, [loadConfig]);
 
@@ -414,11 +405,19 @@ export default function SettingsPage() {
     }
   };
 
-  // MuleRun 登录轮询的 interval 句柄：卸载时清理，避免轮询泄漏 + setConfig-after-unmount。
-  const mulerunPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => {
-    if (mulerunPollRef.current) clearInterval(mulerunPollRef.current);
-  }, []);
+  const handleRefreshCatalog = async () => {
+    setCatalogRefreshing(true);
+    try {
+      const count = await refreshUniArtModelCatalog();
+      setCatalogModelCount(count);
+      setModelSettings((current) => normalizeModelSettings(current, "global_settings"));
+      toast.success(count > 0 ? `已同步 ${count} 个 UniArt 媒体模型` : "UniArt catalog 暂无可用媒体模型");
+    } catch {
+      toast.error("UniArt catalog 更新失败");
+    } finally {
+      setCatalogRefreshing(false);
+    }
+  };
 
   const PathField = ({ value, label }: { value: string; label: string }) => (
     <div>
@@ -535,6 +534,16 @@ export default function SettingsPage() {
       title={t("secModelsTitle")}
       desc={t("secModelsDesc")}
     >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-glass-border bg-surface-inset p-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">UniArt Catalog</div>
+          <div className="mt-1 text-xs text-text-muted">模型、能力、分辨率和时长以 UniArt 发布内容为准{catalogModelCount != null ? ` · 当前 ${catalogModelCount} 个媒体模型` : ""}</div>
+        </div>
+        <button type="button" onClick={handleRefreshCatalog} disabled={catalogRefreshing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm font-medium text-foreground hover:bg-hover-bg disabled:opacity-50">
+          <RefreshCw size={15} className={catalogRefreshing ? "animate-spin" : ""} />
+          {catalogRefreshing ? "同步中" : "更新 Catalog"}
+        </button>
+      </div>
       {/* Image model (T2I + I2I unified) */}
       <FormRow label={t("imageModelLabel")} hint={t("imageModelHint")}>
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
@@ -713,142 +722,6 @@ export default function SettingsPage() {
               placeholder="https://uniart.fun/v1"
               className={settingsInputClass}
             />
-          </FormRow>
-
-          <FormRow label={t("klingLabel")} hint={t("klingHint")}>
-            <ModeSegment
-              value={config.KLING_PROVIDER_MODE}
-              onChange={(v) => handleChange("KLING_PROVIDER_MODE", v)}
-              options={[
-                { id: "dashscope", label: "DashScope" },
-                { id: "vendor", label: t("vendorDirect") },
-              ]}
-            />
-            {config.KLING_PROVIDER_MODE === "vendor" && (
-              <div className="space-y-3 mt-3">
-                <div>
-                  <FieldLabel>KLING_ACCESS_KEY *</FieldLabel>
-                  <KeyField value={config.KLING_ACCESS_KEY} onChange={(v) => handleChange("KLING_ACCESS_KEY", v)} placeholder="Kling Access Key" />
-                </div>
-                <div>
-                  <FieldLabel>KLING_SECRET_KEY *</FieldLabel>
-                  <KeyField value={config.KLING_SECRET_KEY} onChange={(v) => handleChange("KLING_SECRET_KEY", v)} placeholder="Kling Secret Key" />
-                </div>
-              </div>
-            )}
-          </FormRow>
-
-          <FormRow label="Vidu" hint={t("viduHint")}>
-            <ModeSegment
-              value={config.VIDU_PROVIDER_MODE}
-              onChange={(v) => handleChange("VIDU_PROVIDER_MODE", v)}
-              options={[
-                { id: "dashscope", label: "DashScope" },
-                { id: "vendor", label: t("vendorDirect") },
-              ]}
-            />
-            {config.VIDU_PROVIDER_MODE === "vendor" && (
-              <div className="mt-3">
-                <FieldLabel>VIDU_API_KEY *</FieldLabel>
-                <KeyField value={config.VIDU_API_KEY} onChange={(v) => handleChange("VIDU_API_KEY", v)} placeholder="Vidu API Key" />
-              </div>
-            )}
-          </FormRow>
-
-          <FormRow label={t("mulerunLabel")} hint={t("mulerunHint")}>
-            {!config.MULEROUTER_API_KEY && !config.MULERUN_CLI_LOGGED_IN && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await api.triggerMulerunLogin();
-                    if (mulerunPollRef.current) clearInterval(mulerunPollRef.current); // 重入守卫
-                    const stop = () => {
-                      if (mulerunPollRef.current) {
-                        clearInterval(mulerunPollRef.current);
-                        mulerunPollRef.current = null;
-                      }
-                    };
-                    mulerunPollRef.current = setInterval(async () => {
-                      try {
-                        const env = await api.getEnvConfig();
-                        if (env.MULERUN_CLI_LOGGED_IN) {
-                          stop();
-                          setConfig((c) => ({ ...c, MULERUN_CLI_LOGGED_IN: true }));
-                        }
-                      } catch {
-                        /* silent */
-                      }
-                    }, 3000);
-                    setTimeout(stop, 120000);
-                  } catch (err: any) {
-                    toast.error(err?.response?.data?.detail || t("loginFailed"));
-                  }
-                }}
-                className="w-full py-2.5 rounded-lg bg-primary text-on-accent text-sm font-medium hover:bg-primary-hover transition-colors mb-3"
-              >
-                {t("mulerunLogin")}
-              </button>
-            )}
-            {!config.MULEROUTER_API_KEY && config.MULERUN_CLI_LOGGED_IN && (
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex items-center gap-2 text-sm text-emerald-400">
-                  <Check size={16} />
-                  {t("mulerunLoggedIn")}
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await api.triggerMulerunLogin();
-                    } catch (err: any) {
-                      toast.error(err?.response?.data?.detail || t("loginFailed"));
-                    }
-                  }}
-                  className="text-xs text-text-secondary hover:text-foreground transition-colors underline underline-offset-2"
-                >
-                  {t("reLogin")}
-                </button>
-              </div>
-            )}
-            <FieldLabel>MULEROUTER_API_KEY</FieldLabel>
-            <KeyField
-              value={config.MULEROUTER_API_KEY}
-              onChange={(v) => setConfig((c) => ({ ...c, MULEROUTER_API_KEY: v }))}
-              placeholder="muk-..."
-            />
-            <details className="group mt-3">
-              <summary className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1">
-                <ChevronRight size={12} className="transition-transform group-open:rotate-90" />
-                {t("manualGetKey")}
-              </summary>
-              <div className="mt-2 space-y-2 pl-4 border-l border-glass-border">
-                {[
-                  { n: "1", label: t("stepInstallCli"), cmd: "npm i -g @mulerunai/cli" },
-                  { n: "2", label: t("stepBrowserLogin"), cmd: "mulerun login" },
-                  { n: "3", label: t("stepCopyKey"), cmd: "mulerun studio config" },
-                ].map((step) => (
-                  <div key={step.n} className="flex items-center gap-2 text-xs text-text-secondary">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[0.625rem] font-bold">
-                      {step.n}
-                    </span>
-                    <span>{step.label}</span>
-                    <code
-                      className="ml-auto px-2 py-0.5 bg-glass rounded text-[0.6875rem] font-mono select-all cursor-pointer"
-                      onClick={(e) => {
-                        navigator.clipboard.writeText(step.cmd);
-                        const el = e.currentTarget;
-                        el.style.outline = "1px solid var(--color-primary)";
-                        setTimeout(() => (el.style.outline = ""), 800);
-                      }}
-                    >
-                      {step.cmd}
-                    </code>
-                  </div>
-                ))}
-                <p className="text-[0.6875rem] text-text-muted mt-1">{t("mulerunKeyHint")}</p>
-              </div>
-            </details>
           </FormRow>
 
           <FormRow label={t("advancedEndpointsLabel")} hint={t("advancedEndpointsHint")}>

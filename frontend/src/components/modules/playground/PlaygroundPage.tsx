@@ -18,6 +18,7 @@ import {
   type QueuedRequest,
 } from './usePlaygroundStore';
 import { playgroundApi } from '@/lib/api';
+import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } from './playgroundModels';
 
 const POLL_INTERVAL = 2000;
 const MAX_POLL_ERRORS = 4;
@@ -84,11 +85,21 @@ export default function PlaygroundPage() {
     let cancelled = false;
     const bootstrap = async () => {
       try {
+        try {
+          const upstreamCatalog = await playgroundApi.getUniArtModels();
+          installUniArtCatalog(upstreamCatalog.models);
+        } catch (error) {
+          console.error('[Playground] Failed to refresh UniArt catalog:', error);
+        }
         let loaded = (await playgroundApi.getSessions()).map(toPlaygroundSession);
         if (loaded.length === 0) loaded = [toPlaygroundSession(await playgroundApi.createSession())];
         if (cancelled) return;
         setSessions(loaded);
         await openPlaygroundSession(loaded[0]);
+        const current = usePlaygroundStore.getState();
+        if (!getModelCapabilities(current.modelId).includes(current.mode)) {
+          current.setModelId(getDefaultModelForMode(current.mode));
+        }
         if (!cancelled) setSessionReady(true);
       } catch (error) {
         console.error('[Playground] Failed to initialise sessions:', error);

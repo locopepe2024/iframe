@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { getModelAudioControl, getModelDuration, getModelParams } from './playgroundModels';
+import { getModelAudioControl, getModelDuration, getModelParams, getModelRatioOptions, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 export type ComposerControl = 'resolution' | 'ratio' | 'seed' | 'audio' | 'batch';
@@ -135,6 +135,7 @@ export default function ComposerControls({ control }: { control: ComposerControl
   const batchSize = usePlaygroundStore((state) => state.batchSize);
   const setParameters = usePlaygroundStore((state) => state.setParameters);
   const setBatchSize = usePlaygroundStore((state) => state.setBatchSize);
+  usePlaygroundCatalogRevision();
   const params = getModelParams(modelId);
   const audioControl = getModelAudioControl(modelId);
   const update = (key: string, value: unknown) => setParameters({ ...parameters, [key]: value });
@@ -161,7 +162,8 @@ export default function ComposerControls({ control }: { control: ComposerControl
 
   if (control === 'ratio') {
     const sizeOptions = params?.size?.options ?? [];
-    const directOptions = params?.ratio?.options ?? [];
+    const resolution = (parameters.resolution as string | undefined) ?? params?.resolution?.default;
+    const directOptions = getModelRatioOptions(modelId, resolution);
     const ratioOptions = directOptions.length > 0
       ? directOptions
       : Array.from(new Set(sizeOptions.map(ratioFromSize).filter((value): value is string => Boolean(value))));

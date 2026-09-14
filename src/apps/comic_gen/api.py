@@ -51,6 +51,7 @@ from .models import (
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
+from ...utils.uniart_catalog import normalize_uniart_catalog
 from ...utils import setup_logging
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv, set_key
@@ -3989,20 +3990,7 @@ def get_uniart_models():
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    items = payload.get("data", payload if isinstance(payload, list) else [])
-    models = []
-    for item in items:
-        model_id = str(item.get("id", "")).strip() if isinstance(item, dict) else str(item).strip()
-        if not model_id:
-            continue
-        low = model_id.lower()
-        if "gpt-image" in low or "image" in low:
-            capabilities = ["t2i", "i2i"]
-        elif any(token in low for token in ("seedance", "minimax", "video", "h3")):
-            capabilities = ["t2v", "i2v", "r2v"]
-        else:
-            capabilities = ["text"]
-        models.append({"id": f"uniart/{model_id}", "api_model_id": model_id, "capabilities": capabilities})
+    models = normalize_uniart_catalog(payload)
     return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 

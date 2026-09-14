@@ -1669,7 +1669,31 @@ export interface PlaygroundTemplateResponse {
   updated_at: string;
 }
 
+export interface UniArtCatalogModelResponse {
+  id: string;
+  api_model_id: string;
+  display_name: string;
+  description: string;
+  family: string;
+  provider: 'uniart';
+  capabilities: string[];
+  duration?: {
+    type: 'slider' | 'buttons' | 'fixed';
+    min?: number;
+    max?: number;
+    step?: number;
+    default?: number;
+    value?: number;
+    options?: number[];
+  } | null;
+  params?: Record<string, unknown>;
+  inputs?: Record<string, { max?: number }>;
+}
+
 export const playgroundApi = {
+  getUniArtModels: () =>
+    axios.get<{ provider: string; models: UniArtCatalogModelResponse[]; fetched_at: number }>(API_URL + "/config/uniart/models", { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.data),
+
   generate: (data: PlaygroundGenerateRequest) =>
     axios.post<PlaygroundGenerationResponse>(API_URL + "/playground/generate", data).then(r => r.data),
 

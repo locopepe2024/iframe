@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { usePlaygroundStore } from './usePlaygroundStore';
-import { getModelParams, getModelDuration } from './playgroundModels';
+import { getModelParams, getModelDuration, getModelRatioOptions, usePlaygroundCatalogRevision } from './playgroundModels';
 import { ChevronDown, Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -237,6 +237,7 @@ export default function ParameterBar() {
   const batchSize = usePlaygroundStore((s) => s.batchSize);
   const setParameters = usePlaygroundStore((s) => s.setParameters);
   const setBatchSize = usePlaygroundStore((s) => s.setBatchSize);
+  usePlaygroundCatalogRevision();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -254,8 +255,12 @@ export default function ParameterBar() {
 
   const sizeOptions = modelParams?.size?.options ?? [];
   const sizeDefault = modelParams?.size?.default ?? sizeOptions[0] ?? '1024*1024';
-  const ratioOptions = modelParams?.ratio?.options ?? FALLBACK_RATIOS;
-  const ratioDefault = modelParams?.ratio?.default ?? ratioOptions[0];
+  const selectedResolution = (parameters.resolution as string | undefined) ?? modelParams?.resolution?.default;
+  const ratioOptions = getModelRatioOptions(modelId, selectedResolution);
+  const effectiveRatioOptions = ratioOptions.length > 0 ? ratioOptions : FALLBACK_RATIOS;
+  const ratioDefault = effectiveRatioOptions.includes(modelParams?.ratio?.default ?? '')
+    ? modelParams?.ratio?.default ?? effectiveRatioOptions[0]
+    : effectiveRatioOptions[0];
   const resolutionOptions = modelParams?.resolution?.options ?? FALLBACK_RESOLUTIONS;
   const resolutionDefault = modelParams?.resolution?.default ?? resolutionOptions[0];
   const qualityOptions = modelParams?.quality?.options ?? [];
@@ -277,7 +282,7 @@ export default function ParameterBar() {
     }
     if (hasRatio) {
       const cur = parameters.aspect_ratio as string | undefined;
-      if (cur && !ratioOptions.includes(cur)) patches.aspect_ratio = ratioDefault;
+      if (cur && !effectiveRatioOptions.includes(cur)) patches.aspect_ratio = ratioDefault;
     }
     if (hasResolution) {
       const cur = parameters.resolution as string | undefined;
@@ -407,7 +412,7 @@ export default function ParameterBar() {
               <ParamDropdown
                 label={t('parameters.aspectRatio')}
                 value={(parameters.aspect_ratio as string) ?? ratioDefault}
-                options={ratioOptions}
+                options={effectiveRatioOptions}
                 onChange={(v) => updateParam('aspect_ratio', v)}
               />
             )}

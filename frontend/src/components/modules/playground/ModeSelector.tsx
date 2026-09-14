@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
-import { getModelCapabilities } from './playgroundModels';
+import { getDefaultModelForMode, getModelCapabilities, usePlaygroundCatalogRevision } from './playgroundModels';
 
 const IMAGE_MODES: PlaygroundMode[] = ['t2i', 'i2i'];
 const VIDEO_MODES: PlaygroundMode[] = ['t2v', 'i2v', 'r2v', 'f2v'];
@@ -21,6 +21,8 @@ export function OutputTypeSelector() {
   const t = useTranslations('playground');
   const mode = usePlaygroundStore((s) => s.mode);
   const setMode = usePlaygroundStore((s) => s.setMode);
+  const setModelId = usePlaygroundStore((s) => s.setModelId);
+  const modelId = usePlaygroundStore((s) => s.modelId);
   const outputType = getOutputType(mode);
 
   return (
@@ -31,7 +33,13 @@ export function OutputTypeSelector() {
           <button
             key={output}
             type="button"
-            onClick={() => setMode(getDefaultModeForOutput(output))}
+            onClick={() => {
+              const nextMode = getDefaultModeForOutput(output);
+              setMode(nextMode);
+              if (!getModelCapabilities(modelId).includes(nextMode)) {
+                setModelId(getDefaultModelForMode(nextMode));
+              }
+            }}
             aria-pressed={active}
             className={[
               'min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
@@ -53,6 +61,7 @@ export function CreationMethodSelector() {
   const mode = usePlaygroundStore((s) => s.mode);
   const modelId = usePlaygroundStore((s) => s.modelId);
   const setMode = usePlaygroundStore((s) => s.setMode);
+  usePlaygroundCatalogRevision();
   const outputType = getOutputType(mode);
   const modelCapabilities = getModelCapabilities(modelId);
   const outputModes = outputType === 'image' ? IMAGE_MODES : VIDEO_MODES;

@@ -7,7 +7,9 @@ export type DurationConfig =
 
 export interface ModelParamSupport {
     resolution?: { options: string[]; default: string };
+    size?: { options: string[]; default: string };
     ratio?: { options: string[]; default: string };
+    ratiosByResolution?: Record<string, string[]>;
     seed?: boolean;
     negativePrompt?: boolean;
     promptExtend?: boolean;
@@ -70,6 +72,7 @@ interface CatalogModel {
     display_name: string;
     description: string;
     family: string;
+    provider?: string;
     status: ModelStatus;
     capabilities: string[];
     duration?: DurationConfig | null;
@@ -143,18 +146,25 @@ interface ModelCatalog {
 }
 
 const MODEL_CATALOG = rawCatalog as ModelCatalog;
+let UNIART_RUNTIME_ACTIVE = false;
 if (typeof window !== 'undefined') {
     try {
         const snapshot = JSON.parse(localStorage.getItem('lumenx_uniart_model_snapshot') || '{}');
+        UNIART_RUNTIME_ACTIVE = Array.isArray(snapshot.models) && snapshot.models.length > 0;
         for (const entry of (snapshot.models || [])) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
             const caps = Array.isArray(entry.capabilities) ? entry.capabilities : [];
             const image = caps.includes('t2i');
             MODEL_CATALOG.models[id] = {
-                id, display_name: id.slice(7), description: `UniArt ${id.slice(7)}`,
-                family: image ? 'uniart-image' : 'uniart-video', status: 'active', capabilities: caps,
-                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: 10, badges: ['UniArt'] },
+                ...entry,
+                id,
+                display_name: entry.display_name || id.slice(7),
+                description: entry.description || `UniArt ${id.slice(7)}`,
+                family: entry.family || (image ? 'gpt-image' : 'uniart-video'),
+                status: 'active',
+                capabilities: caps,
+                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: entry.ui?.order ?? 100, recommended: entry.recommended ?? false, badges: ['UniArt'] },
             };
         }
     } catch { /* ignore invalid local snapshot */ }
@@ -169,6 +179,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         if (!response.ok) return 0;
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];
+        UNIART_RUNTIME_ACTIVE = models.length > 0;
         for (const entry of models) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
@@ -176,17 +187,21 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
             const isImage = capabilities.includes('t2i');
             MODEL_CATALOG.models[id] = {
                 id,
-                display_name: id.replace(/^uniart\//, ''),
-                description: `UniArt ${id.replace(/^uniart\//, '')}`,
-                family: isImage ? 'uniart-image' : 'uniart-video',
+                display_name: entry.display_name || id.replace(/^uniart\//, ''),
+                description: entry.description || `UniArt ${id.replace(/^uniart\//, '')}`,
+                family: entry.family || (isImage ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
                 capabilities,
+                duration: entry.duration ?? null,
+                params: entry.params ?? {},
+                inputs: entry.inputs ?? {},
                 ui: {
                     selection_group: isImage ? 'image' : 'i2v',
                     visible_in: isImage
                         ? ['project_settings', 'series_settings', 'global_settings']
                         : ['project_settings', 'series_settings', 'video_sidebar', 'global_settings'],
-                    order: 10,
+                    order: models.length - models.indexOf(entry) + 100,
+                    recommended: id === 'uniart/seedance-2.5-vip',
                     badges: ['UniArt'],
                 },
             };
@@ -273,6 +288,7 @@ let SORTED_MODEL_ENTRIES = [...CATALOG_MODELS].sort((left, right) => {
 
 function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolean {
     return (
+        (!UNIART_RUNTIME_ACTIVE || model.provider === 'uniart') &&
         model.status !== 'planned' &&
         model.status !== 'deprecated' &&
         model.status !== 'hidden' &&

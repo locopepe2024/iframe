@@ -4,18 +4,19 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore } from './usePlaygroundStore';
-import { getModelsForMode, getModelDisplayInfo, type PlaygroundModelOption } from './playgroundModels';
+import { getModelsForMode, getModelDisplayInfo, usePlaygroundCatalogRevision, type PlaygroundModelOption } from './playgroundModels';
 
 export default function ModelSelector() {
   const mode = usePlaygroundStore((s) => s.mode);
   const modelId = usePlaygroundStore((s) => s.modelId);
   const setModelId = usePlaygroundStore((s) => s.setModelId);
   const t = useTranslations('playground');
+  const catalogRevision = usePlaygroundCatalogRevision();
 
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const availableModels = useMemo(() => getModelsForMode(mode), [mode]);
+  const availableModels = useMemo(() => getModelsForMode(mode), [mode, catalogRevision]);
 
   const selected = useMemo(() => {
     const info = getModelDisplayInfo(modelId);

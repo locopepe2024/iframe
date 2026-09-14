@@ -1,4 +1,6 @@
 import rawCatalog from '@/generated/modelCatalog.json';
+import { useSyncExternalStore } from 'react';
+import type { UniArtCatalogModelResponse } from '@/lib/api';
 import type { PlaygroundMode } from './usePlaygroundStore';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +24,7 @@ export interface PlaygroundModelOption {
   params: {
     resolution?: { options: string[]; default: string };
     ratio?: { options: string[]; default: string };
+    ratiosByResolution?: Record<string, string[]>;
     size?: { options: string[]; default: string };
     quality?: { options: string[]; default: string };
     seed?: boolean;
@@ -72,6 +75,50 @@ interface CatalogModel {
 
 const catalog = rawCatalog as { models: Record<string, CatalogModel> };
 const allModels = Object.entries(catalog.models);
+let runtimeModels: Record<string, CatalogModel> = {};
+let catalogRevision = 0;
+const catalogListeners = new Set<() => void>();
+
+export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): number {
+  runtimeModels = Object.fromEntries(models.map((model, index) => [model.id, {
+    ...model,
+    status: 'active',
+    duration: model.duration as CatalogDuration | null | undefined,
+    params: model.params,
+    inputs: model.inputs,
+    ui: {
+      selection_group: model.capabilities.some((capability) => capability === 't2i' || capability === 'i2i') ? 'image' : 'i2v',
+      visible_in: ['playground'],
+      recommended: model.id === 'uniart/seedance-2.5-vip',
+      order: models.length - index,
+      badges: ['UniArt'],
+    },
+  } as CatalogModel]));
+  catalogRevision += 1;
+  catalogListeners.forEach((listener) => listener());
+  return models.length;
+}
+
+export function usePlaygroundCatalogRevision(): number {
+  return useSyncExternalStore(
+    (listener) => {
+      catalogListeners.add(listener);
+      return () => catalogListeners.delete(listener);
+    },
+    () => catalogRevision,
+    () => 0,
+  );
+}
+
+function getActiveModelEntries(): [string, CatalogModel][] {
+  const runtimeEntries = Object.entries(runtimeModels);
+  if (runtimeEntries.length > 0) return runtimeEntries;
+  return allModels.filter(([, model]) => model.provider === 'uniart');
+}
+
+function getActiveModel(modelId: string): CatalogModel | undefined {
+  return runtimeModels[modelId] ?? catalog.models[modelId];
+}
 
 // ---------------------------------------------------------------------------
 // Family priority maps (lower number = higher priority)
@@ -80,12 +127,9 @@ const allModels = Object.entries(catalog.models);
 const VIDEO_MODES = new Set<string>(['t2v', 'i2v', 'r2v', 'f2v', 'v2v']);
 
 const VIDEO_FAMILY_PRIORITY: Record<string, number> = {
-  happyhorse: 1,
-  seedance: 2,
-  kling: 3,
-  pixverse: 4,
-  wan: 5,
-  vidu: 6,
+  seedance: 1,
+  minimax: 2,
+  wan: 3,
 };
 
 const IMAGE_FAMILY_PRIORITY: Record<string, number> = {
@@ -197,6 +241,15 @@ function normalizeParams(
     }
   }
 
+  const ratiosByResolution = raw.ratiosByResolution;
+  if (ratiosByResolution && typeof ratiosByResolution === 'object') {
+    result.ratiosByResolution = Object.fromEntries(
+      Object.entries(ratiosByResolution as Record<string, unknown>)
+        .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
+        .map(([key, values]) => [key, values.map(String)]),
+    );
+  }
+
   // boolean flags
   if (typeof raw.seed === 'boolean') result.seed = raw.seed;
   if (typeof raw.negativePrompt === 'boolean') result.negativePrompt = raw.negativePrompt;
@@ -242,7 +295,7 @@ function toOption(model: CatalogModel): PlaygroundModelOption {
  * Playground — e.g. HappyHorse T2V, Wan 2.7 VideoEdit).
  */
 export function getModelsForMode(mode: PlaygroundMode): PlaygroundModelOption[] {
-  return allModels
+  return getActiveModelEntries()
     .filter(([, model]) => {
       if (model.status === 'deprecated' || model.status === 'planned') return false;
       if (!model.capabilities.includes(mode)) return false;
@@ -286,7 +339,7 @@ export function getDefaultModelForMode(mode: PlaygroundMode): string {
 export function getModelDisplayInfo(
   modelId: string,
 ): { displayName: string; family: string } | null {
-  const model = catalog.models[modelId];
+  const model = getActiveModel(modelId);
   if (!model) return null;
   return { displayName: model.display_name, family: model.family };
 }
@@ -297,7 +350,7 @@ export function getModelDisplayInfo(
 export function getModelParams(
   modelId: string,
 ): PlaygroundModelOption['params'] | null {
-  const model = catalog.models[modelId];
+  const model = getActiveModel(modelId);
   if (!model) return null;
   return normalizeParams(model.params);
 }
@@ -309,14 +362,14 @@ export function getModelParams(
 export function getModelDuration(
   modelId: string,
 ): PlaygroundModelOption['duration'] {
-  const model = catalog.models[modelId];
+  const model = getActiveModel(modelId);
   if (!model) return null;
   return normalizeDuration(model.duration);
 }
 
 /** Return the creation modes published by the model catalog for this SKU. */
 export function getModelCapabilities(modelId: string): PlaygroundMode[] {
-  const model = catalog.models[modelId];
+  const model = getActiveModel(modelId);
   if (!model) return [];
   return model.capabilities.filter((capability): capability is PlaygroundMode =>
     ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability),
@@ -330,8 +383,17 @@ export type PlaygroundAudioControl = 'audio' | 'sound' | null;
  * Playground adapter path are known to consume the parameter.
  */
 export function getModelAudioControl(modelId: string): PlaygroundAudioControl {
-  const model = catalog.models[modelId];
+  const model = getActiveModel(modelId);
   if (!model) return null;
+  if (model.provider === 'uniart' && model.params?.audio === true) return 'audio';
   if (model.provider === 'kling' && model.params?.sound === true) return 'sound';
   return null;
+}
+
+export function getModelRatioOptions(modelId: string, resolution?: string): string[] {
+  const params = getModelParams(modelId);
+  if (resolution && params?.ratiosByResolution?.[resolution]) {
+    return params.ratiosByResolution[resolution];
+  }
+  return params?.ratio?.options ?? [];
 }

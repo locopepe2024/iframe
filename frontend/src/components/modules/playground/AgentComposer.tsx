@@ -25,7 +25,7 @@ import { CreationMethodSelector, OutputTypeSelector } from './ModeSelector';
 import ModelSelector from './ModelSelector';
 import PromptInput from './PromptInput';
 import { getOutputType } from './ModeSelector';
-import { getModelDisplayInfo } from './playgroundModels';
+import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 type ComposerPanel = 'output' | 'model' | 'reference' | ComposerControl | null;
@@ -72,6 +72,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
   const mode = usePlaygroundStore((state) => state.mode);
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
+  usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
   const model = getModelDisplayInfo(modelId);
