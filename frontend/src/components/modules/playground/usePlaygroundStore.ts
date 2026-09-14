@@ -77,6 +77,27 @@ export interface PlaygroundGeneration {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
   created_at: string;
+  session_id?: string;
+  parent_generation_id?: string;
+}
+
+export interface PlaygroundDraft {
+  mode: PlaygroundMode;
+  model_id: string;
+  prompt: string;
+  negative_prompt?: string;
+  input_media: string[];
+  parameters: Record<string, any>;
+  batch_size: number;
+  parent_generation_id?: string;
+}
+
+export interface PlaygroundSession {
+  id: string;
+  title: string;
+  draft: PlaygroundDraft;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PlaygroundTemplate {
@@ -101,6 +122,8 @@ export interface QueuedRequest {
   inputMedia: string[];
   parameters: Record<string, any>;
   batchSize: number;
+  sessionId: string;
+  parentGenerationId?: string;
   status: 'pending' | 'dispatching';
   enqueuedAt: number;
 }
@@ -124,6 +147,9 @@ interface PlaygroundState {
 
   // History
   history: PlaygroundGeneration[];
+  sessions: PlaygroundSession[];
+  activeSessionId: string | null;
+  parentGenerationId: string | null;
 
   // Templates
   templates: PlaygroundTemplate[];
@@ -182,6 +208,12 @@ interface PlaygroundState {
   // Actions — history
   setHistory: (history: PlaygroundGeneration[]) => void;
   appendToHistory: (gen: PlaygroundGeneration) => void;
+  setSessions: (sessions: PlaygroundSession[]) => void;
+  addSession: (session: PlaygroundSession) => void;
+  updateSession: (session: PlaygroundSession) => void;
+  setActiveSession: (sessionId: string) => void;
+  applySessionDraft: (draft: PlaygroundDraft) => void;
+  restoreGeneration: (generation: PlaygroundGeneration) => void;
 
   // Actions — templates
   setTemplates: (templates: PlaygroundTemplate[]) => void;
@@ -222,6 +254,9 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
   // -- History ---------------------------------------------------------------
   history: [],
+  sessions: [],
+  activeSessionId: null,
+  parentGenerationId: null,
 
   // -- Templates -------------------------------------------------------------
   templates: [],
@@ -334,10 +369,14 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
   startGeneration: (gen) => {
     const { activeGenerationIds, history } = get();
+    const isTerminal = gen.status === 'completed' || gen.status === 'failed';
+    const nextActive = isTerminal
+      ? activeGenerationIds
+      : [...new Set([...activeGenerationIds, gen.id])];
     set({
-      activeGenerationIds: [...activeGenerationIds, gen.id],
+      activeGenerationIds: nextActive,
       history: [gen, ...history],
-      isGenerating: true,
+      isGenerating: nextActive.length > 0,
     });
   },
 
@@ -368,9 +407,46 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
   // -- History ---------------------------------------------------------------
 
-  setHistory: (history) => set({ history }),
+  setHistory: (history) => {
+    const activeGenerationIds = history
+      .filter((item) => item.status === 'pending' || item.status === 'processing')
+      .map((item) => item.id);
+    set({ history, activeGenerationIds, isGenerating: activeGenerationIds.length > 0 });
+  },
 
   appendToHistory: (gen) => set((s) => ({ history: [gen, ...s.history] })),
+
+  setSessions: (sessions) => set({ sessions }),
+
+  addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
+
+  updateSession: (session) => set((s) => ({
+    sessions: s.sessions.map((item) => item.id === session.id ? session : item),
+  })),
+
+  setActiveSession: (activeSessionId) => set({ activeSessionId, parentGenerationId: null }),
+
+  applySessionDraft: (draft) => set({
+    mode: draft.mode,
+    modelId: draft.model_id,
+    prompt: draft.prompt,
+    negativePrompt: draft.negative_prompt || '',
+    inputMedia: draft.input_media || [],
+    parameters: draft.parameters || {},
+    batchSize: draft.batch_size || 1,
+    parentGenerationId: draft.parent_generation_id || null,
+  }),
+
+  restoreGeneration: (generation) => set({
+    mode: generation.mode,
+    modelId: generation.model_id,
+    prompt: generation.prompt,
+    negativePrompt: generation.negative_prompt || '',
+    inputMedia: generation.input_media || [],
+    parameters: generation.parameters || {},
+    batchSize: generation.batch_size || 1,
+    parentGenerationId: generation.id,
+  }),
 
   // -- Templates -------------------------------------------------------------
 
@@ -418,5 +494,6 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       inputMedia: [],
       parameters: {},
       batchSize: DEFAULT_BATCH_SIZE,
+      parentGenerationId: null,
     }),
 }));

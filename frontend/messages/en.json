@@ -1636,6 +1636,19 @@
       "generate": "Generate",
       "generateBatch": "Generate ×{count}"
     },
+    "sessions": {
+      "new": "New session",
+      "selectLabel": "Select creation session",
+      "saving": "Saving draft…"
+    },
+    "timeline": {
+      "emptyTitle": "Start this creation session",
+      "emptyBody": "Your prompts, reference media, and generated results will stay here in chronological order.",
+      "editContinue": "Edit and continue",
+      "continued": "From earlier turn",
+      "references": "{count} references",
+      "result": "Generated result"
+    },
     "mode": {
       "image": "Image",
       "video": "Video",

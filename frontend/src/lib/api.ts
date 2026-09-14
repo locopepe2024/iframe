@@ -1610,6 +1610,27 @@ export interface PlaygroundGenerateRequest {
   input_media?: string[];
   parameters?: Record<string, any>;
   batch_size?: number;
+  session_id?: string;
+  parent_generation_id?: string;
+}
+
+export interface PlaygroundDraftResponse {
+  mode: string;
+  model_id: string;
+  prompt: string;
+  negative_prompt?: string;
+  input_media: string[];
+  parameters: Record<string, any>;
+  batch_size: number;
+  parent_generation_id?: string;
+}
+
+export interface PlaygroundSessionResponse {
+  id: string;
+  title: string;
+  draft: PlaygroundDraftResponse;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PlaygroundGenerationResponse {
@@ -1631,6 +1652,8 @@ export interface PlaygroundGenerationResponse {
   status: string;
   error?: string;
   created_at: string;
+  session_id?: string;
+  parent_generation_id?: string;
 }
 
 export interface PlaygroundTemplateResponse {
@@ -1650,8 +1673,20 @@ export const playgroundApi = {
   generate: (data: PlaygroundGenerateRequest) =>
     axios.post<PlaygroundGenerationResponse>(API_URL + "/playground/generate", data).then(r => r.data),
 
-  getHistory: (limit = 50, offset = 0) =>
-    axios.get<PlaygroundGenerationResponse[]>(API_URL + "/playground/history", { params: { limit, offset } }).then(r => r.data),
+  getHistory: (limit = 50, offset = 0, sessionId?: string) =>
+    axios.get<PlaygroundGenerationResponse[]>(API_URL + "/playground/history", { params: { limit, offset, session_id: sessionId } }).then(r => r.data),
+
+  getSessions: () =>
+    axios.get<PlaygroundSessionResponse[]>(API_URL + "/playground/sessions").then(r => r.data),
+
+  createSession: (title?: string) =>
+    axios.post<PlaygroundSessionResponse>(API_URL + "/playground/sessions", title ? { title } : {}).then(r => r.data),
+
+  getSession: (id: string) =>
+    axios.get<PlaygroundSessionResponse>(API_URL + "/playground/sessions/" + id).then(r => r.data),
+
+  updateSession: (id: string, data: Partial<{ title: string; draft: PlaygroundDraftResponse }>) =>
+    axios.patch<PlaygroundSessionResponse>(API_URL + "/playground/sessions/" + id, data).then(r => r.data),
 
   getGeneration: (id: string) =>
     axios.get<PlaygroundGenerationResponse>(API_URL + "/playground/history/" + id).then(r => r.data),

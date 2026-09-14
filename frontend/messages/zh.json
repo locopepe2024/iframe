@@ -1636,6 +1636,19 @@
       "generate": "生成",
       "generateBatch": "生成 ×{count}"
     },
+    "sessions": {
+      "new": "新建会话",
+      "selectLabel": "选择创作会话",
+      "saving": "正在保存草稿…"
+    },
+    "timeline": {
+      "emptyTitle": "开始这个创作会话",
+      "emptyBody": "你的提示词、参考素材和每次生成结果会按时间保存在这里。",
+      "editContinue": "编辑并继续",
+      "continued": "来自历史轮次",
+      "references": "{count} 个参考素材",
+      "result": "生成结果"
+    },
     "mode": {
       "image": "图像生成",
       "video": "视频生成",
