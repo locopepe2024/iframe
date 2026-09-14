@@ -11,6 +11,9 @@ from urllib.parse import parse_qs, urlsplit
 import requests
 from .base import VideoGenModel
 from .image import ImageGenModel
+from ..utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def _base_url(config: Dict[str, Any]) -> str:
@@ -95,6 +98,14 @@ def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int 
         try:
             resp = requests.get(url, headers=headers, timeout=180, stream=True)
             if resp.status_code in {408, 425, 429} or resp.status_code >= 500:
+                logger.warning(
+                    "[UniArt] media download transient failure host=%s path=%s status=%s attempt=%s/%s",
+                    urlsplit(url).netloc,
+                    urlsplit(url).path,
+                    resp.status_code,
+                    attempt + 1,
+                    attempts,
+                )
                 resp.close()
                 raise requests.HTTPError(f"media download returned HTTP {resp.status_code}", response=resp)
             resp.raise_for_status()
@@ -115,7 +126,7 @@ def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int 
     raise last_error or RuntimeError("media download failed")
 
 
-def _result_url(data: Dict[str, Any], kind: str) -> str:
+def _result_urls(data: Dict[str, Any], kind: str) -> list[str]:
     candidates: list[str] = []
 
     def add(value: Any) -> None:
@@ -145,16 +156,35 @@ def _result_url(data: Dict[str, Any], kind: str) -> str:
                 add(item.get("url"))
                 add(item.get("content_url"))
 
-    # A signed object-storage URL is the durable media artifact. Prefer it
-    # over a gateway /content URL when both are present: the latter may be a
-    # transient proxy endpoint that returns 502 after the task is complete.
-    for candidate in candidates:
-        query = parse_qs(urlsplit(candidate).query)
-        if "sign" in query:
-            return candidate
-    if candidates:
-        return candidates[0]
+    # A signed object-storage URL is the durable media artifact. Try those
+    # first, then gateway/content URLs. Do not collapse the result to a single
+    # field: a transient 502 from one returned URL must not discard another
+    # valid artifact URL from the same task response.
+    signed = [candidate for candidate in candidates if "sign" in parse_qs(urlsplit(candidate).query)]
+    return signed + [candidate for candidate in candidates if candidate not in signed]
+
+
+def _result_url(data: Dict[str, Any], kind: str) -> str:
+    urls = _result_urls(data, kind)
+    if urls:
+        return urls[0]
     raise RuntimeError(f"UniArt task has no {kind} result URL: {data}")
+
+
+def _download_result(config: Dict[str, Any], data: Dict[str, Any], kind: str, output_path: str) -> str:
+    urls = _result_urls(data, kind)
+    if not urls:
+        raise RuntimeError(f"UniArt task has no {kind} result URL: {data}")
+    errors: list[str] = []
+    for url in urls:
+        try:
+            return _download(config, url, output_path)
+        except requests.RequestException as exc:
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", "request-error")
+            errors.append(f"{urlsplit(url).netloc}{urlsplit(url).path}: HTTP {status}")
+            logger.warning("[UniArt] result URL failed; trying next candidate: %s", errors[-1])
+    raise RuntimeError(f"UniArt {kind} result download failed: {'; '.join(errors)}")
 
 
 class UniArtImageModel(ImageGenModel):
@@ -170,7 +200,7 @@ class UniArtImageModel(ImageGenModel):
                 body[key] = kwargs[key]
         task = _post(self.config, "/images/generations", body)
         result = _poll(self.config, task.get("task_id") or task.get("id"))
-        _download(self.config, _result_url(result, "image"), output_path)
+        _download_result(self.config, result, "image", output_path)
         return output_path, time.time() - started
 
 
@@ -200,5 +230,5 @@ class UniArtVideoModel(VideoGenModel):
                 body["input_reference"] = image
         task = _post(self.config, "/videos", body)
         result = _poll(self.config, task.get("task_id") or task.get("id"))
-        _download(self.config, _result_url(result, "video"), output_path)
+        _download_result(self.config, result, "video", output_path)
         return output_path, time.time() - started
