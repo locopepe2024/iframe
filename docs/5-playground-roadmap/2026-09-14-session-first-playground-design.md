@@ -119,6 +119,48 @@ POST   /playground/generate
 6. 刷新页面后 Session、草稿、生成历史和进行中任务仍可恢复。
 7. 现有图片/视频生成 API、素材上传、收藏和下载行为不回归。
 
+## Phase 1.1 — Global Compose 与全局会话导航
+
+### 目标
+
+在不增加后端 `global` mode、不改变 provider 请求结构的前提下，将图片与视频创作收敛为一个统一的创作入口，并把 Session 导航提升到全局侧栏中“创作台”的二级目录。
+
+### UI Contract
+
+桌面端：
+
+```text
+┌────────────────────┬──────────────────────┬────────────────────────────┐
+│ Global navigation  │ Global Compose       │ Session timeline           │
+│ 工作区             │ 输出：图片 / 视频   │ prompt + parameters        │
+│ 资产库             │ 方式：按输出渐进展开 │ generated media            │
+│ 创作台             │ prompt + references  │ editable historical turns  │
+│   + 新建会话       │ model + parameters   │                            │
+│   Session A        │ Generate             │                            │
+│   Session B        │                      │                            │
+└────────────────────┴──────────────────────┴────────────────────────────┘
+```
+
+- “创作台”仍是一级导航；“新建会话”和最近 Session 是其二级导航，不与工作区、资产库、设置同级。
+- 图片与视频共享一个 `Global Compose` 容器。第一层只选择输出类型，第二层仅显示该输出类型支持的生成方式。
+- 输出类型切换只映射到现有 `t2i / i2i / t2v / i2v / r2v / v2v`，不增加新的 API mode，也不修改模型能力归属。
+- Prompt、参考素材和生成方式合并在同一创作上下文中；模型与参数保留为独立设置区，避免一次展开全部复杂参数。
+- 主内容区移除桌面 Session 中间栏，只保留 Compose 与当前 Session 时间线。
+- 全局侧栏与 Playground 页面必须共享同一个 Session 状态源；切换会话后恢复草稿、加载对应历史并恢复未完成任务轮询。
+- 二级导航按钮与 Session 行保持至少 44px 点击高度，并提供明确选中态、键盘焦点和更新时间。
+- Session 较多时仅在侧栏内部滚动，不拉长或挤压底部设置入口。
+
+窄屏：全局侧栏不可见时，Session 继续使用顶部选择器；Compose 与时间线上下排列，不产生横向滚动。
+
+### Phase 1.1 Success Criteria
+
+1. 桌面端“创作台”下显示新建会话与 Session 子导航，当前 Session 有明确选中态。
+2. Playground 主区域不再出现独立的桌面 Session 中间栏。
+3. 图片和视频不再同时以两组大卡呈现；只展开当前输出类型的生成方式。
+4. 切换 Session 后草稿、历史和进行中任务恢复行为与 Phase 1 一致。
+5. 移动端仍可创建和切换 Session。
+6. 现有图片/视频模型、参数、素材输入和生成 API 不发生能力回归。
+
 ## Deferred
 
 - 自然语言 Agent 自动拆解任务；
