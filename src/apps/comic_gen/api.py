@@ -76,7 +76,7 @@ from ..identity import (
     UserContext,
     _resolve_request_context,
     _set_browser_profile_cookie,
-    identity_router,
+    router as identity_router,
     require_user_context,
 )
 from ..studio_access import (
