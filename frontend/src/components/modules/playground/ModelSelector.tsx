@@ -1,130 +1,105 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore } from './usePlaygroundStore';
-import { getModelsForMode, getModelDisplayInfo, usePlaygroundCatalogRevision, type PlaygroundModelOption } from './playgroundModels';
+import { getModelsForMode, usePlaygroundCatalogRevision, type PlaygroundModelOption } from './playgroundModels';
+
+const FAMILY_LABELS: Record<string, string> = {
+  seedance: 'Seedance',
+  minimax: 'Minimax H3',
+  wan: 'Alibaba Wan',
+  'gpt-image': 'GPT Image',
+  'nano-banana': 'Nano Banana',
+  uniart: 'UniArt',
+};
+
+function modelMeta(model: PlaygroundModelOption): string {
+  const resolution = model.params.resolution?.options ?? model.params.size?.options ?? [];
+  const duration = model.duration?.type === 'slider'
+    ? `${model.duration.min}–${model.duration.max}s`
+    : model.duration?.type === 'buttons'
+      ? model.duration.options.map((value) => `${value}s`).join(' / ')
+      : model.duration?.type === 'fixed'
+        ? `${model.duration.value}s`
+        : null;
+  return [...resolution, duration].filter(Boolean).join(' · ');
+}
 
 export default function ModelSelector() {
-  const mode = usePlaygroundStore((s) => s.mode);
-  const modelId = usePlaygroundStore((s) => s.modelId);
-  const setModelId = usePlaygroundStore((s) => s.setModelId);
+  const mode = usePlaygroundStore((state) => state.mode);
+  const modelId = usePlaygroundStore((state) => state.modelId);
+  const setModelId = usePlaygroundStore((state) => state.setModelId);
   const t = useTranslations('playground');
   const catalogRevision = usePlaygroundCatalogRevision();
 
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const availableModels = useMemo(() => getModelsForMode(mode), [mode, catalogRevision]);
-
-  const selected = useMemo(() => {
-    const info = getModelDisplayInfo(modelId);
-    if (info) return info;
-    if (availableModels.length > 0) return { displayName: availableModels[0].displayName, family: availableModels[0].family };
-    return null;
-  }, [modelId, availableModels]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+  const groupedModels = useMemo(() => {
+    const groups = new Map<string, PlaygroundModelOption[]>();
+    for (const model of availableModels) {
+      groups.set(model.family, [...(groups.get(model.family) ?? []), model]);
     }
-    if (open) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
+    return Array.from(groups, ([family, models]) => ({ family, models }));
+  }, [availableModels]);
 
   useEffect(() => {
-    if (availableModels.length > 0 && !availableModels.some((m) => m.id === modelId)) {
+    if (availableModels.length > 0 && !availableModels.some((model) => model.id === modelId)) {
       setModelId(availableModels[0].id);
     }
   }, [availableModels, modelId, setModelId]);
 
-  function handleSelect(id: string) {
-    setModelId(id);
-    setOpen(false);
+  if (availableModels.length === 0) {
+    return <div className="rounded-xl border border-border-subtle bg-surface-inset px-4 py-5 text-sm text-text-muted">{t('model.noModels')}</div>;
   }
 
-  // Group models by family for visual grouping
-  const groupedModels = useMemo(() => {
-    const groups: { family: string; models: PlaygroundModelOption[] }[] = [];
-    let currentFamily = '';
-    for (const m of availableModels) {
-      if (m.family !== currentFamily) {
-        currentFamily = m.family;
-        groups.push({ family: currentFamily, models: [m] });
-      } else {
-        groups[groups.length - 1].models.push(m);
-      }
-    }
-    return groups;
-  }, [availableModels]);
-
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={`flex items-center gap-[10px] w-full text-left cursor-pointer glass-input hover:border-foreground/30 bg-surface-inset rounded-[14px] ${
-          open ? 'shadow-[var(--glow-primary)]' : ''
-        }`}
-      >
-        <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-        <span className="flex-1 text-[0.8125rem] font-medium text-foreground truncate">
-          {selected?.displayName ?? t('model.selectPlaceholder')}
-        </span>
-        <span className="font-mono text-[0.625rem] text-text-muted uppercase tracking-wider shrink-0">
-          {selected?.family ?? ''}
-        </span>
-        <ChevronDown
-          className={`w-3 h-3 text-text-muted shrink-0 transition-transform ${
-            open ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute top-full mt-1 w-full bg-elevated atelier-card border border-glass-border rounded-lg shadow-xl z-20 max-h-60 overflow-y-auto">
-          {availableModels.length === 0 && (
-            <div className="px-3 py-2 text-[0.75rem] text-text-muted">{t('model.noModels')}</div>
-          )}
-          {groupedModels.map((group, gi) => (
-            <div key={group.family}>
-              {gi > 0 && <div className="border-t border-border-subtle mx-2" />}
-              {groupedModels.length > 1 && (
-                <div className="px-3 pt-2 pb-1">
-                  <span className="font-mono text-[0.5625rem] text-text-muted uppercase tracking-[0.15em]">
-                    {group.family}
-                  </span>
-                </div>
-              )}
-              {group.models.map((m) => (
+    <div className="space-y-4">
+      {groupedModels.map((group) => (
+        <section key={group.family} aria-label={FAMILY_LABELS[group.family] ?? group.family}>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              {FAMILY_LABELS[group.family] ?? group.family}
+            </h3>
+            <span className="font-mono text-[0.5625rem] text-text-muted">{group.models.length} SKU</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {group.models.map((model) => {
+              const selected = model.id === modelId;
+              const meta = modelMeta(model);
+              return (
                 <button
-                  key={m.id}
+                  key={model.id}
                   type="button"
-                  onClick={() => handleSelect(m.id)}
-                  className={`flex items-center gap-[10px] w-full px-3 py-2 text-left transition-colors hover:bg-hover-bg ${
-                    m.id === modelId ? 'bg-elevated text-foreground' : 'text-foreground/80'
-                  }`}
+                  onClick={() => setModelId(model.id)}
+                  aria-pressed={selected}
+                  className={[
+                    'group flex min-h-16 items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                    selected
+                      ? 'border-primary/50 bg-primary/10 text-foreground'
+                      : 'border-border-subtle bg-surface-inset text-foreground hover:border-foreground/30 hover:bg-hover-bg',
+                  ].join(' ')}
                 >
-                  <span className="flex-1 text-[0.8125rem] font-medium truncate">
-                    {m.displayName}
-                  </span>
-                  {m.recommended && (
-                    <span className="text-[0.5rem] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">
-                      {t('model.recommended')}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[0.8125rem] font-semibold">{model.displayName}</span>
+                      {model.recommended && (
+                        <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[0.5rem] uppercase tracking-wider text-primary">
+                          {t('model.recommended')}
+                        </span>
+                      )}
                     </span>
-                  )}
-                  {m.id === modelId && (
-                    <span className="text-primary shrink-0">✓</span>
-                  )}
+                    {meta && <span className="mt-1 block truncate font-mono text-[0.625rem] text-text-muted">{meta}</span>}
+                  </span>
+                  <span className={selected ? 'text-primary' : 'text-transparent group-hover:text-text-muted'}>
+                    <Check size={15} aria-hidden="true" />
+                  </span>
                 </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

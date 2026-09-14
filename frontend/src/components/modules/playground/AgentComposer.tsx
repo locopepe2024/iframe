@@ -125,7 +125,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
             className={clsx(
               'absolute bottom-[calc(100%+0.625rem)] left-0 max-h-[56vh] w-[calc(100vw-1.5rem)] overflow-y-auto rounded-[18px] border border-glass-border bg-elevated p-4 shadow-2xl scrollbar-thin md:p-5',
               activePanel === 'output' && 'max-w-[360px]',
-              activePanel === 'model' && 'max-w-[480px]',
+              activePanel === 'model' && 'max-w-[680px]',
               activePanel === 'reference' && 'max-w-[620px]',
               activePanel === 'resolution' && 'max-w-[520px]',
               ['ratio', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
