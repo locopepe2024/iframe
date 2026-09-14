@@ -77,25 +77,64 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900) -> Dict[str
     raise RuntimeError(f"UniArt task timed out after {max_wait}s")
 
 
-def _download(config: Dict[str, Any], url: str, output_path: str) -> str:
+def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int = 6) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    resp = requests.get(url, headers=_headers(config), timeout=180, stream=True)
-    resp.raise_for_status()
-    with open(output_path, "wb") as f:
-        for chunk in resp.iter_content(65536):
-            f.write(chunk)
-    return output_path
+    headers = {"Authorization": _headers(config)["Authorization"], "Accept": "video/*,image/*,application/octet-stream,*/*"}
+    partial_path = f"{output_path}.part"
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            resp = requests.get(url, headers=headers, timeout=180, stream=True)
+            if resp.status_code in {408, 425, 429} or resp.status_code >= 500:
+                resp.close()
+                raise requests.HTTPError(f"media download returned HTTP {resp.status_code}", response=resp)
+            resp.raise_for_status()
+            with open(partial_path, "wb") as f:
+                for chunk in resp.iter_content(65536):
+                    if chunk:
+                        f.write(chunk)
+            os.replace(partial_path, output_path)
+            return output_path
+        except requests.RequestException as exc:
+            last_error = exc
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", None)
+            retryable = status in {408, 425, 429} or (isinstance(status, int) and status >= 500)
+            if not retryable or attempt == attempts - 1:
+                raise
+            time.sleep(min(5 * (2**attempt), 30))
+    raise last_error or RuntimeError("media download failed")
 
 
 def _result_url(data: Dict[str, Any], kind: str) -> str:
-    url = data.get("result_url") or data.get("url")
+    url = (
+        data.get("result_url")
+        or data.get("url")
+        or data.get(f"{kind}_url")
+        or data.get("content_url")
+    )
     if url:
         return url
     output = data.get("output") or data.get("data") or {}
     if isinstance(output, dict):
-        url = output.get(f"{kind}_url") or output.get("url")
+        url = output.get(f"{kind}_url") or output.get("url") or output.get("content_url")
         if url:
             return url
+    content = data.get("content")
+    if isinstance(content, str) and content.startswith(("http://", "https://")):
+        return content
+    if isinstance(content, dict):
+        url = content.get(f"{kind}_url") or content.get("url") or content.get("content_url")
+        if url:
+            return url
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, str) and item.startswith(("http://", "https://")):
+                return item
+            if isinstance(item, dict):
+                url = item.get(f"{kind}_url") or item.get("url") or item.get("content_url")
+                if url:
+                    return url
     raise RuntimeError(f"UniArt task has no {kind} result URL: {data}")
 
 
