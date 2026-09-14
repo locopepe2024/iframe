@@ -89,7 +89,9 @@ export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): numb
     ui: {
       selection_group: model.capabilities.some((capability) => capability === 't2i' || capability === 'i2i') ? 'image' : 'i2v',
       visible_in: ['playground'],
-      recommended: model.id === 'uniart/seedance-2.5-vip',
+      // Runtime UniArt catalog is the sole owner of model availability and
+      // capabilities. Do not locally mark a SKU as recommended/default.
+      recommended: false,
       order: models.length - index,
       badges: ['UniArt'],
     },
