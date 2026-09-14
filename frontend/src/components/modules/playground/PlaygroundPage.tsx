@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Sparkles } from 'lucide-react';
-import ModeSelector from './ModeSelector';
-import ModelSelector from './ModelSelector';
-import MediaInput from './MediaInput';
-import PromptInput from './PromptInput';
-import ParameterBar from './ParameterBar';
+import AgentComposer from './AgentComposer';
 import SessionRail from './SessionRail';
 import SessionTimeline from './SessionTimeline';
 import {
@@ -26,7 +21,6 @@ import { playgroundApi } from '@/lib/api';
 const MODE_LABELS: Record<PlaygroundMode, string> = {
   t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', v2v: 'V2V',
 };
-const MODES_WITH_MEDIA: PlaygroundMode[] = ['i2i', 'i2v', 'r2v', 'v2v'];
 const POLL_INTERVAL = 2000;
 const MAX_POLL_ERRORS = 4;
 
@@ -225,7 +219,6 @@ export default function PlaygroundPage() {
   useEffect(() => { pump(); }, [activeCount, maxConcurrent, pump, queue]);
 
   const resultCount = history.reduce((count, item) => count + item.outputs.length, 0);
-  const showMediaInput = mode === 't2i' || MODES_WITH_MEDIA.includes(mode);
   const canGenerate = Boolean(activeSessionId && prompt.trim());
 
   return (
@@ -239,28 +232,10 @@ export default function PlaygroundPage() {
       </header>
 
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
-      <div className="flex min-h-0 flex-1 overflow-hidden max-sm:flex-col">
-        <aside className="flex w-[380px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-glass-border px-4 py-4 scrollbar-thin max-lg:w-[350px] max-sm:h-[58%] max-sm:w-full max-sm:border-b max-sm:border-r-0">
-          <section className="glass-panel rounded-[20px] px-5 py-5">
-            <div className="mb-4 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">{t('compose.globalLabel')}</div>
-            <ModeSelector />
-            <div className="my-5 h-px bg-border-subtle" />
-            <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">{t('compose.promptLabel')}</div>
-            <PromptInput />
-            {showMediaInput && (
-              <>
-                <div className="my-5 h-px bg-border-subtle" />
-                <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">{t(mode === 'v2v' ? 'compose.mediaSourceVideo' : mode === 'r2v' ? 'compose.mediaRefMaterial' : mode === 'i2v' ? 'compose.mediaFirstFrame' : 'compose.mediaReference')}</div>
-                <MediaInput />
-              </>
-            )}
-          </section>
-          <section className="glass-panel relative z-30 rounded-[20px] px-5 py-5"><div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">{t('compose.modelLabel')}</div><ModelSelector /><div className="my-4 h-px bg-border-subtle" /><div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">{t('compose.parametersLabel')}</div><ParameterBar /></section>
-          <div className="flex-1" />
-          <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-glass-border bg-surface/80 px-4 pb-4 pt-4 backdrop-blur-md"><button type="button" onClick={handleGenerate} disabled={!canGenerate} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"><Sparkles size={16} /><span>{batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}</span></button></div>
-        </aside>
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden max-sm:min-h-[42%]"><SessionTimeline /></main>
-      </div>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <SessionTimeline />
+        <AgentComposer canGenerate={canGenerate} batchSize={batchSize} onGenerate={handleGenerate} />
+      </main>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Clock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import PromptTemplateModal from './PromptTemplateModal';
@@ -9,13 +8,15 @@ import PromptHistoryDrawer from './PromptHistoryDrawer';
 
 const MAX_LENGTH = 2000;
 
-export default function PromptInput() {
+interface PromptInputProps {
+  onSubmit?: () => void;
+}
+
+export default function PromptInput({ onSubmit }: PromptInputProps) {
   const prompt = usePlaygroundStore((s) => s.prompt);
   const negativePrompt = usePlaygroundStore((s) => s.negativePrompt);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
   const setNegativePrompt = usePlaygroundStore((s) => s.setNegativePrompt);
-  const setShowTemplateModal = usePlaygroundStore((s) => s.setShowTemplateModal);
-  const setShowHistoryDrawer = usePlaygroundStore((s) => s.setShowHistoryDrawer);
   const t = useTranslations('playground');
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
@@ -26,28 +27,18 @@ export default function PromptInput() {
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && onSubmit) {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
         placeholder={t('prompt.placeholder')}
-        className="w-full min-h-[120px] max-h-[280px] resize-y bg-transparent border-0 rounded-none p-0 text-foreground text-[0.9375rem] leading-[1.65] placeholder-text-muted focus:ring-0"
+        className="min-h-[88px] max-h-[220px] w-full resize-y rounded-none border-0 bg-transparent p-0 text-[0.9375rem] leading-[1.65] text-foreground placeholder-text-muted focus:ring-0"
       />
 
       {/* Toolbar — below the textarea, not overlapping */}
-      <div className="flex items-center gap-[6px] border-t border-border-subtle pt-2.5 mt-3">
-        <button
-          type="button"
-          onClick={() => setShowTemplateModal(true)}
-          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground md:hidden"
-        >
-          <Copy size={12} />
-          {t('prompt.templates')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowHistoryDrawer(true)}
-          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-medium text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground md:hidden"
-        >
-          <Clock size={12} />
-          {t('prompt.history')}
-        </button>
+      <div className="mt-3 flex items-center gap-[6px] border-t border-border-subtle pt-2.5">
         <span className="ml-auto font-mono text-[0.625rem] text-text-muted">
           {prompt.length} / {MAX_LENGTH}
         </span>

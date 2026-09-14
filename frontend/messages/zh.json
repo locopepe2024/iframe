@@ -1654,6 +1654,17 @@
       "references": "{count} 个参考素材",
       "result": "生成结果"
     },
+    "agent": {
+      "modePanel": "输出与生成方式",
+      "mediaPanel": "参考素材",
+      "settingsPanel": "模型与参数",
+      "addMedia": "添加素材",
+      "mediaCount": "{count} 个素材",
+      "modelSettings": "模型设置",
+      "mediaUnavailable": "当前文生视频模式不需要参考素材，请先切换生成方式。",
+      "helper": "生成内容可能存在偏差，请检查结果后再用于正式项目。",
+      "shortcut": "⌘/Ctrl + Enter 发送"
+    },
     "mode": {
       "image": "图像生成",
       "video": "视频生成",

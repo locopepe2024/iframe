@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowUpLeft, GitBranch, Image as ImageIcon, Sparkles } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import ResultCard from './ResultCard';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
@@ -90,6 +90,15 @@ export default function SessionTimeline() {
     () => [...history].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [history],
   );
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const element = scrollRef.current;
+    if (!element) return;
+    requestAnimationFrame(() => element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' }));
+  }, [history]);
 
   if (sorted.length === 0) {
     return (
@@ -102,7 +111,14 @@ export default function SessionTimeline() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-5 scrollbar-thin md:px-6">
+    <div
+      ref={scrollRef}
+      onScroll={(event) => {
+        const element = event.currentTarget;
+        stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+      }}
+      className="flex-1 overflow-y-auto px-4 py-5 scrollbar-thin md:px-6"
+    >
       <div className="mx-auto max-w-5xl">
         {sorted.map((generation) => <GenerationTurn key={generation.id} generation={generation} />)}
       </div>

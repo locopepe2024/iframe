@@ -1654,6 +1654,17 @@
       "references": "{count} references",
       "result": "Generated result"
     },
+    "agent": {
+      "modePanel": "Output and creation method",
+      "mediaPanel": "Reference media",
+      "settingsPanel": "Model and parameters",
+      "addMedia": "Add media",
+      "mediaCount": "{count} media",
+      "modelSettings": "Model settings",
+      "mediaUnavailable": "Text-to-video does not use reference media. Choose another creation method first.",
+      "helper": "Generated content may vary. Review results before using them in production.",
+      "shortcut": "⌘/Ctrl + Enter to send"
+    },
     "mode": {
       "image": "Image",
       "video": "Video",
