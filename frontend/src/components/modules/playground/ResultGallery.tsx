@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Grid3x3, GalleryHorizontal } from 'lucide-react';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
+import { toast } from '@/store/toastStore';
 import { playgroundApi } from '@/lib/api';
 import ResultCard from './ResultCard';
 import GalleryView from './GalleryView';
@@ -40,7 +41,9 @@ function formatSessionLabel(
 }
 
 export default function ResultGallery() {
-  const { history, startGeneration, updateGeneration, useResultAsReference } = usePlaygroundStore();
+  const { history, useResultAsReference } = usePlaygroundStore();
+  const activeSessionId = usePlaygroundStore((state) => state.activeSessionId);
+  const enqueueRequest = usePlaygroundStore((state) => state.enqueueRequest);
   const t = useTranslations('playground');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
@@ -52,52 +55,26 @@ export default function ResultGallery() {
     setDetailOutputId(outputId);
   }, []);
 
-  const handleRetry = useCallback(async (gen: PlaygroundGeneration) => {
-    try {
-      const resp = await playgroundApi.generate({
-        mode: gen.mode,
-        model_id: gen.model_id,
-        prompt: gen.prompt,
-        negative_prompt: gen.negative_prompt || undefined,
-        input_media: gen.input_media.length > 0 ? gen.input_media : undefined,
-        parameters: Object.keys(gen.parameters).length > 0 ? gen.parameters : undefined,
-        batch_size: gen.batch_size > 1 ? gen.batch_size : undefined,
-      });
-      const newGen: PlaygroundGeneration = {
-        id: resp.id,
-        mode: resp.mode as PlaygroundGeneration['mode'],
-        model_id: resp.model_id,
-        prompt: resp.prompt,
-        negative_prompt: resp.negative_prompt,
-        input_media: resp.input_media,
-        parameters: resp.parameters,
-        batch_size: resp.batch_size,
-        outputs: [],
-        status: resp.status as PlaygroundGeneration['status'],
-        error: resp.error,
-        created_at: resp.created_at,
-      };
-      startGeneration(newGen);
-      // Poll for status
-      const poll = setInterval(async () => {
-        try {
-          const s = await playgroundApi.getGenerationStatus(newGen.id);
-          if (s.status === 'completed' || s.status === 'failed') {
-            clearInterval(poll);
-            const full = await playgroundApi.getGeneration(newGen.id);
-            updateGeneration({
-              ...newGen,
-              status: full.status as PlaygroundGeneration['status'],
-              outputs: full.outputs.map((o) => ({ id: o.id, media_path: o.media_path, media_type: o.media_type as 'image' | 'video', thumbnail_path: o.thumbnail_path, saved_to_library: o.saved_to_library })),
-              error: full.error,
-            });
-          }
-        } catch { clearInterval(poll); }
-      }, 2000);
-    } catch (err) {
-      console.error('[Playground] Retry failed:', err);
+  const handleRetry = useCallback((gen: PlaygroundGeneration) => {
+    const sessionId = gen.session_id || activeSessionId;
+    if (!sessionId) {
+      toast.error('重试失败', { body: '当前会话不可用，请重新打开一个会话后再试。' });
+      return;
     }
-  }, [startGeneration, updateGeneration]);
+
+    enqueueRequest({
+      mode: gen.mode,
+      modelId: gen.model_id,
+      prompt: gen.prompt,
+      negativePrompt: gen.negative_prompt,
+      inputMedia: gen.input_media,
+      parameters: gen.parameters,
+      batchSize: gen.batch_size,
+      sessionId,
+      parentGenerationId: gen.id,
+    });
+    toast.info('已加入重试队列', { body: '将使用原模型、提示词、参考素材和参数重新提交。' });
+  }, [activeSessionId, enqueueRequest]);
 
   const handleDelete = useCallback(async (gen: PlaygroundGeneration) => {
     try {
