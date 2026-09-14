@@ -1625,6 +1625,7 @@
     "compose": {
       "eyebrow": "创作输入",
       "title": "创作台",
+      "globalLabel": "全能创作",
       "modeLabel": "生成模式",
       "modelLabel": "模型",
       "promptLabel": "Prompt",
@@ -1639,6 +1640,7 @@
     "sessions": {
       "new": "新建会话",
       "selectLabel": "选择创作会话",
+      "navigationLabel": "创作台会话",
       "saving": "正在保存草稿…"
     },
     "timeline": {
@@ -1652,6 +1654,10 @@
     "mode": {
       "image": "图像生成",
       "video": "视频生成",
+      "outputType": "输出类型",
+      "creationMethod": "生成方式",
+      "outputImage": "图片",
+      "outputVideo": "视频",
       "groupImage": "图像",
       "groupVideo": "视频",
       "t2i": "文生图",

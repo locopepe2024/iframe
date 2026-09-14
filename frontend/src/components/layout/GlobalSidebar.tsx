@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import LumenXBranding from "./LumenXBranding";
 import { isTauri } from "@/lib/transport";
+import PlaygroundSessionSubnav from "@/components/modules/playground/PlaygroundSessionSubnav";
 
 export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "settings";
 
@@ -102,15 +103,17 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
       </button>
 
       {/* Primary navigation */}
-      <nav className="flex-1 flex flex-col gap-0.5 p-2.5" aria-label={t("mainNavAria")}>
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2.5 scrollbar-thin" aria-label={t("mainNavAria")}>
         {GLOBAL_NAV_ITEMS.slice(0, 4).map((item) => (
-          <NavButton
-            key={item.id}
-            active={activeTab === item.id}
-            label={t(item.id)}
-            icon={item.icon}
-            onClick={() => handleNav(item.id, item.hash)}
-          />
+          <div key={item.id}>
+            <NavButton
+              active={activeTab === item.id}
+              label={t(item.id)}
+              icon={item.icon}
+              onClick={() => handleNav(item.id, item.hash)}
+            />
+            {item.id === "playground" && activeTab === "playground" && <PlaygroundSessionSubnav />}
+          </div>
         ))}
       </nav>
 

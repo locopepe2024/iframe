@@ -1625,6 +1625,7 @@
     "compose": {
       "eyebrow": "Compose",
       "title": "Playground",
+      "globalLabel": "Global Create",
       "modeLabel": "Mode",
       "modelLabel": "Model",
       "promptLabel": "Prompt",
@@ -1639,6 +1640,7 @@
     "sessions": {
       "new": "New session",
       "selectLabel": "Select creation session",
+      "navigationLabel": "Playground sessions",
       "saving": "Saving draft…"
     },
     "timeline": {
@@ -1652,6 +1654,10 @@
     "mode": {
       "image": "Image",
       "video": "Video",
+      "outputType": "Output type",
+      "creationMethod": "Creation method",
+      "outputImage": "Image",
+      "outputVideo": "Video",
       "groupImage": "Image",
       "groupVideo": "Video",
       "t2i": "Text",

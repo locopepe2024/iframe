@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { usePlaygroundStore, type PlaygroundGeneration, type PlaygroundSession } from '@/components/modules/playground/usePlaygroundStore';
+import { getDefaultModeForOutput, getOutputType } from '@/components/modules/playground/ModeSelector';
 
 const session: PlaygroundSession = {
   id: 'session-1',
@@ -90,5 +91,14 @@ describe('playground session store', () => {
     const state = usePlaygroundStore.getState();
     expect(state.activeGenerationIds).toEqual(['pending-1']);
     expect(state.isGenerating).toBe(true);
+  });
+
+  it('maps the global output selector onto existing playground modes', () => {
+    expect(getOutputType('t2i')).toBe('image');
+    expect(getOutputType('i2i')).toBe('image');
+    expect(getOutputType('t2v')).toBe('video');
+    expect(getOutputType('r2v')).toBe('video');
+    expect(getDefaultModeForOutput('image')).toBe('t2i');
+    expect(getDefaultModeForOutput('video')).toBe('t2v');
   });
 });

@@ -33,7 +33,7 @@ export default function SessionRail({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 lg:hidden">
+      <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 md:hidden">
         <select
           value={activeSessionId || ''}
           onChange={(event) => {
@@ -52,6 +52,7 @@ export default function SessionRail({
           onClick={onCreate}
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-glass-border bg-glass text-foreground hover:border-primary/50 hover:text-primary"
           title={t('new')}
+          aria-label={t('new')}
         >
           <Plus size={17} />
         </button>
