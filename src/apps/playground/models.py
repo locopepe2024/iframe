@@ -20,6 +20,25 @@ class PlaygroundOutput(BaseModel):
     saved_to_library: bool = Field(False, description="Whether this output has been saved to the project library")
 
 
+class PlaygroundDraft(BaseModel):
+    mode: PlaygroundMode = Field(PlaygroundMode.T2I, description="Current generation mode")
+    model_id: str = Field("", description="Currently selected model")
+    prompt: str = Field("", description="Editable prompt draft")
+    negative_prompt: Optional[str] = Field(None, description="Editable negative prompt")
+    input_media: List[str] = Field(default_factory=list, description="Current reference media")
+    parameters: dict = Field(default_factory=dict, description="Current generation parameters")
+    batch_size: int = Field(1, ge=1, le=4, description="Current output count")
+    parent_generation_id: Optional[str] = Field(None, description="Generation restored for continued editing")
+
+
+class PlaygroundSession(BaseModel):
+    id: str = Field(..., description="Unique session identifier")
+    title: str = Field(..., description="User-visible session title")
+    draft: PlaygroundDraft = Field(default_factory=PlaygroundDraft)
+    created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")
+    updated_at: str = Field(..., description="Last activity timestamp in ISO 8601 format")
+
+
 class PlaygroundGeneration(BaseModel):
     id: str = Field(..., description="Unique identifier (UUID)")
     mode: PlaygroundMode = Field(..., description="Generation mode")
@@ -33,6 +52,8 @@ class PlaygroundGeneration(BaseModel):
     status: str = Field("pending", description="Generation status: pending/processing/completed/failed")
     error: Optional[str] = Field(None, description="Error message if generation failed")
     created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")
+    session_id: Optional[str] = Field(None, description="Owning creation session")
+    parent_generation_id: Optional[str] = Field(None, description="Generation used as the editable source for this run")
 
 
 class PlaygroundTemplate(BaseModel):
@@ -56,6 +77,17 @@ class GenerateRequest(BaseModel):
     input_media: Optional[List[str]] = Field(None, description="Input file paths for image/video-conditioned modes")
     parameters: Optional[dict] = Field(None, description="Generation parameters (resolution, duration, aspect_ratio, etc.)")
     batch_size: Optional[int] = Field(1, ge=1, le=4, description="Number of outputs to generate (1-4)")
+    session_id: Optional[str] = Field(None, description="Creation session for this generation")
+    parent_generation_id: Optional[str] = Field(None, description="Generation being edited and continued")
+
+
+class CreateSessionRequest(BaseModel):
+    title: Optional[str] = Field(None, description="Optional session title")
+
+
+class UpdateSessionRequest(BaseModel):
+    title: Optional[str] = Field(None, description="Updated session title")
+    draft: Optional[PlaygroundDraft] = Field(None, description="Current editable session draft")
 
 
 class SaveToLibraryRequest(BaseModel):

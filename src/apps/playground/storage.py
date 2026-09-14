@@ -3,9 +3,11 @@
 import json
 import os
 import threading
+import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from .models import PlaygroundGeneration, PlaygroundTemplate
+from .models import PlaygroundDraft, PlaygroundGeneration, PlaygroundSession, PlaygroundTemplate
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -14,10 +16,15 @@ logger = get_logger(__name__)
 class PlaygroundStorage:
     HISTORY_PATH = "output/playground_history.json"
     TEMPLATES_PATH = "output/playground_templates.json"
+    SESSIONS_PATH = "output/playground_sessions.json"
 
-    def __init__(self):
+    def __init__(self, history_path: Optional[str] = None, templates_path: Optional[str] = None, sessions_path: Optional[str] = None):
+        self.history_path = history_path or self.HISTORY_PATH
+        self.templates_path = templates_path or self.TEMPLATES_PATH
+        self.sessions_path = sessions_path or self.SESSIONS_PATH
         self._history: List[PlaygroundGeneration] = []
         self._templates: List[PlaygroundTemplate] = []
+        self._sessions: List[PlaygroundSession] = []
         self._lock = threading.RLock()
         self._load()
 
@@ -27,8 +34,10 @@ class PlaygroundStorage:
 
     def _load(self) -> None:
         """Load both JSON files, creating them if missing."""
-        self._history = self._load_file(self.HISTORY_PATH, PlaygroundGeneration)
-        self._templates = self._load_file(self.TEMPLATES_PATH, PlaygroundTemplate)
+        self._history = self._load_file(self.history_path, PlaygroundGeneration)
+        self._templates = self._load_file(self.templates_path, PlaygroundTemplate)
+        self._sessions = self._load_file(self.sessions_path, PlaygroundSession)
+        self._migrate_legacy_history()
 
     @staticmethod
     def _load_file(path: str, model_cls):
@@ -44,10 +53,35 @@ class PlaygroundStorage:
             return []
 
     def _save_history(self) -> None:
-        self._save_file(self.HISTORY_PATH, self._history)
+        self._save_file(self.history_path, self._history)
 
     def _save_templates(self) -> None:
-        self._save_file(self.TEMPLATES_PATH, self._templates)
+        self._save_file(self.templates_path, self._templates)
+
+    def _save_sessions(self) -> None:
+        self._save_file(self.sessions_path, self._sessions)
+
+    def _migrate_legacy_history(self) -> None:
+        legacy = [generation for generation in self._history if not generation.session_id]
+        if not legacy:
+            return
+        session = self._sessions[0] if self._sessions else self.create_session("历史创作")
+        for generation in legacy:
+            generation.session_id = session.id
+        newest = max(legacy, key=lambda generation: generation.created_at)
+        session.draft = PlaygroundDraft(
+            mode=newest.mode,
+            model_id=newest.model_id,
+            prompt=newest.prompt,
+            negative_prompt=newest.negative_prompt,
+            input_media=list(newest.input_media),
+            parameters=dict(newest.parameters),
+            batch_size=newest.batch_size,
+            parent_generation_id=newest.id,
+        )
+        session.updated_at = newest.created_at
+        self._save_history()
+        self._save_sessions()
 
     def _save_file(self, path: str, items: list) -> None:
         with self._lock:
@@ -80,10 +114,11 @@ class PlaygroundStorage:
         return None
 
     def list_history(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, session_id: Optional[str] = None
     ) -> List[PlaygroundGeneration]:
         """Return paginated history, newest first."""
-        ordered = list(reversed(self._history))
+        history = self._history if not session_id else [generation for generation in self._history if generation.session_id == session_id]
+        ordered = list(reversed(history))
         return ordered[offset : offset + limit]
 
     def update_generation(self, gen: PlaygroundGeneration) -> None:
@@ -103,6 +138,56 @@ class PlaygroundStorage:
                 self._save_history()
                 return True
         return False
+
+    # ------------------------------------------------------------------
+    # Session CRUD
+    # ------------------------------------------------------------------
+
+    def create_session(self, title: str = "新建创作") -> PlaygroundSession:
+        now = datetime.now(timezone.utc).isoformat()
+        session = PlaygroundSession(
+            id=str(uuid.uuid4()),
+            title=title.strip() or "新建创作",
+            created_at=now,
+            updated_at=now,
+        )
+        self._sessions.append(session)
+        self._save_sessions()
+        return session
+
+    def list_sessions(self) -> List[PlaygroundSession]:
+        return sorted(self._sessions, key=lambda session: session.updated_at, reverse=True)
+
+    def get_session(self, session_id: str) -> Optional[PlaygroundSession]:
+        return next((session for session in self._sessions if session.id == session_id), None)
+
+    def update_session(self, session: PlaygroundSession) -> PlaygroundSession:
+        with self._lock:
+            for index, existing in enumerate(self._sessions):
+                if existing.id == session.id:
+                    self._sessions[index] = session
+                    self._save_sessions()
+                    return session
+        raise KeyError(session.id)
+
+    def ensure_session(self, session_id: Optional[str] = None, title: str = "新建创作") -> PlaygroundSession:
+        if session_id:
+            session = self.get_session(session_id)
+            if session:
+                return session
+        sessions = self.list_sessions()
+        return sessions[0] if sessions else self.create_session(title)
+
+    def save_session_draft(self, session_id: str, draft: PlaygroundDraft, auto_title: Optional[str] = None) -> PlaygroundSession:
+        session = self.get_session(session_id)
+        if not session:
+            raise KeyError(session_id)
+        session.draft = draft
+        session.updated_at = datetime.now(timezone.utc).isoformat()
+        if auto_title and session.title == "新建创作":
+            collapsed = " ".join(auto_title.split())
+            session.title = collapsed[:32] or session.title
+        return self.update_session(session)
 
     # ------------------------------------------------------------------
     # Template CRUD

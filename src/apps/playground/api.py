@@ -8,11 +8,13 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 
 from .models import (
+    CreateSessionRequest,
     CreateTemplateRequest,
     GenerateRequest,
     PlaygroundTemplate,
     SaveToLibraryRequest,
     UpdateTemplateRequest,
+    UpdateSessionRequest,
 )
 from .service import PlaygroundService
 from .storage import PlaygroundStorage
@@ -45,9 +47,9 @@ router.add_api_route("/generate", generate, methods=["POST"])
 # ---------------------------------------------------------------------------
 
 
-def list_history(limit: int = 50, offset: int = 0):
+def list_history(limit: int = 50, offset: int = 0, session_id: Optional[str] = None):
     """Return paginated generation history, newest first."""
-    return _storage.list_history(limit=limit, offset=offset)
+    return _storage.list_history(limit=limit, offset=offset, session_id=session_id)
 
 
 def get_generation(generation_id: str):
@@ -95,6 +97,43 @@ router.add_api_route("/history/{generation_id}", get_generation, methods=["GET"]
 router.add_api_route(
     "/history/{generation_id}/status", get_generation_status, methods=["GET"]
 )
+
+# ---------------------------------------------------------------------------
+# Sessions
+# ---------------------------------------------------------------------------
+
+
+def list_sessions():
+    return _storage.list_sessions()
+
+
+def create_session(request: Optional[CreateSessionRequest] = None):
+    return _storage.create_session(request.title if request and request.title else "新建创作")
+
+
+def get_session(session_id: str):
+    session = _storage.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+def update_session(session_id: str, request: UpdateSessionRequest):
+    session = _storage.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if request.title is not None:
+        session.title = request.title.strip() or session.title
+    if request.draft is not None:
+        session.draft = request.draft
+    session.updated_at = datetime.now(timezone.utc).isoformat()
+    return _storage.update_session(session)
+
+
+router.add_api_route("/sessions", list_sessions, methods=["GET"])
+router.add_api_route("/sessions", create_session, methods=["POST"])
+router.add_api_route("/sessions/{session_id}", get_session, methods=["GET"])
+router.add_api_route("/sessions/{session_id}", update_session, methods=["PATCH"])
 router.add_api_route(
     "/history/{generation_id}", delete_generation, methods=["DELETE"]
 )

@@ -13,6 +13,7 @@ from typing import Optional
 
 from .models import (
     GenerateRequest,
+    PlaygroundDraft,
     PlaygroundGeneration,
     PlaygroundMode,
     PlaygroundOutput,
@@ -50,6 +51,17 @@ class PlaygroundService:
     def create_generation(self, request: GenerateRequest) -> PlaygroundGeneration:
         """Create a :class:`PlaygroundGeneration` record with *status=pending*,
         persist it via storage, and return it."""
+        session = self.storage.ensure_session(request.session_id, request.prompt[:32])
+        draft = PlaygroundDraft(
+            mode=request.mode,
+            model_id=request.model_id,
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt,
+            input_media=request.input_media or [],
+            parameters=request.parameters or {},
+            batch_size=request.batch_size or 1,
+            parent_generation_id=request.parent_generation_id,
+        )
         gen = PlaygroundGeneration(
             id=str(uuid.uuid4()),
             mode=request.mode,
@@ -63,8 +75,12 @@ class PlaygroundService:
             status="pending",
             error=None,
             created_at=datetime.now(timezone.utc).isoformat(),
+            session_id=session.id,
+            parent_generation_id=request.parent_generation_id,
         )
         self.storage.add_generation(gen)
+        draft.parent_generation_id = gen.id
+        self.storage.save_session_draft(session.id, draft, request.prompt)
         return gen
 
     def process_generation(self, generation_id: str) -> None:
