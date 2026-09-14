@@ -9,6 +9,7 @@ export interface PlaygroundModelOption {
   id: string;
   displayName: string;
   family: string;
+  provider: string;
   description: string;
   recommended: boolean;
   badges: string[];
@@ -27,6 +28,8 @@ export interface PlaygroundModelOption {
     negativePrompt?: boolean;
     promptExtend?: boolean;
     watermark?: boolean;
+    audio?: boolean;
+    sound?: boolean;
   };
   maxReferenceImages: number;
 }
@@ -50,6 +53,7 @@ interface CatalogModel {
   display_name: string;
   description: string;
   family: string;
+  provider: string;
   status: string;
   capabilities: string[];
   duration?: CatalogDuration | null;
@@ -198,6 +202,8 @@ function normalizeParams(
   if (typeof raw.negativePrompt === 'boolean') result.negativePrompt = raw.negativePrompt;
   if (typeof raw.promptExtend === 'boolean') result.promptExtend = raw.promptExtend;
   if (typeof raw.watermark === 'boolean') result.watermark = raw.watermark;
+  if (typeof raw.audio === 'boolean') result.audio = raw.audio;
+  if (typeof raw.sound === 'boolean') result.sound = raw.sound;
 
   return result;
 }
@@ -211,6 +217,7 @@ function toOption(model: CatalogModel): PlaygroundModelOption {
     id: model.id,
     displayName: model.display_name,
     family: model.family,
+    provider: model.provider,
     description: model.description,
     recommended: model.ui.recommended ?? false,
     badges: model.ui.badges ?? [],
@@ -305,4 +312,26 @@ export function getModelDuration(
   const model = catalog.models[modelId];
   if (!model) return null;
   return normalizeDuration(model.duration);
+}
+
+/** Return the creation modes published by the model catalog for this SKU. */
+export function getModelCapabilities(modelId: string): PlaygroundMode[] {
+  const model = catalog.models[modelId];
+  if (!model) return [];
+  return model.capabilities.filter((capability): capability is PlaygroundMode =>
+    ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'v2v'].includes(capability),
+  );
+}
+
+export type PlaygroundAudioControl = 'audio' | 'sound' | null;
+
+/**
+ * Return an audio toggle only when both catalog declaration and the current
+ * Playground adapter path are known to consume the parameter.
+ */
+export function getModelAudioControl(modelId: string): PlaygroundAudioControl {
+  const model = catalog.models[modelId];
+  if (!model) return null;
+  if (model.provider === 'kling' && model.params?.sound === true) return 'sound';
+  return null;
 }

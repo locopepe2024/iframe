@@ -265,7 +265,7 @@ export default function ParameterBar() {
   const supportsSeed = modelParams?.seed !== false;
   const supportsPromptExtend = modelParams?.promptExtend !== false;
   const supportsWatermark = modelParams?.watermark !== false;
-  const hasAnyAdvanced = supportsSeed || supportsPromptExtend || supportsWatermark;
+  const hasAnyAdvanced = supportsPromptExtend || supportsWatermark;
 
   // When model changes, reset params whose current value is not in the new model's options
   useEffect(() => {
@@ -340,7 +340,7 @@ export default function ParameterBar() {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
         {/* ── IMAGE MODE PARAMS ── */}
         {!isVideoMode && (
@@ -366,8 +366,24 @@ export default function ParameterBar() {
               />
             )}
 
-            {/* Batch — spans full width if no quality, else single col */}
-            <div className={!hasQuality && !hasSize ? 'col-span-2' : hasSize && !hasQuality ? '' : ''}>
+            {supportsSeed && (
+              <div className="flex flex-col gap-[6px] atelier-field">
+                <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">Seed</span>
+                <input
+                  type="number"
+                  placeholder={t('parameters.seedPlaceholder')}
+                  className="glass-input w-full rounded-[14px] bg-surface-inset font-mono text-xs text-foreground placeholder:text-text-muted"
+                  value={parameters.seed ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const parsed = Number.parseInt(val, 10);
+                    updateParam('seed', val === '' || Number.isNaN(parsed) ? undefined : parsed);
+                  }}
+                />
+              </div>
+            )}
+
+            <div>
               {batchPills}
             </div>
           </>
@@ -376,16 +392,6 @@ export default function ParameterBar() {
         {/* ── VIDEO MODE PARAMS ── */}
         {isVideoMode && (
           <>
-            {/* Ratio */}
-            {hasRatio && (
-              <ParamDropdown
-                label={t('parameters.aspectRatio')}
-                value={(parameters.aspect_ratio as string) ?? ratioDefault}
-                options={ratioOptions}
-                onChange={(v) => updateParam('aspect_ratio', v)}
-              />
-            )}
-
             {/* Resolution */}
             {hasResolution && (
               <ParamDropdown
@@ -396,20 +402,30 @@ export default function ParameterBar() {
               />
             )}
 
+            {/* Ratio */}
+            {hasRatio && (
+              <ParamDropdown
+                label={t('parameters.aspectRatio')}
+                value={(parameters.aspect_ratio as string) ?? ratioDefault}
+                options={ratioOptions}
+                onChange={(v) => updateParam('aspect_ratio', v)}
+              />
+            )}
+
             {/* Fallback: show ratio + resolution even if model doesn't declare them */}
             {!hasRatio && !hasResolution && (
               <>
-                <ParamDropdown
-                  label={t('parameters.aspectRatio')}
-                  value={(parameters.aspect_ratio as string) ?? FALLBACK_RATIOS[0]}
-                  options={FALLBACK_RATIOS}
-                  onChange={(v) => updateParam('aspect_ratio', v)}
-                />
                 <ParamDropdown
                   label={t('parameters.resolution')}
                   value={(parameters.resolution as string) ?? FALLBACK_RESOLUTIONS[0]}
                   options={FALLBACK_RESOLUTIONS}
                   onChange={(v) => updateParam('resolution', v)}
+                />
+                <ParamDropdown
+                  label={t('parameters.aspectRatio')}
+                  value={(parameters.aspect_ratio as string) ?? FALLBACK_RATIOS[0]}
+                  options={FALLBACK_RATIOS}
+                  onChange={(v) => updateParam('aspect_ratio', v)}
                 />
               </>
             )}
@@ -452,7 +468,23 @@ export default function ParameterBar() {
               />
             )}
 
-            {/* Batch */}
+            {supportsSeed && (
+              <div className="flex flex-col gap-[6px] atelier-field">
+                <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">Seed</span>
+                <input
+                  type="number"
+                  placeholder={t('parameters.seedPlaceholder')}
+                  className="glass-input w-full rounded-[14px] bg-surface-inset font-mono text-xs text-foreground placeholder:text-text-muted"
+                  value={parameters.seed ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const parsed = Number.parseInt(val, 10);
+                    updateParam('seed', val === '' || Number.isNaN(parsed) ? undefined : parsed);
+                  }}
+                />
+              </div>
+            )}
+
             {batchPills}
           </>
         )}
@@ -471,23 +503,7 @@ export default function ParameterBar() {
           </button>
 
           {showAdvanced && (
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              {supportsSeed && (
-                <div className="flex flex-col gap-[6px] atelier-field">
-                  <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">Seed</span>
-                  <input
-                    type="number"
-                    placeholder={t('parameters.seedPlaceholder')}
-                    className="glass-input w-full text-xs text-foreground font-mono placeholder:text-text-muted bg-surface-inset rounded-[14px]"
-                    value={parameters.seed ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateParam('seed', val === '' ? undefined : parseInt(val) || undefined);
-                    }}
-                  />
-                </div>
-              )}
-
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {supportsPromptExtend && (
                 <PillToggle
                   label={t('parameters.promptExtend')}

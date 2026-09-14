@@ -4020,13 +4020,13 @@
       "inputs": {},
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556,
-            61,
-            243,
-            184
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
           ]
         },
         "resolution": {
@@ -4109,13 +4109,13 @@
       "inputs": {},
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556,
-            61,
-            243,
-            184
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
           ]
         },
         "resolution": {
@@ -4199,10 +4199,10 @@
       "inputs": {},
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556
+            "16:9",
+            "9:16"
           ]
         },
         "resolution": {
@@ -4285,10 +4285,10 @@
       "inputs": {},
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556
+            "16:9",
+            "9:16"
           ]
         },
         "resolution": {
@@ -7642,13 +7642,13 @@
       "model_line_id": "uniart/uniart/minimax-h3-vip",
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556,
-            61,
-            243,
-            184
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
           ]
         },
         "resolution": {
@@ -7740,13 +7740,13 @@
       "model_line_id": "uniart/uniart/seedance-2.0-vip",
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556,
-            61,
-            243,
-            184
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
           ]
         },
         "resolution": {
@@ -7839,10 +7839,10 @@
       "model_line_id": "uniart/uniart/seedance-2.5-special",
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556
+            "16:9",
+            "9:16"
           ]
         },
         "resolution": {
@@ -7934,10 +7934,10 @@
       "model_line_id": "uniart/uniart/seedance-2.5-vip",
       "params": {
         "ratio": {
-          "default": 969,
+          "default": "16:9",
           "options": [
-            969,
-            556
+            "16:9",
+            "9:16"
           ]
         },
         "resolution": {

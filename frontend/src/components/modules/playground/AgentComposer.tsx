@@ -1,35 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
+  Boxes,
+  Hash,
   History,
+  Image as ImageIcon,
+  Layers3,
   LayoutTemplate,
+  Maximize2,
+  Monitor,
   Paperclip,
-  SlidersHorizontal,
-  WandSparkles,
+  Video,
+  Volume2,
+  Workflow,
+  type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
+import ComposerControls, { getComposerControlState, type ComposerControl } from './ComposerControls';
 import MediaInput from './MediaInput';
-import ModeSelector from './ModeSelector';
+import { CreationMethodSelector, OutputTypeSelector } from './ModeSelector';
 import ModelSelector from './ModelSelector';
-import ParameterBar from './ParameterBar';
 import PromptInput from './PromptInput';
+import { getOutputType } from './ModeSelector';
 import { getModelDisplayInfo } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
-type ComposerPanel = 'mode' | 'media' | 'settings' | null;
+type ComposerPanel = 'output' | 'model' | 'reference' | ComposerControl | null;
 
 interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
 }
-
-const MODE_LABELS: Record<string, string> = {
-  t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', v2v: 'V2V',
-};
 
 function ToolButton({
   active,
@@ -39,18 +44,18 @@ function ToolButton({
 }: {
   active?: boolean;
   label: string;
-  icon: typeof WandSparkles;
+  icon: LucideIcon;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-pressed={active}
+      aria-expanded={active}
       className={clsx(
-        'inline-flex min-h-11 max-w-[13rem] items-center gap-2 rounded-xl px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+        'inline-flex min-h-11 max-w-[16rem] items-center gap-2 rounded-xl px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
         active
-          ? 'bg-primary/12 text-primary'
+          ? 'bg-primary/10 text-primary'
           : 'text-text-muted hover:bg-hover-bg hover:text-foreground',
       )}
     >
@@ -63,16 +68,45 @@ function ToolButton({
 export default function AgentComposer({ canGenerate, batchSize, onGenerate }: AgentComposerProps) {
   const t = useTranslations('playground');
   const [activePanel, setActivePanel] = useState<ComposerPanel>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const mode = usePlaygroundStore((state) => state.mode);
   const modelId = usePlaygroundStore((state) => state.modelId);
-  const inputMedia = usePlaygroundStore((state) => state.inputMedia);
+  const parameters = usePlaygroundStore((state) => state.parameters);
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
   const model = getModelDisplayInfo(modelId);
+  const outputType = getOutputType(mode);
+  const OutputIcon = outputType === 'image' ? ImageIcon : Video;
+  const outputLabel = t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo');
+  const controls = getComposerControlState(modelId, parameters, batchSize);
+  const referenceLabel = t(`mode.${mode}`);
+  const resolutionLabel = [controls.resolution, controls.duration != null ? `${controls.duration}s` : null]
+    .filter(Boolean)
+    .join(' · ');
+
+  const panelTitle = activePanel
+    ? t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
+    : '';
 
   const togglePanel = (panel: Exclude<ComposerPanel, null>) => {
     setActivePanel((current) => current === panel ? null : panel);
   };
+
+  useEffect(() => {
+    if (!activePanel) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!composerRef.current?.contains(event.target as Node)) setActivePanel(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActivePanel(null);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activePanel]);
 
   const handleSubmit = () => {
     if (!canGenerate) return;
@@ -82,36 +116,33 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
 
   return (
     <div className="shrink-0 border-t border-border-subtle bg-background/80 px-3 pb-3 pt-3 backdrop-blur-xl md:px-6 md:pb-5">
-      <div className="relative z-40 mx-auto max-w-5xl rounded-[22px] border border-glass-border bg-elevated/95 shadow-2xl">
+      <div ref={composerRef} className="relative z-40 mx-auto max-w-5xl rounded-[22px] border border-glass-border bg-elevated/95 shadow-2xl">
         {activePanel && (
-          <div className="max-h-[46vh] overflow-y-auto border-b border-border-subtle px-4 py-4 scrollbar-thin md:px-5">
-            {activePanel === 'mode' && (
-              <div>
-                <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                  {t('agent.modePanel')}
-                </div>
-                <ModeSelector />
+          <div
+            role="dialog"
+            aria-label={t('agent.popoverLabel')}
+            className={clsx(
+              'absolute bottom-[calc(100%+0.625rem)] left-0 max-h-[56vh] w-[calc(100vw-1.5rem)] overflow-y-auto rounded-[18px] border border-glass-border bg-elevated p-4 shadow-2xl scrollbar-thin md:p-5',
+              activePanel === 'output' && 'max-w-[360px]',
+              activePanel === 'model' && 'max-w-[480px]',
+              activePanel === 'reference' && 'max-w-[620px]',
+              activePanel === 'resolution' && 'max-w-[520px]',
+              ['ratio', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
+            )}
+          >
+            <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              {panelTitle}
+            </div>
+            {activePanel === 'output' && <OutputTypeSelector />}
+            {activePanel === 'model' && <ModelSelector />}
+            {activePanel === 'reference' && (
+              <div className="space-y-4">
+                <CreationMethodSelector />
+                {!['t2i', 't2v'].includes(mode) && <MediaInput />}
               </div>
             )}
-            {activePanel === 'media' && (
-              <div>
-                <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                  {t('agent.mediaPanel')}
-                </div>
-                {mode === 't2v'
-                  ? <p className="py-3 text-sm text-text-muted">{t('agent.mediaUnavailable')}</p>
-                  : <MediaInput />}
-              </div>
-            )}
-            {activePanel === 'settings' && (
-              <div>
-                <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                  {t('agent.settingsPanel')}
-                </div>
-                <ModelSelector />
-                <div className="my-4 h-px bg-border-subtle" />
-                <ParameterBar />
-              </div>
+            {['resolution', 'ratio', 'seed', 'audio', 'batch'].includes(activePanel) && (
+              <ComposerControls control={activePanel as ComposerControl} />
             )}
           </div>
         )}
@@ -122,32 +153,76 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
 
         <div className="flex flex-wrap items-center gap-1 border-t border-border-subtle px-2 py-2 md:px-3">
           <ToolButton
-            active={activePanel === 'mode'}
-            icon={WandSparkles}
-            label={MODE_LABELS[mode] || mode}
-            onClick={() => togglePanel('mode')}
+            active={activePanel === 'output'}
+            icon={OutputIcon}
+            label={outputLabel}
+            onClick={() => togglePanel('output')}
           />
           <ToolButton
-            active={activePanel === 'media'}
-            icon={Paperclip}
-            label={inputMedia.length > 0 ? t('agent.mediaCount', { count: inputMedia.length }) : t('agent.addMedia')}
-            onClick={() => togglePanel('media')}
+            active={activePanel === 'model'}
+            icon={Boxes}
+            label={model?.displayName || modelId || t('agent.selectSku')}
+            onClick={() => togglePanel('model')}
           />
           <ToolButton
-            active={activePanel === 'settings'}
-            icon={SlidersHorizontal}
-            label={model?.displayName || modelId || t('agent.modelSettings')}
-            onClick={() => togglePanel('settings')}
+            active={activePanel === 'reference'}
+            icon={mode === 't2i' || mode === 't2v' ? Workflow : Paperclip}
+            label={referenceLabel}
+            onClick={() => togglePanel('reference')}
+          />
+          {controls.resolution && (
+            <ToolButton
+              active={activePanel === 'resolution'}
+              icon={Monitor}
+              label={resolutionLabel}
+              onClick={() => togglePanel('resolution')}
+            />
+          )}
+          {controls.ratio && (
+            <ToolButton
+              active={activePanel === 'ratio'}
+              icon={Maximize2}
+              label={controls.ratio}
+              onClick={() => togglePanel('ratio')}
+            />
+          )}
+          {controls.supportsSeed && (
+            <ToolButton
+              active={activePanel === 'seed'}
+              icon={Hash}
+              label={controls.seed != null ? `Seed ${String(controls.seed)}` : `Seed ${t('agent.seedRandom')}`}
+              onClick={() => togglePanel('seed')}
+            />
+          )}
+          {controls.audioControl && (
+            <ToolButton
+              active={activePanel === 'audio'}
+              icon={Volume2}
+              label={t(controls.audioValue ? 'parameters.audioOn' : 'parameters.audioOff')}
+              onClick={() => togglePanel('audio')}
+            />
+          )}
+          <ToolButton
+            active={activePanel === 'batch'}
+            icon={Layers3}
+            label={`×${batchSize}`}
+            onClick={() => togglePanel('batch')}
           />
           <ToolButton
             icon={LayoutTemplate}
             label={t('sessions.templates')}
-            onClick={() => setShowTemplateModal(true)}
+            onClick={() => {
+              setActivePanel(null);
+              setShowTemplateModal(true);
+            }}
           />
           <ToolButton
             icon={History}
             label={t('sessions.allHistory')}
-            onClick={() => setShowHistoryDrawer(true)}
+            onClick={() => {
+              setActivePanel(null);
+              setShowHistoryDrawer(true);
+            }}
           />
 
           <button

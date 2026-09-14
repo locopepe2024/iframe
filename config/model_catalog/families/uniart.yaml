@@ -40,7 +40,7 @@ models:
     duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
     params:
       resolution: {options: [480p, 720p], default: 720p}
-      ratio: {options: [16:9, 9:16], default: 16:9}
+      ratio: {options: ["16:9", "9:16"], default: "16:9"}
 
   - id: uniart/minimax-h3-vip
     display_name: UniArt Minimax H3 VIP
@@ -54,7 +54,7 @@ models:
     duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
     params:
       resolution: {options: [720p, 2k], default: 2k}
-      ratio: {options: [16:9, 9:16, 1:1, 4:3, 3:4], default: 16:9}
+      ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
 
   - id: uniart/seedance-2.0-vip
     display_name: UniArt Seedance 2.0 VIP
@@ -68,7 +68,7 @@ models:
     duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
     params:
       resolution: {options: [480p, 720p, 1080p], default: 720p}
-      ratio: {options: [16:9, 9:16, 1:1, 4:3, 3:4], default: 16:9}
+      ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
   - id: uniart/seedance-2.5-special
     display_name: UniArt Seedance 2.5 Special
     description: Seedance 2.5 video generation through the UniArt gateway
@@ -81,4 +81,4 @@ models:
     duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
     params:
       resolution: {options: [480p, 720p], default: 720p}
-      ratio: {options: [16:9, 9:16], default: 16:9}
+      ratio: {options: ["16:9", "9:16"], default: "16:9"}

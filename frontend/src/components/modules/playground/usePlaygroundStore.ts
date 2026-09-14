@@ -372,7 +372,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     const isTerminal = gen.status === 'completed' || gen.status === 'failed';
     const nextActive = isTerminal
       ? activeGenerationIds
-      : [...new Set([...activeGenerationIds, gen.id])];
+      : Array.from(new Set([...activeGenerationIds, gen.id]));
     set({
       activeGenerationIds: nextActive,
       history: [gen, ...history],
