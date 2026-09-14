@@ -1,11 +1,16 @@
 """Playground API routes — generation, history, and template management."""
 
 import os
+import hashlib
+import hmac
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 
 from .models import (
     CreateSessionRequest,
@@ -18,26 +23,78 @@ from .models import (
 )
 from .service import PlaygroundService
 from .storage import PlaygroundStorage
+from ..identity import UserContext, require_user_context
+from ..user_config import get_user_config_store
 from ...utils import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["playground"])
 
-# Module-level singletons — initialised when the router is first imported.
-_storage = PlaygroundStorage()
-_service = PlaygroundService(_storage)
+_storage_lock = threading.RLock()
+_storages: dict[str, PlaygroundStorage] = {}
+
+
+def _storage_for(identity: UserContext) -> PlaygroundStorage:
+    with _storage_lock:
+        storage = _storages.get(identity.owner_profile_id)
+        if storage is None:
+            storage = PlaygroundStorage(
+                owner_user_id=identity.user_id,
+                owner_profile_id=identity.owner_profile_id,
+            )
+            _storages[identity.owner_profile_id] = storage
+        return storage
+
+
+def _service_for(identity: UserContext) -> PlaygroundService:
+    storage = _storage_for(identity)
+    return PlaygroundService(
+        storage,
+        provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+    )
+
+
+def _media_signature(profile_id: str, generation_id: str, output_id: str, thumbnail: int, expires: int) -> str:
+    key = os.getenv("LUMENX_MEDIA_SIGNING_KEY") or os.getenv("LUMENX_CONFIG_MASTER_KEY")
+    if not key:
+        raise HTTPException(status_code=503, detail="LUMENX_MEDIA_SIGNING_KEY is not configured")
+    message = f"{profile_id}:{generation_id}:{output_id}:{thumbnail}:{expires}".encode("utf-8")
+    return hmac.new(key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _media_url(identity: UserContext, generation_id: str, output_id: str, thumbnail: int = 0) -> str:
+    expires = int(time.time()) + 3600
+    signature = _media_signature(identity.owner_profile_id, generation_id, output_id, thumbnail, expires)
+    return (
+        f"/playground/media/{generation_id}/{output_id}"
+        f"?thumbnail={thumbnail}&expires={expires}&signature={signature}"
+    )
+
+
+def _public_generation(generation, identity: UserContext):
+    payload = generation.model_dump()
+    for output in payload.get("outputs", []):
+        output["media_path"] = _media_url(identity, generation.id, output["id"])
+        if output.get("thumbnail_path"):
+            output["thumbnail_path"] = _media_url(identity, generation.id, output["id"], 1)
+    return payload
 
 # ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
 
 
-def generate(request: GenerateRequest, background_tasks: BackgroundTasks):
+def generate(
+    request: GenerateRequest,
+    background_tasks: BackgroundTasks,
+    identity: UserContext = Depends(require_user_context),
+):
     """Create a generation record and kick off processing in the background."""
-    gen = _service.create_generation(request)
-    background_tasks.add_task(_service.process_generation, gen.id)
-    return gen
+    service = _service_for(identity)
+    gen = service.create_generation(request)
+    background_tasks.add_task(service.process_generation, gen.id)
+    return _public_generation(gen, identity)
 
 
 router.add_api_route("/generate", generate, methods=["POST"])
@@ -47,35 +104,43 @@ router.add_api_route("/generate", generate, methods=["POST"])
 # ---------------------------------------------------------------------------
 
 
-def list_history(limit: int = 50, offset: int = 0, session_id: Optional[str] = None):
+def list_history(
+    limit: int = 50,
+    offset: int = 0,
+    session_id: Optional[str] = None,
+    identity: UserContext = Depends(require_user_context),
+):
     """Return paginated generation history, newest first."""
-    return _storage.list_history(limit=limit, offset=offset, session_id=session_id)
+    return [
+        _public_generation(item, identity)
+        for item in _storage_for(identity).list_history(limit=limit, offset=offset, session_id=session_id)
+    ]
 
 
-def get_generation(generation_id: str):
+def get_generation(generation_id: str, identity: UserContext = Depends(require_user_context)):
     """Return full details for a single generation."""
-    gen = _storage.get_generation(generation_id)
+    gen = _storage_for(identity).get_generation(generation_id)
     if not gen:
         raise HTTPException(status_code=404, detail="Generation not found")
-    return gen
+    return _public_generation(gen, identity)
 
 
-def get_generation_status(generation_id: str):
+def get_generation_status(generation_id: str, identity: UserContext = Depends(require_user_context)):
     """Return lightweight status payload for polling."""
-    gen = _storage.get_generation(generation_id)
+    gen = _storage_for(identity).get_generation(generation_id)
     if not gen:
         raise HTTPException(status_code=404, detail="Generation not found")
     return {
         "id": gen.id,
         "status": gen.status,
-        "outputs": gen.outputs,
+        "outputs": _public_generation(gen, identity)["outputs"],
         "error": gen.error,
     }
 
 
-def delete_generation(generation_id: str):
+def delete_generation(generation_id: str, identity: UserContext = Depends(require_user_context)):
     """Delete a generation record and its outputs."""
-    if not _storage.delete_generation(generation_id):
+    if not _storage_for(identity).delete_generation(generation_id):
         raise HTTPException(status_code=404, detail="Generation not found")
     return {"ok": True}
 
@@ -84,10 +149,11 @@ def save_to_library(
     generation_id: str,
     output_id: str,
     request: Optional[SaveToLibraryRequest] = None,
+    identity: UserContext = Depends(require_user_context),
 ):
     """Save a specific generation output to the project library."""
     category = request.category if request else "general"
-    if not _service.save_to_library(generation_id, output_id, category):
+    if not _service_for(identity).save_to_library(generation_id, output_id, category):
         raise HTTPException(status_code=404, detail="Generation or output not found")
     return {"ok": True}
 
@@ -98,28 +164,82 @@ router.add_api_route(
     "/history/{generation_id}/status", get_generation_status, methods=["GET"]
 )
 
+
+def get_generation_media(
+    generation_id: str,
+    output_id: str,
+    thumbnail: int = 0,
+    expires: int = 0,
+    signature: str = "",
+    authorization: str | None = Header(default=None),
+):
+    if authorization:
+        identity = require_user_context(authorization)
+    else:
+        if expires < int(time.time()):
+            raise HTTPException(status_code=401, detail="Media URL expired")
+        identity = None
+        for candidate in list(_storages.values()):
+            expected = _media_signature(candidate.owner_profile_id, generation_id, output_id, thumbnail, expires)
+            if hmac.compare_digest(expected, signature):
+                identity = UserContext(
+                    user_id=candidate.owner_user_id,
+                    owner_profile_id=candidate.owner_profile_id,
+                    display_name="",
+                    access_token="",
+                )
+                break
+        if identity is None:
+            raise HTTPException(status_code=401, detail="Invalid media signature")
+    generation = _storage_for(identity).get_generation(generation_id)
+    if not generation:
+        raise HTTPException(status_code=404, detail="Media not found")
+    output = next((item for item in generation.outputs if item.id == output_id), None)
+    if not output:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = output.thumbnail_path if thumbnail and output.thumbnail_path else output.media_path
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Media not found")
+    return FileResponse(path)
+
+
+router.add_api_route(
+    "/media/{generation_id}/{output_id}",
+    get_generation_media,
+    methods=["GET"],
+)
+
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------
 
 
-def list_sessions():
-    return _storage.list_sessions()
+def list_sessions(identity: UserContext = Depends(require_user_context)):
+    return _storage_for(identity).list_sessions()
 
 
-def create_session(request: Optional[CreateSessionRequest] = None):
-    return _storage.create_session(request.title if request and request.title else "新建创作")
+def create_session(
+    request: Optional[CreateSessionRequest] = None,
+    identity: UserContext = Depends(require_user_context),
+):
+    return _storage_for(identity).create_session(request.title if request and request.title else "新建创作")
 
 
-def get_session(session_id: str):
-    session = _storage.get_session(session_id)
+def get_session(session_id: str, identity: UserContext = Depends(require_user_context)):
+    storage = _storage_for(identity)
+    session = storage.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
 
-def update_session(session_id: str, request: UpdateSessionRequest):
-    session = _storage.get_session(session_id)
+def update_session(
+    session_id: str,
+    request: UpdateSessionRequest,
+    identity: UserContext = Depends(require_user_context),
+):
+    storage = _storage_for(identity)
+    session = storage.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if request.title is not None:
@@ -127,7 +247,7 @@ def update_session(session_id: str, request: UpdateSessionRequest):
     if request.draft is not None:
         session.draft = request.draft
     session.updated_at = datetime.now(timezone.utc).isoformat()
-    return _storage.update_session(session)
+    return storage.update_session(session)
 
 
 router.add_api_route("/sessions", list_sessions, methods=["GET"])
@@ -148,12 +268,15 @@ router.add_api_route(
 # ---------------------------------------------------------------------------
 
 
-def list_templates():
+def list_templates(identity: UserContext = Depends(require_user_context)):
     """Return all saved prompt templates."""
-    return _storage.list_templates()
+    return _storage_for(identity).list_templates()
 
 
-def create_template(request: CreateTemplateRequest):
+def create_template(
+    request: CreateTemplateRequest,
+    identity: UserContext = Depends(require_user_context),
+):
     """Create a new prompt template."""
     now = datetime.now(timezone.utc).isoformat()
     template = PlaygroundTemplate(
@@ -167,27 +290,34 @@ def create_template(request: CreateTemplateRequest):
         default_parameters=request.default_parameters or {},
         created_at=now,
         updated_at=now,
+        owner_user_id=identity.user_id,
+        owner_profile_id=identity.owner_profile_id,
     )
-    _storage.add_template(template)
+    _storage_for(identity).add_template(template)
     return template
 
 
-def update_template(template_id: str, request: UpdateTemplateRequest):
+def update_template(
+    template_id: str,
+    request: UpdateTemplateRequest,
+    identity: UserContext = Depends(require_user_context),
+):
     """Update an existing prompt template (partial update)."""
-    template = _storage.get_template(template_id)
+    storage = _storage_for(identity)
+    template = storage.get_template(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     update_data = request.model_dump(exclude_none=True)
     for key, value in update_data.items():
         setattr(template, key, value)
     template.updated_at = datetime.now(timezone.utc).isoformat()
-    _storage.update_template(template)
+    storage.update_template(template)
     return template
 
 
-def delete_template(template_id: str):
+def delete_template(template_id: str, identity: UserContext = Depends(require_user_context)):
     """Delete a prompt template."""
-    if not _storage.delete_template(template_id):
+    if not _storage_for(identity).delete_template(template_id):
         raise HTTPException(status_code=404, detail="Template not found")
     return {"ok": True}
 
@@ -201,15 +331,16 @@ router.add_api_route("/templates/{template_id}", delete_template, methods=["DELE
 # Upload
 # ---------------------------------------------------------------------------
 
-UPLOAD_DIR = os.path.join("output", "playground", "uploads")
-
-
-async def upload_media(file: UploadFile = File(...)):
+async def upload_media(
+    file: UploadFile = File(...),
+    identity: UserContext = Depends(require_user_context),
+):
     """Upload a media file for use as playground input (reference image, first frame, etc.)."""
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    upload_dir = os.path.join(_storage_for(identity).output_dir, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
     ext = os.path.splitext(file.filename or "file")[1] or ".bin"
     filename = f"{uuid.uuid4()}{ext}"
-    dest = os.path.join(UPLOAD_DIR, filename)
+    dest = os.path.join(upload_dir, filename)
     contents = await file.read()
     with open(dest, "wb") as f:
         f.write(contents)

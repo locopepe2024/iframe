@@ -1,6 +1,7 @@
 """Playground storage layer — JSON-file persistence for generation history and templates."""
 
 import json
+import hashlib
 import os
 import threading
 import uuid
@@ -18,15 +19,35 @@ class PlaygroundStorage:
     TEMPLATES_PATH = "output/playground_templates.json"
     SESSIONS_PATH = "output/playground_sessions.json"
 
-    def __init__(self, history_path: Optional[str] = None, templates_path: Optional[str] = None, sessions_path: Optional[str] = None):
-        self.history_path = history_path or self.HISTORY_PATH
-        self.templates_path = templates_path or self.TEMPLATES_PATH
-        self.sessions_path = sessions_path or self.SESSIONS_PATH
+    def __init__(
+        self,
+        *,
+        owner_user_id: str,
+        owner_profile_id: str,
+        history_path: Optional[str] = None,
+        templates_path: Optional[str] = None,
+        sessions_path: Optional[str] = None,
+    ):
+        if not owner_user_id or not owner_profile_id:
+            raise ValueError("PlaygroundStorage requires an authenticated owner")
+        self.owner_user_id = owner_user_id
+        self.owner_profile_id = owner_profile_id
+        owner_dir = self._owner_dir(owner_profile_id)
+        self.history_path = history_path or os.path.join(owner_dir, "playground_history.json")
+        self.templates_path = templates_path or os.path.join(owner_dir, "playground_templates.json")
+        self.sessions_path = sessions_path or os.path.join(owner_dir, "playground_sessions.json")
+        self.output_dir = os.path.join(owner_dir, "playground")
+        self.asset_dir = os.path.join(owner_dir, "assets")
         self._history: List[PlaygroundGeneration] = []
         self._templates: List[PlaygroundTemplate] = []
         self._sessions: List[PlaygroundSession] = []
         self._lock = threading.RLock()
         self._load()
+
+    @staticmethod
+    def _owner_dir(owner_profile_id: str) -> str:
+        digest = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()[:24]
+        return os.path.join("output", "users", digest)
 
     # ------------------------------------------------------------------
     # Internal persistence
@@ -62,8 +83,28 @@ class PlaygroundStorage:
         self._save_file(self.sessions_path, self._sessions)
 
     def _migrate_legacy_history(self) -> None:
+        owner_changed = False
+        for session in self._sessions:
+            if not session.owner_user_id and not session.owner_profile_id:
+                session.owner_user_id = self.owner_user_id
+                session.owner_profile_id = self.owner_profile_id
+                owner_changed = True
+        for generation in self._history:
+            if not generation.owner_user_id and not generation.owner_profile_id:
+                generation.owner_user_id = self.owner_user_id
+                generation.owner_profile_id = self.owner_profile_id
+                owner_changed = True
+        for template in self._templates:
+            if not template.owner_user_id and not template.owner_profile_id:
+                template.owner_user_id = self.owner_user_id
+                template.owner_profile_id = self.owner_profile_id
+                owner_changed = True
         legacy = [generation for generation in self._history if not generation.session_id]
         if not legacy:
+            if owner_changed:
+                self._save_history()
+                self._save_templates()
+                self._save_sessions()
             return
         session = self._sessions[0] if self._sessions else self.create_session("历史创作")
         for generation in legacy:
@@ -103,6 +144,7 @@ class PlaygroundStorage:
 
     def add_generation(self, gen: PlaygroundGeneration) -> None:
         """Append a generation record and persist."""
+        self._assert_owner(gen.owner_user_id, gen.owner_profile_id)
         self._history.append(gen)
         self._save_history()
 
@@ -112,6 +154,21 @@ class PlaygroundStorage:
             if gen.id == gen_id:
                 return gen
         return None
+
+    def resolve_media_reference(self, value: str) -> str:
+        prefix = "/playground/media/"
+        if not value.startswith(prefix):
+            return value
+        parts = value.removeprefix(prefix).split("/")
+        if len(parts) != 2:
+            raise ValueError("Invalid playground media reference")
+        generation = self.get_generation(parts[0])
+        if not generation:
+            raise FileNotFoundError("Playground media not found")
+        output = next((item for item in generation.outputs if item.id == parts[1]), None)
+        if not output:
+            raise FileNotFoundError("Playground media not found")
+        return output.media_path
 
     def list_history(
         self, limit: int = 50, offset: int = 0, session_id: Optional[str] = None
@@ -123,6 +180,7 @@ class PlaygroundStorage:
 
     def update_generation(self, gen: PlaygroundGeneration) -> None:
         """Replace an existing generation record (matched by id) and persist."""
+        self._assert_owner(gen.owner_user_id, gen.owner_profile_id)
         for i, existing in enumerate(self._history):
             if existing.id == gen.id:
                 self._history[i] = gen
@@ -150,6 +208,8 @@ class PlaygroundStorage:
             title=title.strip() or "新建创作",
             created_at=now,
             updated_at=now,
+            owner_user_id=self.owner_user_id,
+            owner_profile_id=self.owner_profile_id,
         )
         self._sessions.append(session)
         self._save_sessions()
@@ -195,6 +255,7 @@ class PlaygroundStorage:
 
     def add_template(self, template: PlaygroundTemplate) -> None:
         """Append a template record and persist."""
+        self._assert_owner(template.owner_user_id, template.owner_profile_id)
         self._templates.append(template)
         self._save_templates()
 
@@ -211,6 +272,7 @@ class PlaygroundStorage:
 
     def update_template(self, template: PlaygroundTemplate) -> None:
         """Replace an existing template (matched by id) and persist."""
+        self._assert_owner(template.owner_user_id, template.owner_profile_id)
         for i, existing in enumerate(self._templates):
             if existing.id == template.id:
                 self._templates[i] = template
@@ -226,3 +288,7 @@ class PlaygroundStorage:
                 self._save_templates()
                 return True
         return False
+
+    def _assert_owner(self, owner_user_id: Optional[str], owner_profile_id: Optional[str]) -> None:
+        if owner_user_id != self.owner_user_id or owner_profile_id != self.owner_profile_id:
+            raise PermissionError("Playground record owner does not match storage owner")

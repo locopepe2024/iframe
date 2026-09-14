@@ -12,12 +12,23 @@ from .base import VideoGenModel
 from .image import ImageGenModel
 
 
-def _base_url() -> str:
-    return (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "https://uniart.fun/v1").rstrip("/")
+def _base_url(config: Dict[str, Any]) -> str:
+    return str(
+        config.get("base_url")
+        or config.get("UNIART_BASE_URL")
+        or os.getenv("UNIART_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or "https://uniart.fun/v1"
+    ).rstrip("/")
 
 
-def _headers() -> Dict[str, str]:
-    key = os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY")
+def _headers(config: Dict[str, Any]) -> Dict[str, str]:
+    key = (
+        config.get("api_key")
+        or config.get("UNIART_API_KEY")
+        or os.getenv("UNIART_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
     if not key:
         raise RuntimeError("UNIART_API_KEY or OPENAI_API_KEY is required")
     return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -36,8 +47,8 @@ def _media(value: Optional[str]) -> Optional[str]:
         return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
 
-def _post(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
-    resp = requests.post(f"{_base_url()}{path}", headers=_headers(), json=body, timeout=90)
+def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    resp = requests.post(f"{_base_url(config)}{path}", headers=_headers(config), json=body, timeout=90)
     resp.raise_for_status()
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
@@ -46,10 +57,14 @@ def _post(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
-def _poll(task_id: str, max_wait: int = 900) -> Dict[str, Any]:
+def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900) -> Dict[str, Any]:
     started = time.time()
     while time.time() - started < max_wait:
-        resp = requests.get(f"{_base_url()}/videos/{task_id}", headers=_headers(), timeout=30)
+        resp = requests.get(
+            f"{_base_url(config)}/videos/{task_id}",
+            headers=_headers(config),
+            timeout=30,
+        )
         resp.raise_for_status()
         data = resp.json()
         status = str(data.get("status") or "").lower()
@@ -62,9 +77,9 @@ def _poll(task_id: str, max_wait: int = 900) -> Dict[str, Any]:
     raise RuntimeError(f"UniArt task timed out after {max_wait}s")
 
 
-def _download(url: str, output_path: str) -> str:
+def _download(config: Dict[str, Any], url: str, output_path: str) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    resp = requests.get(url, headers=_headers(), timeout=180, stream=True)
+    resp = requests.get(url, headers=_headers(config), timeout=180, stream=True)
     resp.raise_for_status()
     with open(output_path, "wb") as f:
         for chunk in resp.iter_content(65536):
@@ -85,6 +100,9 @@ def _result_url(data: Dict[str, Any], kind: str) -> str:
 
 
 class UniArtImageModel(ImageGenModel):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = config or {}
+
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()
         model = (kwargs.get("model_name") or "gpt-image-2").removeprefix("uniart/")
@@ -92,13 +110,16 @@ class UniArtImageModel(ImageGenModel):
         for key in ("size", "quality", "n"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
-        task = _post("/images/generations", body)
-        result = _poll(task.get("task_id") or task.get("id"))
-        _download(_result_url(result, "image"), output_path)
+        task = _post(self.config, "/images/generations", body)
+        result = _poll(self.config, task.get("task_id") or task.get("id"))
+        _download(self.config, _result_url(result, "image"), output_path)
         return output_path, time.time() - started
 
 
 class UniArtVideoModel(VideoGenModel):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = config or {}
+
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
@@ -119,7 +140,7 @@ class UniArtVideoModel(VideoGenModel):
             image = _media(kwargs.get("img_url") or kwargs.get("img_path"))
             if image:
                 body["input_reference"] = image
-        task = _post("/videos", body)
-        result = _poll(task.get("task_id") or task.get("id"))
-        _download(_result_url(result, "video"), output_path)
+        task = _post(self.config, "/videos", body)
+        result = _poll(self.config, task.get("task_id") or task.get("id"))
+        _download(self.config, _result_url(result, "video"), output_path)
         return output_path, time.time() - started

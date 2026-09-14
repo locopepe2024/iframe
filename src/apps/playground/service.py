@@ -9,7 +9,7 @@ import os
 import shutil
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Dict, Optional
 
 from .models import (
     GenerateRequest,
@@ -26,16 +26,17 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Output directories
 # ---------------------------------------------------------------------------
-IMAGE_OUTPUT_DIR = os.path.join("output", "playground", "images")
-VIDEO_OUTPUT_DIR = os.path.join("output", "playground", "videos")
-
-
 class PlaygroundService:
     """High-level service that creates generation records and delegates to
     the correct model adapter for execution."""
 
-    def __init__(self, storage: PlaygroundStorage):
+    def __init__(
+        self,
+        storage: PlaygroundStorage,
+        provider_config_loader: Optional[Callable[[], Dict[str, str]]] = None,
+    ):
         self.storage = storage
+        self.provider_config_loader = provider_config_loader
         # Lazy-initialised model instances (cached for the lifetime of the service)
         self._wanx_model = None
         self._wanx_image_model = None
@@ -51,13 +52,17 @@ class PlaygroundService:
     def create_generation(self, request: GenerateRequest) -> PlaygroundGeneration:
         """Create a :class:`PlaygroundGeneration` record with *status=pending*,
         persist it via storage, and return it."""
+        input_media = [
+            self.storage.resolve_media_reference(value)
+            for value in (request.input_media or [])
+        ]
         session = self.storage.ensure_session(request.session_id, request.prompt[:32])
         draft = PlaygroundDraft(
             mode=request.mode,
             model_id=request.model_id,
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
-            input_media=request.input_media or [],
+            input_media=input_media,
             parameters=request.parameters or {},
             batch_size=request.batch_size or 1,
             parent_generation_id=request.parent_generation_id,
@@ -68,7 +73,7 @@ class PlaygroundService:
             model_id=request.model_id,
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
-            input_media=request.input_media or [],
+            input_media=input_media,
             parameters=request.parameters or {},
             batch_size=request.batch_size or 1,
             outputs=[],
@@ -77,6 +82,8 @@ class PlaygroundService:
             created_at=datetime.now(timezone.utc).isoformat(),
             session_id=session.id,
             parent_generation_id=request.parent_generation_id,
+            owner_user_id=self.storage.owner_user_id,
+            owner_profile_id=self.storage.owner_profile_id,
         )
         self.storage.add_generation(gen)
         draft.parent_generation_id = gen.id
@@ -96,6 +103,10 @@ class PlaygroundService:
         self.storage.update_generation(gen)
 
         try:
+            if not self._uses_owner_scoped_provider(gen.model_id):
+                raise RuntimeError(
+                    "This legacy provider is disabled in multi-user mode; select a UniArt catalog model"
+                )
             mode = gen.mode
             if mode in (PlaygroundMode.T2I, PlaygroundMode.I2I):
                 self._process_image_generation(gen)
@@ -140,50 +151,12 @@ class PlaygroundService:
             logger.error("save_to_library: source file not found: %s", target_output.media_path)
             return False
 
-        dest_dir = os.path.join("output", "assets", category)
+        dest_dir = os.path.join(self.storage.asset_dir, category)
         os.makedirs(dest_dir, exist_ok=True)
 
         dest_path = os.path.join(dest_dir, os.path.basename(src_path))
         shutil.copy2(src_path, dest_path)
         logger.info("Saved output %s to library: %s", output_id, dest_path)
-
-        # Wave A (shared asset pool): besides copying the file, register a real
-        # global library asset record so the output is curatable through the
-        # /library/assets CRUD. category -> asset_type mapping; anything
-        # unknown (incl. the "general" default) falls back to "prop".
-        asset_type = self._category_to_asset_type(category)
-        prompt_text = (gen.prompt or "").strip()
-        asset_name = prompt_text[:40] or os.path.splitext(os.path.basename(dest_path))[0]
-        try:
-            # Deferred import: comic_gen.api owns the live ComicGenPipeline
-            # singleton -- the same instance that backs the /library/assets
-            # CRUD endpoints, so the new asset is immediately visible there.
-            # A top-level import would create a cycle (comic_gen.api imports the
-            # playground router at module load), so we import lazily at call
-            # time when both modules are fully initialised.
-            from ..comic_gen.api import pipeline as comic_pipeline
-
-            asset = comic_pipeline.create_library_asset(
-                asset_type,
-                {
-                    "name": asset_name,
-                    "description": prompt_text,
-                    # Point the library record at the freshly-copied file.
-                    "image_url": dest_path,
-                },
-            )
-            logger.info(
-                "save_to_library: created global %s asset %s from output %s",
-                asset_type,
-                getattr(asset, "id", "?"),
-                output_id,
-            )
-        except Exception:
-            logger.exception(
-                "save_to_library: failed to register global library asset for output %s",
-                output_id,
-            )
-            return False
 
         target_output.saved_to_library = True
         self.storage.update_generation(gen)
@@ -194,7 +167,8 @@ class PlaygroundService:
     # ------------------------------------------------------------------
 
     def _process_image_generation(self, gen: PlaygroundGeneration) -> None:
-        os.makedirs(IMAGE_OUTPUT_DIR, exist_ok=True)
+        image_output_dir = os.path.join(self.storage.output_dir, "images")
+        os.makedirs(image_output_dir, exist_ok=True)
 
         model_lower = gen.model_id.lower()
         failures = []
@@ -202,7 +176,7 @@ class PlaygroundService:
         for idx in range(gen.batch_size):
             ext = "png"
             out_filename = f"{gen.mode.value}_{gen.id}_{idx}.{ext}"
-            out_path = os.path.join(IMAGE_OUTPUT_DIR, out_filename)
+            out_path = os.path.join(image_output_dir, out_filename)
 
             try:
                 if model_lower.startswith("uniart/") or model_lower.startswith("gpt-image"):
@@ -259,9 +233,11 @@ class PlaygroundService:
         from ...models.mulerouter import MuleRouterImageModel
         from ...models.uniart import UniArtImageModel
 
-        if self._mulerouter_image_model is None:
-            use_uniart = "uniart.fun" in (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "")
-            self._mulerouter_image_model = UniArtImageModel({}) if use_uniart else MuleRouterImageModel({})
+        runtime_config = self._load_provider_config()
+        use_uniart = bool(runtime_config) or "uniart.fun" in (
+            os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
+        )
+        model = UniArtImageModel(runtime_config) if use_uniart else MuleRouterImageModel({})
 
         params = gen.parameters
         kwargs = {
@@ -274,7 +250,7 @@ class PlaygroundService:
         if gen.mode == PlaygroundMode.I2I and gen.input_media:
             kwargs["ref_image_paths"] = list(gen.input_media)
 
-        self._mulerouter_image_model.generate(
+        model.generate(
             prompt=gen.prompt,
             output_path=out_path,
             model_name=gen.model_id,
@@ -286,14 +262,15 @@ class PlaygroundService:
     # ------------------------------------------------------------------
 
     def _process_video_generation(self, gen: PlaygroundGeneration) -> None:
-        os.makedirs(VIDEO_OUTPUT_DIR, exist_ok=True)
+        video_output_dir = os.path.join(self.storage.output_dir, "videos")
+        os.makedirs(video_output_dir, exist_ok=True)
 
         model_lower = gen.model_id.lower()
         failures = []
 
         for idx in range(gen.batch_size):
             out_filename = f"{gen.mode.value}_{gen.id}_{idx}.mp4"
-            out_path = os.path.join(VIDEO_OUTPUT_DIR, out_filename)
+            out_path = os.path.join(video_output_dir, out_filename)
 
             try:
                 if model_lower.startswith("uniart/") or model_lower.startswith("seedance") or model_lower.startswith("minimax"):
@@ -368,9 +345,11 @@ class PlaygroundService:
         from ...models.mulerouter import MuleRouterVideoModel
         from ...models.uniart import UniArtVideoModel
 
-        if self._mulerouter_video_model is None:
-            use_uniart = "uniart.fun" in (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "")
-            self._mulerouter_video_model = UniArtVideoModel({}) if use_uniart else MuleRouterVideoModel({})
+        runtime_config = self._load_provider_config()
+        use_uniart = bool(runtime_config) or "uniart.fun" in (
+            os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
+        )
+        model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
 
         params = gen.parameters
         img_path, img_url = self._resolve_first_input_media(gen)
@@ -395,7 +374,7 @@ class PlaygroundService:
             kwargs["first_frame"] = gen.input_media[0]
             kwargs["last_frame"] = gen.input_media[1]
 
-        self._mulerouter_video_model.generate(
+        model.generate(
             prompt=gen.prompt,
             output_path=out_path,
             img_url=img_url,
@@ -466,6 +445,18 @@ class PlaygroundService:
         if normalized in ("character", "scene", "prop"):
             return normalized
         return "prop"
+
+    def _load_provider_config(self) -> Dict[str, str]:
+        if not self.provider_config_loader:
+            return {}
+        return dict(self.provider_config_loader())
+
+    @staticmethod
+    def _uses_owner_scoped_provider(model_id: str) -> bool:
+        model = model_id.lower()
+        if model.startswith(("uniart/", "seedance", "minimax", "gpt-image")):
+            return True
+        return os.getenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false").lower() == "true"
 
     @staticmethod
     def _resolve_first_input_media(gen: PlaygroundGeneration):

@@ -9,6 +9,8 @@ from src.apps.playground.storage import PlaygroundStorage
 
 def make_storage(tmp_path: Path) -> PlaygroundStorage:
     return PlaygroundStorage(
+        owner_user_id="user-a",
+        owner_profile_id="profile-a",
         history_path=str(tmp_path / "history.json"),
         templates_path=str(tmp_path / "templates.json"),
         sessions_path=str(tmp_path / "sessions.json"),
@@ -59,6 +61,8 @@ def test_legacy_history_moves_into_history_session(tmp_path: Path):
     assert session.title == "历史创作"
     assert storage.list_history(session_id=session.id)[0].id == "legacy-run"
     assert session.draft == PlaygroundDraft(mode=PlaygroundMode.T2I, model_id="image-a", prompt="legacy prompt", parent_generation_id="legacy-run")
+    assert session.owner_profile_id == "profile-a"
+    assert storage.list_history(session_id=session.id)[0].owner_profile_id == "profile-a"
 
 
 def test_first_last_frame_requires_exactly_two_images():

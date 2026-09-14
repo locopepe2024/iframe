@@ -20,7 +20,7 @@
 # import_file_preview, import_file_confirm, upload_t2i_frame,
 # analyze_script_for_styles. All others are `def` for a reason.
 # ─────────────────────────────────────────────────────────────────────────────
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import concurrent.futures
 import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -69,7 +70,11 @@ if os.path.exists(env_path):
     load_dotenv(env_path, override=True)
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
+from ..identity import router as identity_router, UserContext, require_user_context
+from ..user_config import router as user_config_router
 from ..playground.api import router as playground_router
+app.include_router(identity_router)
+app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
 
 # Debug: Print OSS configuration at startup
@@ -89,6 +94,8 @@ app.add_middleware(
 # Middleware to add cache headers to static files
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
+    if request.url.path.startswith("/files/users/"):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
     response = await call_next(request)
     if request.url.path.startswith("/files/"):
         response.headers["Cache-Control"] = "public, max-age=86400"
@@ -1268,8 +1275,21 @@ def get_config_info():
 
 
 @app.post("/config/env")
-def update_env_config(config: EnvConfig):
+def update_env_config(
+    config: EnvConfig,
+    identity: UserContext = Depends(require_user_context),
+    x_lumenx_admin_token: Optional[str] = Header(default=None),
+):
     """Updates environment configuration and saves to config file."""
+    del identity
+    expected_admin_token = os.getenv("LUMENX_ADMIN_CONFIG_TOKEN")
+    if (
+        os.getenv("LUMENX_ENABLE_ADMIN_ENV_CONFIG", "false").lower() != "true"
+        or not expected_admin_token
+        or not x_lumenx_admin_token
+        or not hmac.compare_digest(x_lumenx_admin_token, expected_admin_token)
+    ):
+        raise HTTPException(status_code=403, detail="Server environment configuration is disabled")
     try:
         raw_config = config.dict(exclude_unset=True)
 
@@ -3917,7 +3937,7 @@ def _mask_secret(value: Optional[str]) -> str:
 
 
 @app.get("/config/env")
-def get_env_config():
+def get_env_config(identity: UserContext = Depends(require_user_context)):
     """Get current environment configuration.
 
     Secrets are masked (bullets + last 4 chars) and never returned in
@@ -3925,6 +3945,7 @@ def get_env_config():
     the frontend can drive required-field / validation logic without the raw
     value. Non-secret config (OSS bucket/endpoint/base path, provider modes,
     endpoint overrides) is returned as-is."""
+    del identity
     try:
         from ...utils.endpoints import PROVIDER_DEFAULTS
         from ...utils.oss_utils import is_oss_enabled
@@ -3942,19 +3963,9 @@ def get_env_config():
 
 
         return {
-            # Masked secrets — never plaintext.
-            "DASHSCOPE_API_KEY": _mask_secret(os.getenv("DASHSCOPE_API_KEY")),
-            "OPENAI_API_KEY": _mask_secret(os.getenv("OPENAI_API_KEY")),
-            "UNIART_API_KEY": _mask_secret(os.getenv("UNIART_API_KEY")),
             "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "dashscope"),
             "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", ""),
             "OPENAI_MODEL": os.getenv("OPENAI_MODEL", ""),
-            "ALIBABA_CLOUD_ACCESS_KEY_ID": _mask_secret(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")),
-            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": _mask_secret(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
-            "KLING_ACCESS_KEY": _mask_secret(os.getenv("KLING_ACCESS_KEY")),
-            "KLING_SECRET_KEY": _mask_secret(os.getenv("KLING_SECRET_KEY")),
-            "VIDU_API_KEY": _mask_secret(os.getenv("VIDU_API_KEY")),
-            "MULEROUTER_API_KEY": _mask_secret(os.getenv("MULEROUTER_API_KEY")),
             # Non-secret config.
             "OSS_BUCKET_NAME": os.getenv("OSS_BUCKET_NAME", ""),
             "OSS_ENDPOINT": os.getenv("OSS_ENDPOINT", ""),

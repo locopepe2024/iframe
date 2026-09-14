@@ -38,6 +38,8 @@ class PlaygroundSession(BaseModel):
     draft: PlaygroundDraft = Field(default_factory=PlaygroundDraft)
     created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")
     updated_at: str = Field(..., description="Last activity timestamp in ISO 8601 format")
+    owner_user_id: Optional[str] = Field(None, description="Authenticated owning user")
+    owner_profile_id: Optional[str] = Field(None, description="Authenticated owning profile")
 
 
 class PlaygroundGeneration(BaseModel):
@@ -55,6 +57,8 @@ class PlaygroundGeneration(BaseModel):
     created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")
     session_id: Optional[str] = Field(None, description="Owning creation session")
     parent_generation_id: Optional[str] = Field(None, description="Generation used as the editable source for this run")
+    owner_user_id: Optional[str] = Field(None, description="Authenticated owning user")
+    owner_profile_id: Optional[str] = Field(None, description="Authenticated owning profile")
 
 
 class PlaygroundTemplate(BaseModel):
@@ -68,6 +72,8 @@ class PlaygroundTemplate(BaseModel):
     default_parameters: dict = Field(default_factory=dict, description="Default generation parameters")
     created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")
     updated_at: str = Field(..., description="Last update timestamp in ISO 8601 format")
+    owner_user_id: Optional[str] = Field(None, description="Authenticated owning user")
+    owner_profile_id: Optional[str] = Field(None, description="Authenticated owning profile")
 
 
 class GenerateRequest(BaseModel):
