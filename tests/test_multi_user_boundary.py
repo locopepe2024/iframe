@@ -5,14 +5,20 @@ from pathlib import Path
 import pytest
 
 from src.apps.identity import UserContext, _extract_bearer
-from src.apps.comic_gen.models import Script, Series
+from src.apps.comic_gen.models import Character, GlobalAssetLibrary, Script, Series
 from src.apps.playground.storage import PlaygroundStorage
 from src.apps.studio_access import (
     StudioOwnerMixin,
     require_studio_user,
     reset_studio_user,
+    reset_studio_uniart_config,
     set_studio_user,
+    set_studio_uniart_config,
+    sign_studio_media_paths,
+    studio_uniart_config,
+    studio_owner_key,
     verify_studio_resource_path,
+    verify_studio_media,
 )
 from src.apps.user_config import UserConfigStore, UserConfigUpdate
 
@@ -105,13 +111,18 @@ class StudioStore(StudioOwnerMixin):
     def _save_series_data(self):
         Path(self.series_data_file).write_text(json.dumps({key: value.model_dump() for key, value in self.series_store.items()}))
 
+    def _save_library_data(self):
+        Path(self.library_data_file).write_text(json.dumps(self.library_store.model_dump()))
+
 
 def studio_pipeline(tmp_path: Path) -> StudioStore:
     pipeline = StudioStore()
     pipeline.data_file = str(tmp_path / "projects.json")
     pipeline.series_data_file = str(tmp_path / "series.json")
+    pipeline.library_data_file = str(tmp_path / "library.json")
     pipeline.scripts = {}
     pipeline.series_store = {}
+    pipeline.library_store = GlobalAssetLibrary()
     return pipeline
 
 
@@ -224,13 +235,22 @@ def test_studio_url_resource_precheck_hides_cross_owner_ids(tmp_path: Path):
 
 
 def test_legacy_studio_owner_requires_explicit_mapping(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     pipeline = studio_pipeline(tmp_path)
     pipeline.scripts = {"legacy-project": script("legacy-project", None, None)}
+    pipeline.scripts["legacy-project"].merged_video_url = "video/legacy.mp4"
     pipeline.series_store = {"legacy-series": series("legacy-series", None, None)}
+    pipeline.library_store.characters = [
+        Character(id="legacy-character", name="Legacy", description="")
+    ]
+    legacy_video = tmp_path / "output" / "video" / "legacy.mp4"
+    legacy_video.parent.mkdir(parents=True)
+    legacy_video.write_bytes(b"video")
 
     pipeline._migrate_legacy_studio_owners()
     assert pipeline.scripts["legacy-project"].owner_profile_id is None
     assert pipeline.series_store["legacy-series"].owner_profile_id is None
+    assert pipeline.library_store.characters[0].owner_profile_id is None
 
     monkeypatch.setenv("LUMENX_LEGACY_OWNER_USER_ID", "legacy-user")
     monkeypatch.setenv("LUMENX_LEGACY_OWNER_PROFILE_ID", "legacy-profile")
@@ -240,4 +260,59 @@ def test_legacy_studio_owner_requires_explicit_mapping(tmp_path: Path, monkeypat
     assert pipeline.scripts["legacy-project"].owner_profile_id == "legacy-profile"
     assert pipeline.series_store["legacy-series"].owner_user_id == "legacy-user"
     assert pipeline.series_store["legacy-series"].owner_profile_id == "legacy-profile"
+    assert pipeline.library_store.characters[0].owner_profile_id == "legacy-profile"
+    migrated_video = pipeline.scripts["legacy-project"].merged_video_url
+    assert migrated_video.startswith(
+        f"users/{studio_owner_key('legacy-profile')}/studio/legacy/video/"
+    )
+    assert (tmp_path / "output" / migrated_video).read_bytes() == b"video"
     assert json.loads(Path(pipeline.data_file).read_text())["legacy-project"]["owner_profile_id"] == "legacy-profile"
+
+
+def test_studio_media_urls_are_owner_scoped_and_signed(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-signing-key")
+    owner_key = studio_owner_key("profile-a")
+    stored_path = f"users/{owner_key}/studio/uploads/example.png"
+    media_path = tmp_path / "output" / stored_path
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"image")
+
+    signed = sign_studio_media_paths({"url": stored_path}, "profile-a")["url"]
+    assert signed.startswith(f"/studio/media/{owner_key}/uploads/example.png?")
+    query = signed.split("?", 1)[1]
+    values = dict(part.split("=", 1) for part in query.split("&"))
+    resolved = verify_studio_media(
+        owner_key,
+        "uploads/example.png",
+        int(values["expires"]),
+        values["signature"],
+    )
+    assert Path(resolved).read_bytes() == b"image"
+
+    with pytest.raises(Exception) as exc_info:
+        verify_studio_media(
+            studio_owner_key("profile-b"),
+            "uploads/example.png",
+            int(values["expires"]),
+            values["signature"],
+        )
+    assert getattr(exc_info.value, "status_code", None) == 401
+
+
+def test_studio_uniart_config_is_request_scoped():
+    token_a = set_studio_uniart_config(
+        {"api_key": "sk-user-a", "base_url": "https://a.example/v1"}
+    )
+    try:
+        assert studio_uniart_config()["api_key"] == "sk-user-a"
+        token_b = set_studio_uniart_config(
+            {"api_key": "sk-user-b", "base_url": "https://b.example/v1"}
+        )
+        try:
+            assert studio_uniart_config()["api_key"] == "sk-user-b"
+        finally:
+            reset_studio_uniart_config(token_b)
+        assert studio_uniart_config()["api_key"] == "sk-user-a"
+    finally:
+        reset_studio_uniart_config(token_a)

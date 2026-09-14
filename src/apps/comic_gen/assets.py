@@ -7,6 +7,7 @@ from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageV
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
+from ..studio_access import studio_owner_dir, studio_uniart_config
 
 logger = get_logger(__name__)
 
@@ -54,13 +55,17 @@ class AssetGenerator:
         self._uniart_image_model = None
         self.output_dir = self.config.get('output_dir', 'output/assets')
 
+    def _output_dir_for(self, asset: Any) -> str:
+        owner_profile_id = getattr(asset, "owner_profile_id", None)
+        if owner_profile_id:
+            return os.path.join(studio_owner_dir(owner_profile_id), "assets")
+        return self.output_dir
+
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
         if model_name and model_name.startswith("uniart/gpt-image-"):
-            if self._uniart_image_model is None:
-                from ...models.uniart import UniArtImageModel
-                self._uniart_image_model = UniArtImageModel({})
-            return self._uniart_image_model
+            from ...models.uniart import UniArtImageModel
+            return UniArtImageModel(studio_uniart_config())
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel
@@ -74,6 +79,7 @@ class AssetGenerator:
         Types: 'full_body', 'three_view', 'headshot', 'all'
         """
         character.status = GenerationStatus.PROCESSING
+        output_dir = self._output_dir_for(character)
         
         # Default style suffix if not provided (None means use default, "" means no style)
         style_suffix = positive_prompt if positive_prompt is not None else "cinematic lighting, movie still, 8k, highly detailed, realistic"
@@ -95,7 +101,7 @@ class AssetGenerator:
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
-                        sheet_path = os.path.join(self.output_dir, 'characters', f"{character.id}_refsheet_{variant_id}.png")
+                        sheet_path = os.path.join(output_dir, 'characters', f"{character.id}_refsheet_{variant_id}.png")
                         os.makedirs(os.path.dirname(sheet_path), exist_ok=True)
 
                         self._get_model_for(model_name).generate(
@@ -171,7 +177,7 @@ class AssetGenerator:
                 # Check for base character reference (for variants)
                 ref_image_path = None
                 if character.base_character_id:
-                    base_fullbody_path = os.path.join(self.output_dir, 'characters', f"{character.base_character_id}_fullbody.png")
+                    base_fullbody_path = os.path.join(output_dir, 'characters', f"{character.base_character_id}_fullbody.png")
                     if os.path.exists(base_fullbody_path):
                         ref_image_path = base_fullbody_path
 
@@ -218,7 +224,7 @@ class AssetGenerator:
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
-                        fullbody_path = os.path.join(self.output_dir, 'characters', f"{character.id}_fullbody_{variant_id}.png")
+                        fullbody_path = os.path.join(output_dir, 'characters', f"{character.id}_fullbody_{variant_id}.png")
                         os.makedirs(os.path.dirname(fullbody_path), exist_ok=True)
                         
                         # Select model: use I2I model (wan2.6-image) when reference image is provided
@@ -380,7 +386,7 @@ class AssetGenerator:
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
-                        sheet_path = os.path.join(self.output_dir, 'characters', f"{character.id}_sheet_{variant_id}.png")
+                        sheet_path = os.path.join(output_dir, 'characters', f"{character.id}_sheet_{variant_id}.png")
                         
                         self._get_model_for(i2i_model_name).generate(generation_prompt, sheet_path, ref_image_path=fullbody_path, negative_prompt=sheet_negative, ref_strength=0.8, model_name=i2i_model_name)
                         
@@ -458,7 +464,7 @@ class AssetGenerator:
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
-                        avatar_path = os.path.join(self.output_dir, 'characters', f"{character.id}_avatar_{variant_id}.png")
+                        avatar_path = os.path.join(output_dir, 'characters', f"{character.id}_avatar_{variant_id}.png")
                         
                         self._get_model_for(i2i_model_name).generate(generation_prompt, avatar_path, ref_image_path=fullbody_path, negative_prompt=negative_prompt, ref_strength=0.8, model_name=i2i_model_name)
                         
@@ -536,6 +542,7 @@ class AssetGenerator:
     def generate_scene(self, scene: Scene, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
+        output_dir = self._output_dir_for(scene)
         
         # Use provided prompts or fall back to default cinematic style
         if positive_prompt is None:
@@ -549,7 +556,7 @@ class AssetGenerator:
         try:
             for _ in range(batch_size):
                 variant_id = str(uuid.uuid4())
-                output_path = os.path.join(self.output_dir, 'scenes', f"{scene.id}_{variant_id}.png")
+                output_path = os.path.join(output_dir, 'scenes', f"{scene.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
                 image_path, _ = self._get_model_for(model_name).generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)
@@ -598,6 +605,7 @@ class AssetGenerator:
     def generate_prop(self, prop: Prop, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
+        output_dir = self._output_dir_for(prop)
         
         # Use provided prompts or fall back to default cinematic style
         if positive_prompt is None:
@@ -611,7 +619,7 @@ class AssetGenerator:
         try:
             for _ in range(batch_size):
                 variant_id = str(uuid.uuid4())
-                output_path = os.path.join(self.output_dir, 'props', f"{prop.id}_{variant_id}.png")
+                output_path = os.path.join(output_dir, 'props', f"{prop.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
                 image_path, _ = self._get_model_for(model_name).generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)

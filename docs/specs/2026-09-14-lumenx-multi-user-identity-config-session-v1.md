@@ -142,3 +142,54 @@
 - Global library assets and Studio media files are not isolated by this slice.
 - Background task dictionaries and document/snapshot files may still require owner-aware storage paths.
 - Production UniArt identity latency and outage behavior require deployment observation.
+
+## Phase 2b Personal Asset Library
+
+### Observed
+
+- The existing `GlobalAssetLibrary` persists all reusable characters, scenes, and props in one JSON document.
+- Project asset resolution automatically folds that library underneath episode and series assets.
+- Library promotion and fork operations previously addressed source and target assets without an owner check.
+
+### Direct Implication
+
+- Reusable assets must be filtered by `owner_profile_id` at every read and mutation boundary.
+- Promoting an asset must copy the authenticated owner onto the library copy.
+- Episode resolution must only fold in library assets owned by the episode profile.
+- Reference-integrity scans must not reveal another profile's project titles or frame identifiers.
+
+### Compatibility
+
+- The persisted JSON shape remains compatible; owner fields are added to individual library assets.
+- Ownerless library assets remain invisible to authenticated users by default.
+- Explicit legacy owner migration assigns project, series, and library records together.
+
+## Phase 2b Provider and Media Boundary
+
+### Observed
+
+- Studio UniArt image/video adapters previously fell back to process environment credentials and cached adapter instances globally.
+- Native `fetch` calls in the Studio frontend did not inherit Axios bearer defaults.
+- Generated media and uploads were written below shared `output/assets`, `output/video`, `output/audio`, and `output/uploads` directories.
+
+### Direct Implication
+
+- A globally cached UniArt adapter can retain one user's credential and reuse it for another user's task.
+- Every authenticated frontend transport, including multipart uploads and streaming requests, must attach the bearer token.
+- New local outputs must be written below the authenticated profile directory and served through expiring signed URLs.
+- Direct access to dynamic `/files/*` output directories must be denied.
+
+### Implemented Boundary
+
+- UniArt adapters are constructed from the task owner's encrypted user configuration instead of shared environment credentials.
+- Background image tasks carry owner identifiers in memory and restore a request-scoped UniArt config while processing.
+- Video tasks derive UniArt credentials from the persisted project owner; credentials are never written to project JSON.
+- Studio uploads and generated image, video, storyboard, and audio outputs use `output/users/<profile-hash>/studio/`.
+- Browser responses replace private internal paths with one-hour HMAC-signed `/studio/media/*` URLs.
+- Legacy media referenced by explicitly assigned legacy records is copied into that owner's private tree and references are rewritten before shared dynamic file routes are blocked.
+- The frontend uses one authenticated fetch wrapper for legacy fetch-based calls and recognizes signed Studio/Playground media URLs.
+
+### Not Yet Proven
+
+- Production identity latency, master-key availability, and legacy media copy volume require deployment observation.
+- Non-UniArt Studio providers still rely on their legacy credential paths and should remain disabled for ordinary multi-user workflows.

@@ -3,6 +3,7 @@ import time
 import hashlib
 from typing import Dict, Any, List, Optional
 from .models import StoryboardFrame, Character, GenerationStatus
+from ..studio_access import studio_owner_dir
 from ...utils import get_logger
 from ...audio.tts import TTSProcessor
 
@@ -77,6 +78,11 @@ class AudioGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.output_dir = self.config.get('output_dir', 'output/audio')
+
+    def _output_dir_for(self, frame: StoryboardFrame) -> str:
+        if frame.owner_profile_id:
+            return os.path.join(studio_owner_dir(frame.owner_profile_id), "audio")
+        return self.output_dir
         
         # Initialize TTS Processor
         try:
@@ -176,7 +182,7 @@ class AudioGenerator:
     ) -> StoryboardFrame:
         """Generate dialogue using real TTS."""
         try:
-            output_path = os.path.join(self.output_dir, 'dialogue', f"{frame.id}.mp3")
+            output_path = os.path.join(self._output_dir_for(frame), 'dialogue', f"{frame.id}.mp3")
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
             voice = character.voice_id
@@ -221,7 +227,7 @@ class AudioGenerator:
             # For now, we mock it.
             logger.info(f"Generating SFX for: {frame.action_description}")
             
-            output_path = os.path.join(self.output_dir, 'sfx', f"{frame.id}.mp3")
+            output_path = os.path.join(self._output_dir_for(frame), 'sfx', f"{frame.id}.mp3")
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # Create a dummy file
@@ -248,7 +254,7 @@ class AudioGenerator:
         # Mock V2A Logic
         time.sleep(1)
         
-        output_path = os.path.join(self.output_dir, 'sfx', f"{frame.id}_v2a.mp3")
+        output_path = os.path.join(self._output_dir_for(frame), 'sfx', f"{frame.id}_v2a.mp3")
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         with open(output_path, 'wb') as f:
@@ -263,7 +269,7 @@ class AudioGenerator:
         # Mock MusicGen Logic
         time.sleep(1)
         
-        output_path = os.path.join(self.output_dir, 'bgm', f"{frame.id}.mp3")
+        output_path = os.path.join(self._output_dir_for(frame), 'bgm', f"{frame.id}.mp3")
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         with open(output_path, 'wb') as f:

@@ -19,7 +19,14 @@ from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
-from ..studio_access import StudioOwnerMixin
+from ..studio_access import (
+    StudioOwnerMixin,
+    owned_by,
+    reset_studio_uniart_config,
+    runtime_uniart_for_owner,
+    set_studio_uniart_config,
+    studio_owner_dir,
+)
 
 logger = get_logger(__name__)
 
@@ -86,9 +93,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
-        self._migrate_legacy_studio_owners()
         # Project-independent global asset library (lowest resolver layer).
         self.library_store: GlobalAssetLibrary = self._load_library_data()
+        self._migrate_legacy_studio_owners()
         self._repair_series_bindings()
 
         # Extraction preview cache: {project_id: (timestamp, Script)}
@@ -123,6 +130,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._recover_orphan_tasks()
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("Orphan task recovery failed: %s", exc)
+
+    @staticmethod
+    def _owner_output_dir(resource: Any, category: str) -> str:
+        owner_profile_id = getattr(resource, "owner_profile_id", None)
+        if owner_profile_id:
+            return os.path.join(studio_owner_dir(owner_profile_id), category)
+        return os.path.join("output", category)
 
     _ORPHAN_RECOVERY_REASON = (
         "Backend was restarted while this task was running. Click Retry to run it again."
@@ -413,7 +427,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         for series_id, series in self.series_store.items():
             for ep_id in series.episode_ids:
                 script = self.scripts.get(ep_id)
-                if script and not script.series_id:
+                same_owner = (
+                    script
+                    and script.owner_profile_id
+                    and script.owner_profile_id == series.owner_profile_id
+                )
+                if same_owner and not script.series_id:
                     script.series_id = series_id
                     if not script.episode_number:
                         script.episode_number = series.episode_ids.index(ep_id) + 1
@@ -452,6 +471,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
+        self.stamp_owned_children(script)
         self.scripts[script.id] = script
         self._save_data()
 
@@ -644,6 +664,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
         target_asset.status = GenerationStatus.PROCESSING
+        if not target_asset.owner_user_id:
+            target_asset.owner_user_id = script.owner_user_id
+        if not target_asset.owner_profile_id:
+            target_asset.owner_profile_id = script.owner_profile_id
         self._save_data()
         if asset_is_series_level:
             self._save_series_data()
@@ -744,6 +768,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "asset_id": asset_id,
             "asset_type": asset_type,
             "created_at": time.time(),
+            "owner_user_id": script.owner_user_id,
+            "owner_profile_id": script.owner_profile_id,
             # Store all params for later processing
             "params": {
                 "style_preset": style_preset,
@@ -771,7 +797,14 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         task["status"] = "processing"
 
+        provider_token = None
         try:
+            owner_user_id = task.get("owner_user_id")
+            owner_profile_id = task.get("owner_profile_id")
+            if owner_user_id and owner_profile_id:
+                provider_token = set_studio_uniart_config(
+                    runtime_uniart_for_owner(owner_user_id, owner_profile_id)
+                )
             params = task["params"]
             if task.get("is_series"):
                 # Series asset generation — operate on series_store
@@ -800,11 +833,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             task["status"] = "failed"
             task["error"] = str(e)
             logger.error(f"Task {task_id} failed: {e}")
+        finally:
+            if provider_token is not None:
+                reset_studio_uniart_config(provider_token)
 
     def _process_series_asset_task(self, task: Dict, params: Dict):
         """Process a Series asset generation task."""
         series_id = task["script_id"]  # stored as script_id for compatibility
-        series = self.series_store.get(series_id)
+        series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
 
@@ -859,6 +895,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             
         if not task:
             return None
+
+        requested_owner = self._requested_owner_profile_id()
+        if requested_owner and task.get("owner_profile_id") != requested_owner:
+            return None
         
         return {
             "task_id": task_id,
@@ -888,6 +928,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "asset_id": asset_id,
             "asset_type": asset_type,
             "created_at": time.time(),
+            "owner_user_id": script.owner_user_id,
+            "owner_profile_id": script.owner_profile_id,
             "params": {
                 "prompt": prompt,
                 "audio_url": audio_url,
@@ -1032,7 +1074,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Fall back to series shared pool if this episode belongs to
         # a series.
         if script.series_id:
-            series = self.series_store.get(script.series_id)
+            series = self.get_series(script.series_id, script.owner_profile_id)
             if series:
                 if asset_type == "character":
                     sh_list = series.characters
@@ -1047,12 +1089,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Fall back to the project-independent global asset library
         # (lowest layer). Empty by default, so this is a no-op until
         # the global pool is populated.
-        if asset_type == "character":
-            gl_list = self.library_store.characters
-        elif asset_type == "scene":
-            gl_list = self.library_store.scenes
-        else:  # prop
-            gl_list = self.library_store.props
+        gl_list = self._library_list_for_type(asset_type, script.owner_profile_id)
         glob = next((a for a in gl_list if a.id == asset_id), None)
         if glob is not None:
             return glob, "global"
@@ -1422,6 +1459,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             frame = StoryboardFrame(
                 id=str(uuid.uuid4()),
+                owner_user_id=script.owner_user_id,
+                owner_profile_id=script.owner_profile_id,
                 scene_id=scene_id,
                 character_ids=character_ids,
                 prop_ids=prop_ids,
@@ -1439,6 +1478,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         # Replace existing frames with new ones
         script.frames = new_frames
+        self.stamp_owned_children(script)
         script.updated_at = time.time()
         
         logger.info(f"Generated {len(new_frames)} frames from text analysis")
@@ -1732,6 +1772,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         new_frame = StoryboardFrame(
             id=f"frame_{uuid.uuid4().hex[:8]}",
+            owner_user_id=script.owner_user_id,
+            owner_profile_id=script.owner_profile_id,
             scene_id=scene_id or (script.scenes[0].id if script.scenes else ""),
             character_ids=[],
             action_description=action_description,
@@ -1934,6 +1976,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         video_task = VideoTask(
                             id=f"video_{uuid.uuid4().hex[:8]}",
                             project_id=script_id,
+                            owner_user_id=script.owner_user_id,
+                            owner_profile_id=script.owner_profile_id,
                             asset_id=asset_id,
                             image_url=source_image_url,
                             prompt=prompt,
@@ -2161,7 +2205,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 src_path = _safe_resolve_path("output", image_url)
                 if os.path.exists(src_path) and os.path.isfile(src_path):
                     # Create snapshot dir
-                    snapshot_dir = os.path.join("output", "video_inputs")
+                    snapshot_dir = self._owner_output_dir(script, "video_inputs")
                     os.makedirs(snapshot_dir, exist_ok=True)
 
                     # Define snapshot path
@@ -2191,6 +2235,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         task = VideoTask(
             id=task_id,
             project_id=script_id,
+            owner_user_id=script.owner_user_id,
+            owner_profile_id=script.owner_profile_id,
             frame_id=frame_id,
             image_url=snapshot_url,
             prompt=prompt,
@@ -2265,7 +2311,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not ffmpeg_path:
             raise RuntimeError("FFmpeg is required for frame extraction but was not found.")
 
-        output_dir = os.path.join("output", "storyboard")
+        output_dir = self._owner_output_dir(script, "storyboard")
         os.makedirs(output_dir, exist_ok=True)
         # Use the store-backed frame.id (identical to the request frame_id by
         # the lookup above) so the ffmpeg arg carries no request-parameter taint.
@@ -2689,7 +2735,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # frame.id comes from the store (== frame_id), keeping ffmpeg args taint-free.
         output_filename = f"preview_{frame.id}_{int(time.time())}.mp4"
-        output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+        output_path = _safe_resolve_path(self._owner_output_dir(script, "video"), output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # Ensure background audio is cached (Demucs runs only on first call or video change)
@@ -2760,7 +2806,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not os.path.exists(output_path):
             raise RuntimeError("Preview video was not created")
 
-        frame.preview_video_url = f"video/{output_filename}"
+        frame.preview_video_url = os.path.relpath(output_path, "output")
         frame.dubbed_video_task_id = video_task_id
         frame.dub_offset_ms = offset_ms
         self._save_data()
@@ -2926,7 +2972,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Output path
         output_filename = f"merged_{script.id}_{int(time.time())}.mp4"
-        output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+        output_path = _safe_resolve_path(self._owner_output_dir(script, "video"), output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         logger.debug(f"[MERGE] Output path: {output_path}")
@@ -2964,15 +3010,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             logger.debug(f"[MERGE] FFmpeg stdout: {result.stdout.decode()[:500] if result.stdout else 'empty'}")
             logger.info(f"[MERGE] FFmpeg completed successfully")
             
-            # Update script with merged video path
-            # Use 'videos/' (plural) to match the /files/videos route
-            script.merged_video_url = f"videos/{output_filename}"
+            # Persist the owner-scoped path; API responses convert it into a
+            # short-lived signed media URL for the browser.
+            script.merged_video_url = os.path.relpath(output_path, "output")
 
             # Verify file was created and log details
             if os.path.exists(output_path):
                 file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
                 logger.info(f"[MERGE] ✅ Merged video created successfully: {output_filename} ({file_size_mb:.2f} MB)")
-                logger.info(f"[MERGE] ✅ Video accessible at: /files/videos/{output_filename}")
+                logger.info(f"[MERGE] ✅ Video stored at: {script.merged_video_url}")
             else:
                 logger.error(f"[MERGE] ❌ Merged video file NOT found at: {output_path}")
                 raise RuntimeError(f"Video merge completed but output file not found: {output_path}")
@@ -3203,6 +3249,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         task = VideoTask(
             id=task_id,
             project_id=script_id,
+            owner_user_id=script.owner_user_id,
+            owner_profile_id=script.owner_profile_id,
             asset_id=asset_id, # Link to asset
             image_url=image_url,
             prompt=prompt or f"Cinematic shot of {target_asset.name}",
@@ -3251,7 +3299,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             # Generate video
             output_filename = f"video_{task_id}.mp4"
-            output_path = os.path.join("output", "video", output_filename)
+            output_path = os.path.join(self._owner_output_dir(script, "video"), output_filename)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # Handle Audio Logic
@@ -3295,10 +3343,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
             if use_uniart:
-                if self._uniart_video_model is None:
-                    from ...models.uniart import UniArtVideoModel
-                    self._uniart_video_model = UniArtVideoModel({})
-                video_path, _ = self._uniart_video_model.generate(
+                from ...models.uniart import UniArtVideoModel
+                script_owner = self.get_script(script_id)
+                if not script_owner or not script_owner.owner_user_id or not script_owner.owner_profile_id:
+                    raise RuntimeError("Video task has no authenticated owner")
+                uniart_model = UniArtVideoModel(
+                    runtime_uniart_for_owner(
+                        script_owner.owner_user_id,
+                        script_owner.owner_profile_id,
+                    )
+                )
+                video_path, _ = uniart_model.generate(
                     prompt=task.prompt, output_path=output_path, img_url=img_url, img_path=img_path,
                     duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model, generation_mode=task.generation_mode,
@@ -3958,7 +4013,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     # consistent. The library is curated/opt-in (anti-bloat): nothing is
     # auto-ingested here.
 
-    def _library_list_for_type(self, asset_type: str) -> List:
+    def _library_raw_list_for_type(self, asset_type: str) -> List:
         """Return the live list backing the given asset type in the global
         library (so callers can append/iterate). Raises on unknown type."""
         if asset_type == "character":
@@ -3968,6 +4023,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         elif asset_type == "prop":
             return self.library_store.props
         raise ValueError(f"Invalid asset type: {asset_type}")
+
+    def _library_list_for_type(
+        self,
+        asset_type: str,
+        owner_profile_id: Optional[str] = None,
+    ) -> List:
+        raw = self._library_raw_list_for_type(asset_type)
+        requested_owner = self._requested_owner_profile_id(owner_profile_id)
+        if not requested_owner:
+            return raw
+        return [asset for asset in raw if owned_by(asset, requested_owner)]
 
     def _find_library_asset(self, asset_type: str, asset_id: str):
         """Locate a global library asset by (type, id). Raises ValueError
@@ -3981,7 +4047,14 @@ class ComicGenPipeline(StudioOwnerMixin):
     def list_library_assets(self) -> GlobalAssetLibrary:
         """Return the global shared asset pool container (characters /
         scenes / props). Mirrors get_series for the library scope."""
-        return self.library_store
+        owner_profile_id = self._requested_owner_profile_id()
+        if not owner_profile_id:
+            return self.library_store
+        return GlobalAssetLibrary(
+            characters=self._library_list_for_type("character", owner_profile_id),
+            scenes=self._library_list_for_type("scene", owner_profile_id),
+            props=self._library_list_for_type("prop", owner_profile_id),
+        )
 
     def create_library_asset(self, asset_type: str, payload: Dict[str, Any]):
         """Create a new global library asset of `asset_type`
@@ -3998,6 +4071,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .models import Character, Scene, Prop, AssetUnit, ImageVariant
         with self._save_lock:
             payload = dict(payload or {})
+            owner_user_id = self._requested_owner_user_id()
+            owner_profile_id = self._requested_owner_profile_id()
             name = payload.get("name") or "未命名"
             description = payload.get("description") or ""
             image_url = payload.get("image_url")
@@ -4009,6 +4084,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     ref_sheet.selected_image_id = variant.id
                 asset = Character(
                     id=f"char_{uuid.uuid4().hex[:12]}",
+                    owner_user_id=owner_user_id,
+                    owner_profile_id=owner_profile_id,
                     name=name,
                     description=description,
                     persona=payload.get("persona") or "",
@@ -4018,6 +4095,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             elif asset_type == "scene":
                 asset = Scene(
                     id=f"scene_{uuid.uuid4().hex[:12]}",
+                    owner_user_id=owner_user_id,
+                    owner_profile_id=owner_profile_id,
                     name=name,
                     description=description,
                     image_url=image_url,
@@ -4025,13 +4104,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             elif asset_type == "prop":
                 asset = Prop(
                     id=f"prop_{uuid.uuid4().hex[:12]}",
+                    owner_user_id=owner_user_id,
+                    owner_profile_id=owner_profile_id,
                     name=name,
                     description=description,
                     image_url=image_url,
                 )
             else:
                 raise ValueError(f"Invalid asset type: {asset_type}")
-            self._library_list_for_type(asset_type).append(asset)
+            self._library_raw_list_for_type(asset_type).append(asset)
             self._save_library_data_unlocked()
             return asset
 
@@ -4043,7 +4124,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         with self._save_lock:
             asset = self._find_library_asset(asset_type, asset_id)
             for key, value in (patch or {}).items():
-                if hasattr(asset, key) and key not in ("id", "status"):
+                if hasattr(asset, key) and key not in (
+                    "id",
+                    "status",
+                    "owner_user_id",
+                    "owner_profile_id",
+                ):
                     setattr(asset, key, value)
             self._save_library_data_unlocked()
             return asset
@@ -4081,9 +4167,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "frame_id": getattr(frame, "id", None),
                     })
 
+        owner_profile_id = self._requested_owner_profile_id()
         for sid, script in (getattr(self, "scripts", {}) or {}).items():
+            if owner_profile_id and not owned_by(script, owner_profile_id):
+                continue
             _scan("project", sid, script, getattr(script, "frames", None))
         for sid, series in (getattr(self, "series_store", {}) or {}).items():
+            if owner_profile_id and not owned_by(series, owner_profile_id):
+                continue
             _scan("series", sid, series, getattr(series, "frames", None))
         return references
 
@@ -4100,14 +4191,16 @@ class ComicGenPipeline(StudioOwnerMixin):
         Raises ValueError when the asset (or asset type) is absent — this is
         checked BEFORE the reference scan so a missing id still maps to 404."""
         with self._save_lock:
-            target_list = self._library_list_for_type(asset_type)
-            if not any(a.id == asset_id for a in target_list):
+            visible_assets = self._library_list_for_type(asset_type)
+            target_asset = next((a for a in visible_assets if a.id == asset_id), None)
+            if target_asset is None:
                 raise ValueError(f"Asset {asset_id} of type {asset_type} not found in library")
             if not force:
                 refs = self._scan_library_asset_references(asset_type, asset_id)
                 if refs:
                     raise LibraryAssetInUseError(asset_type, asset_id, refs)
-            kept = [a for a in target_list if a.id != asset_id]
+            target_list = self._library_raw_list_for_type(asset_type)
+            kept = [a for a in target_list if a is not target_asset]
             if asset_type == "character":
                 self.library_store.characters = kept
             elif asset_type == "scene":
@@ -4129,11 +4222,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Invalid asset type: {asset_type}")
         with self._save_lock:
             if source_kind == "series":
-                container = self.series_store.get(source_id)
+                container = self.get_series(source_id)
                 if not container:
                     raise ValueError("Source series not found")
             elif source_kind == "project":
-                container = self.scripts.get(source_id)
+                container = self.get_script(source_id)
                 if not container:
                     raise ValueError("Source project not found")
             else:
@@ -4153,7 +4246,9 @@ class ComicGenPipeline(StudioOwnerMixin):
 
             new_asset = copy.deepcopy(source_asset)
             new_asset.id = str(uuid.uuid4())
-            self._library_list_for_type(asset_type).append(new_asset)
+            new_asset.owner_user_id = self._requested_owner_user_id()
+            new_asset.owner_profile_id = self._requested_owner_profile_id()
+            self._library_raw_list_for_type(asset_type).append(new_asset)
             self._save_library_data_unlocked()
             return new_asset
 
@@ -4174,7 +4269,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset type: {asset_type}")
         with self._save_lock:
-            script = self.scripts.get(script_id)
+            script = self.get_script(script_id)
             if not script:
                 raise ValueError(f"Project not found: {script_id}")
             # _find_library_asset raises ValueError when the id/type is absent.
@@ -4244,7 +4339,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Series not found")
             # Disassociate episodes
             for ep_id in series.episode_ids:
-                script = self.scripts.get(ep_id)
+                script = self.get_script(ep_id)
                 if script:
                     script.series_id = None
                     script.episode_number = None
@@ -4591,7 +4686,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def get_series_episodes(self, series_id: str) -> List[Script]:
         """Get all Episodes belonging to a Series, in order."""
-        series = self.series_store.get(series_id)
+        series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
         episodes = []
@@ -4611,7 +4706,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not series:
             # Auto-lookup series if episode has series_id
             if episode.series_id:
-                series = self.series_store.get(episode.series_id)
+                series = self.get_series(episode.series_id, episode.owner_profile_id)
         if not series:
             # No parent series — episode-local assets sit on top of the
             # global library (lowest layer). With an empty library this
@@ -4620,9 +4715,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             ep_scene_ids = {s.id for s in episode.scenes}
             ep_prop_ids = {p.id for p in episode.props}
             return {
-                "characters": list(episode.characters) + [c for c in self.library_store.characters if c.id not in ep_char_ids],
-                "scenes": list(episode.scenes) + [s for s in self.library_store.scenes if s.id not in ep_scene_ids],
-                "props": list(episode.props) + [p for p in self.library_store.props if p.id not in ep_prop_ids],
+                "characters": list(episode.characters) + [c for c in self._library_list_for_type("character", episode.owner_profile_id) if c.id not in ep_char_ids],
+                "scenes": list(episode.scenes) + [s for s in self._library_list_for_type("scene", episode.owner_profile_id) if s.id not in ep_scene_ids],
+                "props": list(episode.props) + [p for p in self._library_list_for_type("prop", episode.owner_profile_id) if p.id not in ep_prop_ids],
             }
         # Build lookup by ID for episode-local assets
         ep_char_ids = {c.id for c in episode.characters}
@@ -4640,9 +4735,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         merged_scene_ids = {s.id for s in merged_scenes}
         merged_prop_ids = {p.id for p in merged_props}
 
-        merged_characters += [c for c in self.library_store.characters if c.id not in merged_char_ids]
-        merged_scenes += [s for s in self.library_store.scenes if s.id not in merged_scene_ids]
-        merged_props += [p for p in self.library_store.props if p.id not in merged_prop_ids]
+        merged_characters += [c for c in self._library_list_for_type("character", episode.owner_profile_id) if c.id not in merged_char_ids]
+        merged_scenes += [s for s in self._library_list_for_type("scene", episode.owner_profile_id) if s.id not in merged_scene_ids]
+        merged_props += [p for p in self._library_list_for_type("prop", episode.owner_profile_id) if p.id not in merged_prop_ids]
 
         return {
             "characters": merged_characters,
@@ -4692,6 +4787,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 script = self.script_processor.create_draft_script(ep_title, ep_text)
                 script.owner_user_id = owner_user_id
                 script.owner_profile_id = owner_profile_id
+                self.stamp_owned_children(script)
                 script.series_id = series.id
                 script.episode_number = episode_number
                 self.scripts[script.id] = script
@@ -4757,7 +4853,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Find an asset in a Series. Returns (series, asset) tuple."""
         if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset type: {asset_type}")
-        series = self.series_store.get(series_id)
+        series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
         target_asset = None
@@ -4816,7 +4912,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                               model_name: str = None) -> tuple:
         """Generate a Series asset. Creates an async task like project asset generation.
         Returns (series, task_id)."""
-        series = self.series_store.get(series_id)
+        series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
 
@@ -4862,6 +4958,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "asset_id": asset_id,
             "asset_type": asset_type,
             "created_at": time.time(),
+            "owner_user_id": series.owner_user_id,
+            "owner_profile_id": series.owner_profile_id,
             "is_series": True,
             "params": {
                 "style_preset": style_preset,
@@ -4882,10 +4980,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Deep-copy selected assets from source Series to target Series.
         Returns (target_series, imported_ids, skipped_ids)."""
         with self._save_lock:
-            target = self.series_store.get(target_series_id)
+            target = self.get_series(target_series_id)
             if not target:
                 raise ValueError("Target series not found")
-            source = self.series_store.get(source_series_id)
+            source = self.get_series(source_series_id)
             if not source:
                 raise ValueError("Source series not found")
 

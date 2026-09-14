@@ -40,6 +40,20 @@ const getApiUrl = (): string => {
 
 export const API_URL = getApiUrl();
 
+export const authenticatedFetch = (
+    input: RequestInfo | URL,
+    init: RequestInit = {},
+): Promise<Response> => {
+    const headers = new Headers(init.headers);
+    if (typeof window !== "undefined") {
+        const token = window.localStorage.getItem("lumenx-access-token");
+        if (token && !headers.has("Authorization")) {
+            headers.set("Authorization", `Bearer ${token}`);
+        }
+    }
+    return fetch(input, { ...init, headers });
+};
+
 export type ProviderMode = "dashscope" | "vendor";
 
 /**
@@ -404,7 +418,7 @@ export const api = {
     uploadFile: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(`${API_URL}/upload`, {
+        const response = await authenticatedFetch(`${API_URL}/upload`, {
             method: "POST",
             body: formData,
         });
@@ -506,7 +520,7 @@ export const api = {
             params.append("description", description);
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
             `${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/upload?${params.toString()}`,
             {
                 method: "POST",
@@ -888,7 +902,7 @@ export const api = {
     },
 
     getVoices: async (): Promise<VoiceMeta[]> => {
-        const response = await fetch(`${API_URL}/voices`);
+        const response = await authenticatedFetch(`${API_URL}/voices`);
         if (!response.ok) throw new Error("Failed to fetch voices");
         return response.json();
     },
@@ -907,7 +921,7 @@ export const api = {
         volume?: number;
         instructions?: string;
     }): Promise<{ url: string; cached: boolean }> => {
-        const response = await fetch(`${API_URL}/voice/preview`, {
+        const response = await authenticatedFetch(`${API_URL}/voice/preview`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -940,7 +954,7 @@ export const api = {
         label: string;
         target_model?: string;
     }): Promise<CustomVoice> => {
-        const response = await fetch(`${API_URL}/voice/clone`, {
+        const response = await authenticatedFetch(`${API_URL}/voice/clone`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -959,14 +973,14 @@ export const api = {
 
     /** PR-3h · List custom voices (clones + designs) on a series. */
     listCustomVoices: async (seriesId: string): Promise<CustomVoice[]> => {
-        const response = await fetch(`${API_URL}/series/${seriesId}/custom_voices`);
+        const response = await authenticatedFetch(`${API_URL}/series/${seriesId}/custom_voices`);
         if (!response.ok) throw new Error("Failed to list custom voices");
         return response.json();
     },
 
     /** PR-3h · Remove a custom voice. Does NOT delete on dashscope side. */
     deleteCustomVoice: async (seriesId: string, voiceId: string): Promise<{ removed: boolean }> => {
-        const response = await fetch(`${API_URL}/series/${seriesId}/custom_voices/${voiceId}`, {
+        const response = await authenticatedFetch(`${API_URL}/series/${seriesId}/custom_voices/${voiceId}`, {
             method: "DELETE",
         });
         if (!response.ok) throw new Error("Failed to delete custom voice");
@@ -982,7 +996,7 @@ export const api = {
         preview_text?: string;
         target_model?: string;
     }): Promise<{ voice_id: string; preview_url: string; target_model: string }> => {
-        const response = await fetch(`${API_URL}/voice/design/preview`, {
+        const response = await authenticatedFetch(`${API_URL}/voice/design/preview`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1006,7 +1020,7 @@ export const api = {
         label: string;
         target_model?: string;
     }): Promise<CustomVoice> => {
-        const response = await fetch(`${API_URL}/voice/design/accept`, {
+        const response = await authenticatedFetch(`${API_URL}/voice/design/accept`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1026,7 +1040,7 @@ export const api = {
 
     /** PR-3i · LLM helper — translate character.description → CosyVoice voice_prompt. */
     translateVoicePrompt: async (description: string): Promise<{ voice_prompt: string }> => {
-        const response = await fetch(`${API_URL}/voice/design/translate`, {
+        const response = await authenticatedFetch(`${API_URL}/voice/design/translate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ description }),
@@ -1039,7 +1053,7 @@ export const api = {
     },
 
     bindVoice: async (scriptId: string, charId: string, voiceId: string, voiceName: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ voice_id: voiceId, voice_name: voiceName }),
@@ -1049,7 +1063,7 @@ export const api = {
     },
 
     generateAudio: async (scriptId: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to generate audio");
@@ -1064,7 +1078,7 @@ export const api = {
         volume: number = 50,
         instructions?: string,
     ) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume, instructions: instructions || null }),
@@ -1076,7 +1090,7 @@ export const api = {
     /** PR-3j · Generate dialogue audio for every frame with dialogue.
      *  Skips frames whose snapshot hash still matches. */
     generateDialogueAudioBatch: async (scriptId: string): Promise<{ _batch_stats: { generated: number; skipped: number; failed: number; no_voice: number } }> => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/dialogue_audio/batch`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/dialogue_audio/batch`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to generate dialogue audio batch");
@@ -1103,7 +1117,7 @@ export const api = {
 
     /** Schema v2 · Refine a single frame (Phase 2 rich fields). */
     refineSingleFrame: async (scriptId: string, frameId: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/refine`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/refine`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to refine frame");
@@ -1115,7 +1129,7 @@ export const api = {
         scriptId: string,
         onEvent: (event: RefineSSEEvent) => void,
     ): Promise<void> => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/storyboard/refine_batch`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/storyboard/refine_batch`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to start batch refine");
@@ -1145,7 +1159,7 @@ export const api = {
 
     /** PR-3k · BGM preset catalog for Assembly Mix phase. */
     listBgmPresets: async (): Promise<BgmPreset[]> => {
-        const response = await fetch(`${API_URL}/bgm/presets`);
+        const response = await authenticatedFetch(`${API_URL}/bgm/presets`);
         if (!response.ok) throw new Error("Failed to list bgm presets");
         return response.json();
     },
@@ -1157,7 +1171,7 @@ export const api = {
         bgm_volume?: number;
         sfx_volume?: number;
     }) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/audio_mix`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/audio_mix`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -1167,7 +1181,7 @@ export const api = {
     },
 
     updateVoiceParams: async (scriptId: string, charId: string, speed: number, pitch: number, volume: number) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
@@ -1177,7 +1191,7 @@ export const api = {
     },
 
     exportProject: async (scriptId: string, options: any) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/export`, {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/export`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(options),
@@ -1228,7 +1242,7 @@ export const api = {
     uploadFrameImage: async (scriptId: string, frameId: string, file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(
+        const response = await authenticatedFetch(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_image`,
             { method: "POST", body: formData }
         );

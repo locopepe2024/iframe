@@ -54,7 +54,8 @@ from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDE
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils.uniart_catalog import normalize_uniart_catalog
 from ...utils import setup_logging
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pathlib import Path
 from dotenv import load_dotenv, set_key
 
 app = FastAPI(title="AI Comic Gen API")
@@ -72,9 +73,14 @@ if os.path.exists(env_path):
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
 from ..identity import router as identity_router, UserContext, require_user_context
 from ..studio_access import (
+    current_studio_user,
     require_studio_user,
     reset_studio_user,
+    sign_studio_media_paths,
     set_studio_user,
+    studio_owner_dir,
+    studio_uniart_config,
+    verify_studio_media,
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
@@ -100,7 +106,21 @@ app.add_middleware(
 # Middleware to add cache headers to static files
 @app.middleware("http")
 async def add_cache_control_header(request: Request, call_next):
-    if request.url.path.startswith("/files/users/"):
+    protected_media_prefixes = (
+        "/files/users/",
+        "/files/assets/",
+        "/files/audio/",
+        "/files/cache/",
+        "/files/export/",
+        "/files/outputs/",
+        "/files/playground/",
+        "/files/storyboard/",
+        "/files/uploads/",
+        "/files/video/",
+        "/files/videos/",
+        "/files/video_inputs/",
+    )
+    if request.url.path.startswith(protected_media_prefixes):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     response = await call_next(request)
     if request.url.path.startswith("/files/"):
@@ -136,7 +156,17 @@ pipeline = ComicGenPipeline()
 async def enforce_studio_owner_boundary(request: Request, call_next):
     """Authenticate Studio routes and reject cross-profile resource IDs."""
     path = request.url.path
-    protected = path == "/projects" or path.startswith("/projects/") or path == "/series" or path.startswith("/series/")
+    protected = (
+        path == "/projects"
+        or path.startswith("/projects/")
+        or path == "/series"
+        or path.startswith("/series/")
+        or path == "/library"
+        or path.startswith("/library/")
+        or path == "/upload"
+        or path == "/config/uniart/models"
+        or path.startswith("/tasks/")
+    )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
 
@@ -220,6 +250,13 @@ def signed_response(data):
         processed_data = [item.model_dump() if hasattr(item, "model_dump") else item for item in data]
     else:
         processed_data = data
+
+    studio_user = current_studio_user()
+    if studio_user:
+        processed_data = sign_studio_media_paths(
+            processed_data,
+            studio_user.owner_profile_id,
+        )
     
     # Check if OSS is configured
     uploader = OSSImageUploader()
@@ -229,6 +266,27 @@ def signed_response(data):
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
+
+
+@app.get("/studio/media/{owner_key}/{relative_path:path}")
+def get_studio_media(
+    owner_key: str,
+    relative_path: str,
+    expires: int = 0,
+    signature: str = "",
+):
+    path = verify_studio_media(owner_key, relative_path, expires, signature)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Media not found")
+    return FileResponse(path)
+
+
+def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
+    upload_dir = os.path.join(studio_owner_dir(user.owner_profile_id), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    absolute_path = os.path.join(upload_dir, filename)
+    stored_path = os.path.relpath(absolute_path, "output")
+    return absolute_path, stored_path
 
 
 # ============================================================
@@ -328,12 +386,15 @@ def check_system():
 
 
 @app.post("/upload")
-def upload_file(file: UploadFile = File(...)):
+def upload_file(
+    file: UploadFile = File(...),
+    user: UserContext = Depends(require_studio_user),
+):
     """Uploads a file and returns its URL (OSS if configured, else local)."""
     try:
         file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path, stored_path = _studio_upload_target(user, filename)
 
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -344,7 +405,7 @@ def upload_file(file: UploadFile = File(...)):
             return signed_response({"url": oss_url})
 
         # Fallback to local URL (relative path for frontend getAssetUrl)
-        return {"url": f"uploads/{filename}"}
+        return signed_response({"url": stored_path})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -361,7 +422,8 @@ def upload_asset(
     asset_id: str,
     upload_type: str,
     description: Optional[str] = None,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    user: UserContext = Depends(require_studio_user),
 ):
     """
     Uploads an image as a new variant for an asset.
@@ -375,7 +437,7 @@ def upload_asset(
         # 1. Save file locally first
         file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path, stored_path = _studio_upload_target(user, filename)
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -384,7 +446,7 @@ def upload_asset(
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(file_path)
         if not oss_url:
-            oss_url = f"uploads/{filename}"  # Fallback to local path
+            oss_url = stored_path
         
         # 3. Update asset with new variant
         updated_script = pipeline.add_uploaded_asset_variant(
@@ -869,6 +931,8 @@ def create_series_character(series_id: str, request: CreateSeriesAssetRequest):
         ref_sheet.selected_image_id = variant.id
     char = Character(
         id=char_id,
+        owner_user_id=series.owner_user_id,
+        owner_profile_id=series.owner_profile_id,
         name=request.name,
         description=request.description or "",
         persona=request.persona or "",
@@ -891,6 +955,8 @@ def create_series_scene(series_id: str, request: CreateSeriesAssetRequest):
     sid = _new_id("scene")
     scene = Scene(
         id=sid,
+        owner_user_id=series.owner_user_id,
+        owner_profile_id=series.owner_profile_id,
         name=request.name,
         description=request.description or "",
         image_url=request.image_url,
@@ -911,6 +977,8 @@ def create_series_prop(series_id: str, request: CreateSeriesAssetRequest):
     pid = _new_id("prop")
     prop = Prop(
         id=pid,
+        owner_user_id=series.owner_user_id,
+        owner_profile_id=series.owner_profile_id,
         name=request.name,
         description=request.description or "",
         image_url=request.image_url,
@@ -1001,7 +1069,10 @@ def create_library_asset(request: CreateLibraryAssetRequest):
 
 
 @app.post("/library/assets/upload")
-def upload_library_asset_image(file: UploadFile = File(...)):
+def upload_library_asset_image(
+    file: UploadFile = File(...),
+    user: UserContext = Depends(require_studio_user),
+):
     """Upload an image to use as a global library asset's master image.
 
     Saves the file under output/uploads/ (served via the /files static mount)
@@ -1016,14 +1087,14 @@ def upload_library_asset_image(file: UploadFile = File(...)):
     try:
         file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path, stored_path = _studio_upload_target(user, filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         # Prefer OSS when configured (signed), else fall back to local path.
         oss_url = OSSImageUploader().upload_image(file_path)
         if oss_url:
             return signed_response({"image_url": oss_url})
-        return {"image_url": f"uploads/{filename}"}
+        return signed_response({"image_url": stored_path})
     except Exception as e:
         logger.exception("upload_library_asset_image failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3476,13 +3547,18 @@ def extract_last_frame(script_id: str, frame_id: str, request: ExtractLastFrameR
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/upload_image")
-def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = File(...)):
+def upload_frame_image(
+    script_id: str,
+    frame_id: str,
+    file: UploadFile = File(...),
+    user: UserContext = Depends(require_studio_user),
+):
     """Upload an image as a variant for a frame's rendered_image_asset."""
     try:
         # Save file locally first
         file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path, _stored_path = _studio_upload_target(user, filename)
 
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -3505,7 +3581,12 @@ _T2I_UPLOAD_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/upload_t2i")
-async def upload_t2i_frame(script_id: str, frame_id: str, file: UploadFile = File(...)):
+async def upload_t2i_frame(
+    script_id: str,
+    frame_id: str,
+    file: UploadFile = File(...),
+    user: UserContext = Depends(require_studio_user),
+):
     """Upload an external image as a T2I首帧 candidate for an I2V flow.
 
     Validation:
@@ -3530,9 +3611,7 @@ async def upload_t2i_frame(script_id: str, frame_id: str, file: UploadFile = Fil
         # Stream-to-disk with explicit byte cap so we never load >8 MB
         # into memory if a client lies about Content-Length.
         filename = f"t2i_{uuid.uuid4().hex}{ext}"
-        rel_path = os.path.join("uploads", filename)
-        abs_path = os.path.join("output", rel_path)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        abs_path, rel_path = _studio_upload_target(user, filename)
         size = 0
         try:
             with open(abs_path, "wb") as buffer:
@@ -4061,8 +4140,9 @@ def get_uniart_models():
     The upstream response is normalized into the capability vocabulary used by
     LumenX selectors; credentials stay server-side.
     """
-    base = (os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "https://uniart.fun/v1").rstrip("/")
-    key = os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+    runtime_config = studio_uniart_config()
+    base = runtime_config["base_url"].rstrip("/")
+    key = runtime_config["api_key"]
     req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
     try:
         with urlopen(req, timeout=15) as response:
@@ -4133,7 +4213,6 @@ def delete_prop(script_id: str, prop_id: str):
 # Document CRUD — Script Editor document persistence
 # ─────────────────────────────────────────────────────────────────────────────
 
-from pathlib import Path
 from datetime import datetime, timezone
 
 _TRON_PROJECTS_DIR = Path.home() / ".tron" / "comic" / "projects"

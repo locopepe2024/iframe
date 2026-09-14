@@ -8,6 +8,9 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getAssetUrl(path: string | null | undefined): string {
     if (!path) return "";
+    if (path.startsWith("/studio/media/") || path.startsWith("/playground/media/")) {
+        return `${API_URL}${path}`;
+    }
     if (path.startsWith("http") || path.startsWith("blob:")) {
         // Only pass through well-formed http(s)/blob URLs; anything else
         // (e.g. javascript: smuggled behind a weird prefix) is dropped.

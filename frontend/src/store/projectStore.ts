@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, authenticatedFetch } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
@@ -510,7 +510,7 @@ export const useProjectStore = create<ProjectStore>()(
 
                 // Then fetch latest data from backend
                 try {
-                    const response = await fetch(`${API_URL}/projects/${id}`);
+                    const response = await authenticatedFetch(`${API_URL}/projects/${id}`);
                     if (response.ok) {
                         const rawData = await response.json();
                         // Transform data to match frontend model (snake_case -> camelCase for specific fields)

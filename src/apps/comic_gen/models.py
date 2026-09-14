@@ -171,6 +171,8 @@ class AssetUnit(BaseModel):
 class VideoTask(BaseModel):
     id: str
     project_id: str
+    owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
+    owner_profile_id: Optional[str] = Field(None, description="Authenticated profile owner")
     frame_id: Optional[str] = Field(None, description="ID of the storyboard frame this video belongs to")
     asset_id: Optional[str] = Field(None, description="ID of the asset this video belongs to")
     image_url: str
@@ -235,6 +237,8 @@ class VideoTask(BaseModel):
 
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
+    owner_user_id: Optional[str] = Field(None, description="Owner when stored in the personal asset library")
+    owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the character")
     description: str = Field(..., description="Physical appearance and personality description")
 
@@ -314,6 +318,8 @@ class Character(BaseModel):
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
+    owner_user_id: Optional[str] = Field(None, description="Owner when stored in the personal asset library")
+    owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the location/scene")
     description: str = Field(..., description="Visual description of the environment")
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
@@ -332,6 +338,8 @@ class Scene(BaseModel):
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
+    owner_user_id: Optional[str] = Field(None, description="Owner when stored in the personal asset library")
+    owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the object")
     description: str = Field(..., description="Visual description of the object")
     video_url: Optional[str] = None
@@ -351,6 +359,8 @@ class Prop(BaseModel):
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
+    owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
+    owner_profile_id: Optional[str] = Field(None, description="Authenticated profile owner")
     scene_id: str = Field(..., description="Reference to the Scene ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
