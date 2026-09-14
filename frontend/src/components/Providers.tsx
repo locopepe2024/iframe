@@ -7,6 +7,7 @@ import { getMessages } from '@/lib/i18n';
 import { LightboxProvider } from '@/components/shared/preview/LightboxProvider';
 import ToastContainer from '@/components/shared/ToastContainer';
 import { MotionConfig } from 'framer-motion';
+import { AuthProvider } from '@/components/auth/AuthProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     const locale = useSettingsStore((s) => s.locale);
@@ -32,6 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     return (
         <NextIntlClientProvider locale={locale} messages={messages} timeZone="Asia/Shanghai">
+          <AuthProvider>
             {/* MotionConfig: respect OS prefers-reduced-motion ("user"); when the
              *  in-app 动效 toggle is off, force-reduce Framer animations ("always"). */}
             <MotionConfig reducedMotion={animations ? "user" : "always"}>
@@ -43,6 +45,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     <ToastContainer />
                 </LightboxProvider>
             </MotionConfig>
+          </AuthProvider>
         </NextIntlClientProvider>
     );
 }

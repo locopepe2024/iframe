@@ -2,6 +2,7 @@ import "./globals.css";
 import EnvConfigChecker from "@/components/EnvConfigChecker";
 import { Providers } from "@/components/Providers";
 import TauriDragBar from "@/components/layout/TauriDragBar";
+import { AuthGate } from "@/components/auth/AuthGate";
 
 export default function RootLayout({
   children,
@@ -29,9 +30,11 @@ export default function RootLayout({
       </head>
       <body className="font-sans bg-background text-foreground antialiased">
         <Providers>
-          <TauriDragBar />
-          <EnvConfigChecker />
-          {children}
+          <AuthGate>
+            <TauriDragBar />
+            <EnvConfigChecker />
+            {children}
+          </AuthGate>
         </Providers>
       </body>
     </html>

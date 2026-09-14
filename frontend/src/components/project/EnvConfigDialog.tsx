@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Save, ChevronDown, ChevronRight, Loader2, Key } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { api, type EnvConfigPayload, type ProviderMode } from "@/lib/api";
+import { AnimatePresence, motion } from "framer-motion";
+import { KeyRound, Loader2, Save, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { api } from "@/lib/api";
 
 interface EnvConfigDialogProps {
   isOpen: boolean;
@@ -12,381 +12,133 @@ interface EnvConfigDialogProps {
   isRequired?: boolean;
 }
 
-type EnvConfig = EnvConfigPayload & {
-  DASHSCOPE_API_KEY: string;
-  OPENAI_API_KEY?: string;
-  UNIART_API_KEY?: string;
-  UNIART_BASE_URL?: string;
-  LLM_PROVIDER?: string;
-  OPENAI_BASE_URL?: string;
-  OPENAI_MODEL?: string;
-  ALIBABA_CLOUD_ACCESS_KEY_ID: string;
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET: string;
-  OSS_BUCKET_NAME: string;
-  OSS_ENDPOINT: string;
-  OSS_BASE_PATH: string;
-  KLING_PROVIDER_MODE: ProviderMode;
-  VIDU_PROVIDER_MODE: ProviderMode;
-  PIXVERSE_PROVIDER_MODE: ProviderMode;
-  KLING_ACCESS_KEY: string;
-  KLING_SECRET_KEY: string;
-  VIDU_API_KEY: string;
-  MULEROUTER_API_KEY: string;
-  MULERUN_CLI_LOGGED_IN?: boolean;
-  endpoint_overrides: Record<string, string>;
-};
-
-const ENDPOINT_PROVIDERS = [
-  { key: "UNIART_BASE_URL", label: "UniArt", placeholder: "https://uniart.fun/v1" },
-];
-
-const DEFAULT_CONFIG: EnvConfig = {
-  DASHSCOPE_API_KEY: "",
-  ALIBABA_CLOUD_ACCESS_KEY_ID: "",
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET: "",
-  OSS_BUCKET_NAME: "",
-  OSS_ENDPOINT: "",
-  OSS_BASE_PATH: "",
-  KLING_PROVIDER_MODE: "dashscope",
-  VIDU_PROVIDER_MODE: "dashscope",
-  PIXVERSE_PROVIDER_MODE: "dashscope",
-  KLING_ACCESS_KEY: "",
-  KLING_SECRET_KEY: "",
-  VIDU_API_KEY: "",
-  MULEROUTER_API_KEY: "",
-  endpoint_overrides: {},
-};
-
-const normalizeProviderMode = (mode?: string): ProviderMode => (mode === "vendor" ? "vendor" : "dashscope");
-
-const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvConfig => ({
-  ...existing,
-  ...data,
-  KLING_PROVIDER_MODE: normalizeProviderMode(data?.KLING_PROVIDER_MODE ?? existing.KLING_PROVIDER_MODE),
-  VIDU_PROVIDER_MODE: normalizeProviderMode(data?.VIDU_PROVIDER_MODE ?? existing.VIDU_PROVIDER_MODE),
-  PIXVERSE_PROVIDER_MODE: normalizeProviderMode(data?.PIXVERSE_PROVIDER_MODE ?? existing.PIXVERSE_PROVIDER_MODE),
-  endpoint_overrides: data?.endpoint_overrides ?? existing.endpoint_overrides ?? {},
-});
-
-const getValidationErrors = (env: EnvConfig): string[] => {
-  const errors: string[] = [];
-
-  const configured = env.secrets_configured || {};
-  const hasOpenAICompatible = Boolean(env.OPENAI_API_KEY?.trim() || env.UNIART_API_KEY?.trim() || configured.OPENAI_API_KEY || configured.UNIART_API_KEY);
-  if (env.LLM_PROVIDER === "openai" ? !hasOpenAICompatible : !env.DASHSCOPE_API_KEY?.trim()) {
-    errors.push(env.LLM_PROVIDER === "openai" ? "UniArt/OpenAI API Key" : "DashScope API Key");
-  }
-  return errors;
-};
-
 export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }: EnvConfigDialogProps) {
-  const [config, setConfig] = useState<EnvConfig>(DEFAULT_CONFIG);
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("https://uniart.fun/v1");
+  const [configured, setConfigured] = useState(false);
+  const [prefix, setPrefix] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [endpointsOpen, setEndpointsOpen] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const t = useTranslations("project");
-  const tc = useTranslations("common");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      loadConfig();
-    }
+    if (!isOpen) return;
+    setLoading(true);
+    setError(null);
+    api.getUserConfig()
+      .then((config) => {
+        setConfigured(Boolean(config.secrets_configured?.UNIART_API_KEY));
+        setPrefix(config.secret_prefixes?.UNIART_API_KEY || "");
+        setBaseUrl(config.UNIART_BASE_URL || "https://uniart.fun/v1");
+        setApiKey("");
+      })
+      .catch(() => setError("无法读取当前用户配置，请重新登录后再试。"))
+      .finally(() => setLoading(false));
   }, [isOpen]);
 
-  const loadConfig = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.getEnvConfig();
-      setConfig((prev) => normalizeEnvConfig(prev, data));
-    } catch (error) {
-      console.error("Failed to load env config:", error);
-      setLoadError(t("configLoadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const validateRequiredFields = () => getValidationErrors(config).length === 0;
-  const canClose = !isRequired || validateRequiredFields();
-
-  const handleSave = async () => {
-    const errors = getValidationErrors(config);
-    if (errors.length > 0) {
-      alert(t("requiredFields") + "\n- " + errors.join("\n- "));
+  const save = async () => {
+    if (!configured && !apiKey.trim()) {
+      setError("请输入您自己的 UniArt API Key。");
       return;
     }
-
     setSaving(true);
+    setError(null);
     try {
-      await api.saveEnvConfig(config);
-      alert(t("configSaved"));
+      const next = await api.saveUserConfig({
+        ...(apiKey.trim() ? { UNIART_API_KEY: apiKey.trim() } : {}),
+        UNIART_BASE_URL: baseUrl.trim(),
+      });
+      setConfigured(Boolean(next.secrets_configured?.UNIART_API_KEY));
+      setPrefix(next.secret_prefixes?.UNIART_API_KEY || "");
+      setApiKey("");
       onClose();
-      if (isRequired) {
-        window.location.reload();
-      }
-    } catch (error) {
-      console.error("Failed to save env config:", error);
-      alert(t("configSaveFailed"));
+    } catch {
+      setError("保存失败。请检查 API Key 和服务地址后重试。");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleChange = (key: keyof EnvConfig, value: string) => {
-    setConfig((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleEndpointChange = (envKey: string, value: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      endpoint_overrides: { ...prev.endpoint_overrides, [envKey]: value },
-    }));
-  };
-
-  const requestClose = () => {
-    if (canClose) {
-      onClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  const inputClass = "w-full bg-surface border border-glass-border rounded-lg px-4 py-2 text-foreground placeholder-text-muted focus:outline-none focus:border-primary/50 transition-colors";
-  const modeButtonClass = (active: boolean) =>
-    `px-3 py-1.5 text-xs rounded-md border transition-colors font-medium ${active ? "bg-amber-500 text-white border-amber-500 shadow-sm" : "border-glass-border bg-surface text-text-secondary hover:text-foreground"}`;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4"
-        onClick={requestClose}
-      >
+      {isOpen && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-elevated rounded-2xl border border-glass-border w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[100] grid place-items-center bg-overlay px-4 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => { if (!isRequired || configured) onClose(); }}
         >
-          <div className="flex items-center justify-between p-6 border-b border-glass-border">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-lg">
-                <Key size={20} className="text-amber-400" />
-              </div>
+          <motion.section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-uniart-config-title"
+            className="glass-panel atelier-card w-full max-w-lg rounded-[22px] border border-glass-border p-6 shadow-2xl"
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: 4 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-foreground">{t("envConfig")}</h2>
-                <p className="text-xs text-text-muted">{t("envConfigSub")}</p>
+                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <KeyRound size={20} aria-hidden="true" />
+                </div>
+                <h2 id="user-uniart-config-title" className="font-display text-xl font-semibold">个人 UniArt 配置</h2>
+                <p className="mt-1 text-sm leading-6 text-text-secondary">
+                  密钥按当前登录账户加密保存，不与其他 LumenX 用户共享。
+                </p>
               </div>
+              {(!isRequired || configured) && (
+                <button onClick={onClose} className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-hover-bg" aria-label="关闭">
+                  <X size={19} />
+                </button>
+              )}
             </div>
-            <button
-              onClick={requestClose}
-              disabled={!canClose}
-              className="p-2 hover:bg-hover-bg rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <X size={20} className="text-text-secondary" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {isRequired && (
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-300">
-                {t("requiredHint")}
-              </div>
-            )}
-            {isRequired && !canClose && (
-              <div className="bg-glass border border-glass-border rounded-lg p-3 text-xs text-text-secondary">
-                {t("cannotClose")}
-              </div>
-            )}
 
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={24} className="animate-spin text-amber-400" />
-                <span className="ml-2 text-text-secondary">{t("loadingConfig")}</span>
-              </div>
-            ) : loadError ? (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm text-red-300">
-                {loadError}
+              <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-text-secondary" role="status">
+                <Loader2 className="animate-spin" size={18} /> 正在读取配置…
               </div>
             ) : (
-              <>
+              <div className="mt-6 space-y-5">
                 <div>
-                  <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                    <span>UniArt API Key <span className="text-red-500">*</span></span>
-                    <span className="text-text-muted font-normal text-xs">e.g. sk-xxx</span>
-                  </label>
+                  <label htmlFor="user-uniart-key" className="mb-2 block text-sm font-medium">UniArt API Key</label>
                   <input
+                    id="user-uniart-key"
                     type="password"
-                    value={config.OPENAI_API_KEY || config.UNIART_API_KEY || ""}
-                    onChange={(e) => handleChange("OPENAI_API_KEY", e.target.value)}
-                    placeholder="Required for UniArt model routing"
-                    className={inputClass}
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    autoComplete="off"
+                    className="glass-input min-h-11 w-full"
+                    placeholder={configured ? `已配置 ${prefix || "个人密钥"}；留空保持不变` : "ur-... 或 sk-..."}
+                  />
+                  <p className="mt-2 text-xs text-text-muted">保存后不会再次显示完整密钥。</p>
+                </div>
+                <div>
+                  <label htmlFor="user-uniart-url" className="mb-2 block text-sm font-medium">UniArt API 地址</label>
+                  <input
+                    id="user-uniart-url"
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    className="glass-input min-h-11 w-full"
+                    inputMode="url"
                   />
                 </div>
-
-                <div className="bg-glass border border-glass-border rounded-lg p-4 space-y-4">
-                  <div className="text-xs text-text-secondary">
-                    {t("ossLocalFirst")}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Alibaba Cloud Access Key ID
-                    </label>
-                    <input
-                      type="password"
-                      value={config.ALIBABA_CLOUD_ACCESS_KEY_ID}
-                      onChange={(e) => handleChange("ALIBABA_CLOUD_ACCESS_KEY_ID", e.target.value)}
-                      placeholder="Optional, used when OSS mirror is enabled"
-                      className={inputClass}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Alibaba Cloud Access Key Secret
-                    </label>
-                    <input
-                      type="password"
-                      value={config.ALIBABA_CLOUD_ACCESS_KEY_SECRET}
-                      onChange={(e) => handleChange("ALIBABA_CLOUD_ACCESS_KEY_SECRET", e.target.value)}
-                      placeholder="Optional, used when OSS mirror is enabled"
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-glass-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground">{t("ossMirror")}</h3>
-                      <p className="text-[0.625rem] text-text-muted mt-1">{t("ossMirrorDesc")}</p>
-                    </div>
-                    <a
-                      href="https://oss.console.aliyun.com/overview"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:text-primary/80 transition-colors"
-                    >
-                      Open OSS Console &rarr;
-                    </a>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                        <span>OSS Bucket Name</span>
-                        <span className="text-text-muted font-normal text-xs">e.g. my-comic-bucket</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={config.OSS_BUCKET_NAME}
-                        onChange={(e) => handleChange("OSS_BUCKET_NAME", e.target.value)}
-                        placeholder="your_bucket_name (optional)"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                        <span>OSS Endpoint</span>
-                        <span className="text-text-muted font-normal text-xs">e.g. oss-cn-hangzhou.aliyuncs.com</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={config.OSS_ENDPOINT}
-                        onChange={(e) => handleChange("OSS_ENDPOINT", e.target.value)}
-                        placeholder="oss-cn-beijing.aliyuncs.com (optional)"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                        <span>OSS Base Path</span>
-                        <span className="text-text-muted font-normal text-xs">e.g. lumenx</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={config.OSS_BASE_PATH}
-                        onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)}
-                        placeholder="lumenx"
-                        className={inputClass}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-glass-border">
-                  <button
-                    type="button"
-                    onClick={() => setEndpointsOpen(!endpointsOpen)}
-                    aria-expanded={endpointsOpen}
-                    className="flex items-center gap-2 text-sm font-medium text-text-secondary hover:text-foreground transition-colors"
-                  >
-                    {endpointsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    {t("advancedEndpoints")}
-                  </button>
-
-                  {endpointsOpen && (
-                    <div className="mt-4 space-y-4">
-                      <p className="text-xs text-text-muted">
-                        {t("endpointsDesc")}
-                      </p>
-                      {ENDPOINT_PROVIDERS.map(({ key, label, placeholder }) => (
-                        <div key={key}>
-                          <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                            <span>{label} Base URL</span>
-                            <span className="text-text-muted font-normal text-xs">{placeholder}</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={config.endpoint_overrides[key] || (key === "UNIART_BASE_URL" ? config.OPENAI_BASE_URL || "" : "")}
-                            onChange={(e) => handleEndpointChange(key, e.target.value)}
-                            placeholder={placeholder}
-                            className={inputClass + " text-sm"}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
+                {error && <p role="alert" className="rounded-lg border border-status-failed-border bg-status-failed-bg px-3 py-2 text-sm text-status-failed-fg">{error}</p>}
+                <button
+                  onClick={save}
+                  disabled={saving || !baseUrl.trim()}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                  {saving ? "正在保存…" : "保存个人配置"}
+                </button>
+              </div>
             )}
-          </div>
-
-          <div className="flex justify-end gap-3 p-6 border-t border-glass-border">
-            <button
-              onClick={requestClose}
-              disabled={!canClose}
-              className="px-4 py-2 text-sm text-text-secondary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {tc("cancel")}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || loading || !!loadError}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  {t("savingConfig")}
-                </>
-              ) : (
-                <>
-                  <Save size={16} />
-                  {t("saveConfig")}
-                </>
-              )}
-            </button>
-          </div>
+          </motion.section>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 }

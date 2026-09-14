@@ -103,7 +103,15 @@ export interface EnvConfigPayload {
     // Secrets from GET are masked (bullets + last 4 chars). This map reports
     // which credential fields are actually configured on the backend.
     secrets_configured?: Record<string, boolean>;
-    [key: string]: string | Record<string, string> | Record<string, boolean> | boolean | undefined;
+    [key: string]: string | Record<string, string> | Record<string, boolean> | Record<string, unknown> | boolean | undefined;
+}
+
+export interface UserConfigPayload {
+    UNIART_API_KEY?: string;
+    UNIART_BASE_URL?: string;
+    preferences?: Record<string, unknown>;
+    secrets_configured?: Record<string, boolean>;
+    secret_prefixes?: Record<string, string>;
 }
 
 // R2V v2 Phase 4 — Cross-episode reconcile types
@@ -1185,6 +1193,16 @@ export const api = {
 
     getEnvConfig: async (): Promise<EnvConfigPayload> => {
         const res = await axios.get<EnvConfigPayload>(`${API_URL}/config/env`);
+        return res.data;
+    },
+
+    getUserConfig: async (): Promise<UserConfigPayload> => {
+        const res = await axios.get<UserConfigPayload>(`${API_URL}/user/config`);
+        return res.data;
+    },
+
+    saveUserConfig: async (config: UserConfigPayload) => {
+        const res = await axios.put<UserConfigPayload>(`${API_URL}/user/config`, config);
         return res.data;
     },
 

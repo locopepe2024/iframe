@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw } from "lucide-react";
+import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { api, type EnvConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
+import { api, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
 import { ASPECT_RATIOS } from "@/store/projectStore";
 import {
   DEFAULT_MODEL_SETTINGS,
@@ -21,6 +21,7 @@ import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import LumenXBranding from "@/components/layout/LumenXBranding";
 import UpdateChecker from "./UpdateChecker";
+import { useAuth } from "@/components/auth/AuthProvider";
 type SettingsCategory = "general" | "models" | "prompts" | "apikeys" | "storage" | "about";
 import {
   FormRow,
@@ -33,7 +34,7 @@ import {
 
 const APP_VERSION = "v0.2.0";
 
-type EnvConfig = EnvConfigPayload & {
+type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   DASHSCOPE_API_KEY: string;
   OPENAI_API_KEY?: string;
   UNIART_API_KEY?: string;
@@ -81,7 +82,7 @@ const DEFAULT_CONFIG: EnvConfig = {
 
 const normalizeProviderMode = (mode?: string): ProviderMode => (mode === "vendor" ? "vendor" : "dashscope");
 
-const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvConfig => ({
+const normalizeEnvConfig = (existing: EnvConfig, data?: Partial<EnvConfig>): EnvConfig => ({
   ...existing,
   ...data,
   KLING_PROVIDER_MODE: normalizeProviderMode(data?.KLING_PROVIDER_MODE ?? existing.KLING_PROVIDER_MODE),
@@ -185,6 +186,7 @@ function Section({
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const { locale, theme, animations, setLocale, setTheme, setAnimations } = useSettingsStore();
+  const { profile, logout } = useAuth();
 
   const [active, setActive] = useState<SettingsCategory>("general");
 
@@ -225,8 +227,17 @@ export default function SettingsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await api.getEnvConfig();
-      setConfig((prev) => normalizeEnvConfig(prev, data));
+      const [serverConfig, userConfig] = await Promise.all([api.getEnvConfig(), api.getUserConfig()]);
+      setConfig((prev) => normalizeEnvConfig(prev, { ...serverConfig, ...userConfig, UNIART_API_KEY: "" }));
+      const preferences = userConfig.preferences || {};
+      const savedModelSettings = preferences.model_settings;
+      if (savedModelSettings && typeof savedModelSettings === "object") {
+        setModelSettings(normalizeModelSettings(savedModelSettings as FrontendModelSettings, "global_settings"));
+      }
+      const savedPromptConfig = preferences.prompt_config;
+      if (savedPromptConfig && typeof savedPromptConfig === "object") {
+        setPromptConfig((current) => ({ ...current, ...(savedPromptConfig as Partial<DefaultPromptConfig>) }));
+      }
     } catch {
       setLoadError(t("loadConfigFailed"));
     } finally {
@@ -335,7 +346,19 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
-      await api.saveEnvConfig(config);
+      const saved = await api.saveUserConfig({
+        ...(config.UNIART_API_KEY?.trim() ? { UNIART_API_KEY: config.UNIART_API_KEY.trim() } : {}),
+        UNIART_BASE_URL: config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1",
+      });
+      setConfig((prev) => normalizeEnvConfig(
+        { ...prev, UNIART_API_KEY: "" },
+        {
+          UNIART_BASE_URL: saved.UNIART_BASE_URL,
+          secrets_configured: saved.secrets_configured,
+          secret_prefixes: saved.secret_prefixes,
+          preferences: saved.preferences,
+        },
+      ));
       toast.success(t("saveSuccess"));
     } catch {
       toast.error(t("saveConfigFailed"));
@@ -368,7 +391,7 @@ export default function SettingsPage() {
     }));
   };
 
-  const handleSaveModelDefaults = () => {
+  const handleSaveModelDefaults = async () => {
     const normalized = normalizeModelSettings(modelSettings, "global_settings");
     // T2I and I2I share one image model in the UI; persist both backend
     // fields plus image_model so per-project backfill stays consistent.
@@ -379,10 +402,15 @@ export default function SettingsPage() {
     };
     localStorage.setItem(LS_KEY_MODEL, JSON.stringify(merged));
     setModelSettings(merged);
-    toast.success(t("saved"));
+    try {
+      await api.saveUserConfig({ preferences: { model_settings: merged } });
+      toast.success(t("saved"));
+    } catch {
+      toast.error(t("saveConfigFailed"));
+    }
   };
 
-  const handleSavePromptDefaults = () => {
+  const handleSavePromptDefaults = async () => {
     // DELTA persistence: a field equal to its built-in default is stored as ""
     // (=> use built-in, no snapshot pinning); only genuine overrides are saved.
     const delta: DefaultPromptConfig = { ...EMPTY_PROMPT_CONFIG };
@@ -391,7 +419,12 @@ export default function SettingsPage() {
       delta[k] = text === promptDefaults[k] ? "" : text;
     });
     localStorage.setItem(LS_KEY_PROMPT, JSON.stringify(delta));
-    toast.success(t("saved"));
+    try {
+      await api.saveUserConfig({ preferences: { prompt_config: delta } });
+      toast.success(t("saved"));
+    } catch {
+      toast.error(t("saveConfigFailed"));
+    }
   };
 
   const copyPath = async (p: string) => {
@@ -700,14 +733,28 @@ export default function SettingsPage() {
         </div>
       ) : (
         <div className="space-y-1">
+          <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-glass-border bg-glass px-4 py-3">
+            <div>
+              <div className="text-sm font-medium text-foreground">{profile?.display_name || "UniArt 用户"}</div>
+              <div className="mt-0.5 text-xs text-text-muted">个人配置仅对当前账户生效</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
+            >
+              <LogOut size={16} aria-hidden="true" />
+              退出登录
+            </button>
+          </div>
           <FormRow label="UniArt API Key" hint="用于文字、图片和视频模型调用">
             <FieldLabel>UNIART_API_KEY *</FieldLabel>
             <KeyField
-              value={config.UNIART_API_KEY || config.OPENAI_API_KEY || ""}
-              onChange={(v) => handleChange("OPENAI_API_KEY", v)}
-              placeholder="sk-..."
+              value={config.UNIART_API_KEY || ""}
+              onChange={(v) => handleChange("UNIART_API_KEY", v)}
+              placeholder={config.secrets_configured?.UNIART_API_KEY ? `已配置 ${config.secret_prefixes?.UNIART_API_KEY || "个人密钥"}；留空保持不变` : "ur-... 或 sk-..."}
               status={
-                (config.UNIART_API_KEY || config.OPENAI_API_KEY || config.secrets_configured?.UNIART_API_KEY || config.secrets_configured?.OPENAI_API_KEY)
+                (config.UNIART_API_KEY || config.secrets_configured?.UNIART_API_KEY)
                   ? { kind: "ok", text: t("filled") }
                   : { kind: "warn", text: t("notConfiguredUnavailable") }
               }
