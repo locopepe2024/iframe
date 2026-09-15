@@ -11,8 +11,6 @@ MODE_MAP = {
     "image_reference": "i2v",
     "omni_reference": "r2v",
     "first_last_frame": "f2v",
-    "image_generation": "t2i",
-    "image_edit": "i2i",
 }
 
 

@@ -53,12 +53,40 @@ def _media(value: Optional[str]) -> Optional[str]:
 
 def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, Any]:
     resp = requests.post(f"{_base_url(config)}{path}", headers=_headers(config), json=body, timeout=90)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        # Preserve the provider's actionable error without logging the request
+        # body (which may contain prompts or media references) or credentials.
+        detail = _provider_error_detail(resp)
+        raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
     if not task_id:
         raise RuntimeError(f"UniArt response has no task id: {data}")
     return data
+
+
+def _provider_error_detail(resp: requests.Response) -> str:
+    """Return a compact, secret-free error from a UniArt HTTP response."""
+    status = resp.status_code
+    code = ""
+    message = ""
+    request_id = resp.headers.get("X-Oneapi-Request-Id") or resp.headers.get("X-Request-Id") or ""
+    try:
+        payload = resp.json()
+        error = payload.get("error", payload) if isinstance(payload, dict) else {}
+        if isinstance(error, dict):
+            code = str(error.get("code") or "").strip()
+            message = str(error.get("message") or error.get("detail") or "").strip()
+        elif error:
+            message = str(error).strip()
+    except (ValueError, requests.exceptions.JSONDecodeError):
+        message = resp.text.strip()
+    message = message[:1000] or "empty provider error response"
+    suffix = f" (request id: {request_id})" if request_id else ""
+    code_part = f" {code}" if code else ""
+    return f"UniArt request failed ({status}{code_part}): {message}{suffix}"
 
 
 def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900, endpoint: str = "videos") -> Dict[str, Any]:

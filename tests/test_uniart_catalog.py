@@ -34,16 +34,17 @@ def test_normalizes_authoritative_video_capabilities():
     assert model["inputs"]["reference_images"]["max"] == 30
 
 
-def test_normalizes_image_models_and_ignores_text_models():
+def test_normalizes_image_models_only_from_image_capability():
     models = normalize_uniart_catalog({"data": [
         {"id": "gpt-image-2", "image_capability": {"resolutions": ["1k", "2k", "4k"], "supports_generation": True, "supports_edit": True}},
+        # Some UniArt video catalog entries contain image_generation/image_edit
+        # labels for an upstream route, but they are not image API capabilities.
         {"id": "gpt-image-2.5-sunburst-special", "video_capability": {"modes": [{"id": "image_generation"}, {"id": "image_edit"}], "resolutions": ["1k", "2k", "4k"]}},
         {"id": "gpt-5.6-sol", "supported_endpoint_types": ["openai"]},
     ]})
 
     assert [model["id"] for model in models] == [
         "uniart/gpt-image-2",
-        "uniart/gpt-image-2.5-sunburst-special",
     ]
     assert models[0]["capabilities"] == ["t2i", "i2i"]
     assert models[0]["params"]["size"]["options"] == ["1k", "2k", "4k"]
