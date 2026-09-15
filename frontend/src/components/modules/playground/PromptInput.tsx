@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Film, ImagePlus, Plus, X } from 'lucide-react';
+import { Film, Plus, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
@@ -18,13 +18,11 @@ interface PromptInputProps {
 export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputProps) {
   const prompt = usePlaygroundStore((s) => s.prompt);
   const negativePrompt = usePlaygroundStore((s) => s.negativePrompt);
-  const mode = usePlaygroundStore((s) => s.mode);
   const inputMedia = usePlaygroundStore((s) => s.inputMedia);
   const history = usePlaygroundStore((s) => s.history);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
   const setNegativePrompt = usePlaygroundStore((s) => s.setNegativePrompt);
   const setInputMedia = usePlaygroundStore((s) => s.setInputMedia);
-  const setMode = usePlaygroundStore((s) => s.setMode);
   const t = useTranslations('playground');
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
@@ -34,27 +32,20 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   const mentionText = mentionStart >= 0 ? prompt.slice(mentionStart) : '';
   const mentionActive = mentionStart >= 0 && !/\s/.test(mentionText);
 
-  const referenceCandidates = history
-    .flatMap((generation) => generation.outputs.map((output) => ({
-      path: output.media_path,
-      mediaType: output.media_type,
-      label: generation.model_id || generation.mode,
-      generationId: generation.id,
-    })))
-    .filter((candidate, index, all) => candidate.path && all.findIndex((item) => item.path === candidate.path) === index)
-    .filter((candidate) => !['t2i', 'i2i'].includes(mode) || candidate.mediaType === 'image')
-    .slice(0, 12);
+  const referenceCandidates = inputMedia.map((path, index) => ({
+    path,
+    index,
+    label: `参考素材${index + 1}`,
+    mediaType: history.flatMap((generation) => generation.outputs)
+      .find((output) => output.media_path === path)?.media_type
+      || (/\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path) ? 'video' : 'image'),
+  }));
 
-  const addReference = (path: string, mediaType: string, mention = false) => {
-    if (!inputMedia.includes(path)) setInputMedia([...inputMedia, path]);
-    if (mode === 't2i') setMode('i2i');
-    if (mode === 't2v') setMode(mediaType === 'video' ? 'v2v' : 'i2v');
-    if (mention) {
-      const nextPrompt = mentionActive
-        ? `${prompt.slice(0, mentionStart)}@参考素材 `
-        : `${prompt}${prompt && !prompt.endsWith(' ') ? ' ' : ''}@参考素材 `;
-      setPrompt(nextPrompt.slice(0, MAX_LENGTH));
-    }
+  const insertReference = (label: string) => {
+    const nextPrompt = mentionActive
+      ? `${prompt.slice(0, mentionStart)}@${label} `
+      : `${prompt}${prompt && !prompt.endsWith(' ') ? ' ' : ''}@${label} `;
+    setPrompt(nextPrompt.slice(0, MAX_LENGTH));
     setMentionMenuOpen(false);
   };
 
@@ -117,7 +108,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
         className="min-h-[88px] max-h-[220px] w-full resize-y rounded-none border-0 bg-transparent p-0 text-[0.9375rem] leading-[1.65] text-foreground placeholder-text-muted focus:ring-0"
       />
 
-      {mentionMenuOpen && (
+      {mentionMenuOpen && mentionActive && referenceCandidates.length > 0 && (
         <div
           role="listbox"
           aria-label="选择参考素材"
@@ -128,10 +119,10 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           </div>
           {referenceCandidates.map((candidate) => (
             <button
-              key={`${candidate.generationId}-${candidate.path}`}
+              key={`${candidate.index}-${candidate.path}`}
               type="button"
               role="option"
-              onClick={() => addReference(candidate.path, candidate.mediaType, true)}
+              onClick={() => insertReference(candidate.label)}
               className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
               <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
@@ -142,7 +133,6 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 )}
               </span>
               <span className="min-w-0 flex-1 truncate text-xs text-foreground">{candidate.label}</span>
-              <span className="text-[0.625rem] text-text-muted">@参考素材</span>
             </button>
           ))}
         </div>
@@ -159,10 +149,6 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
         >
           <Plus size={17} aria-hidden="true" />
         </button>
-        <span className="inline-flex items-center gap-1 text-[0.6875rem] text-text-muted">
-          <ImagePlus size={13} aria-hidden="true" />
-          输入 @ 选择历史参考素材
-        </span>
         <span className="ml-auto font-mono text-[0.625rem] text-text-muted">
           {prompt.length} / {MAX_LENGTH}
         </span>
