@@ -37,6 +37,8 @@ interface AgentComposerProps {
   onGenerate: () => void;
 }
 
+function shortSku(value: string): string { return value.length > 10 ? `${value.slice(0, 10)}...` : value; }
+
 function ToolButton({
   active,
   label,
@@ -61,7 +63,7 @@ function ToolButton({
       )}
     >
       <Icon size={15} aria-hidden="true" className="shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="truncate" title={label}>{shortSku(label)}</span>
     </button>
   );
 }
@@ -155,7 +157,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 border-t border-border-subtle px-2 py-2 md:px-3">
+        <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-border-subtle px-2 py-2 md:px-3">
           <ToolButton
             active={activePanel === 'output'}
             icon={OutputIcon}
