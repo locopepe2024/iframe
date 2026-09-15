@@ -282,6 +282,17 @@ def update_session(
     return _public_session(storage.update_session(session), identity)
 
 
+def delete_session(session_id: str, identity: UserContext = Depends(require_user_context)):
+    try:
+        deleted = _storage_for(identity).delete_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"ok": True}
+
+
+router.add_api_route("/sessions/{session_id}", delete_session, methods=["DELETE"])
 router.add_api_route("/sessions", list_sessions, methods=["GET"])
 router.add_api_route("/sessions", create_session, methods=["POST"])
 router.add_api_route("/sessions/{session_id}", get_session, methods=["GET"])

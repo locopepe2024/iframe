@@ -1741,6 +1741,9 @@ export const playgroundApi = {
   createSession: (title?: string) =>
     axios.post<PlaygroundSessionResponse>(API_URL + "/playground/sessions", title ? { title } : {}).then(r => r.data),
 
+  deleteSession: (id: string) =>
+    axios.delete(API_URL + "/playground/sessions/" + id).then(r => r.data),
+
   getSession: (id: string) =>
     axios.get<PlaygroundSessionResponse>(API_URL + "/playground/sessions/" + id).then(r => r.data),
 

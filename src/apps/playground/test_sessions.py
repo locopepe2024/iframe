@@ -81,3 +81,22 @@ def test_first_last_frame_requires_exactly_two_images():
         input_media=["first.png", "last.png"],
     )
     assert request.input_media == ["first.png", "last.png"]
+
+
+def test_delete_session_removes_only_its_history_and_persists(tmp_path):
+    storage = make_storage(tmp_path)
+    service = PlaygroundService(storage)
+    first = storage.create_session('first')
+    second = storage.create_session('second')
+    run = service.create_generation(GenerateRequest(mode=PlaygroundMode.T2I, model_id='test', prompt='test', session_id=first.id))
+    with pytest.raises(ValueError, match='active'):
+        storage.delete_session(first.id)
+    assert storage.get_session(first.id)
+    run.status = 'completed'
+    storage.update_generation(run)
+    assert storage.delete_session(first.id)
+    restored = make_storage(tmp_path)
+    assert restored.get_session(first.id) is None
+    assert restored.get_generation(run.id) is None
+    assert restored.get_session(second.id)
+    assert not restored.delete_session('missing')

@@ -257,6 +257,18 @@ class PlaygroundStorage:
                     return session
         raise KeyError(session.id)
 
+    def delete_session(self, session_id: str) -> bool:
+        with self._lock:
+            if not self.get_session(session_id):
+                return False
+            if any(gen.session_id == session_id and gen.status in {"pending", "processing"} for gen in self._history):
+                raise ValueError("Session has active generations")
+            self._history = [gen for gen in self._history if gen.session_id != session_id]
+            self._sessions = [session for session in self._sessions if session.id != session_id]
+            self._save_history()
+            self._save_sessions()
+            return True
+
     def ensure_session(self, session_id: Optional[str] = None, title: str = "新建创作") -> PlaygroundSession:
         if session_id:
             session = self.get_session(session_id)
