@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getAssetUrl(path: string | null | undefined): string {
     if (!path) return "";
-    if (path.startsWith("/studio/media/") || path.startsWith("/playground/media/")) {
+    if (path.startsWith("/studio/media/") || path.startsWith("/playground/media/") || path.startsWith("/playground/input-media/")) {
         return `${API_URL}${path}`;
     }
     if (path.startsWith("http") || path.startsWith("blob:")) {
