@@ -3,7 +3,8 @@
 import { useRef, useState, useCallback } from 'react';
 import { ImagePlus, Film, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { API_URL, playgroundApi } from '@/lib/api';
+import { playgroundApi } from '@/lib/api';
+import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import AssetPickerModal from './AssetPickerModal';
 
@@ -100,8 +101,7 @@ function isVideoPath(path: string): boolean {
 // root-relative (/files/...) URLs pass through untouched. The raw path is still kept
 // in store state + the generate payload — only the <img>/<video> src is resolved.
 function resolveMediaSrc(path: string): string {
-  if (/^(https?:|blob:|data:|\/)/i.test(path)) return path;
-  return `${API_URL}/files/${path.replace(/^output\//, '')}`;
+  return getAssetUrl(path);
 }
 
 // ---------------------------------------------------------------------------
