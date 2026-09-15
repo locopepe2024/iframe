@@ -21,7 +21,7 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import ComposerControls, { getComposerControlState, type ComposerControl } from './ComposerControls';
 import MediaInput from './MediaInput';
-import { CreationMethodSelector, OutputTypeSelector } from './ModeSelector';
+import { OutputTypeSelector } from './ModeSelector';
 import ModelSelector from './ModelSelector';
 import PromptInput from './PromptInput';
 import { getOutputType } from './ModeSelector';
@@ -137,10 +137,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
             {activePanel === 'output' && <OutputTypeSelector />}
             {activePanel === 'model' && <ModelSelector />}
             {activePanel === 'reference' && (
-              <div className="space-y-4">
-                <CreationMethodSelector />
-                {!['t2i', 't2v'].includes(mode) && <MediaInput />}
-              </div>
+              <MediaInput />
             )}
             {['resolution', 'ratio', 'seed', 'audio', 'batch'].includes(activePanel) && (
               <ComposerControls control={activePanel as ComposerControl} />

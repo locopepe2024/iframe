@@ -193,6 +193,7 @@ interface PlaygroundState {
     mediaPath: string,
     mediaType: 'image' | 'video',
     targetMode?: PlaygroundMode,
+    prompt?: string,
   ) => void;
   setParameters: (params: Record<string, any>) => void;
   setBatchSize: (size: number) => void;
@@ -341,13 +342,14 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
   setInputMedia: (inputMedia) => set({ inputMedia }),
 
-  useResultAsReference: (mediaPath, mediaType, targetMode) => {
+  useResultAsReference: (mediaPath, mediaType, targetMode, sourcePrompt) => {
     const { modelPreferences } = get();
     const mode: PlaygroundMode =
       targetMode ?? (mediaType === 'video' ? 'v2v' : 'i2i');
     const preferredModel = modelPreferences[mode];
     set({
       mode,
+      ...(sourcePrompt !== undefined ? { prompt: sourcePrompt } : {}),
       inputMedia: [mediaPath],
       ...(preferredModel !== undefined ? { modelId: preferredModel } : {}),
     });

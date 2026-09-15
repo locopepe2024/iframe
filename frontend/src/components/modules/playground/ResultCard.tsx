@@ -182,8 +182,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   const handleUseAsReference = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!output?.media_path) return;
-    useResultAsReference(output.media_path, output.media_type);
-  }, [output, useResultAsReference]);
+    useResultAsReference(output.media_path, output.media_type, undefined, generation.prompt);
+  }, [generation.prompt, output, useResultAsReference]);
 
   return (
     <div
