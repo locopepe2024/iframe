@@ -57,7 +57,7 @@ def _service_for(identity: UserContext) -> PlaygroundService:
 
 
 def _media_signature(profile_id: str, generation_id: str, output_id: str, thumbnail: int, expires: int) -> str:
-    key = os.getenv("LUMENX_MEDIA_SIGNING_KEY") or os.getenv("LUMENX_CONFIG_MASTER_KEY")
+    key = (os.getenv("LUMENX_MEDIA_SIGNING_KEY") or os.getenv("LUMENX_CONFIG_MASTER_KEY") or os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY"))
     if not key:
         raise HTTPException(status_code=503, detail="LUMENX_MEDIA_SIGNING_KEY is not configured")
     message = f"{profile_id}:{generation_id}:{output_id}:{thumbnail}:{expires}".encode("utf-8")
