@@ -13,7 +13,24 @@ def test_image_ratio_quality_outbound(monkeypatch, ratio, tier, size, quality):
     monkeypatch.setattr(uniart, '_poll', lambda *args, **kwargs: {})
     monkeypatch.setattr(uniart, '_download_result', lambda *args: None)
     uniart.UniArtImageModel({}).generate('test', 'unused.png', size=tier, aspect_ratio=ratio, quality=quality)
-    assert captured['size'] == size
+    assert 'size' not in captured
     assert captured['resolution'] == tier
     assert captured['quality'] == quality
-    assert 'aspect_ratio' not in captured
+    assert captured['aspect_ratio'] == ratio
+
+
+def test_image_edit_forwards_reference_and_semantic_size(monkeypatch, tmp_path):
+    image = tmp_path / 'reference.png'
+    image.write_bytes(b'image')
+    captured = {}
+    def post(config, endpoint, body):
+        captured.update(endpoint=endpoint, body=body)
+        return {'task_id': 'task'}
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_poll', lambda *a, **kw: {})
+    monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
+    uniart.UniArtImageModel({}).generate('edit', 'unused.png', size='2k', aspect_ratio='16:9', ref_image_paths=[str(image)])
+    assert captured['endpoint'] == '/images/edits'
+    assert captured['body']['image'] == ['data:image/png;base64,aW1hZ2U=']
+    assert captured['body']['resolution'] == '2k'
+    assert 'size' not in captured['body']

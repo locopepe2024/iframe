@@ -252,18 +252,19 @@ class UniArtImageModel(ImageGenModel):
         for key in ("size", "quality", "n"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
+        size = kwargs.get("size")
+        if isinstance(size, str) and size.lower() in {"1k", "2k", "4k"}:
+            body.pop("size", None)
+            body["resolution"] = size.lower()
         if kwargs.get("aspect_ratio"):
-            ratio = kwargs["aspect_ratio"]
-            ratios = {"1:1": (1, 1), "16:9": (16, 9), "9:16": (9, 16), "4:3": (4, 3), "3:4": (3, 4), "3:2": (3, 2), "2:3": (2, 3)}
-            tier = str(kwargs.get("size", "1k")).lower()
-            if ratio not in ratios or tier not in {"1k", "2k", "4k"}:
-                raise ValueError("Image ratio requires a supported ratio and 1k/2k/4k size")
-            width, height = ratios[ratio]
-            # Preserve the exact aspect ratio with dimensions divisible by 16.
-            unit = (int(tier[0]) * 1024 // (max(width, height) * 16)) * 16
-            body["resolution"] = tier
-            body["size"] = f"{width * unit}x{height * unit}"
-        task = _post(self.config, "/images/generations", body)
+            body["aspect_ratio"] = kwargs["aspect_ratio"]
+        refs = list(kwargs.get("ref_image_paths") or [])
+        if kwargs.get("ref_image_path"):
+            refs.insert(0, kwargs["ref_image_path"])
+        if refs:
+            body["image"] = [_media(ref) for ref in refs]
+        endpoint = "/images/edits" if refs else "/images/generations"
+        task = _post(self.config, endpoint, body)
         image = _image_bytes(task)
         if image is not None:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)

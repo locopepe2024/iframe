@@ -25,13 +25,13 @@ class _DownloadResponse:
 def test_uniart_video_uses_canonical_first_last_frame_content(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_post(path, body):
+    def fake_post(_config, path, body):
         captured["path"] = path
         captured["body"] = body
         return {"task_id": "task-frames"}
 
     monkeypatch.setattr(uniart, "_post", fake_post)
-    monkeypatch.setattr(uniart, "_poll", lambda task_id, **_kwargs: {"result_url": "https://example.com/result.mp4"})
+    monkeypatch.setattr(uniart, "_poll", lambda _config, task_id, **_kwargs: {"result_url": "https://example.com/result.mp4"})
     monkeypatch.setattr(uniart, "_download", lambda _config, url, output_path: output_path)
 
     output = tmp_path / "frames.mp4"
@@ -123,7 +123,7 @@ def test_uniart_result_url_prefers_signed_storage_artifact():
 def test_uniart_image_uses_image_task_endpoint_and_data_url(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_post(path, body):
+    def fake_post(_config, path, body):
         captured["post_path"] = path
         return {"task_id": "image-task"}
 
