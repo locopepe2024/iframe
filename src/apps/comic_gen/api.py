@@ -92,9 +92,11 @@ from ..studio_access import (
 )
 from ..user_config import router as user_config_router
 from ..playground.api import router as playground_router
+from ..agent_api import router as agent_router
 app.include_router(identity_router)
 app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
+app.include_router(agent_router)
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
