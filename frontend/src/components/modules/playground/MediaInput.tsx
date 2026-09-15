@@ -33,8 +33,8 @@ const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
     labelKey: 'compose.mediaReference',
     accept: 'image/*',
     hintKey: 'i2i',
-    multiple: false,
-    maxFiles: 1,
+    multiple: true,
+    maxFiles: 9,
     icon: 'image',
   },
   i2v: {
@@ -121,8 +121,9 @@ export default function MediaInput() {
     if (fileArray.length === 0) return;
 
     // Respect max file limit
-    const available = config.multiple ? config.maxFiles - inputMedia.length : 1;
+    const available = Math.max(0, config.maxFiles - usePlaygroundStore.getState().inputMedia.length);
     const toUpload = fileArray.slice(0, available);
+    if (!toUpload.length) return;
 
     setUploading(true);
     try {
@@ -135,11 +136,7 @@ export default function MediaInput() {
         usePlaygroundStore.getState().rememberMediaName(result.path, toUpload[index].name);
       });
 
-      if (config.multiple) {
-        setInputMedia([...inputMedia, ...newPaths]);
-      } else {
-        setInputMedia(newPaths);
-      }
+      setInputMedia([...usePlaygroundStore.getState().inputMedia, ...newPaths].slice(0, config.maxFiles));
     } catch (err) {
       console.error('[MediaInput] upload failed:', err);
     } finally {
@@ -151,7 +148,9 @@ export default function MediaInput() {
   // Event handlers
   // -------------------------------------------------------------------------
 
+  const atLimit = inputMedia.length >= config.maxFiles;
   const handleClick = () => {
+    if (atLimit || uploading) return;
     fileInputRef.current?.click();
   };
 
@@ -189,7 +188,7 @@ export default function MediaInput() {
 
   const handleAssetSelect = (path: string) => {
     if (mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
-    setInputMedia(config.multiple ? [...inputMedia, path].slice(0, config.maxFiles) : [path]);
+    setInputMedia([...usePlaygroundStore.getState().inputMedia, path].slice(0, config.maxFiles));
   };
 
   // Determine accept type for AssetPickerModal
@@ -249,7 +248,7 @@ export default function MediaInput() {
           )}
 
           <span className="text-xs text-text-secondary">
-            {uploading ? t('media.uploading') : t('media.dragOrClick')}
+            {atLimit ? t('media.limitReached', { count: config.maxFiles }) : uploading ? t('media.uploading') : t('media.dragOrClick')}
           </span>
 
           <span className="text-[0.6875rem] text-text-muted">{t(`media.hints.${config.hintKey}`)}</span>
@@ -260,7 +259,7 @@ export default function MediaInput() {
           <button
             type="button"
             onClick={handleClick}
-            disabled={uploading}
+            disabled={uploading || atLimit}
             className={ACTION_BTN_CLASS}
           >
             {t('media.localUpload')}
@@ -268,6 +267,7 @@ export default function MediaInput() {
           <button
             type="button"
             onClick={() => setShowAssetPicker(true)}
+            disabled={uploading || atLimit}
             className={ACTION_BTN_CLASS}
           >
             {t('media.pickFromLibrary')}
