@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import threading
+import base64
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -63,7 +64,25 @@ class UserConfigStore:
             raise HTTPException(status_code=503, detail="User encryption key is unavailable")
         return hashlib.sha256(("lumenx:user:" + seed).encode("utf-8")).digest()
 
-    def _encrypt(self, value: str, identity: UserContext | None = None) -> str:
+    def _user_data_key(self, identity: UserContext, payload: dict) -> bytes:
+        # Versioned envelope: a random per-user data key is wrapped by the
+        # authenticated identity key. Legacy records transparently use the
+        # derived identity key and are re-encrypted on the next update.
+        wrapped = payload.get("_user_key")
+        if wrapped:
+            return self._unwrap_user_key(identity, wrapped)
+        return get_random_bytes(32)
+
+    def _wrap_user_key(self, identity: UserContext, data_key: bytes) -> dict:
+        wrapper = AES.new(data_key or self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
+        encrypted, tag = wrapper.encrypt_and_digest(data_key)
+        return {"version": 2, "nonce": wrapper.nonce.hex(), "ciphertext": encrypted.hex(), "tag": tag.hex()}
+
+    def _unwrap_user_key(self, identity: UserContext, wrapped: dict) -> bytes:
+        cipher = AES.new(self._encryption_key(identity), AES.MODE_GCM, nonce=bytes.fromhex(wrapped["nonce"]))
+        return cipher.decrypt_and_verify(bytes.fromhex(wrapped["ciphertext"]), bytes.fromhex(wrapped["tag"]))
+
+    def _encrypt(self, value: str, identity: UserContext | None = None, data_key: bytes | None = None) -> str:
         cipher = AES.new(self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
         ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
         return json.dumps(
@@ -75,10 +94,10 @@ class UserConfigStore:
             separators=(",", ":"),
         )
 
-    def _decrypt(self, value: str, identity: UserContext | None = None) -> str:
+    def _decrypt(self, value: str, identity: UserContext | None = None, data_key: bytes | None = None) -> str:
         payload = json.loads(value)
         cipher = AES.new(
-            self._encryption_key(identity),
+            data_key or self._encryption_key(identity),
             AES.MODE_GCM,
             nonce=bytes.fromhex(payload["nonce"]),
         )
@@ -121,10 +140,12 @@ class UserConfigStore:
             config["UNIART_BASE_URL"] = value
         if update.preferences:
             config["preferences"] = {**config.get("preferences", {}), **update.preferences}
+        data_key = self._user_data_key(identity, secret_payload)
         if update.UNIART_API_KEY is not None:
             secret = update.UNIART_API_KEY.strip()
             if secret:
-                encrypted = self._encrypt(secret, identity)
+                encrypted = self._encrypt(secret, identity, data_key)
+                secret_payload["_user_key"] = self._wrap_user_key(identity, data_key)
                 secret_payload["UNIART_API_KEY"] = {
                     "ciphertext": encrypted,
                     "prefix": secret[:12],
@@ -163,7 +184,8 @@ class UserConfigStore:
         ciphertext = entry.get("ciphertext")
         if ciphertext:
             try:
-                key = self._decrypt(ciphertext, identity)
+                data_key = self._user_data_key(identity, secret_payload)
+                key = self._decrypt(ciphertext, identity, data_key)
             except (KeyError, ValueError, json.JSONDecodeError) as exc:
                 raise HTTPException(status_code=503, detail="Stored UniArt credential cannot be decrypted") from exc
             return {
