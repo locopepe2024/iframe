@@ -5,6 +5,7 @@ import { ImagePlus, Film } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
+import { getModelsForMode } from './playgroundModels';
 import AssetPickerModal from './AssetPickerModal';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,11 @@ export default function MediaInput() {
   const isSeedance = modelId.startsWith('seedance');
 
   let config = MODE_CONFIG[mode === 't2v' ? 'i2v' : mode];
+
+  const imageLimit = getModelsForMode(mode).find((model) => model.id === modelId)?.maxReferenceImages;
+  if (config && (mode === 't2i' || mode === 'i2i') && imageLimit && imageLimit > 0) {
+    config = { ...config, multiple: imageLimit > 1, maxFiles: imageLimit };
+  }
 
   // Override r2v config when Seedance is selected
   if (config && mode === 'r2v' && isSeedance) {

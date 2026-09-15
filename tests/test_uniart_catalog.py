@@ -48,3 +48,11 @@ def test_normalizes_image_models_only_from_image_capability():
     ]
     assert models[0]["capabilities"] == ["t2i", "i2i"]
     assert models[0]["params"]["size"]["options"] == ["1k", "2k", "4k"]
+
+
+def test_image_25_reference_limit_comes_from_public_image_capability():
+    models = normalize_uniart_catalog({"data": [{
+        "id": "gpt-image-2.5-flare",
+        "image_capability": {"supports_generation": True, "supports_edit": True, "supports_mask": True, "max_input_images": 16},
+    }]})
+    assert models[0]["inputs"]["reference_images"]["max"] == 16

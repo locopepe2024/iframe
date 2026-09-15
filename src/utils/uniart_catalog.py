@@ -107,7 +107,7 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         "duration": duration,
         "params": params,
         "inputs": {
-            "reference_images": {"max": int(video.get("max_reference_images") or 0)},
+            "reference_images": {"max": int((image.get("max_input_images") if is_image else video.get("max_reference_images")) or 0)},
             "reference_videos": {"max": int(video.get("max_reference_videos") or 0)},
             "reference_audios": {"max": int(video.get("max_reference_audios") or 0)},
         },

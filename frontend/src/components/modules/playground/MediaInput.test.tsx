@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installUniArtCatalog } from './playgroundModels';
 import MediaInput from './MediaInput';
 import { usePlaygroundStore } from './usePlaygroundStore';
 const upload = vi.hoisted(() => vi.fn().mockResolvedValue({ path: '/new.png' }));
@@ -30,4 +31,14 @@ it('does not overwrite the first frame when a single-input mode is full', () => 
   expect(screen.getByText('media.localUpload')).toBeDisabled();
   expect(screen.getByText('media.pickFromLibrary')).toBeDisabled();
   expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png']);
+});
+
+it('uses the model catalog limit of sixteen for GPT Image 2.5', async () => {
+  installUniArtCatalog([{ id: 'uniart/gpt-image-2.5-flare', api_model_id: 'gpt-image-2.5-flare', display_name: 'GPT Image 2.5', description: '', family: 'gpt-image', provider: 'uniart', capabilities: ['t2i', 'i2i'], inputs: { reference_images: { max: 16 } } }]);
+  const existing = Array.from({ length: 15 }, (_, i) => `/image-${i}.png`);
+  usePlaygroundStore.setState({ mode: 'i2i', modelId: 'uniart/gpt-image-2.5-flare', inputMedia: existing });
+  const { container } = render(<MediaInput />);
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'new.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, '/new.png']));
+  expect(screen.getByText('media.localUpload')).toBeDisabled();
 });

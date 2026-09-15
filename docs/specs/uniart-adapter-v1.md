@@ -32,3 +32,7 @@ Verified against deployed UniArt image `unitoken-5c9aaddd72c229964f7f3f362230189
 - This patch does not add a mask drawing/upload UI or accept unvalidated local mask paths from Playground parameters.
 - Existing semantic resolution/aspect_ratio mapping remains; resolution and concrete size are mutually exclusive.
 - 22 adapter regression checks passed. No paid image generation has been rerun. Nginx configuration was not changed.
+
+## GPT Image 2.5 reference capacity
+
+Verified deployed UniArt commit 5c9aaddd72c229964f7f3f36223018953a81aa1d, docs/atlascloud-gpt-image-2-5-edit-mask-v1.md and relay/channel/openai/adaptor.go: Flare/Sunburst expose image_capability.max_input_images=16. Preserve this value in LumenX catalog projection and consume it in the image material picker. Regression checks cover appending the sixteenth reference and disabling additions at capacity. This does not add a third image endpoint or a mask editor UI.
