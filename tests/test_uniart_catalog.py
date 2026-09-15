@@ -81,3 +81,10 @@ def test_classifies_minimax_speed_audio_skus():
     assert models[0]["capabilities"] == ["audio"]
     assert models[1]["capabilities"] == ["audio"]
     assert models[2]["capabilities"] == ["chat"]
+
+def test_gpt_image_route_aliases_remain_image_models_without_capability_block():
+    models = normalize_uniart_catalog({"data": [
+        {"id": "gpt-image-2.5-flare-discount"},
+        {"id": "gpt-image-2.5-flare-special"},
+    ]})
+    assert all(model["capabilities"] == ["t2i", "i2i"] for model in models)

@@ -57,6 +57,11 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         capabilities.append("t2i")
     if image.get("supports_edit"):
         capabilities.append("i2i")
+    # Some UniArt GPT Image route aliases publish generic OpenAI metadata
+    # without image_capability. Their stable model prefix still identifies
+    # the image API family.
+    if model_id.lower().startswith("gpt-image-"):
+        capabilities.extend(("t2i", "i2i"))
     if audio.get("supports_generation") or audio.get("supports_tts") or audio.get("supports_speech"):
         capabilities.append("audio")
     # Older UniArt payloads identify these MiniMax audio SKUs only by ID.
