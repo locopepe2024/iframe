@@ -149,7 +149,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
         )}
 
         <div className="px-4 pt-3 md:px-5 md:pt-4">
-          <PromptInput onSubmit={handleSubmit} />
+          <PromptInput
+            onSubmit={handleSubmit}
+            onOpenReferences={() => togglePanel('reference')}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-1 border-t border-border-subtle px-2 py-2 md:px-3">
