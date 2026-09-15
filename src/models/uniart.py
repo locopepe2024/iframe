@@ -61,11 +61,11 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
     return data
 
 
-def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900) -> Dict[str, Any]:
+def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900, endpoint: str = "videos") -> Dict[str, Any]:
     started = time.time()
     while time.time() - started < max_wait:
         resp = requests.get(
-            f"{_base_url(config)}/videos/{task_id}",
+            f"{_base_url(config)}/{endpoint}/{task_id}",
             headers=_headers(config),
             timeout=30,
         )
@@ -156,6 +156,19 @@ def _result_urls(data: Dict[str, Any], kind: str) -> list[str]:
                 add(item.get("url"))
                 add(item.get("content_url"))
 
+    # Image task responses use the OpenAI-style data array:
+    # {"object":"image.task", "data":[{"url":"https://..."}]}
+    # Keep this separate from the video content shape but include it in the
+    # common candidate ordering so signed COS URLs are still preferred.
+    data_items = data.get("data")
+    if isinstance(data_items, list):
+        for item in data_items:
+            add(item)
+            if isinstance(item, dict):
+                add(item.get("url"))
+                add(item.get("image_url"))
+                add(item.get("content_url"))
+
     # A signed object-storage URL is the durable media artifact. Try those
     # first, then gateway/content URLs. Do not collapse the result to a single
     # field: a transient 502 from one returned URL must not discard another
@@ -199,7 +212,7 @@ class UniArtImageModel(ImageGenModel):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
         task = _post(self.config, "/images/generations", body)
-        result = _poll(self.config, task.get("task_id") or task.get("id"))
+        result = _poll(self.config, task.get("task_id") or task.get("id"), endpoint="images")
         _download_result(self.config, result, "image", output_path)
         return output_path, time.time() - started
 

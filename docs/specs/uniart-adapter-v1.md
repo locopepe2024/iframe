@@ -5,7 +5,8 @@
 - `GET https://uniart.fun/v1/models` lists `gpt-5.6-sol`, `gpt-image-2`, and Seedance models.
 - `POST /v1/images/generations` accepts `model: gpt-image-2` and returns an async task object with `task_id`.
 - `POST /v1/videos` accepts a Seedance model field and validates video metadata before generation.
-- `GET /v1/videos/{task_id}` returns normalized task status and `result_url`/`content` metadata.
+- `GET /v1/images/{task_id}` returns image task status and `data[].url` metadata.
+- `GET /v1/videos/{task_id}` returns video task status and `result_url`/`content` metadata.
 - MuleRouter's generic submit/retry/poll/download shape is reusable; MuleRouter vendor paths and CLI are not.
 
 ## Decision

@@ -31,8 +31,8 @@ def test_uniart_video_uses_canonical_first_last_frame_content(monkeypatch, tmp_p
         return {"task_id": "task-frames"}
 
     monkeypatch.setattr(uniart, "_post", fake_post)
-    monkeypatch.setattr(uniart, "_poll", lambda task_id: {"result_url": "https://example.com/result.mp4"})
-    monkeypatch.setattr(uniart, "_download", lambda url, output_path: output_path)
+    monkeypatch.setattr(uniart, "_poll", lambda task_id, **_kwargs: {"result_url": "https://example.com/result.mp4"})
+    monkeypatch.setattr(uniart, "_download", lambda _config, url, output_path: output_path)
 
     output = tmp_path / "frames.mp4"
     uniart.UniArtVideoModel({}).generate(
@@ -118,3 +118,26 @@ def test_uniart_result_url_prefers_signed_storage_artifact():
         {"result_url": "https://uniart.fun/v1/images/task-1/content", "output": {"image_url": signed}},
         "image",
     ) == signed
+
+
+def test_uniart_image_uses_image_task_endpoint_and_data_url(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_post(path, body):
+        captured["post_path"] = path
+        return {"task_id": "image-task"}
+
+    def fake_poll(_config, task_id, **kwargs):
+        captured["task_id"] = task_id
+        captured["poll_endpoint"] = kwargs["endpoint"]
+        return {"object": "image.task", "status": "completed", "data": [{"url": "https://storage.iyishow.com/result.png?sign=x"}]}
+
+    monkeypatch.setattr(uniart, "_post", fake_post)
+    monkeypatch.setattr(uniart, "_poll", fake_poll)
+    monkeypatch.setattr(uniart, "_download", lambda _config, url, output_path: output_path)
+
+    output = tmp_path / "result.png"
+    uniart.UniArtImageModel({}).generate("a test image", str(output), model_name="gpt-image-2")
+
+    assert captured == {"post_path": "/images/generations", "task_id": "image-task", "poll_endpoint": "images"}
+    assert uniart._result_url({"data": [{"url": "https://storage.iyishow.com/result.png?sign=x"}]}, "image").startswith("https://storage.iyishow.com/")
