@@ -86,18 +86,15 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
               </div>
             );
           })}
-          <button
-            type="button"
-            onClick={onOpenReferences}
-            aria-label="添加参考素材"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-border-subtle text-text-muted transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-          >
-            <Plus size={18} aria-hidden="true" />
-          </button>
         </div>
       )}
 
       {/* Main prompt textarea */}
+      <div className="flex items-start gap-3">
+        <button type="button" onClick={onOpenReferences} aria-label="添加参考素材" title="添加参考素材"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-hover-bg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+          <Plus size={18} aria-hidden="true" />
+        </button>
       <textarea
         value={prompt}
         onChange={(e) => handlePromptChange(e.target.value)}
@@ -108,8 +105,9 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           }
         }}
         placeholder={t('prompt.placeholder')}
-        className="min-h-[88px] max-h-[220px] w-full resize-y rounded-none border-0 bg-transparent p-0 text-[0.9375rem] leading-[1.65] text-foreground placeholder-text-muted focus:ring-0"
+        className="min-h-[120px] max-h-[260px] min-w-0 w-full resize-y rounded-none border-0 bg-transparent p-0 text-[0.9375rem] leading-[1.65] text-foreground placeholder-text-muted focus:ring-0"
       />
+      </div>
 
       {mentionMenuOpen && mentionActive && referenceCandidates.length > 0 && (
         <div
@@ -143,22 +141,6 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           ))}
         </div>
       )}
-
-      {/* Toolbar — below the textarea, not overlapping */}
-      <div className="mt-3 flex items-center gap-[6px] border-t border-border-subtle pt-2.5">
-        <button
-          type="button"
-          onClick={onOpenReferences}
-          aria-label="添加参考素材"
-          title="添加参考素材"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-text-muted transition-colors hover:bg-hover-bg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-        >
-          <Plus size={17} aria-hidden="true" />
-        </button>
-        <span className="ml-auto font-mono text-[0.625rem] text-text-muted">
-          {prompt.length} / {MAX_LENGTH}
-        </span>
-      </div>
 
       {/* Negative prompt toggle */}
       <div

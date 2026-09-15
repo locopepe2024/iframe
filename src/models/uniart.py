@@ -239,6 +239,17 @@ class UniArtImageModel(ImageGenModel):
         for key in ("size", "quality", "n"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
+        if kwargs.get("aspect_ratio"):
+            ratio = kwargs["aspect_ratio"]
+            ratios = {"1:1": (1, 1), "16:9": (16, 9), "9:16": (9, 16), "4:3": (4, 3), "3:4": (3, 4), "3:2": (3, 2), "2:3": (2, 3)}
+            tier = str(kwargs.get("size", "1k")).lower()
+            if ratio not in ratios or tier not in {"1k", "2k", "4k"}:
+                raise ValueError("Image ratio requires a supported ratio and 1k/2k/4k size")
+            width, height = ratios[ratio]
+            # Preserve the exact aspect ratio with dimensions divisible by 16.
+            unit = (int(tier[0]) * 1024 // (max(width, height) * 16)) * 16
+            body["resolution"] = tier
+            body["size"] = f"{width * unit}x{height * unit}"
         task = _post(self.config, "/images/generations", body)
         result = _poll(self.config, task.get("task_id") or task.get("id"), endpoint="images")
         _download_result(self.config, result, "image", output_path)

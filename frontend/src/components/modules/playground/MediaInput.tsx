@@ -194,7 +194,7 @@ export default function MediaInput() {
 
   const isSeedance = modelId.startsWith('seedance');
 
-  let config = MODE_CONFIG[mode];
+  let config = MODE_CONFIG[mode === 't2v' ? 'i2v' : mode];
 
   // Override r2v config when Seedance is selected
   if (config && mode === 'r2v' && isSeedance) {
@@ -230,6 +230,7 @@ export default function MediaInput() {
         toUpload.map((file) => playgroundApi.uploadMedia(file))
       );
       const newPaths = results.map((r) => r.path);
+      if (mode === 't2v' && newPaths.length) usePlaygroundStore.getState().setMode('i2v');
       results.forEach((result, index) => {
         usePlaygroundStore.getState().rememberMediaName(result.path, toUpload[index].name);
       });
@@ -296,6 +297,7 @@ export default function MediaInput() {
   };
 
   const handleAssetSelect = (path: string) => {
+    if (mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
     setInputMedia([...inputMedia, path]);
   };
 

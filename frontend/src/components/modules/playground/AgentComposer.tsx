@@ -15,20 +15,21 @@ import {
   Video,
   Volume2,
   Workflow,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import ComposerControls, { getComposerControlState, type ComposerControl } from './ComposerControls';
 import MediaInput from './MediaInput';
-import { OutputTypeSelector } from './ModeSelector';
+import { OutputTypeSelector, CreationMethodSelector } from './ModeSelector';
 import ModelSelector from './ModelSelector';
 import PromptInput from './PromptInput';
 import { getOutputType } from './ModeSelector';
 import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
-type ComposerPanel = 'output' | 'model' | 'reference' | ComposerControl | null;
+type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | ComposerControl | null;
 
 interface AgentComposerProps {
   canGenerate: boolean;
@@ -72,6 +73,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
   const mode = usePlaygroundStore((state) => state.mode);
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
+  const prompt = usePlaygroundStore((state) => state.prompt);
   usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
@@ -86,7 +88,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
     .join(' · ');
 
   const panelTitle = activePanel
-    ? t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
+    ? activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
     : '';
 
   const togglePanel = (panel: Exclude<ComposerPanel, null>) => {
@@ -128,7 +130,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
               activePanel === 'model' && 'max-w-[680px]',
               activePanel === 'reference' && 'max-w-[620px]',
               activePanel === 'resolution' && 'max-w-[520px]',
-              ['ratio', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
+              ['ratio', 'quality', 'method', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
             )}
           >
             <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
@@ -136,10 +138,11 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
             </div>
             {activePanel === 'output' && <OutputTypeSelector />}
             {activePanel === 'model' && <ModelSelector />}
+            {activePanel === 'method' && <CreationMethodSelector />}
             {activePanel === 'reference' && (
               <MediaInput />
             )}
-            {['resolution', 'ratio', 'seed', 'audio', 'batch'].includes(activePanel) && (
+            {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
               <ComposerControls control={activePanel as ComposerControl} />
             )}
           </div>
@@ -166,10 +169,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
             onClick={() => togglePanel('model')}
           />
           <ToolButton
-            active={activePanel === 'reference'}
+            active={activePanel === 'method'}
             icon={mode === 't2i' || mode === 't2v' ? Workflow : Paperclip}
             label={referenceLabel}
-            onClick={() => togglePanel('reference')}
+            onClick={() => togglePanel('method')}
           />
           {controls.resolution && (
             <ToolButton
@@ -194,6 +197,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
               label={controls.seed != null ? `Seed ${String(controls.seed)}` : `Seed ${t('agent.seedRandom')}`}
               onClick={() => togglePanel('seed')}
             />
+          )}
+          {controls.quality && (
+            <ToolButton active={activePanel === 'quality'} icon={SlidersHorizontal}
+              label={controls.quality} onClick={() => togglePanel('quality')} />
           )}
           {controls.audioControl && (
             <ToolButton
@@ -226,12 +233,13 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
             }}
           />
 
+          <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length} / 2000</span>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!canGenerate}
             aria-label={batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
-            className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
           >
             <ArrowUp size={17} aria-hidden="true" />
             <span className="hidden sm:inline">

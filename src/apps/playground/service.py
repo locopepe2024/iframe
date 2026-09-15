@@ -250,12 +250,14 @@ class PlaygroundService:
 
         params = gen.parameters
         kwargs = {
-            "size": params.get("size", "1024x1024"),
+            "size": params.get("size", "1k" if use_uniart else "1024x1024"),
             "quality": params.get("quality", "high"),
             "n": 1,
         }
 
         # i2i: attach reference images
+        if use_uniart and params.get("aspect_ratio"):
+            kwargs["aspect_ratio"] = params["aspect_ratio"]
         if gen.mode == PlaygroundMode.I2I and gen.input_media:
             kwargs["ref_image_paths"] = list(gen.input_media)
 

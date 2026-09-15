@@ -1,0 +1,39 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
+import AgentComposer from './AgentComposer';
+import { usePlaygroundStore } from './usePlaygroundStore';
+import { installUniArtCatalog } from './playgroundModels';
+
+vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
+vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun' }));
+vi.mock('./ModelSelector', () => ({ default: () => null }));
+vi.mock('./MediaInput', () => ({ default: () => <div>Media selection panel</div> }));
+vi.mock('./PromptTemplateModal', () => ({ default: () => null }));
+vi.mock('./PromptHistoryDrawer', () => ({ default: () => null }));
+
+beforeEach(() => {
+    installUniArtCatalog([{ id: 'uniart/gpt-image-2', api_model_id: 'gpt-image-2', display_name: 'GPT Image', description: '', family: 'gpt-image', provider: 'uniart', capabilities: ['t2i', 'i2i'], duration: null, params: { size: { options: ['1k', '2k', '4k'], default: '1k' } }, inputs: {} }]);
+    usePlaygroundStore.setState({ mode: 'i2i', modelId: 'uniart/gpt-image-2', parameters: {}, inputMedia: ['picture.png'], history: [], mediaNames: {}, prompt: 'hello', negativePrompt: '' });
+});
+
+it('keeps one add button and separates creation methods from media selection', () => {
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
+    expect(screen.getAllByRole('button', { name: '添加参考素材' })).toHaveLength(1);
+    expect(screen.getByLabelText('字数统计')).toHaveTextContent('5 / 2000');
+    fireEvent.click(screen.getByRole('button', { name: 'mode.i2i' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'mode.t2i' })).toBeInTheDocument();
+    expect(screen.queryByText('Media selection panel')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '添加参考素材' }));
+    expect(screen.getByText('Media selection panel')).toBeInTheDocument();
+});
+
+it('persists image ratio and quality selection in submission parameters', () => {
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '1:1' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '16:9' }));
+    expect(usePlaygroundStore.getState().parameters.aspect_ratio).toBe('16:9');
+    fireEvent.click(screen.getByRole('button', { name: 'high' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'medium' }));
+    expect(usePlaygroundStore.getState().parameters).toEqual({ aspect_ratio: '16:9', quality: 'medium' });
+});

@@ -5,7 +5,19 @@ import { useTranslations } from 'next-intl';
 import { getModelAudioControl, getModelDuration, getModelParams, getModelRatioOptions, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
-export type ComposerControl = 'resolution' | 'ratio' | 'seed' | 'audio' | 'batch';
+export type ComposerControl = 'resolution' | 'ratio' | 'quality' | 'seed' | 'audio' | 'batch';
+
+const IMAGE_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
+const IMAGE_QUALITIES = ['low', 'medium', 'high'];
+
+function imageControlOptions(modelId: string) {
+  const params = getModelParams(modelId);
+  const tierSize = params?.size?.options.some((size) => /^[124]k$/i.test(size));
+  return {
+    ratios: tierSize && modelId.startsWith('uniart/') ? IMAGE_RATIOS : [],
+    qualities: params?.quality?.options ?? (modelId.startsWith('uniart/gpt-image') ? IMAGE_QUALITIES : []),
+  };
+}
 
 function ratioFromSize(size: string): string | null {
   const match = size.match(/^(\d+)[x*×](\d+)$/i);
@@ -109,7 +121,8 @@ export function getComposerControlState(modelId: string, parameters: Record<stri
   const duration = getModelDuration(modelId);
   const size = (parameters.size as string | undefined) ?? params?.size?.default;
   const resolution = (parameters.resolution as string | undefined) ?? params?.resolution?.default ?? size;
-  const ratio = (parameters.aspect_ratio as string | undefined) ?? params?.ratio?.default ?? (size ? ratioFromSize(size) : null);
+  const imageOptions = imageControlOptions(modelId);
+  const ratio = (parameters.aspect_ratio as string | undefined) ?? params?.ratio?.default ?? (size ? ratioFromSize(size) : null) ?? imageOptions.ratios[0];
   const durationValue = duration
     ? (typeof parameters.duration === 'number' ? parameters.duration : duration.type === 'fixed' ? duration.value : duration.default)
     : null;
@@ -119,6 +132,7 @@ export function getComposerControlState(modelId: string, parameters: Record<stri
   return {
     resolution,
     ratio,
+    quality: imageOptions.qualities.length ? parameters.quality ?? params?.quality?.default ?? 'high' : null,
     duration: durationValue,
     seed: parameters.seed,
     audioControl,
@@ -139,6 +153,11 @@ export default function ComposerControls({ control }: { control: ComposerControl
   const params = getModelParams(modelId);
   const audioControl = getModelAudioControl(modelId);
   const update = (key: string, value: unknown) => setParameters({ ...parameters, [key]: value });
+
+  if (control === 'quality') {
+    return <ChoiceGrid options={imageControlOptions(modelId).qualities}
+      value={parameters.quality ?? params?.quality?.default ?? 'high'} onChange={(next) => update('quality', next)} />;
+  }
 
   if (control === 'resolution') {
     const options = params?.resolution?.options ?? params?.size?.options ?? [];
@@ -163,7 +182,8 @@ export default function ComposerControls({ control }: { control: ComposerControl
   if (control === 'ratio') {
     const sizeOptions = params?.size?.options ?? [];
     const resolution = (parameters.resolution as string | undefined) ?? params?.resolution?.default;
-    const directOptions = getModelRatioOptions(modelId, resolution);
+    const catalogRatios = getModelRatioOptions(modelId, resolution);
+    const directOptions = catalogRatios.length ? catalogRatios : imageControlOptions(modelId).ratios;
     const ratioOptions = directOptions.length > 0
       ? directOptions
       : Array.from(new Set(sizeOptions.map(ratioFromSize).filter((value): value is string => Boolean(value))));
@@ -171,6 +191,7 @@ export default function ComposerControls({ control }: { control: ComposerControl
     const value = (parameters.aspect_ratio as string | undefined)
       ?? params?.ratio?.default
       ?? ratioFromSize(currentSize)
+      ?? directOptions[0]
       ?? '';
     return (
       <ChoiceGrid
