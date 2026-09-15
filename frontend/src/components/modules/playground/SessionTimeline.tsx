@@ -1,11 +1,12 @@
 'use client';
 
 import { ArrowUpLeft, GitBranch, Image as ImageIcon, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import ResultCard from './ResultCard';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
+import { shortReferenceLabel } from './referenceMedia';
 
 const MODE_LABELS: Record<string, string> = {
   t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', f2v: 'F2V', v2v: 'V2V',
@@ -17,6 +18,24 @@ function parameterSummary(parameters: Record<string, any>): string {
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`)
     .join(' · ');
+}
+
+function PromptWithReferences({ generation }: { generation: PlaygroundGeneration }) {
+  const names = Object.values(generation.media_names || {}).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return <>{generation.prompt}</>;
+  const pattern = new RegExp(`@(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of Array.from(generation.prompt.matchAll(pattern))) {
+    const index = match.index ?? 0;
+    if (index > cursor) parts.push(generation.prompt.slice(cursor, index));
+    const fullName = match[1];
+    parts.push(<span key={`${index}-${fullName}`} title={fullName} className="mx-0.5 inline-flex max-w-[13rem] cursor-help items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 align-baseline text-emerald-300 ring-1 ring-inset ring-emerald-400/20">@{shortReferenceLabel(fullName)}</span>);
+    cursor = index + match[0].length;
+  }
+  if (!parts.length) return <>{generation.prompt}</>;
+  if (cursor < generation.prompt.length) parts.push(generation.prompt.slice(cursor));
+  return <>{parts}</>;
 }
 
 function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
@@ -50,7 +69,7 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
             </span>
           )}
         </div>
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{generation.prompt}</p>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground"><PromptWithReferences generation={generation} /></p>
         {(generation.input_media.length > 0 || summary) && (
           <div className="mt-3 flex flex-wrap gap-2 text-[0.6875rem] text-text-muted">
             {generation.input_media.length > 0 && (
