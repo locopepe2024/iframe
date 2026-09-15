@@ -1787,3 +1787,17 @@ export const playgroundApi = {
     }).then(r => r.data);
   },
 };
+
+export interface ChatSession { id: string; title: string; model: string; updated_at: number }
+export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[] }
+export interface ChatModel { id: string; api_model_id: string; display_name: string }
+export async function agentRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const response = await authenticatedFetch(`${API_URL}/agent${path}`, {
+    method, headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Chat 服务尚未就绪');
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Chat 请求失败');
+  return data as T;
+}

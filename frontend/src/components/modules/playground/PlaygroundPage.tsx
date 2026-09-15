@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import AgentComposer from './AgentComposer';
+import ChatPanel from './ChatPanel';
 import { getOutputType } from './ModeSelector';
 import SessionRail from './SessionRail';
 import SessionTimeline from './SessionTimeline';
@@ -26,6 +27,7 @@ const MAX_POLL_ERRORS = 4;
 
 export default function PlaygroundPage() {
   const t = useTranslations('playground');
+  const [chatMode, setChatMode] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
 
@@ -244,14 +246,17 @@ export default function PlaygroundPage() {
           <span className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.2em] text-text-muted">FREEFORM STUDIO <span className="font-semibold text-primary">· {t('header.eyebrowAccent')}</span></span>
           <div className="flex items-baseline gap-2"><h1 className="truncate font-display text-[1.625rem] font-semibold tracking-tight text-foreground md:text-[2.125rem]">{t('header.title')}</h1><span className="font-mono text-[0.625rem] uppercase tracking-[0.1em] text-text-muted">{t('header.resultsCount', { count: resultCount })}</span></div>
         </div>
-        <div className="flex items-center gap-3">{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
+        <div className="flex items-center gap-3"><div role="group" aria-label="创作台模式" className="flex rounded-lg border border-border-subtle p-1">{[false, true].map(chat => <button key={String(chat)} aria-pressed={chatMode === chat} onClick={() => setChatMode(chat)} className={`rounded px-3 py-1 text-sm ${chatMode === chat ? "bg-glass text-foreground" : "text-text-muted"}`}>{chat ? "Chat" : "创作"}</button>)}</div>{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
       </header>
 
+      <div className={chatMode ? "hidden" : "contents"}>
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <SessionTimeline />
         <AgentComposer canGenerate={canGenerate} batchSize={batchSize} onGenerate={handleGenerate} />
       </main>
+      </div>
+      {chatMode && <ChatPanel onUseDraft={text => { usePlaygroundStore.setState({ prompt: text }); setChatMode(false); }} />}
     </div>
   );
 }
