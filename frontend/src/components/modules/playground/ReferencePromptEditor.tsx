@@ -14,6 +14,7 @@ const ReferenceToken = Node.create({
   parseHTML: () => [{ tag: 'span[data-reference-label]' }],
   renderHTML: ({ node }) => ['span', {
     'data-reference-label': node.attrs.label,
+    'data-full-name': node.attrs.label,
     title: node.attrs.label,
     class: 'rounded bg-primary/15 px-1 text-primary',
   }, '@' + shortReferenceLabel(node.attrs.label)],
@@ -47,7 +48,7 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
       ReferenceToken, Placeholder.configure({ placeholder }), CharacterCount.configure({ limit: 2000 })],
     content: referencePromptDocument(value, labels),
     editorProps: {
-      attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', class: 'min-h-[120px] max-h-[260px] overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none' },
+      attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: 'min-h-[120px] max-h-[260px] overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none' },
       handleKeyDown: (_view, event) => {
         if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           callbacks.current.onSubmit?.(); return true;
