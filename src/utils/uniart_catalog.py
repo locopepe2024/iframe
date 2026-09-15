@@ -57,8 +57,10 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     if image.get("supports_edit"):
         capabilities.append("i2i")
     capabilities = _unique(capabilities)
+    # UniArt's /models endpoint also publishes chat SKUs. Keep them in the
+    # selectable catalog even though they have no image/video controls.
     if not capabilities:
-        return None
+        capabilities = ["chat"]
 
     is_image = any(capability in {"t2i", "i2i"} for capability in capabilities)
     resolutions = video.get("resolutions") or image.get("resolutions") or []

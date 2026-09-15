@@ -582,7 +582,7 @@ export default function SettingsPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-glass-border bg-surface-inset p-3">
         <div>
           <div className="text-sm font-semibold text-foreground">UniArt Catalog</div>
-          <div className="mt-1 text-xs text-text-muted">模型、能力、分辨率和时长以 UniArt 发布内容为准{catalogModelCount != null ? ` · 当前 ${catalogModelCount} 个媒体模型` : ""}</div>
+          <div className="mt-1 text-xs text-text-muted">模型、能力、分辨率、时长和对话模型以 UniArt 发布内容为准{catalogModelCount != null ? ` · 当前 ${catalogModelCount} 个媒体模型` : ""}</div>
         </div>
         <button type="button" onClick={handleRefreshCatalog} disabled={skuLoading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm font-medium text-foreground hover:bg-hover-bg disabled:opacity-50">
           <RefreshCw size={15} className={skuLoading ? "animate-spin" : ""} />

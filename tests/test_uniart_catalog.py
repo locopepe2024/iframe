@@ -44,7 +44,7 @@ def test_normalizes_image_models_only_from_image_capability():
     ]})
 
     assert [model["id"] for model in models] == [
-        "uniart/gpt-image-2",
+        "uniart/gpt-image-2", "uniart/gpt-image-2.5-sunburst-special", "uniart/gpt-5.6-sol",
     ]
     assert models[0]["capabilities"] == ["t2i", "i2i"]
     assert models[0]["params"]["size"]["options"] == ["1k", "2k", "4k"]
@@ -56,3 +56,17 @@ def test_image_25_reference_limit_comes_from_public_image_capability():
         "image_capability": {"supports_generation": True, "supports_edit": True, "supports_mask": True, "max_input_images": 16},
     }]})
     assert models[0]["inputs"]["reference_images"]["max"] == 16
+
+def test_preserves_chat_only_skus_from_uniart_models():
+    models = normalize_uniart_catalog({"data": [
+        {"id": "qwen3.8-flash"},
+        {"id": "chatgpt-6"},
+        {"id": "deepseek-v4"},
+        {"id": "glm-5"},
+        {"id": "minimax-speed-hd"},
+        {"id": "minimax-turbo"},
+    ]})
+    assert [model["api_model_id"] for model in models] == [
+        "qwen3.8-flash", "chatgpt-6", "deepseek-v4", "glm-5", "minimax-speed-hd", "minimax-turbo",
+    ]
+    assert all(model["capabilities"] == ["chat"] for model in models)

@@ -292,6 +292,7 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
         : null;
     return (
         (!UNIART_RUNTIME_ACTIVE || model.provider === 'uniart') &&
+        model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
         (!enabled || model.provider !== 'uniart' || enabled.includes(model.id)) &&
         model.status !== 'planned' &&
         model.status !== 'deprecated' &&
