@@ -70,3 +70,14 @@ def test_preserves_chat_only_skus_from_uniart_models():
         "qwen3.8-flash", "chatgpt-6", "deepseek-v4", "glm-5", "minimax-speed-hd", "minimax-turbo",
     ]
     assert all(model["capabilities"] == ["chat"] for model in models)
+
+
+def test_classifies_minimax_speed_audio_skus():
+    models = normalize_uniart_catalog({"data": [
+        {"id": "minimax-speed-hd"},
+        {"id": "minimax-speed-turbo"},
+        {"id": "minimax-chat"},
+    ]})
+    assert models[0]["capabilities"] == ["audio"]
+    assert models[1]["capabilities"] == ["audio"]
+    assert models[2]["capabilities"] == ["chat"]

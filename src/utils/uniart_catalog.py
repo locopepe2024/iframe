@@ -46,6 +46,7 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
 
     video = item.get("video_capability") if isinstance(item.get("video_capability"), dict) else {}
     image = item.get("image_capability") if isinstance(item.get("image_capability"), dict) else {}
+    audio = item.get("audio_capability") if isinstance(item.get("audio_capability"), dict) else {}
     mode_ids = [
         str(mode.get("id") or "")
         for mode in video.get("modes", [])
@@ -56,6 +57,11 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         capabilities.append("t2i")
     if image.get("supports_edit"):
         capabilities.append("i2i")
+    if audio.get("supports_generation") or audio.get("supports_tts") or audio.get("supports_speech"):
+        capabilities.append("audio")
+    # Older UniArt payloads identify these MiniMax audio SKUs only by ID.
+    if model_id.lower().startswith("minimax") and any(token in model_id.lower() for token in ("speed-hd", "speed_hd", "-turbo", "_turbo")):
+        capabilities.append("audio")
     capabilities = _unique(capabilities)
     # UniArt's /models endpoint also publishes chat SKUs. Keep them in the
     # selectable catalog even though they have no image/video controls.
