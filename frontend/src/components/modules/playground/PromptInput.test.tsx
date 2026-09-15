@@ -62,12 +62,45 @@ describe('selected reference mentions', () => {
     it('restores compact tokens when reference names arrive after the prompt', () => {
         usePlaygroundStore.setState({ prompt: '@Library portrait ', mediaNames: {}, history: [] });
         render(<PromptInput />);
-        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toBeNull();
         act(() => usePlaygroundStore.setState({ mediaNames: { [selected[1]]: 'Library portrait' } }));
         const token = screen.getByRole('textbox').querySelector('[data-reference-label]');
         expect(token).toHaveTextContent('@Libra...');
         expect(token).toHaveStyle({ backgroundColor: 'rgba(52, 216, 196, 0.15)' });
         expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
+    });
+
+    it.each([
+        ['@Screenshot 2026-09-14 at 4.45.24\u202fPM.png 在跳舞', ['@Scree...']],
+        ['@设计一个女孩和一只小狗在玩耍 @Untitled image 在一起玩耍', ['@设计一个女...', '@Untit...']],
+    ])('renders restored reference names without requiring selected media: %s', (prompt, expected) => {
+        usePlaygroundStore.setState({ prompt, inputMedia: [], mediaNames: {}, history: [] });
+        render(<PromptInput />);
+        const tokens = Array.from(screen.getByRole('textbox').querySelectorAll('[data-reference-label]'));
+        expect(tokens.map((token) => token.textContent)).toEqual(expected);
+        tokens.forEach((token) => expect(token).toHaveStyle({ backgroundColor: 'rgba(52, 216, 196, 0.15)' }));
+        expect(usePlaygroundStore.getState().prompt).toBe(prompt);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        expect(editor.getText({ blockSeparator: '\n' })).toBe(prompt);
+        expect(screen.getByRole('textbox')).toHaveTextContent(prompt.endsWith('在跳舞') ? '在跳舞' : '在一起玩耍');
+    });
+
+    it('leaves a filename editable while typing and compacts it on blur', () => {
+        usePlaygroundStore.setState({ prompt: '', inputMedia: [], mediaNames: {}, history: [] });
+        render(<PromptInput />);
+        const textbox = screen.getByRole('textbox');
+        const editor = (textbox as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        const prompt = '@Screenshot 2026-09-14 at 4.45.24\u202fPM.png 在跳舞';
+        act(() => { editor.commands.insertContent(prompt); });
+        expect(textbox.querySelector('[data-reference-label]')).toBeNull();
+        act(() => { editor.emit('blur', { editor, event: new FocusEvent('blur'), transaction: editor.state.tr }); });
+        expect(textbox.querySelector('[data-reference-label]')).toHaveTextContent('@Scree...');
+        expect(editor.getText({ blockSeparator: '\n' })).toBe(prompt);
+    });
+
+    it('does not convert email addresses into references', () => {
+        usePlaygroundStore.setState({ prompt: 'Contact hello@example.com for details', inputMedia: [], mediaNames: {}, history: [] });
+        render(<PromptInput />);
+        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toBeNull();
     });
 
     it('does not truncate the selected reference list to twelve items', () => {

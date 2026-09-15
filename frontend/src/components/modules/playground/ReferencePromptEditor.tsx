@@ -21,14 +21,28 @@ const ReferenceToken = Node.create({
   renderText: ({ node }) => '@' + node.attrs.label,
 });
 
-export function referencePromptDocument(value: string, labels: string[]): JSONContent {
+function restoredReferenceName(text: string): string | undefined {
+  // Old drafts contain plain @names without selected-media metadata. Filename
+  // extensions delimit names containing spaces; prose after them stays plain.
+  const filename = text.match(/^([^@\n]+?\.(?:png|jpe?g|webp|gif|avif|heic|mp4|mov|webm))(?=$|[\s，。！？、“”"'）)])/i)?.[1];
+  if (filename) return filename;
+  const untitled = text.match(/^(Untitled (?:image|video))(?=$|[\s，。！？、“”"'）)])/i)?.[1];
+  if (untitled) return untitled;
+  return text.match(/^([^@\s，。！？、“”"'（）()]+)(?=$|[\s，。！？、“”"'）)])/)?.[1];
+}
+
+export function referencePromptDocument(value: string, labels: string[], restoreNames = true): JSONContent {
   const names = Array.from(new Set(labels)).filter(Boolean).sort((a, b) => b.length - a.length);
   return { type: 'doc', content: value.split('\n').map((line) => {
     const content: JSONContent[] = [];
     let plain = '';
     const flush = () => { if (plain) content.push({ type: 'text', text: plain }); plain = ''; };
     for (let index = 0; index < line.length;) {
-      const label = line[index] === '@' ? names.find((name) => line.startsWith('@' + name, index)) : undefined;
+      const isMention = line[index] === '@' && (index === 0 || /[\s“”"'（(，。！？、]/.test(line[index - 1]));
+      const label = isMention
+        ? names.find((name) => line.startsWith('@' + name, index))
+          || (restoreNames ? restoredReferenceName(line.slice(index + 1)) : undefined)
+        : undefined;
       if (label) { flush(); content.push({ type: 'referenceToken', attrs: { label } }); index += label.length + 1; }
       else { plain += line[index++]; }
     }
@@ -40,6 +54,9 @@ export function referencePromptDocument(value: string, labels: string[]): JSONCo
 export default function ReferencePromptEditor({ value, labels, placeholder, onChange, onSubmit }: {
   value: string; labels: string[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
 }) {
+  const lastLocalValue = useRef<string | null>(null);
+  const currentLabels = useRef(labels);
+  currentLabels.current = labels;
   const callbacks = useRef({ onChange, onSubmit });
   callbacks.current = { onChange, onSubmit };
   const editor = useEditor({
@@ -63,11 +80,24 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
         return true;
       },
     },
-    onUpdate: ({ editor }) => callbacks.current.onChange(editor.getText({ blockSeparator: '\n' })),
+    onUpdate: ({ editor }) => {
+      const text = editor.getText({ blockSeparator: '\n' });
+      lastLocalValue.current = text;
+      callbacks.current.onChange(text);
+    },
+    onBlur: ({ editor }) => {
+      const text = editor.getText({ blockSeparator: '\n' });
+      const document = referencePromptDocument(text, currentLabels.current);
+      if (!editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {
+        editor.commands.setContent(document, { emitUpdate: false });
+      }
+    },
   });
   useEffect(() => {
     if (!editor) return;
-    const document = referencePromptDocument(value, labels);
+    const existingNames: string[] = [];
+    editor.state.doc.descendants((node) => { if (node.type.name === 'referenceToken') existingNames.push(node.attrs.label); });
+    const document = referencePromptDocument(value, [...labels, ...existingNames], lastLocalValue.current !== value);
     // Equal text can still be plain text while reference metadata is loading.
     if (editor.state.doc.eq(editor.schema.nodeFromJSON(document))) return;
     const textChanged = editor.getText({ blockSeparator: '\n' }) !== value;

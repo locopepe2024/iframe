@@ -96,7 +96,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
 
       {/* Main prompt textarea */}
       <div className="flex items-start gap-3">
-      <ReferencePromptEditor value={prompt} labels={referenceCandidates.map((candidate) => candidate.label)}
+      <ReferencePromptEditor value={prompt} labels={[...referenceCandidates.map((candidate) => candidate.label), ...Object.values(mediaNames)]}
         onChange={handlePromptChange} onSubmit={onSubmit} placeholder={t('prompt.placeholder')} />
       </div>
 

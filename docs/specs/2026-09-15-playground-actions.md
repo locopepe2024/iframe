@@ -20,3 +20,8 @@ User preference after live review: retain only the smaller native title tooltip;
 - Reconcile the editor document structure when reference metadata arrives even if plain prompt text is unchanged. Preserve full text and avoid focusing on metadata-only reconciliation.
 - Runtime inspection found the token background computed as transparent despite its opacity utility class. Give reference tokens an explicit translucent green background.
 - Regression checks cover delayed name hydration and visible tooltip content; production checks must inspect computed background and hover visibility after reload.
+
+## Plain-text reference restoration
+- Restore @filename references (including spaces and narrow no-break spaces), Untitled image/video, and whitespace-delimited @names even when selected-media metadata is absent. Prefer known media names, retain full text in serialization, and leave following prose untouched.
+- While typing unknown references, keep plain text editable; restore compact tokens on blur. Existing tokens remain compact during subsequent edits. Email addresses are excluded by mention-boundary checks.
+- Regression examples: @Screenshot 2026-09-14 at 4.45.24 PM.png 在跳舞; @设计一个女孩和一只小狗在玩耍 @Untitled image 在一起玩耍.
