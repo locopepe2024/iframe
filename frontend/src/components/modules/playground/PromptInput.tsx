@@ -61,10 +61,9 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
 
   return (
     <div className="relative">
-      {inputMedia.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="参考素材列表">
-          {referenceCandidates.map(({ path, label }, index) => {
-            const isVideo = /\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path);
+          {referenceCandidates.map(({ path, label, mediaType }, index) => {
+            const isVideo = mediaType === 'video';
             return (
               <div
                 key={`${path}-${index}`}
@@ -86,15 +85,14 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
               </div>
             );
           })}
+          <button type="button" onClick={onOpenReferences} aria-label="添加参考素材" title="添加参考素材"
+            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-subtle text-text-muted hover:bg-hover-bg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+            <Plus size={18} aria-hidden="true" />
+          </button>
         </div>
-      )}
 
       {/* Main prompt textarea */}
       <div className="flex items-start gap-3">
-        <button type="button" onClick={onOpenReferences} aria-label="添加参考素材" title="添加参考素材"
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-hover-bg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
-          <Plus size={18} aria-hidden="true" />
-        </button>
       <textarea
         value={prompt}
         onChange={(e) => handlePromptChange(e.target.value)}

@@ -182,6 +182,21 @@ class PlaygroundStorage:
             raise FileNotFoundError("Playground media not found")
         return output.media_path
 
+    def browser_media_reference(self, value: str) -> str:
+        if value.startswith(("/playground/media/", "/playground/input-media/")):
+            return urlsplit(value).path
+        if urlsplit(value).scheme:
+            return value
+        target = os.path.realpath(value)
+        for generation in self._history:
+            for output in generation.outputs:
+                if os.path.realpath(output.media_path) == target:
+                    return f"/playground/media/{generation.id}/{output.id}"
+        uploads = os.path.realpath(os.path.join(self.output_dir, "uploads"))
+        if os.path.dirname(target) == uploads and os.path.isfile(target):
+            return f"/playground/input-media/{os.path.basename(target)}"
+        return value
+
     def list_history(
         self, limit: int = 50, offset: int = 0, session_id: Optional[str] = None
     ) -> List[PlaygroundGeneration]:

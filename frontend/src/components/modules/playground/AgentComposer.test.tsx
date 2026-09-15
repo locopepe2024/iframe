@@ -19,6 +19,8 @@ beforeEach(() => {
 it('keeps one add button and separates creation methods from media selection', () => {
     render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
     expect(screen.getAllByRole('button', { name: '添加参考素材' })).toHaveLength(1);
+    expect(within(screen.getByLabelText('参考素材列表')).getByRole('button', { name: '添加参考素材' })).toBeInTheDocument();
+    expect(within(screen.getByLabelText('参考素材列表')).getByRole('img')).toBeInTheDocument();
     expect(screen.getByLabelText('字数统计')).toHaveTextContent('5 / 2000');
     fireEvent.click(screen.getByRole('button', { name: 'mode.i2i' }));
     const dialog = screen.getByRole('dialog');

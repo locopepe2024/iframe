@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -72,8 +73,41 @@ def _media_url(identity: UserContext, generation_id: str, output_id: str, thumbn
     )
 
 
+def _public_reference_fields(payload, identity: UserContext):
+    storage = _storage_for(identity)
+    names = payload.get("media_names", {})
+    public_names = {}
+    references = []
+    for value in payload.get("input_media", []):
+        reference = storage.browser_media_reference(value)
+        key = urlsplit(value).path if value.startswith("/playground/") else value
+        name = names.get(key) or names.get(value)
+        if name:
+            public_names[reference] = name
+        if reference.startswith("/playground/media/"):
+            parts = reference.removeprefix("/playground/media/").split("/")
+            if len(parts) == 2:
+                try:
+                    storage.resolve_media_reference(reference)
+                except (ValueError, FileNotFoundError):
+                    pass
+                else:
+                    reference = _media_url(identity, parts[0], parts[1])
+        references.append(reference)
+    payload["input_media"] = references
+    payload["media_names"] = public_names
+    return payload
+
+
+def _public_session(session, identity: UserContext):
+    payload = session.model_dump()
+    payload["draft"] = _public_reference_fields(payload["draft"], identity)
+    return payload
+
+
 def _public_generation(generation, identity: UserContext):
     payload = generation.model_dump()
+    _public_reference_fields(payload, identity)
     for output in payload.get("outputs", []):
         output["media_path"] = _media_url(identity, generation.id, output["id"])
         if output.get("thumbnail_path"):
@@ -215,14 +249,14 @@ router.add_api_route(
 
 
 def list_sessions(identity: UserContext = Depends(require_user_context)):
-    return _storage_for(identity).list_sessions()
+    return [_public_session(session, identity) for session in _storage_for(identity).list_sessions()]
 
 
 def create_session(
     request: Optional[CreateSessionRequest] = None,
     identity: UserContext = Depends(require_user_context),
 ):
-    return _storage_for(identity).create_session(request.title if request and request.title else "新建创作")
+    return _public_session(_storage_for(identity).create_session(request.title if request and request.title else "新建创作"), identity)
 
 
 def get_session(session_id: str, identity: UserContext = Depends(require_user_context)):
@@ -230,7 +264,7 @@ def get_session(session_id: str, identity: UserContext = Depends(require_user_co
     session = storage.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return session
+    return _public_session(session, identity)
 
 
 def update_session(
@@ -247,7 +281,7 @@ def update_session(
     if request.draft is not None:
         session.draft = request.draft
     session.updated_at = datetime.now(timezone.utc).isoformat()
-    return storage.update_session(session)
+    return _public_session(storage.update_session(session), identity)
 
 
 router.add_api_route("/sessions", list_sessions, methods=["GET"])
