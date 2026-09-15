@@ -69,7 +69,7 @@ export default function PlaygroundPage() {
     if (pollTimers.current.has(generationId)) return;
     const timer = setInterval(async () => {
       try {
-        const full = toPlaygroundGeneration(await playgroundApi.getGeneration(generationId));
+        const full = toPlaygroundGeneration(await playgroundApi.getGenerationStatus(generationId));
         pollErrors.current.set(generationId, 0);
         if (!full.session_id || full.session_id === activeSessionRef.current) updateGeneration(full);
         if (full.status === 'completed' || full.status === 'failed') stopPolling(generationId);

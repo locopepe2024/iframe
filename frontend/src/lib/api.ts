@@ -1751,7 +1751,7 @@ export const playgroundApi = {
     axios.get<PlaygroundGenerationResponse>(API_URL + "/playground/history/" + id).then(r => r.data),
 
   getGenerationStatus: (id: string) =>
-    axios.get<{ id: string; status: string; outputs: any[]; error?: string }>(API_URL + "/playground/history/" + id + "/status").then(r => r.data),
+    axios.get<PlaygroundGenerationResponse>(API_URL + "/playground/history/" + id + "/status").then(r => r.data),
 
   deleteGeneration: (id: string) =>
     axios.delete(API_URL + "/playground/history/" + id).then(r => r.data),

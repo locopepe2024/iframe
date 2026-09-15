@@ -39,3 +39,18 @@ def test_legacy_upload_preview_is_owner_scoped(tmp_path, monkeypatch):
     upload.write_bytes(b'image')
     assert owner.browser_media_reference(str(upload)) == '/playground/input-media/portrait.png'
     assert other.browser_media_reference(str(upload)) == str(upload)
+
+
+def test_generation_status_is_complete_and_caps_large_errors(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    identity = UserContext(user_id='user', owner_profile_id='profile', display_name='', access_token='')
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    monkeypatch.setattr(api, '_storage_for', lambda _: storage)
+    generation = PlaygroundGeneration(id='g', mode='t2i', model_id='test', prompt='test', created_at='2026-09-15',
+        owner_user_id='user', owner_profile_id='profile', status='failed', error='x' * 10_000)
+    storage.add_generation(generation)
+    payload = api.get_generation_status('g', identity)
+    assert payload['mode'] == 't2i'
+    assert payload['prompt'] == 'test'
+    assert len(payload['error']) == 2003

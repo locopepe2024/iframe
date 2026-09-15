@@ -62,9 +62,22 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
         raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
-    if not task_id:
-        raise RuntimeError(f"UniArt response has no task id: {data}")
+    if not task_id and not _image_bytes(data):
+        raise RuntimeError("UniArt response has neither a task id nor image data")
     return data
+
+
+def _image_bytes(data: Dict[str, Any]) -> bytes | None:
+    items = data.get("data")
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and item.get("b64_json"):
+            try:
+                return base64.b64decode(item["b64_json"], validate=True)
+            except (ValueError, TypeError):
+                return None
+    return None
 
 
 def _provider_error_detail(resp: requests.Response) -> str:
@@ -251,8 +264,14 @@ class UniArtImageModel(ImageGenModel):
             body["resolution"] = tier
             body["size"] = f"{width * unit}x{height * unit}"
         task = _post(self.config, "/images/generations", body)
-        result = _poll(self.config, task.get("task_id") or task.get("id"), endpoint="images")
-        _download_result(self.config, result, "image", output_path)
+        image = _image_bytes(task)
+        if image is not None:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, "wb") as target:
+                target.write(image)
+        else:
+            result = _poll(self.config, task.get("task_id") or task.get("id"), endpoint="images")
+            _download_result(self.config, result, "image", output_path)
         return output_path, time.time() - started
 
 

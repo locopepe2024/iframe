@@ -164,12 +164,10 @@ def get_generation_status(generation_id: str, identity: UserContext = Depends(re
     gen = _storage_for(identity).get_generation(generation_id)
     if not gen:
         raise HTTPException(status_code=404, detail="Generation not found")
-    return {
-        "id": gen.id,
-        "status": gen.status,
-        "outputs": _public_generation(gen, identity)["outputs"],
-        "error": gen.error,
-    }
+    payload = _public_generation(gen, identity)
+    if payload.get("error") and len(payload["error"]) > 2000:
+        payload["error"] = payload["error"][:2000] + "..."
+    return payload
 
 
 def delete_generation(generation_id: str, identity: UserContext = Depends(require_user_context)):
