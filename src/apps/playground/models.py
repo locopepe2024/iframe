@@ -22,6 +22,7 @@ class PlaygroundOutput(BaseModel):
 
 
 class PlaygroundDraft(BaseModel):
+    media_names: dict[str, str] = Field(default_factory=dict, description="Display names only; never media identity")
     mode: PlaygroundMode = Field(PlaygroundMode.T2I, description="Current generation mode")
     model_id: str = Field("", description="Currently selected model")
     prompt: str = Field("", description="Editable prompt draft")
@@ -43,6 +44,7 @@ class PlaygroundSession(BaseModel):
 
 
 class PlaygroundGeneration(BaseModel):
+    media_names: dict[str, str] = Field(default_factory=dict, description="Display names only; never media identity")
     id: str = Field(..., description="Unique identifier (UUID)")
     mode: PlaygroundMode = Field(..., description="Generation mode")
     model_id: str = Field(..., description="Model identifier from model catalog")
@@ -77,6 +79,7 @@ class PlaygroundTemplate(BaseModel):
 
 
 class GenerateRequest(BaseModel):
+    media_names: dict[str, str] = Field(default_factory=dict, description="Display names only; never media identity")
     mode: PlaygroundMode = Field(..., description="Generation mode")
     model_id: str = Field(..., description="Model identifier from model catalog")
     prompt: str = Field(..., description="Text prompt for generation")

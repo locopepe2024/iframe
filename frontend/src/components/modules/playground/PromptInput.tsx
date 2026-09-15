@@ -5,6 +5,7 @@ import { Film, Plus, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
+import { referenceKey, referenceName } from './referenceMedia';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
@@ -20,6 +21,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   const negativePrompt = usePlaygroundStore((s) => s.negativePrompt);
   const inputMedia = usePlaygroundStore((s) => s.inputMedia);
   const history = usePlaygroundStore((s) => s.history);
+  const mediaNames = usePlaygroundStore((s) => s.mediaNames);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
   const setNegativePrompt = usePlaygroundStore((s) => s.setNegativePrompt);
   const setInputMedia = usePlaygroundStore((s) => s.setInputMedia);
@@ -35,9 +37,10 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   const referenceCandidates = inputMedia.map((path, index) => ({
     path,
     index,
-    label: `参考素材${index + 1}`,
+    label: referenceName(path, mediaNames, history),
+    source: path.includes('/input-media/') ? '上传文件' : path.includes('/studio/media/') ? '素材库' : '历史生成',
     mediaType: history.flatMap((generation) => generation.outputs)
-      .find((output) => output.media_path === path)?.media_type
+      .find((output) => referenceKey(output.media_path) === referenceKey(path))?.media_type
       || (/\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path) ? 'video' : 'image'),
   }));
 
@@ -60,7 +63,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
     <div className="relative">
       {inputMedia.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="参考素材列表">
-          {inputMedia.map((path, index) => {
+          {referenceCandidates.map(({ path, label }, index) => {
             const isVideo = /\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path);
             return (
               <div
@@ -70,12 +73,12 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 {isVideo ? (
                   <video src={getAssetUrl(path)} muted className="h-full w-full object-cover" />
                 ) : (
-                  <img src={getAssetUrl(path)} alt={`参考素材 ${index + 1}`} className="h-full w-full object-cover" />
+                  <img src={getAssetUrl(path)} alt={label} title={label} className="h-full w-full object-cover" />
                 )}
                 <button
                   type="button"
                   onClick={() => setInputMedia(inputMedia.filter((_, itemIndex) => itemIndex !== index))}
-                  aria-label={`移除参考素材 ${index + 1}`}
+                  aria-label={`移除 ${label}`}
                   className="absolute right-0.5 top-0.5 inline-flex min-h-7 min-w-7 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity hover:bg-black/90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary group-hover:opacity-100"
                 >
                   <X size={13} aria-hidden="true" />
@@ -115,7 +118,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           className="absolute bottom-16 left-0 z-50 max-h-64 w-[min(100%,24rem)] overflow-y-auto rounded-2xl border border-glass-border bg-elevated p-2 shadow-2xl"
         >
           <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
-            @参考素材
+            参考素材
           </div>
           {referenceCandidates.map((candidate) => (
             <button
@@ -132,7 +135,10 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                   <img src={getAssetUrl(candidate.path)} alt="" className="h-full w-full object-cover" />
                 )}
               </span>
-              <span className="min-w-0 flex-1 truncate text-xs text-foreground">{candidate.label}</span>
+              <span className="min-w-0 flex-1 text-xs">
+                <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
+                <span className="block text-text-muted">{candidate.source}</span>
+              </span>
             </button>
           ))}
         </div>

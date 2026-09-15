@@ -1635,6 +1635,7 @@ export const crudApi = {
 // ─── Playground API ─────────────────────────────────────────────────────────
 
 export interface PlaygroundGenerateRequest {
+  media_names?: Record<string, string>;
   mode: string;
   model_id: string;
   prompt: string;
@@ -1647,6 +1648,7 @@ export interface PlaygroundGenerateRequest {
 }
 
 export interface PlaygroundDraftResponse {
+  media_names?: Record<string, string>;
   mode: string;
   model_id: string;
   prompt: string;
@@ -1666,6 +1668,7 @@ export interface PlaygroundSessionResponse {
 }
 
 export interface PlaygroundGenerationResponse {
+  media_names?: Record<string, string>;
   id: string;
   mode: string;
   model_id: string;

@@ -13,6 +13,7 @@ import {
 export function toPlaygroundGeneration(resp: PlaygroundGenerationResponse): PlaygroundGeneration {
   return {
     id: resp.id,
+    media_names: resp.media_names,
     mode: resp.mode as PlaygroundMode,
     model_id: resp.model_id,
     prompt: resp.prompt,

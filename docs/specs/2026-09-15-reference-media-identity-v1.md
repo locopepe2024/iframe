@@ -75,10 +75,9 @@ They are not a second source of identity in the reference list.
 - The `@` menu lists only the active draft's selected references, in list order.
 - Historical results, uploaded files, and library entries follow identical rules.
 - Selecting a reference does not require saving it to the library.
-- UI labels are `Reference 1`, `Reference 2`, etc., localized as appropriate.
-  The menu also shows the thumbnail and display name; raw IDs are not primary UI.
-- The label number is derived from current list order, not embedded identity.
-  Reordering changes displayed numbers but retains the same mention targets.
+- UI labels and mentions use the media display name, with no reference ordinal.
+  The menu shows a thumbnail and source to distinguish equal names. Raw IDs are
+  not primary UI. Reordering does not change names or mention targets.
 - Clicking a mention option inserts a structured node targeting `reference_id`.
   It does not add a file, change mode, or resubmit generation.
 - Selecting the same `media_id` and role twice focuses the existing reference.
@@ -155,3 +154,11 @@ reference, library reference, draft reload, and submitted payload verification.
 This specification makes no claim that these release gates have already passed.
 The current deployed `b909c61` contains selected-list filtering and display
 numbering only. It does not implement this identity and structured binding model.
+
+## Name Display Slice
+
+The next deployment removes numbered labels, uses prompt-derived names for
+generated media and original upload names, and persists `media_names` as display
+metadata in drafts and generations. The existing `input_media` remains the file
+reference authority until the versioned migration. Names never resolve files.
+This slice does not claim structured mention binding or add a media registry.

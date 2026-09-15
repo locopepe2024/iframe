@@ -230,6 +230,9 @@ export default function MediaInput() {
         toUpload.map((file) => playgroundApi.uploadMedia(file))
       );
       const newPaths = results.map((r) => r.path);
+      results.forEach((result, index) => {
+        usePlaygroundStore.getState().rememberMediaName(result.path, toUpload[index].name);
+      });
 
       if (config.multiple) {
         setInputMedia([...inputMedia, ...newPaths]);

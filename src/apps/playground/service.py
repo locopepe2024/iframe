@@ -8,6 +8,7 @@ routing logic in ``src/apps/comic_gen/pipeline.py:process_video_task()``.
 import os
 import shutil
 import uuid
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
@@ -57,17 +58,25 @@ class PlaygroundService:
             for value in (request.input_media or [])
         ]
         session = self.storage.ensure_session(request.session_id, request.prompt[:32])
+        media_names = {}
+        for reference, resolved in zip(request.input_media or [], input_media):
+            key = urlsplit(reference).path if reference.startswith(("/playground/media/", "/playground/input-media/", "/studio/media/")) else reference
+            name = request.media_names.get(key)
+            if name:
+                media_names[resolved] = name
         draft = PlaygroundDraft(
+            media_names=dict(request.media_names),
             mode=request.mode,
             model_id=request.model_id,
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
-            input_media=input_media,
+            input_media=list(request.input_media or []),
             parameters=request.parameters or {},
             batch_size=request.batch_size or 1,
             parent_generation_id=request.parent_generation_id,
         )
         gen = PlaygroundGeneration(
+            media_names=media_names,
             id=str(uuid.uuid4()),
             mode=request.mode,
             model_id=request.model_id,

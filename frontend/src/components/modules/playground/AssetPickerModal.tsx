@@ -6,6 +6,8 @@ import { X, Check, Image, Film, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
+import { referenceName } from './referenceMedia';
+import { usePlaygroundStore } from './usePlaygroundStore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,11 +36,6 @@ type FilterTab = 'all' | 'image' | 'video';
 
 function isVideoPath(path: string): boolean {
   return /\.(mp4|mov|webm|avi|mkv)$/i.test(path);
-}
-
-function getFileName(path: string): string {
-  const parts = path.split('/');
-  return parts[parts.length - 1] || path;
 }
 
 /** Convert a media_path (e.g. "output/storyboard/foo.png") to a /files/ URL */
@@ -99,13 +96,13 @@ export default function AssetPickerModal({
           if (!output.media_path || seen.has(output.media_path)) continue;
           seen.add(output.media_path);
 
-          const isVideo = isVideoPath(output.media_path);
+          const isVideo = output.media_type === 'video';
           items.push({
             id: output.id,
             path: output.media_path,
             type: isVideo ? 'video' : 'image',
             thumbnail: output.thumbnail_path || undefined,
-            label: getFileName(output.media_path),
+            label: referenceName(output.media_path, {}, history),
           });
         }
 
@@ -120,7 +117,7 @@ export default function AssetPickerModal({
               id: 'input-' + inputPath,
               path: inputPath,
               type: isVideo ? 'video' : 'image',
-              label: getFileName(inputPath),
+              label: referenceName(inputPath, gen.media_names || {}, history),
             });
           }
         }
@@ -170,6 +167,8 @@ export default function AssetPickerModal({
 
   const handleSelect = () => {
     if (selected) {
+      const asset = assets.find((item) => item.path === selected);
+      if (asset) usePlaygroundStore.getState().rememberMediaName(selected, asset.label);
       onSelect(selected);
       onClose();
     }

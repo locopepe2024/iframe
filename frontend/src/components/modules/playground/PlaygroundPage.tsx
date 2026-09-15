@@ -19,6 +19,7 @@ import {
 } from './usePlaygroundStore';
 import { playgroundApi } from '@/lib/api';
 import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } from './playgroundModels';
+import { referenceKey, referenceName } from './referenceMedia';
 
 const POLL_INTERVAL = 2000;
 const MAX_POLL_ERRORS = 4;
@@ -33,6 +34,7 @@ export default function PlaygroundPage() {
   const prompt = usePlaygroundStore((state) => state.prompt);
   const negativePrompt = usePlaygroundStore((state) => state.negativePrompt);
   const inputMedia = usePlaygroundStore((state) => state.inputMedia);
+  const mediaNames = usePlaygroundStore((state) => state.mediaNames);
   const parameters = usePlaygroundStore((state) => state.parameters);
   const batchSize = usePlaygroundStore((state) => state.batchSize);
   const history = usePlaygroundStore((state) => state.history);
@@ -143,6 +145,7 @@ export default function PlaygroundPage() {
             prompt,
             negative_prompt: negativePrompt || undefined,
             input_media: inputMedia,
+            media_names: Object.fromEntries(inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
             parameters,
             batch_size: batchSize,
             parent_generation_id: parentGenerationId || undefined,
@@ -156,7 +159,7 @@ export default function PlaygroundPage() {
       }
     }, 700);
     return () => { clearTimeout(timer); setSavingDraft(false); };
-  }, [activeSessionId, batchSize, inputMedia, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt, sessionReady, updateSession]);
+  }, [activeSessionId, batchSize, inputMedia, mediaNames, history, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt, sessionReady, updateSession]);
 
   const handleCreateSession = useCallback(async () => {
     try {
@@ -182,12 +185,13 @@ export default function PlaygroundPage() {
       prompt: prompt.trim(),
       negativePrompt: negativePrompt || undefined,
       inputMedia,
+      mediaNames: Object.fromEntries(inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
       parameters,
       batchSize,
       sessionId: activeSessionId,
       parentGenerationId: parentGenerationId || undefined,
     });
-  }, [activeSessionId, batchSize, enqueueRequest, inputMedia, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt]);
+  }, [activeSessionId, batchSize, enqueueRequest, inputMedia, mediaNames, history, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt]);
 
   const dispatchRequest = useCallback(async (request: QueuedRequest) => {
     try {
@@ -197,6 +201,7 @@ export default function PlaygroundPage() {
         prompt: request.prompt,
         negative_prompt: request.negativePrompt,
         input_media: request.inputMedia.length ? request.inputMedia : undefined,
+        media_names: request.mediaNames,
         parameters: Object.keys(request.parameters).length ? request.parameters : undefined,
         batch_size: request.batchSize > 1 ? request.batchSize : undefined,
         session_id: request.sessionId,

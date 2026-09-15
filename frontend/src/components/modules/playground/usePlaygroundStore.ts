@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { referenceKey } from './referenceMedia';
 
 // ---------------------------------------------------------------------------
 // Featured (best-of-batch) persistence — client-side localStorage only.
@@ -65,6 +66,7 @@ export interface PlaygroundOutput {
 }
 
 export interface PlaygroundGeneration {
+  media_names?: Record<string, string>;
   id: string;
   mode: PlaygroundMode;
   model_id: string;
@@ -82,6 +84,7 @@ export interface PlaygroundGeneration {
 }
 
 export interface PlaygroundDraft {
+  media_names?: Record<string, string>;
   mode: PlaygroundMode;
   model_id: string;
   prompt: string;
@@ -114,6 +117,7 @@ export interface PlaygroundTemplate {
 }
 
 export interface QueuedRequest {
+  mediaNames?: Record<string, string>;
   id: string;
   mode: PlaygroundMode;
   modelId: string;
@@ -133,6 +137,8 @@ export interface QueuedRequest {
 // ---------------------------------------------------------------------------
 
 interface PlaygroundState {
+  mediaNames: Record<string, string>;
+  rememberMediaName: (path: string, name: string) => void;
   // Current input
   mode: PlaygroundMode;
   modelId: string;
@@ -336,6 +342,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     });
   },
 
+  mediaNames: {},
+  rememberMediaName: (path, name) => set((state) => ({
+    mediaNames: { ...state.mediaNames, [referenceKey(path)]: name },
+  })),
   setPrompt: (prompt) => set({ prompt }),
 
   setNegativePrompt: (negativePrompt) => set({ negativePrompt }),
@@ -429,6 +439,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   setActiveSession: (activeSessionId) => set({ activeSessionId, parentGenerationId: null }),
 
   applySessionDraft: (draft) => set({
+    mediaNames: draft.media_names || {},
     mode: draft.mode,
     modelId: draft.model_id,
     prompt: draft.prompt,
@@ -440,6 +451,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   }),
 
   restoreGeneration: (generation) => set({
+    mediaNames: generation.media_names || {},
     mode: generation.mode,
     modelId: generation.model_id,
     prompt: generation.prompt,
@@ -491,6 +503,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
   resetInput: () =>
     set({
+      mediaNames: {},
       prompt: DEFAULT_PROMPT,
       negativePrompt: '',
       inputMedia: [],

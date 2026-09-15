@@ -5,6 +5,7 @@ import hashlib
 import os
 import threading
 import uuid
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -156,6 +157,8 @@ class PlaygroundStorage:
         return None
 
     def resolve_media_reference(self, value: str) -> str:
+        if value.startswith(("/playground/media/", "/playground/input-media/")):
+            value = urlsplit(value).path
         prefix = "/playground/media/"
         if not value.startswith(prefix):
             input_prefix = "/playground/input-media/"

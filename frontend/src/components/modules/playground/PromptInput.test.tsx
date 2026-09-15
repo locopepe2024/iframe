@@ -18,9 +18,10 @@ describe('selected reference mentions', () => {
     beforeEach(() => {
         usePlaygroundStore.setState({
             prompt: '', negativePrompt: '', mode: 'i2i', inputMedia: selected,
+            mediaNames: { [selected[1]]: 'Library portrait' },
             history: [{
                 ...usePlaygroundStore.getState().history[0],
-                id: 'history', model_id: 'model',
+                id: 'history', model_id: 'model', prompt: 'Historical portrait',
                 outputs: [
                     { id: 'selected', media_path: selected[0], media_type: 'image' },
                     { id: 'unselected', media_path: '/playground/media/unselected/image', media_type: 'image' },
@@ -37,7 +38,7 @@ describe('selected reference mentions', () => {
         expect(options.map((option) => option.querySelector('img')?.getAttribute('src')))
             .toEqual(selected.map((path) => `https://garage.uniart.fun${path}`));
         fireEvent.click(options[1]);
-        expect(usePlaygroundStore.getState().prompt).toBe('@参考素材2 ');
+        expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
         expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
         expect(usePlaygroundStore.getState().mode).toBe('i2i');
     });
@@ -47,7 +48,7 @@ describe('selected reference mentions', () => {
         openMentions();
         act(() => usePlaygroundStore.setState({ inputMedia: [selected[1]], history: [] }));
         expect(screen.getAllByRole('option')).toHaveLength(1);
-        expect(within(screen.getByRole('option')).getByText('参考素材1')).toBeInTheDocument();
+        expect(within(screen.getByRole('option')).getByText('Library portrait')).toBeInTheDocument();
         act(() => usePlaygroundStore.setState({ inputMedia: [], prompt: '' }));
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
         openMentions();
