@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Download, Video, Copy, Check, Replace, Crown, Bookmark } from 'lucide-react';
+import { Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
@@ -136,6 +136,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const useResultAsReference = usePlaygroundStore((s) => s.useResultAsReference);
+  const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
   const featured = output ? featuredByGen[generation.id] === output.id : false;
@@ -182,8 +183,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   const handleUseAsReference = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!output?.media_path) return;
-    useResultAsReference(output.media_path, output.media_type, undefined, generation.prompt);
-  }, [generation.prompt, output, useResultAsReference]);
+    useResultAsReference(output.media_path, output.media_type);
+  }, [output, useResultAsReference]);
 
   return (
     <div
@@ -258,6 +259,14 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
             title={t('card.useAsReference')}
           >
             <Replace className="w-3.5 h-3.5 text-foreground" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); restoreGeneration(generation); }}
+            className="w-7 h-7 rounded-full bg-elevated backdrop-blur-sm flex items-center justify-center hover:bg-hover-bg transition"
+            title={t('card.reedit')}
+            aria-label={t('card.reedit')}
+          >
+            <PencilLine className="w-3.5 h-3.5 text-foreground" />
           </button>
           {output?.media_type === 'image' && onGenerateVideo && (
             <button
