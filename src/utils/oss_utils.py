@@ -62,8 +62,11 @@ def is_object_key(value: str) -> bool:
     Check if a string value is an OSS Object Key (not a full URL or local path).
     """
     return (
-        classify_media_ref(value, oss_base_path=get_oss_base_path())
-        == MEDIA_REF_OBJECT_KEY
+        classify_media_ref(
+            value,
+            oss_base_path=(os.getenv("LUMENX_COS_KEY_PREFIX", "lumenx").strip("/")
+                           if is_cos_configured() else get_oss_base_path()),
+        ) == MEDIA_REF_OBJECT_KEY
     )
 
 def is_local_path(value: str) -> bool:
