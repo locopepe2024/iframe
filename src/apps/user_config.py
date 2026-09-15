@@ -55,13 +55,16 @@ class UserConfigStore:
                 """
             )
 
-    def _encryption_key(self) -> bytes:
-        if not self.master_key:
-            raise HTTPException(status_code=503, detail="LUMENX_CONFIG_MASTER_KEY is not configured")
-        return hashlib.sha256(self.master_key.encode("utf-8")).digest()
+    def _encryption_key(self, identity: UserContext | None = None) -> bytes:
+        # Prefer a per-user key derived from the authenticated identity token.
+        # The server master key remains only as legacy migration fallback.
+        seed = identity.access_token if identity and identity.access_token else self.master_key
+        if not seed:
+            raise HTTPException(status_code=503, detail="User encryption key is unavailable")
+        return hashlib.sha256(("lumenx:user:" + seed).encode("utf-8")).digest()
 
-    def _encrypt(self, value: str) -> str:
-        cipher = AES.new(self._encryption_key(), AES.MODE_GCM, nonce=get_random_bytes(12))
+    def _encrypt(self, value: str, identity: UserContext | None = None) -> str:
+        cipher = AES.new(self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
         ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
         return json.dumps(
             {
@@ -72,10 +75,10 @@ class UserConfigStore:
             separators=(",", ":"),
         )
 
-    def _decrypt(self, value: str) -> str:
+    def _decrypt(self, value: str, identity: UserContext | None = None) -> str:
         payload = json.loads(value)
         cipher = AES.new(
-            self._encryption_key(),
+            self._encryption_key(identity),
             AES.MODE_GCM,
             nonce=bytes.fromhex(payload["nonce"]),
         )
@@ -121,7 +124,7 @@ class UserConfigStore:
         if update.UNIART_API_KEY is not None:
             secret = update.UNIART_API_KEY.strip()
             if secret:
-                encrypted = self._encrypt(secret)
+                encrypted = self._encrypt(secret, identity)
                 secret_payload["UNIART_API_KEY"] = {
                     "ciphertext": encrypted,
                     "prefix": secret[:12],
@@ -160,7 +163,7 @@ class UserConfigStore:
         ciphertext = entry.get("ciphertext")
         if ciphertext:
             try:
-                key = self._decrypt(ciphertext)
+                key = self._decrypt(ciphertext, identity)
             except (KeyError, ValueError, json.JSONDecodeError) as exc:
                 raise HTTPException(status_code=503, detail="Stored UniArt credential cannot be decrypted") from exc
             return {
