@@ -14,3 +14,9 @@ User runtime report: image requests return HTTP 400 when both resolution and siz
 Replace native-only titles with explicit portal tooltips for session names and reference names. Set prompt outline style explicitly to none (Tailwind outline-none compiles to a transparent solid outline).
 
 User preference after live review: retain only the smaller native title tooltip; remove the custom bordered tooltip to prevent duplicate full-name hints. Explicit prompt outline removal remains.
+
+## Refresh regression correction
+- Native title attributes did not establish visible hover behavior. Use one compact 11px borderless full-name tooltip for sessions, thumbnails and prompt tokens; remove native titles from these targets to avoid duplicates.
+- Reconcile the editor document structure when reference metadata arrives even if plain prompt text is unchanged. Preserve full text and avoid focusing on metadata-only reconciliation.
+- Runtime inspection found the token background computed as transparent despite its opacity utility class. Give reference tokens an explicit translucent green background.
+- Regression checks cover delayed name hydration and visible tooltip content; production checks must inspect computed background and hover visibility after reload.

@@ -41,7 +41,8 @@ describe('selected reference mentions', () => {
         fireEvent.click(options[1]);
         expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
         expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveTextContent('@Libra...');
-        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveAttribute('title', 'Library portrait');
+        fireEvent.mouseOver(screen.getByRole('textbox').querySelector('[data-reference-label]')!);
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Library portrait');
         expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
         expect(usePlaygroundStore.getState().mode).toBe('i2i');
     });
@@ -56,6 +57,17 @@ describe('selected reference mentions', () => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
         openMentions();
         expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    });
+
+    it('restores compact tokens when reference names arrive after the prompt', () => {
+        usePlaygroundStore.setState({ prompt: '@Library portrait ', mediaNames: {}, history: [] });
+        render(<PromptInput />);
+        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toBeNull();
+        act(() => usePlaygroundStore.setState({ mediaNames: { [selected[1]]: 'Library portrait' } }));
+        const token = screen.getByRole('textbox').querySelector('[data-reference-label]');
+        expect(token).toHaveTextContent('@Libra...');
+        expect(token).toHaveStyle({ backgroundColor: 'rgba(52, 216, 196, 0.15)' });
+        expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
     });
 
     it('does not truncate the selected reference list to twelve items', () => {

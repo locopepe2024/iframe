@@ -14,8 +14,9 @@ const ReferenceToken = Node.create({
   parseHTML: () => [{ tag: 'span[data-reference-label]' }],
   renderHTML: ({ node }) => ['span', {
     'data-reference-label': node.attrs.label,
-    title: node.attrs.label,
-    class: 'rounded bg-primary/15 px-1 text-primary',
+    'data-full-name': node.attrs.label,
+    class: 'rounded px-1 text-primary',
+    style: 'background-color: rgba(52, 216, 196, 0.15);',
   }, '@' + shortReferenceLabel(node.attrs.label)],
   renderText: ({ node }) => '@' + node.attrs.label,
 });
@@ -65,9 +66,18 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
     onUpdate: ({ editor }) => callbacks.current.onChange(editor.getText({ blockSeparator: '\n' })),
   });
   useEffect(() => {
-    if (!editor || editor.getText({ blockSeparator: '\n' }) === value) return;
-    editor.commands.setContent(referencePromptDocument(value, labels), { emitUpdate: false });
-    editor.commands.focus('end');
+    if (!editor) return;
+    const document = referencePromptDocument(value, labels);
+    // Equal text can still be plain text while reference metadata is loading.
+    if (editor.state.doc.eq(editor.schema.nodeFromJSON(document))) return;
+    const textChanged = editor.getText({ blockSeparator: '\n' }) !== value;
+    const { from, to } = editor.state.selection;
+    editor.commands.setContent(document, { emitUpdate: false });
+    if (textChanged) editor.commands.focus('end');
+    else {
+      const end = editor.state.doc.content.size - 1;
+      editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
+    }
   }, [editor, value, labels]);
   return <EditorContent editor={editor} className="min-w-0 w-full" />;
 }

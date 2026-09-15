@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceKey, referenceName } from './referenceMedia';
+import FullNameHints from './FullNameHints';
 import ReferencePromptEditor from './ReferencePromptEditor';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
@@ -61,20 +62,20 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   };
 
   return (
-    <div className="relative">
+    <FullNameHints className="relative">
         <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="参考素材列表">
           {referenceCandidates.map(({ path, label, mediaType }, index) => {
             const isVideo = mediaType === 'video';
             return (
               <div
                 key={`${path}-${index}`}
-                title={label}
+                data-full-name={label}
                 className="group relative h-12 w-12 overflow-hidden rounded-xl border border-primary/30 bg-surface-inset"
               >
                 {isVideo ? (
                   <video src={getAssetUrl(path)} muted className="h-full w-full object-cover" />
                 ) : (
-                  <img src={getAssetUrl(path)} alt={label} title={label} className="h-full w-full object-cover" />
+                  <img src={getAssetUrl(path)} alt={label} className="h-full w-full object-cover" />
                 )}
                 <button
                   type="button"
@@ -157,6 +158,6 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
 
       <PromptTemplateModal />
       <PromptHistoryDrawer />
-    </div>
+    </FullNameHints>
   );
 }

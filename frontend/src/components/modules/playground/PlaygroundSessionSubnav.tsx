@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { playgroundApi } from '@/lib/api';
+import FullNameHints from './FullNameHints';
 import OverflowActions from './OverflowActions';
 import { shortReferenceLabel } from './referenceMedia';
 import { createPlaygroundSession, openPlaygroundSession } from './playgroundSessionController';
@@ -61,7 +62,7 @@ export default function PlaygroundSessionSubnav() {
   };
 
   return (
-    <div className="ml-4 mt-1 border-l border-border-subtle pl-2" aria-label={t('navigationLabel')}>
+    <FullNameHints className="ml-4 mt-1 border-l border-border-subtle pl-2" aria-label={t('navigationLabel')}>
       <button
         type="button"
         onClick={handleCreate}
@@ -107,7 +108,7 @@ export default function PlaygroundSessionSubnav() {
                 className={clsx('shrink-0', active ? 'text-primary' : 'group-hover:text-foreground')}
               />
               <span className="min-w-0 flex-1">
-                <span title={session.title} className="block truncate text-xs font-medium">{shortReferenceLabel(session.title)}</span>
+                <span data-full-name={session.title} className="block truncate text-xs font-medium">{shortReferenceLabel(session.title)}</span>
                 <span className="mt-0.5 block font-mono text-[0.5625rem] text-text-muted">
                   {formatUpdatedAt(session.updated_at)}
                 </span>
@@ -121,6 +122,6 @@ export default function PlaygroundSessionSubnav() {
           );
         })}
       </div>
-    </div>
+    </FullNameHints>
   );
 }

@@ -15,7 +15,12 @@ beforeEach(() => {
 it('shortens titles and renames through the session menu', async () => {
   api.updateSession.mockResolvedValue({ ...session, title: '新会话名称' });
   render(<PlaygroundSessionSubnav />);
-  expect(screen.getByTitle(session.title)).toHaveTextContent('第一个测试...');
+  const label = screen.getByText('第一个测试...');
+  fireEvent.mouseOver(label);
+  expect(screen.getByRole('tooltip')).toHaveTextContent(session.title);
+  expect(label).not.toHaveAttribute('title');
+  fireEvent.mouseLeave(label.closest('[aria-label="navigationLabel"]')!);
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   expect(screen.queryByText('allHistory')).not.toBeInTheDocument();
   expect(screen.queryByText('templates')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'manage' }));
