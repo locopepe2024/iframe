@@ -1085,6 +1085,9 @@
     "project": "项目",
     "gallery": "画廊",
     "allLabel": "全部",
+    "deleteNamed": "删除 {name}",
+    "deleteInUse": "此资产正在被项目使用，请先解除引用后再删除",
+    "deleteFailed": "删除失败，请重试",
     "globalGroup": "全局 / 共享",
     "viewLabel": "视图",
     "viewByType": "按类型",
@@ -1736,6 +1739,7 @@
       "more": "更多操作"
     },
     "media": {
+      "limitReached": "最多添加 {count} 个素材；请先移除已有素材再添加",
       "uploading": "上传中...",
       "dragOrClick": "拖拽或点击上传",
       "localUpload": "本地上传",

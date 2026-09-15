@@ -1323,6 +1323,10 @@ export const api = {
         const res = await axios.put(`${API_URL}/library/assets/${assetType}/${assetId}`, patch);
         return res.data;
     },
+    deleteLibraryAsset: async (assetType: string, assetId: string) => {
+        const res = await axios.delete(`${API_URL}/library/assets/${assetType}/${assetId}`);
+        return res.data;
+    },
     /** 把项目/系列来源资产 deep-copy 提升进全局共享池。后端：POST /library/assets/promote。
      *  sourceKind: "project"|"series"；assetType 单数。 */
     promoteAssetToLibrary: async (

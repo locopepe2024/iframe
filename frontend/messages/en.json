@@ -1085,6 +1085,9 @@
     "project": "Project",
     "gallery": "Gallery",
     "allLabel": "All",
+    "deleteNamed": "Delete {name}",
+    "deleteInUse": "This asset is used by a project. Remove its references before deleting.",
+    "deleteFailed": "Could not delete asset. Please retry.",
     "globalGroup": "Global / Shared",
     "viewLabel": "View",
     "viewByType": "By Type",
@@ -1736,6 +1739,7 @@
       "more": "More actions"
     },
     "media": {
+      "limitReached": "Up to {count} materials. Remove an existing material before adding another.",
       "uploading": "Uploading…",
       "dragOrClick": "Drag or click to upload",
       "localUpload": "Local upload",

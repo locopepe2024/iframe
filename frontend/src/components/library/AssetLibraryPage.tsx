@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus } from "lucide-react";
+import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Series, Project, Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
@@ -166,6 +166,20 @@ export default function AssetLibraryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const deleteAsset = async (assetId: string, type: AssetTab) => {
+    if (deleting) return;
+    setDeleting(assetId);
+    try {
+      await api.deleteLibraryAsset(SINGULAR[type], assetId);
+      setSelected((current) => current?.assetId === assetId ? null : current);
+      await loadAssets();
+    } catch (error) {
+      const status = (error as { response?: { status?: number } }).response?.status;
+      toast.error(status === 409 ? t("deleteInUse") : t("deleteFailed"));
+    } finally { setDeleting(null); }
   };
 
   // 全局计数（facet 总览；不受搜索/星标过滤影响，与分组标题里的计数互补）。
@@ -619,8 +633,15 @@ export default function AssetLibraryPage() {
                           </div>
                           <div className="p-3">
                             <div className="text-sm font-medium text-foreground truncate">{asset.name}</div>
-                            {viewAxis === "type" ? (
-                              <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{src.name}</div>
+                            {viewAxis === "type" || src.kind === "global" ? (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[0.6875rem] text-text-muted truncate">{src.name}</span>
+                                {src.kind === "global" && <button type="button" aria-label={t("deleteNamed", { name: asset.name })}
+                                  disabled={deleting !== null} onClick={(event) => { event.stopPropagation(); void deleteAsset(asset.id, type); }}
+                                  className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:text-status-failed-fg hover:bg-hover-bg disabled:opacity-40">
+                                  <Trash2 size={14} />
+                                </button>}
+                              </div>
                             ) : (
                               asset.description && <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{asset.description}</div>
                             )}
