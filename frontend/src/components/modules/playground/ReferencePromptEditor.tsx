@@ -14,7 +14,6 @@ const ReferenceToken = Node.create({
   parseHTML: () => [{ tag: 'span[data-reference-label]' }],
   renderHTML: ({ node }) => ['span', {
     'data-reference-label': node.attrs.label,
-    'data-full-name': node.attrs.label,
     title: node.attrs.label,
     class: 'rounded bg-primary/15 px-1 text-primary',
   }, '@' + shortReferenceLabel(node.attrs.label)],

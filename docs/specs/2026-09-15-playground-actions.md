@@ -12,3 +12,5 @@ Validation: session storage deletion/reload and busy protection tests; frontend 
 User runtime report: image requests return HTTP 400 when both resolution and size are submitted. Provider code in uniart-1.1/service/imageroute/contract.go and relay/helper/openai_image_request_test.go explicitly accepts resolution + aspect_ratio and rejects resolution + concrete size. Send semantic tiers as resolution; preserve pixel size only when supplied as pixels. Reference edit requests use /images/edits and image references instead of silently dropping refs. Unit fixtures validate outbound contracts; live model completion remains a separate verification level.
 
 Replace native-only titles with explicit portal tooltips for session names and reference names. Set prompt outline style explicitly to none (Tailwind outline-none compiles to a transparent solid outline).
+
+User preference after live review: retain only the smaller native title tooltip; remove the custom bordered tooltip to prevent duplicate full-name hints. Explicit prompt outline removal remains.
