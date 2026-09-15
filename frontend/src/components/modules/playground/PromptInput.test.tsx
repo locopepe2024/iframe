@@ -11,7 +11,8 @@ vi.mock('./PromptHistoryDrawer', () => ({ default: () => null }));
 const selected = ['/playground/media/selected/image', '/studio/media/library-image'];
 
 function openMentions() {
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '@' } });
+    const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+    act(() => { editor.commands.setContent('<p>@</p>'); });
 }
 
 describe('selected reference mentions', () => {
@@ -39,6 +40,8 @@ describe('selected reference mentions', () => {
             .toEqual(selected.map((path) => `https://garage.uniart.fun${path}`));
         fireEvent.click(options[1]);
         expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
+        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveTextContent('@Libra...');
+        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveAttribute('title', 'Library portrait');
         expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
         expect(usePlaygroundStore.getState().mode).toBe('i2i');
     });

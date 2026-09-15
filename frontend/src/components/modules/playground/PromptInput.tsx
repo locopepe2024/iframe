@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceKey, referenceName } from './referenceMedia';
+import ReferencePromptEditor from './ReferencePromptEditor';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
@@ -86,25 +87,15 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
             );
           })}
           <button type="button" onClick={onOpenReferences} aria-label="添加参考素材" title="添加参考素材"
-            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-subtle text-text-muted hover:bg-hover-bg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-primary/40 bg-primary/5 text-primary/70 transition-colors hover:border-primary hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
             <Plus size={18} aria-hidden="true" />
           </button>
         </div>
 
       {/* Main prompt textarea */}
       <div className="flex items-start gap-3">
-      <textarea
-        value={prompt}
-        onChange={(e) => handlePromptChange(e.target.value)}
-        onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && onSubmit) {
-            event.preventDefault();
-            onSubmit();
-          }
-        }}
-        placeholder={t('prompt.placeholder')}
-        className="min-h-[120px] max-h-[260px] min-w-0 w-full resize-y rounded-none border-0 bg-transparent p-0 text-[0.9375rem] leading-[1.65] text-foreground placeholder-text-muted focus:ring-0"
-      />
+      <ReferencePromptEditor value={prompt} labels={referenceCandidates.map((candidate) => candidate.label)}
+        onChange={handlePromptChange} onSubmit={onSubmit} placeholder={t('prompt.placeholder')} />
       </div>
 
       {mentionMenuOpen && mentionActive && referenceCandidates.length > 0 && (
@@ -159,7 +150,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           value={negativePrompt}
           onChange={(e) => setNegativePrompt(e.target.value)}
           placeholder={t('prompt.negativePlaceholder')}
-          className="w-full min-h-[60px] resize-y bg-transparent border-0 rounded-none p-0 text-text-secondary text-xs placeholder-text-muted focus:ring-0"
+          className="w-full min-h-[60px] resize-y bg-transparent border-0 rounded-none p-0 text-text-secondary text-xs placeholder-text-muted focus:outline-none focus:ring-0"
         />
       )}
 

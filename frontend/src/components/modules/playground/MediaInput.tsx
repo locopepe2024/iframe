@@ -1,10 +1,9 @@
 'use client';
 
 import { useRef, useState, useCallback } from 'react';
-import { ImagePlus, Film, X } from 'lucide-react';
+import { ImagePlus, Film } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
-import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import AssetPickerModal from './AssetPickerModal';
 
@@ -76,109 +75,12 @@ const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
 // Shared style tokens (Line B — semantic tokens only, theme-safe)
 // ---------------------------------------------------------------------------
 
-// Neutral glass action button (本地上传 / 替换文件 / 从资产库选取). Replaces the
+// Neutral glass action button (本地上传 / 从资产库选取). Replaces the
 // old `border-primary/30 text-primary` accent so the panel reads quiet in Line B.
 const ACTION_BTN_CLASS =
   'flex-1 px-3 py-1.5 rounded-full text-xs border border-border-subtle ' +
   'text-foreground/80 hover:bg-hover-bg hover:text-foreground ' +
   'transition-colors disabled:opacity-40';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getFileName(path: string): string {
-  const parts = path.split('/');
-  return parts[parts.length - 1] || path;
-}
-
-function isVideoPath(path: string): boolean {
-  return /\.(mp4|mov|webm|avi|mkv)$/i.test(path);
-}
-
-// Resolve a stored media path to a browser-loadable URL. Local `output/...` paths
-// are served via the backend /files static mount; absolute (http(s)/blob/data) and
-// root-relative (/files/...) URLs pass through untouched. The raw path is still kept
-// in store state + the generate payload — only the <img>/<video> src is resolved.
-function resolveMediaSrc(path: string): string {
-  return getAssetUrl(path);
-}
-
-// ---------------------------------------------------------------------------
-// Single-reference preview — Line B media-preview-row (thumb + name + meta).
-//
-// Used for maxFiles=1 modes (i2i / i2v first-frame / v2v source video). Mirrors
-// the mockup's `.media-preview-row`: a larger thumbnail on the left, file name +
-// "W × H · FORMAT" meta on the right. Dimensions are read from the loaded media
-// (onLoad / onLoadedMetadata); format is derived from the extension. File size is
-// intentionally omitted — it is not persisted past the upload moment (and is
-// absent entirely for asset-library picks), so showing it would be inconsistent.
-// Keyed by `path` at the call site so dims reset when the reference changes.
-// ---------------------------------------------------------------------------
-
-function SingleRefPreview({
-  path,
-  onRemove,
-}: {
-  path: string;
-  onRemove: () => void;
-}) {
-  const [meta, setMeta] = useState<string | null>(null);
-  const ext = (path.split('.').pop() || '').toUpperCase();
-  const video = isVideoPath(path);
-
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-[14px] bg-surface-inset border border-border-subtle">
-      <div className="group relative w-20 h-20 shrink-0 rounded-[12px] overflow-hidden bg-elevated border border-border-subtle">
-        {video ? (
-          <video
-            src={resolveMediaSrc(path)}
-            className="w-full h-full object-cover"
-            muted
-            onLoadedMetadata={(e) =>
-              setMeta(
-                `${e.currentTarget.videoWidth} × ${e.currentTarget.videoHeight} · ${ext}`
-              )
-            }
-          />
-        ) : (
-          <img
-            src={resolveMediaSrc(path)}
-            alt=""
-            className="w-full h-full object-cover"
-            onLoad={(e) =>
-              setMeta(
-                `${e.currentTarget.naturalWidth} × ${e.currentTarget.naturalHeight} · ${ext}`
-              )
-            }
-          />
-        )}
-
-        {/* Remove badge on hover (functional black corner scrim) */}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="text-sm text-foreground truncate" title={getFileName(path)}>
-          {getFileName(path)}
-        </div>
-        <div className="font-mono text-[0.6875rem] text-text-muted mt-1">
-          {meta ?? ext}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function MediaInput() {
   const mode = usePlaygroundStore((s) => s.mode);
@@ -209,8 +111,6 @@ export default function MediaInput() {
   // Don't render for t2v mode (no input media needed)
   if (!config) return null;
 
-  const hasMedia = inputMedia.length > 0;
-  const canAddMore = config.multiple && inputMedia.length < config.maxFiles;
 
   // -------------------------------------------------------------------------
   // Upload handler
@@ -221,7 +121,7 @@ export default function MediaInput() {
     if (fileArray.length === 0) return;
 
     // Respect max file limit
-    const available = config.maxFiles - inputMedia.length;
+    const available = config.multiple ? config.maxFiles - inputMedia.length : 1;
     const toUpload = fileArray.slice(0, available);
 
     setUploading(true);
@@ -287,18 +187,9 @@ export default function MediaInput() {
     [inputMedia, config]
   );
 
-  const handleRemove = (index: number) => {
-    const updated = inputMedia.filter((_, i) => i !== index);
-    setInputMedia(updated);
-  };
-
-  const handleReplace = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleAssetSelect = (path: string) => {
     if (mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
-    setInputMedia([...inputMedia, path]);
+    setInputMedia(config.multiple ? [...inputMedia, path].slice(0, config.maxFiles) : [path]);
   };
 
   // Determine accept type for AssetPickerModal
@@ -331,7 +222,7 @@ export default function MediaInput() {
   // so this component renders only the slot + actions to avoid a double header.
   // -------------------------------------------------------------------------
 
-  if (!hasMedia) {
+  {
     return (
       <div className="space-y-2">
         <div
@@ -395,127 +286,4 @@ export default function MediaInput() {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Render: has media state
-  //
-  // Multi-reference modes (r2v / t2i, maxFiles>1) → thumbnail tile grid.
-  // Single-reference modes (i2i / i2v / v2v, maxFiles=1) → media-preview-row
-  // (larger thumb + file name + dimensions·format), per the mockup.
-  // -------------------------------------------------------------------------
-
-  return (
-    <div className="space-y-2">
-      {config.multiple ? (
-        <div className="space-y-3">
-          {/* Thumbnail row */}
-          <div className="flex flex-wrap gap-2">
-            {inputMedia.map((path, index) => (
-              <div
-                key={path + index}
-                className="group relative w-[72px] h-[72px] rounded-[14px] overflow-hidden bg-elevated border border-border-subtle"
-              >
-                {isVideoPath(path) ? (
-                  <video
-                    src={resolveMediaSrc(path)}
-                    className="w-full h-full object-cover"
-                    muted
-                  />
-                ) : (
-                  <img
-                    src={resolveMediaSrc(path)}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                )}
-
-                {/* Remove badge on hover (functional black corner scrim) */}
-                <button
-                  type="button"
-                  onClick={() => handleRemove(index)}
-                  className="
-                    absolute top-1 right-1
-                    w-4 h-4 rounded-full
-                    bg-black/70 text-white
-                    flex items-center justify-center
-                    opacity-0 group-hover:opacity-100
-                    transition-opacity
-                  "
-                >
-                  <X className="w-3 h-3" />
-                </button>
-
-                {mode === 'f2v' && (
-                  <div className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[0.5625rem] font-medium text-white">
-                    {t(index === 0 ? 'media.firstFrame' : 'media.lastFrame')}
-                  </div>
-                )}
-
-                {/* File name — bottom gradient scrim (functional, theme-agnostic) */}
-                <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-gradient-to-t from-black/75 to-transparent text-[0.5625rem] text-white truncate">
-                  {getFileName(path)}
-                </div>
-              </div>
-            ))}
-
-            {/* Add more button for r2v */}
-            {canAddMore && (
-              <button
-                type="button"
-                onClick={handleClick}
-                disabled={uploading}
-                className="
-                  w-[72px] h-[72px] rounded-[14px] bg-input-bg
-                  border border-dashed border-border-subtle
-                  flex items-center justify-center
-                  text-text-muted hover:text-foreground hover:border-foreground/30 hover:bg-hover-bg
-                  transition-colors disabled:opacity-40
-                "
-              >
-                <ImagePlus className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-
-          {/* File count for r2v */}
-          <div className="font-mono text-[0.6875rem] text-text-muted">
-            {t('media.fileCount', { current: inputMedia.length, max: config.maxFiles })}
-          </div>
-        </div>
-      ) : (
-        <SingleRefPreview
-          key={inputMedia[0]}
-          path={inputMedia[0]}
-          onRemove={() => handleRemove(0)}
-        />
-      )}
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleReplace}
-          disabled={uploading}
-          className={ACTION_BTN_CLASS}
-        >
-          {uploading ? t('media.uploading') : t('media.replaceFile')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowAssetPicker(true)}
-          className={ACTION_BTN_CLASS}
-        >
-          {t('media.pickFromLibrary')}
-        </button>
-      </div>
-
-      {fileInput}
-
-      <AssetPickerModal
-        isOpen={showAssetPicker}
-        onClose={() => setShowAssetPicker(false)}
-        onSelect={handleAssetSelect}
-        accept={acceptType}
-      />
-    </div>
-  );
 }

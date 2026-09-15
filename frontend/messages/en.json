@@ -1645,7 +1645,14 @@
       "allHistory": "All history",
       "templates": "Templates",
       "recent": "Recent sessions",
-      "saving": "Saving draft…"
+      "saving": "Saving draft…",
+      "manage": "Session actions",
+      "rename": "Rename",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "deleteFailed": "Could not delete. Wait for active tasks to finish and retry.",
+      "renameFailed": "Could not rename. Please retry."
     },
     "timeline": {
       "emptyTitle": "Start this creation session",
@@ -1725,7 +1732,8 @@
       "failed": "Generation failed",
       "queued": "Queued…",
       "processing": "Generating…",
-      "imageUnavailable": "Image unavailable"
+      "imageUnavailable": "Image unavailable",
+      "more": "More actions"
     },
     "media": {
       "uploading": "Uploading…",

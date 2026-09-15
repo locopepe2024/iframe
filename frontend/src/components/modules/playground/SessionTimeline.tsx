@@ -1,8 +1,9 @@
 'use client';
 
 import { ArrowUpLeft, GitBranch, Image as ImageIcon, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { playgroundApi } from '@/lib/api';
 import ResultCard from './ResultCard';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
@@ -22,6 +23,13 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
   const t = useTranslations('playground.timeline');
   const restoreGeneration = usePlaygroundStore((state) => state.restoreGeneration);
   const useResultAsReference = usePlaygroundStore((state) => state.useResultAsReference);
+  const [error, setError] = useState('');
+  const remove = async () => {
+    try {
+      await playgroundApi.deleteGeneration(generation.id);
+      usePlaygroundStore.getState().removeGeneration(generation.id);
+    } catch { setError('删除失败，请重试 / Could not delete'); }
+  };
   const summary = parameterSummary(generation.parameters);
 
   return (
@@ -63,6 +71,7 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
       </section>
 
       <section className="mb-8">
+        {error && <p role="alert" className="text-xs text-status-failed-fg">{error}</p>}
         <div className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
           <Sparkles size={12} className="text-primary" /> {t('result')}
         </div>
@@ -73,10 +82,11 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
                   key={output.id}
                   generation={generation}
                   outputIndex={index}
+                  onDelete={() => { void remove(); }}
                   onGenerateVideo={(path) => useResultAsReference(path, 'image', 'i2v')}
                 />
               ))
-            : <ResultCard generation={generation} onRetry={() => restoreGeneration(generation)} />}
+            : <ResultCard generation={generation} onDelete={() => { void remove(); }} onRetry={() => restoreGeneration(generation)} />}
         </div>
       </section>
     </article>

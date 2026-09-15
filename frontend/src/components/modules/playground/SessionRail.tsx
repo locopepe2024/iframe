@@ -2,6 +2,8 @@
 
 import { MessageSquare, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import PlaygroundSessionSubnav from './PlaygroundSessionSubnav';
+import { shortReferenceLabel } from './referenceMedia';
 import { type PlaygroundSession } from './usePlaygroundStore';
 
 interface SessionRailProps {
@@ -32,32 +34,15 @@ export default function SessionRail({
   const t = useTranslations('playground.sessions');
 
   if (compact) {
-    return (
-      <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 md:hidden">
-        <select
-          value={activeSessionId || ''}
-          onChange={(event) => {
-            const session = sessions.find((item) => item.id === event.target.value);
-            if (session) onSelect(session);
-          }}
-          className="min-h-11 min-w-0 flex-1 rounded-xl border border-glass-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary"
-          aria-label={t('selectLabel')}
-        >
-          {sessions.map((session) => (
-            <option key={session.id} value={session.id}>{session.title}</option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={onCreate}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-glass-border bg-glass text-foreground hover:border-primary/50 hover:text-primary"
-          title={t('new')}
-          aria-label={t('new')}
-        >
-          <Plus size={17} />
-        </button>
+    const active = sessions.find((session) => session.id === activeSessionId);
+    return <details className="relative z-50 border-b border-border-subtle bg-surface px-4 py-3 md:hidden">
+      <summary className="cursor-pointer text-sm text-foreground" title={active?.title}>
+        {active ? shortReferenceLabel(active.title) : t('selectLabel')}
+      </summary>
+      <div className="absolute left-3 right-3 top-full max-h-[50vh] overflow-y-auto rounded-xl border border-glass-border bg-surface p-2 shadow-xl">
+        <PlaygroundSessionSubnav />
       </div>
-    );
+    </details>;
   }
 
   return (

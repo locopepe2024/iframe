@@ -1645,7 +1645,14 @@
       "allHistory": "全部历史",
       "templates": "模板库",
       "recent": "最近会话",
-      "saving": "正在保存草稿…"
+      "saving": "正在保存草稿…",
+      "manage": "会话管理",
+      "rename": "重命名",
+      "delete": "删除",
+      "save": "保存",
+      "cancel": "取消",
+      "deleteFailed": "删除失败，请等待会话中的任务完成后重试。",
+      "renameFailed": "重命名失败，请重试。"
     },
     "timeline": {
       "emptyTitle": "开始这个创作会话",
@@ -1725,7 +1732,8 @@
       "failed": "生成失败",
       "queued": "排队中…",
       "processing": "生成中…",
-      "imageUnavailable": "图片暂不可用"
+      "imageUnavailable": "图片暂不可用",
+      "more": "更多操作"
     },
     "media": {
       "uploading": "上传中...",

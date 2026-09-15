@@ -7,6 +7,8 @@ import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
+import OverflowActions from './OverflowActions';
+
 interface ResultCardProps {
   generation: PlaygroundGeneration;
   outputIndex?: number;
@@ -84,14 +86,6 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[0.625rem] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
             >
               ↻ {t('card.retry')}
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(generation); }}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-[0.625rem] font-medium text-status-failed-fg/60 hover:text-status-failed-fg hover:bg-status-failed-bg transition-colors"
-            >
-              × {t('card.delete')}
             </button>
           )}
           {error && (
@@ -328,7 +322,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   );
 }
 
-export default function ResultCard({ generation, outputIndex = 0, onGenerateVideo, onRetry, onOpenDetail, onDelete }: ResultCardProps) {
+function ResultCardBody({ generation, outputIndex = 0, onGenerateVideo, onRetry, onOpenDetail, onDelete }: ResultCardProps) {
   const { status, prompt, model_id, mode, created_at } = generation;
   const t = useTranslations('playground');
 
@@ -390,4 +384,16 @@ export default function ResultCard({ generation, outputIndex = 0, onGenerateVide
 
   // ─── COMPLETED STATE ────────────────────────────────────────────────────────
   return <CompletedCard generation={generation} outputIndex={outputIndex} onGenerateVideo={onGenerateVideo} onOpenDetail={onOpenDetail} />;
+}
+
+export default function ResultCard(props: ResultCardProps) {
+  const t = useTranslations('playground');
+  return <div className="rounded-[20px] border border-glass-border bg-glass [&>div:first-child]:border-0 [&>div:first-child]:rounded-b-none">
+    <ResultCardBody {...props} />
+    {props.onDelete && <div className="flex justify-end px-2">
+      <OverflowActions label={t('card.more')} actions={[{
+        label: t('card.delete'), danger: true, onClick: () => props.onDelete?.(props.generation),
+      }]} />
+    </div>}
+  </div>;
 }

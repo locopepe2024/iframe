@@ -20,3 +20,8 @@ export function referenceName(path: string, names: Record<string, string>, histo
     if (/\.[a-z0-9]{2,5}$/i.test(filename) && !/^[0-9a-f-]{36}\./i.test(filename)) return filename;
     return /\.(mp4|mov|webm|avi|mkv)$/i.test(pathname) ? 'Untitled video' : 'Untitled image';
 }
+
+export function shortReferenceLabel(value: string): string {
+    const chars = Array.from(value);
+    return chars.length > 5 ? chars.slice(0, 5).join('') + '...' : value;
+}
