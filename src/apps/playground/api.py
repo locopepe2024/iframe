@@ -344,7 +344,23 @@ async def upload_media(
     contents = await file.read()
     with open(dest, "wb") as f:
         f.write(contents)
-    return {"path": dest}
+    # Return an owner-scoped browser reference, never the server filesystem
+    # path. The corresponding endpoint verifies the current owner before
+    # serving the file.
+    return {"path": f"/playground/input-media/{filename}"}
+
+
+def get_input_media(
+    filename: str,
+    identity: UserContext = Depends(require_user_context),
+):
+    if not filename or os.path.basename(filename) != filename:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = os.path.join(_storage_for(identity).output_dir, "uploads", filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Media not found")
+    return FileResponse(path)
 
 
 router.add_api_route("/upload", upload_media, methods=["POST"])
+router.add_api_route("/input-media/{filename}", get_input_media, methods=["GET"])

@@ -158,6 +158,15 @@ class PlaygroundStorage:
     def resolve_media_reference(self, value: str) -> str:
         prefix = "/playground/media/"
         if not value.startswith(prefix):
+            input_prefix = "/playground/input-media/"
+            if value.startswith(input_prefix):
+                filename = value.removeprefix(input_prefix)
+                if not filename or os.path.basename(filename) != filename:
+                    raise ValueError("Invalid playground input media reference")
+                path = os.path.join(self.output_dir, "uploads", filename)
+                if not os.path.isfile(path):
+                    raise FileNotFoundError("Playground input media not found")
+                return path
             return value
         parts = value.removeprefix(prefix).split("/")
         if len(parts) != 2:
