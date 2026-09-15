@@ -74,7 +74,7 @@ class UserConfigStore:
         return get_random_bytes(32)
 
     def _wrap_user_key(self, identity: UserContext, data_key: bytes) -> dict:
-        wrapper = AES.new(data_key or self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
+        wrapper = AES.new(self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
         encrypted, tag = wrapper.encrypt_and_digest(data_key)
         return {"version": 2, "nonce": wrapper.nonce.hex(), "ciphertext": encrypted.hex(), "tag": tag.hex()}
 
@@ -83,7 +83,7 @@ class UserConfigStore:
         return cipher.decrypt_and_verify(bytes.fromhex(wrapped["ciphertext"]), bytes.fromhex(wrapped["tag"]))
 
     def _encrypt(self, value: str, identity: UserContext | None = None, data_key: bytes | None = None) -> str:
-        cipher = AES.new(self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
+        cipher = AES.new(data_key or self._encryption_key(identity), AES.MODE_GCM, nonce=get_random_bytes(12))
         ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
         return json.dumps(
             {

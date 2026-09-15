@@ -97,11 +97,14 @@ def test_user_configs_are_separate_and_secret_is_not_returned(tmp_path: Path):
     assert "sk-user-a-secret" not in raw
 
 
-def test_user_config_requires_master_key_for_secret_write(tmp_path: Path):
+def test_user_config_uses_identity_scoped_key_without_master(tmp_path: Path):
     store = UserConfigStore(str(tmp_path / "users.db"), master_key="")
-    with pytest.raises(Exception) as exc_info:
-        store.update(identity("user-a", "profile-a"), UserConfigUpdate(UNIART_API_KEY="sk-secret"))
-    assert getattr(exc_info.value, "status_code", None) == 503
+    user_a = identity("user-a", "profile-a")
+    user_b = identity("user-b", "profile-b")
+    store.update(user_a, UserConfigUpdate(UNIART_API_KEY="sk-secret"))
+    assert store.get_runtime_uniart(user_a)["api_key"] == "sk-secret"
+    with pytest.raises(Exception):
+        store._decrypt(json.loads(store._row("profile-a")["secrets_json"])["UNIART_API_KEY"]["ciphertext"], user_b)
 
 
 class StudioStore(StudioOwnerMixin):
