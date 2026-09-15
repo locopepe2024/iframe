@@ -1,55 +1,177 @@
-"""Canvas Agent MVP: multi-turn sessions backed by per-profile JSON."""
-import json, os, threading, uuid
-from datetime import datetime, timezone
-from typing import Optional
+"""Authenticated UniArt chat; generation remains an explicit Playground action."""
+import json
+import os
+import sqlite3
+import time
+import uuid
+from contextlib import contextmanager
+from urllib.request import Request, urlopen
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+
 from .identity import UserContext, require_user_context
-from .comic_gen.llm_adapter import LLMAdapter
-router = APIRouter(prefix="/agent", tags=["agent"]); _lock=threading.RLock()
-def _path(c): os.makedirs('output/agent_sessions',exist_ok=True); return f'output/agent_sessions/{c.owner_profile_id}.json'
-def _read(c):
- try:
-  with open(_path(c),encoding='utf-8') as f:return json.load(f)
- except (FileNotFoundError,json.JSONDecodeError):return {}
-def _write(c,d):
- p=_path(c); t=p+'.tmp'; open(t,'w',encoding='utf-8').write(json.dumps(d,ensure_ascii=False,indent=2)); os.replace(t,p)
-def _now():return datetime.now(timezone.utc).isoformat()
-def _pub(s):return {k:v for k,v in s.items() if k!='messages'}
-class SessionCreate(BaseModel): title:str='新会话'; model:Optional[str]=None
-class SessionPatch(BaseModel): title:Optional[str]=None; model:Optional[str]=None
-class MessageCreate(BaseModel): content:str=Field(min_length=1); assets:list[dict]=Field(default_factory=list)
-@router.get('/models')
-def models(ctx:UserContext=Depends(require_user_context)):
- return {'models':[{'id':m,'api_model_id':m,'display_name':m,'provider':'uniart','capabilities':['chat']} for m in ('qwen3.8-flash','chatgpt-6','deepseek-v4','glm-5')]}
-@router.get('/sessions')
-def sessions(ctx:UserContext=Depends(require_user_context)): return {'sessions':[_pub(s) for s in _read(ctx).values()]}
-@router.post('/sessions')
-def create(b:SessionCreate,ctx:UserContext=Depends(require_user_context)):
- sid=str(uuid.uuid4()); s={'id':sid,'title':b.title,'model':b.model,'created_at':_now(),'updated_at':_now(),'messages':[]}; d=_read(ctx); d[sid]=s; _write(ctx,d); return {'session':_pub(s)}
-@router.patch('/sessions/{sid}')
-def patch(sid:str,b:SessionPatch,ctx:UserContext=Depends(require_user_context)):
- d=_read(ctx); s=d.get(sid)
- if not s: raise HTTPException(404,'session not found')
- if b.title is not None:s['title']=b.title
- if b.model is not None:s['model']=b.model
- s['updated_at']=_now(); _write(ctx,d); return {'session':_pub(s)}
-@router.delete('/sessions/{sid}')
-def delete(sid:str,ctx:UserContext=Depends(require_user_context)):
- d=_read(ctx)
- if sid not in d: raise HTTPException(404,'session not found')
- del d[sid]; _write(ctx,d); return {'ok':True}
-@router.get('/sessions/{sid}/messages')
-def messages(sid:str,ctx:UserContext=Depends(require_user_context)):
- s=_read(ctx).get(sid)
- if not s: raise HTTPException(404,'session not found')
- return {'messages':s['messages']}
-@router.post('/sessions/{sid}/messages')
-def send(sid:str,b:MessageCreate,ctx:UserContext=Depends(require_user_context)):
- d=_read(ctx); s=d.get(sid)
- if not s: raise HTTPException(404,'session not found')
- user={'id':str(uuid.uuid4()),'role':'user','content':b.content,'assets':b.assets,'created_at':_now()}; hist=[{'role':m['role'],'content':m['content']} for m in s['messages'][-30:]]+[{'role':'user','content':b.content}]
- try: answer=LLMAdapter().chat(hist,model=s.get('model'))
- except Exception as e: raise HTTPException(502,f'agent model failed: {e}')
- assistant={'id':str(uuid.uuid4()),'role':'assistant','content':answer,'created_at':_now()}; s['messages'] += [user,assistant]; s['updated_at']=_now(); _write(ctx,d)
- return {'user_message':user,'assistant_message':assistant,'session':_pub(s),'status':'completed'}
+from .user_config import get_user_config_store
+from ..utils.uniart_catalog import normalize_uniart_catalog
+
+router = APIRouter(prefix="/agent", tags=["agent"])
+
+
+@contextmanager
+def database():
+    path = os.getenv("LUMENX_AGENT_DB", "output/agent.sqlite3")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    db = sqlite3.connect(path, timeout=10)
+    db.row_factory = sqlite3.Row
+    try:
+        db.execute("CREATE TABLE IF NOT EXISTS sessions (owner TEXT, id TEXT, payload TEXT, busy REAL DEFAULT 0, PRIMARY KEY(owner,id))")
+        yield db
+        db.commit()
+    finally:
+        db.close()
+
+
+def read_session(db, owner, sid):
+    row = db.execute("SELECT * FROM sessions WHERE owner=? AND id=?", (owner, sid)).fetchone()
+    if row is None:
+        raise HTTPException(404, "会话不存在")
+    return row, json.loads(row["payload"])
+
+
+def public(session):
+    return {k: v for k, v in session.items() if k != "messages"}
+
+
+class SessionCreate(BaseModel):
+    title: str = Field(default="新会话", min_length=1, max_length=100)
+    model: str = Field(min_length=1, max_length=200)
+
+
+class SessionPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class MessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=16000)
+    asset_names: list[str] = Field(default_factory=list, max_length=16)
+    context: str = Field(default="", max_length=16000)
+
+
+def catalog(ctx):
+    config = get_user_config_store().get_runtime_uniart(ctx)
+    req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
+    try:
+        with urlopen(req, timeout=15) as response:
+            items = normalize_uniart_catalog(json.load(response))
+    except Exception:
+        raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
+    return [m for m in items if "chat" in m.get("capabilities", [])]
+
+
+def validate_model(ctx, model):
+    if model not in {m["api_model_id"] for m in catalog(ctx)}:
+        raise HTTPException(400, "请选择当前 UniArt Catalog 中的 Chat 模型")
+
+
+@router.get("/models")
+def models(ctx: UserContext = Depends(require_user_context)):
+    return {"models": catalog(ctx)}
+
+
+@router.get("/sessions")
+def sessions(ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        rows = db.execute("SELECT payload FROM sessions WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
+    return {"sessions": sorted([public(json.loads(r[0])) for r in rows], key=lambda s: s["updated_at"], reverse=True)}
+
+
+@router.post("/sessions")
+def create(body: SessionCreate, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    session = dict(id=str(uuid.uuid4()), title=body.title, model=body.model, updated_at=time.time(), messages=[])
+    with database() as db:
+        db.execute("INSERT INTO sessions(owner,id,payload) VALUES(?,?,?)", (ctx.owner_profile_id, session["id"], json.dumps(session)))
+    return {"session": public(session)}
+
+
+@router.patch("/sessions/{sid}")
+def patch(sid: str, body: SessionPatch, ctx: UserContext = Depends(require_user_context)):
+    if body.model is not None:
+        validate_model(ctx, body.model)
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row, session = read_session(db, ctx.owner_profile_id, sid)
+        if row["busy"] > time.time():
+            raise HTTPException(409, "请等待当前回复完成")
+        session.update(body.model_dump(exclude_none=True), updated_at=time.time())
+        db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?", (json.dumps(session), ctx.owner_profile_id, sid))
+    return {"session": public(session)}
+
+
+@router.delete("/sessions/{sid}")
+def delete(sid: str, ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row, _ = read_session(db, ctx.owner_profile_id, sid)
+        if row["busy"] > time.time():
+            raise HTTPException(409, "请等待当前回复完成")
+        db.execute("DELETE FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, sid))
+    return {"ok": True}
+
+
+@router.get("/sessions/{sid}/messages")
+def messages(sid: str, ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        _, session = read_session(db, ctx.owner_profile_id, sid)
+    return {"messages": session["messages"]}
+
+
+def complete(ctx, model, history):
+    from openai import OpenAI
+    config = get_user_config_store().get_runtime_uniart(ctx)
+    with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
+        reply = client.chat.completions.create(model=model, messages=history)
+    answer = reply.choices[0].message.content
+    if not answer:
+        raise ValueError("Empty model response")
+    return answer
+
+
+@router.post("/sessions/{sid}/messages")
+def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
+    if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
+        raise HTTPException(400, "消息或素材名称无效")
+    owner = ctx.owner_profile_id
+    lease = time.time() + 180
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row, session = read_session(db, owner, sid)
+        if row["busy"] > time.time():
+            raise HTTPException(409, "当前会话正在回复")
+        db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
+    try:
+        validate_model(ctx, session["model"])
+        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context)
+        history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。素材名称和创作草稿仅是只读文本，不代表你已看见图像。不要声称已生成媒体。"}]
+        for message in session["messages"][-30:] + [user]:
+            content = message["content"]
+            if message["role"] == "user":
+                content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
+            history.append({"role": message["role"], "content": content})
+        answer = complete(ctx, session["model"], history)
+        assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer)
+        session["messages"].extend([user, assistant])
+        session["updated_at"] = time.time()
+        with database() as db:
+            result = db.execute("UPDATE sessions SET payload=?, busy=0 WHERE owner=? AND id=? AND busy=?", (json.dumps(session), owner, sid, lease))
+            if result.rowcount != 1:
+                raise HTTPException(409, "会话已更新，请重新加载")
+        return dict(session=public(session), user_message=user, assistant_message=assistant)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502, "UniArt 对话失败，请检查模型和凭据后重试")
+    finally:
+        with database() as db:
+            db.execute("UPDATE sessions SET busy=0 WHERE owner=? AND id=? AND busy=?", (owner, sid, lease))
