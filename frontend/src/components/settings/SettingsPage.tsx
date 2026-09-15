@@ -882,7 +882,7 @@ export default function SettingsPage() {
         <div className="flex flex-col items-start gap-3 pb-6 mb-6 border-b border-glass-border">
           <LumenXBranding size="md" showSlogan={false} />
           <p className="font-display atelier-display text-base italic text-accent leading-snug">
-            “Render Noise into Narrative”
+            “Powered by Lumenx”
           </p>
           <div className="font-mono text-[0.625rem] tracking-[0.08em] text-text-muted uppercase">
             VERSION {APP_VERSION.replace(/^v/, "")} · BUILD 20260613

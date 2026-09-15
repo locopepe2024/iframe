@@ -98,7 +98,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
       >
         <LumenXBranding size="md" showSlogan={false} />
         <p className="font-display atelier-display text-[0.75rem] italic text-text-muted tracking-wide leading-snug mt-2.5">
-          Render Noise into Narrative
+          Powered by Lumenx
         </p>
       </button>
 
