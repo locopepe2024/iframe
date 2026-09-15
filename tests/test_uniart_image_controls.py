@@ -32,7 +32,7 @@ def test_image_edit_forwards_reference_and_semantic_size(monkeypatch, tmp_path):
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
     uniart.UniArtImageModel({}).generate('edit', 'unused.png', size='2k', aspect_ratio='16:9', ref_image_paths=[str(image)])
     assert captured['endpoint'] == '/images/edits'
-    assert captured['body']['images'] == ['https://storage.example/reference.png']
+    assert captured['body']['images'] == [{'image_url': 'https://storage.example/reference.png'}]
     assert 'image' not in captured['body']
     assert captured['body']['resolution'] == '2k'
     assert 'size' not in captured['body']
@@ -68,7 +68,7 @@ def test_mask_edit_uses_urls_and_polls_image_task(monkeypatch):
     monkeypatch.setattr(uniart, '_download_result', lambda *args: None)
     uniart.UniArtImageModel({}).generate('edit', 'unused.png', ref_image_paths=['https://storage.example/source.png'], mask='https://storage.example/mask.png')
     assert captured['endpoint'] == '/images/edits'
-    assert captured['body']['images'] == ['https://storage.example/source.png']
+    assert captured['body']['images'] == [{'image_url': 'https://storage.example/source.png'}]
     assert captured['body']['mask'] == 'https://storage.example/mask.png'
     assert captured['body']['async'] is True
 

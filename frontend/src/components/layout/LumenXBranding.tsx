@@ -39,7 +39,7 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
         <div className="flex-shrink-0">
           <img
             src={logoSrc}
-            alt="LumenX"
+            alt="UniArt"
             className={`${logoSize} object-contain`}
             style={logoFilter ? { filter: logoFilter } : undefined}
           />
@@ -47,10 +47,7 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
         <div className="flex flex-col justify-center">
           <div className="flex items-baseline gap-0">
             <span className={`font-mono ${titleSize} font-bold tracking-tight text-foreground`}>
-              LUMEN
-            </span>
-            <span className={`font-mono ${titleSize} font-black tracking-tight text-primary`}>
-              X
+              UniArt
             </span>
           </div>
           {size !== "sm" && (
@@ -62,7 +59,7 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
       </div>
       {showSlogan && (
         <p className="font-mono atelier-display text-[0.5rem] text-text-muted tracking-[0.15em] text-center mt-2.5 uppercase">
-          Render Noise into Narrative
+              Powered by Lumenx
         </p>
       )}
     </div>

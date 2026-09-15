@@ -284,7 +284,10 @@ class UniArtImageModel(ImageGenModel):
         if kwargs.get("ref_image_path"):
             refs.insert(0, kwargs["ref_image_path"])
         if refs:
-            body["images"] = [_image_reference_url(ref) for ref in refs]
+            # UniArt image-edit accepts structured image inputs. Sending bare
+            # strings makes the gateway reject the request with
+            # `images[].image_url is required`.
+            body["images"] = [{"image_url": _image_reference_url(ref)} for ref in refs]
         mask = kwargs.get("mask")
         if mask:
             if not refs:
