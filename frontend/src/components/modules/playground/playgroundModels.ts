@@ -105,7 +105,9 @@ export function usePlaygroundCatalogRevision(): number {
   return useSyncExternalStore(
     (listener) => {
       catalogListeners.add(listener);
-      return () => catalogListeners.delete(listener);
+      const onSkuChange = () => listener();
+      window.addEventListener('lumenx:uniart-skus-changed', onSkuChange);
+      return () => { catalogListeners.delete(listener); window.removeEventListener('lumenx:uniart-skus-changed', onSkuChange); };
     },
     () => catalogRevision,
     () => 0,
@@ -114,8 +116,12 @@ export function usePlaygroundCatalogRevision(): number {
 
 function getActiveModelEntries(): [string, CatalogModel][] {
   const runtimeEntries = Object.entries(runtimeModels);
-  if (runtimeEntries.length > 0) return runtimeEntries;
-  return allModels.filter(([, model]) => model.provider === 'uniart');
+  const entries = runtimeEntries.length > 0 ? runtimeEntries : allModels.filter(([, model]) => model.provider === 'uniart');
+  if (typeof window === 'undefined') return entries;
+  try {
+    const enabled = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null;
+    return enabled ? entries.filter(([id]) => enabled.includes(id)) : entries;
+  } catch { return entries; }
 }
 
 function getActiveModel(modelId: string): CatalogModel | undefined {

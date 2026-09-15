@@ -287,8 +287,12 @@ let SORTED_MODEL_ENTRIES = [...CATALOG_MODELS].sort((left, right) => {
 });
 
 function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolean {
+    const enabled = typeof window !== 'undefined'
+        ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
+        : null;
     return (
         (!UNIART_RUNTIME_ACTIVE || model.provider === 'uniart') &&
+        (!enabled || model.provider !== 'uniart' || enabled.includes(model.id)) &&
         model.status !== 'planned' &&
         model.status !== 'deprecated' &&
         model.status !== 'hidden' &&

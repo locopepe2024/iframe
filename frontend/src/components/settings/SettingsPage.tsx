@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw } from "lucide-react";
+import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { api, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
+import { api, playgroundApi, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
 import { ASPECT_RATIOS } from "@/store/projectStore";
 import {
   DEFAULT_MODEL_SETTINGS,
@@ -220,6 +220,10 @@ export default function SettingsPage() {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const [catalogModelCount, setCatalogModelCount] = useState<number | null>(null);
+  const [skuDialogOpen, setSkuDialogOpen] = useState(false);
+  const [skuLoading, setSkuLoading] = useState(false);
+  const [skuModels, setSkuModels] = useState<Awaited<ReturnType<typeof playgroundApi.getUniArtModels>>['models']>([]);
+  const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([]);
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -437,17 +441,27 @@ export default function SettingsPage() {
   };
 
   const handleRefreshCatalog = async () => {
-    setCatalogRefreshing(true);
+    setSkuDialogOpen(true);
+    setSkuLoading(true);
     try {
-      const count = await refreshUniArtModelCatalog();
+      const payload = await playgroundApi.getUniArtModels();
+      const count = payload.models.length;
+      setSkuModels(payload.models);
       setCatalogModelCount(count);
-      setModelSettings((current) => normalizeModelSettings(current, "global_settings"));
-      toast.success(count > 0 ? `已同步 ${count} 个 UniArt 媒体模型` : "UniArt catalog 暂无可用媒体模型");
+      const stored = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null;
+      setSelectedSkuIds(stored || payload.models.map((model) => model.id));
     } catch {
-      toast.error("UniArt catalog 更新失败");
+      toast.error("获取 UniArt 模型失败");
     } finally {
-      setCatalogRefreshing(false);
+      setSkuLoading(false);
     }
+  };
+
+  const saveSkuSelection = () => {
+    localStorage.setItem('lumenx_uniart_enabled_skus', JSON.stringify(selectedSkuIds));
+    window.dispatchEvent(new CustomEvent('lumenx:uniart-skus-changed'));
+    setSkuDialogOpen(false);
+    toast.success(`已启用 ${selectedSkuIds.length} 个 UniArt SKU`);
   };
 
   const PathField = ({ value, label }: { value: string; label: string }) => (
@@ -570,11 +584,29 @@ export default function SettingsPage() {
           <div className="text-sm font-semibold text-foreground">UniArt Catalog</div>
           <div className="mt-1 text-xs text-text-muted">模型、能力、分辨率和时长以 UniArt 发布内容为准{catalogModelCount != null ? ` · 当前 ${catalogModelCount} 个媒体模型` : ""}</div>
         </div>
-        <button type="button" onClick={handleRefreshCatalog} disabled={catalogRefreshing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm font-medium text-foreground hover:bg-hover-bg disabled:opacity-50">
-          <RefreshCw size={15} className={catalogRefreshing ? "animate-spin" : ""} />
-          {catalogRefreshing ? "同步中" : "更新 Catalog"}
+        <button type="button" onClick={handleRefreshCatalog} disabled={skuLoading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm font-medium text-foreground hover:bg-hover-bg disabled:opacity-50">
+          <RefreshCw size={15} className={skuLoading ? "animate-spin" : ""} />
+          {skuLoading ? "获取中" : "获取模型"}
         </button>
       </div>
+      {skuDialogOpen && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="UniArt SKU 列表">
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-glass-border bg-elevated shadow-2xl">
+            <div className="flex items-center justify-between border-b border-glass-border px-5 py-4">
+              <div><h2 className="text-base font-semibold text-foreground">UniArt SKU List</h2><p className="mt-1 text-xs text-text-muted">勾选要在模型选择器中使用的模型</p></div>
+              <button type="button" aria-label="关闭" onClick={() => setSkuDialogOpen(false)} className="grid h-9 w-9 place-items-center rounded-lg text-text-muted hover:bg-hover-bg"><X size={17} /></button>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto p-4 space-y-2">
+              {skuModels.map((model) => <label key={model.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-glass-border p-3 hover:bg-hover-bg">
+                <input type="checkbox" checked={selectedSkuIds.includes(model.id)} onChange={() => setSelectedSkuIds((ids) => ids.includes(model.id) ? ids.filter((id) => id !== model.id) : [...ids, model.id])} className="mt-1 accent-[var(--color-primary)]" />
+                <span className="min-w-0"><span className="block text-sm font-medium text-foreground">{model.display_name}</span><span className="mt-1 block font-mono text-[0.625rem] text-text-muted">{model.id} · {model.capabilities.join(' / ')}</span></span>
+              </label>)}
+              {!skuLoading && skuModels.length === 0 && <p className="py-8 text-center text-sm text-text-muted">暂无可用 UniArt 模型</p>}
+            </div>
+            <div className="flex items-center justify-between border-t border-glass-border px-5 py-4"><span className="text-xs text-text-muted">已选择 {selectedSkuIds.length} 个 SKU</span><button type="button" onClick={saveSkuSelection} disabled={skuLoading || selectedSkuIds.length === 0} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-accent disabled:opacity-50"><Save size={15} />保存</button></div>
+          </div>
+        </div>
+      )}
       {/* Image model (T2I + I2I unified) */}
       <FormRow label={t("imageModelLabel")} hint={t("imageModelHint")}>
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
