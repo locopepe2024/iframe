@@ -51,6 +51,28 @@ def _media(value: Optional[str]) -> Optional[str]:
         return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
 
+def _image_reference_url(value: str) -> str:
+    """Publish local edit inputs through managed storage; never inline bytes."""
+    if value.startswith(("https://", "http://")):
+        return value
+    if value.startswith(("data:", "blob:")):
+        raise ValueError("UniArt image edits require HTTP(S) material URLs")
+    from ..utils.oss_utils import OSSImageUploader
+    uploader = OSSImageUploader()
+    if not uploader.is_configured:
+        raise RuntimeError("Image edit material storage is not configured")
+    path = value if os.path.isfile(value) else os.path.join("output", value)
+    if not os.path.isfile(path):
+        raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
+    key = uploader.upload_file(path, sub_path="image-edit-inputs")
+    if not key:
+        raise RuntimeError("Could not upload image edit material")
+    url = uploader.sign_url_for_api(key)
+    if not url or not url.startswith(("https://", "http://")):
+        raise RuntimeError("Could not create image edit material URL")
+    return url
+
+
 def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, Any]:
     resp = requests.post(f"{_base_url(config)}{path}", headers=_headers(config), json=body, timeout=90)
     try:
@@ -62,7 +84,7 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
         raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
-    if not task_id and not _image_bytes(data):
+    if not task_id and not _image_bytes(data) and not _result_urls(data, "image"):
         raise RuntimeError("UniArt response has neither a task id nor image data")
     return data
 
@@ -262,7 +284,13 @@ class UniArtImageModel(ImageGenModel):
         if kwargs.get("ref_image_path"):
             refs.insert(0, kwargs["ref_image_path"])
         if refs:
-            body["image"] = [_media(ref) for ref in refs]
+            body["images"] = [_image_reference_url(ref) for ref in refs]
+        mask = kwargs.get("mask")
+        if mask:
+            if not refs:
+                raise ValueError("Mask editing requires a reference image")
+            body["mask"] = _image_reference_url(mask)
+            body["async"] = True
         endpoint = "/images/edits" if refs else "/images/generations"
         task = _post(self.config, endpoint, body)
         image = _image_bytes(task)
@@ -270,6 +298,8 @@ class UniArtImageModel(ImageGenModel):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with open(output_path, "wb") as target:
                 target.write(image)
+        elif _result_urls(task, "image"):
+            _download_result(self.config, task, "image", output_path)
         else:
             result = _poll(self.config, task.get("task_id") or task.get("id"), endpoint="images")
             _download_result(self.config, result, "image", output_path)

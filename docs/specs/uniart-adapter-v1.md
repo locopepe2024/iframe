@@ -21,3 +21,14 @@ Add a dedicated UniArt HTTP adapter. Keep it separate from MuleRouter and use mo
 - async task submit/status/result download
 
 Image edit request shape and advanced video reference modes remain deferred until a real request is validated.
+
+## 2026-09-15 image contract correction
+
+Verified against deployed UniArt image `unitoken-5c9aaddd72c229964f7f3f36223018953a81aa1d`, specifically `dto/openai_image.go`, `relay/channel/openai/adaptor.go`, and `docs/openai-image-async-task-contract-v1.md` at that commit.
+
+- Generation: POST /v1/images/generations. JSON edit: POST /v1/images/edits with `images: [HTTP(S) URL]`; mask is a URL string. Do not send local file bytes as base64 in the request.
+- Local references are uploaded through managed COS/OSS and signed for provider access; upload/sign failure stops submission. Existing HTTP(S) references remain URLs.
+- Mask adapter submissions request async=true. Public async responses carry task_id/id and poll GET /v1/images/{task_id}; sync responses may contain b64_json or image URLs and do not require a task ID. Provider routing, not mask presence alone, determines async behavior.
+- This patch does not add a mask drawing/upload UI or accept unvalidated local mask paths from Playground parameters.
+- Existing semantic resolution/aspect_ratio mapping remains; resolution and concrete size are mutually exclusive.
+- 22 adapter regression checks passed. No paid image generation has been rerun. Nginx configuration was not changed.
