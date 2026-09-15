@@ -38,7 +38,7 @@ export function referencePromptDocument(value: string, labels: string[], restore
     let plain = '';
     const flush = () => { if (plain) content.push({ type: 'text', text: plain }); plain = ''; };
     for (let index = 0; index < line.length;) {
-      const isMention = line[index] === '@' && (index === 0 || /[\s“”"'（(，。！？、]/.test(line[index - 1]));
+      const isMention = line[index] === '@' && (index === 0 || /[\s“”"'（(，。！？、\u3400-\u9fff]/.test(line[index - 1]));
       const label = isMention
         ? names.find((name) => line.startsWith('@' + name, index))
           || (restoreNames ? restoredReferenceName(line.slice(index + 1)) : undefined)

@@ -70,6 +70,7 @@ describe('selected reference mentions', () => {
     });
 
     it.each([
+        ['@ed0bd598ly1gon8dd5fqzj21kw2dcu0z.jpg 和@Screenshot 2026-09-14 at 4.45.24\u202fPM.png 在跳舞', ['@ed0bd...', '@Scree...']],
         ['@Screenshot 2026-09-14 at 4.45.24\u202fPM.png 在跳舞', ['@Scree...']],
         ['@设计一个女孩和一只小狗在玩耍 @Untitled image 在一起玩耍', ['@设计一个女...', '@Untit...']],
     ])('renders restored reference names without requiring selected media: %s', (prompt, expected) => {
