@@ -111,6 +111,16 @@ def uninstall(skill_id: str, ctx: UserContext = Depends(require_user_context)):
 def creative_guidance(owner, request="", history=()):
     skills = [p for p in installed(owner) if p["enabled"]]
     target_text = request
+    model_pattern = r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺|seedance"
+    previous = history[-1] if history else {}
+    # A parameter answer belongs to the immediately preceding clarification,
+    # even when the user does not repeat the target model's name.
+    if (not re.search(model_pattern, request, re.I)
+            and re.search(r"\d+\s*(?:秒|s\b)|切镜|单镜头|单镜|\d+\s*[:：]\s*\d+", request, re.I)
+            and previous.get("role") == "assistant"
+            and re.search(r"请|补充|确认|\?|？", previous.get("content", ""))
+            and re.search(model_pattern, previous.get("content", ""), re.I)):
+        target_text = previous["content"]
     if re.fullmatch(r"\s*(继续|同上|按上面|continue)[。.!！]?\s*", request, flags=re.I):
         target_text = next((m["content"] for m in reversed(history) if m.get("role") == "user" and re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺|seedance", m.get("content", ""), re.I)), request)
     h3 = bool(re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target_text, re.I))

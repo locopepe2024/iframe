@@ -177,3 +177,20 @@ def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, mo
     skills.patch('minimax-h3-director', skills.SkillPatch(enabled=False), ctx)
     agent.send(sid, agent.MessageCreate(content='为H3优化'), ctx)
     assert next(p['instructions'] for p in packages if p['id'] == 'minimax-h3-director') not in call.call_args.args[2][0]['content']
+
+
+def test_h3_clarification_keeps_skill_without_overriding_explicit_new_target(ctx):
+    for package in skills.catalog():
+        skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+    history = [
+        {'role': 'user', 'content': '将仙侠侧踢优化适合minima H3'},
+        {'role': 'assistant', 'content': '为了按 MiniMax H3 编排，请补充视频总时长和是否允许切镜。'},
+    ]
+    guidance = skills.creative_guidance(ctx.owner_profile_id, '1. **视频总时长15 秒 2、允许切镜。', history)
+    h3 = next(p for p in skills.catalog() if p['id'] == 'minimax-h3-director')
+    assert h3['instructions'] in guidance
+    assert '[Seedance' not in guidance
+    assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '改为Seedance，15秒允许切镜', history)
+    assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '帮我写一封邮件', history)
+    skills.patch(h3['id'], skills.SkillPatch(enabled=False), ctx)
+    assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '15秒允许切镜', history)
