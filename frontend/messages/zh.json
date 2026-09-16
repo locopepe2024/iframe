@@ -412,6 +412,7 @@
     "offlineBannerText": "网络已断开 — 重新连接后可继续操作"
   },
   "nav": {
+    "recreation": "复刻",
     "workspace": "工作区",
     "library": "资产库",
     "editor": "剧本编辑器",
@@ -419,6 +420,19 @@
     "settings": "设置",
     "workspaceAria": "LumenX Studio · 工作区",
     "mainNavAria": "主导航"
+  },
+  "recreation": {
+    "title": "视频复刻", "upload": "导入原片", "sources": "原片",
+    "loading": "加载中", "empty": "暂无原片", "selectSource": "选择原片",
+    "registered": "已登记", "queued": "等待分析", "analyzing": "正在分析", "review": "待确认时间线",
+    "confirmed": "时间线已确认", "failed": "分析失败", "requestFailed": "请求失败，请重试。",
+    "invalidTimeline": "切点必须是递增、不重复的原片帧时间，不能包含起点和终点。",
+    "refresh": "刷新", "analyze": "分析原片", "audioTracks": "{count} 条音轨", "timeline": "时间线",
+    "shots": "镜", "confirm": "确认时间线", "frame": "原片帧", "addCut": "添加切点",
+    "timestamps": "切点时间（秒）", "import": "导入切点", "noCuts": "单个连续镜头",
+    "detected": "检测候选", "manual": "手动", "remove": "删除切点", "before": "切点前一帧",
+    "after": "切点首帧", "evidence": "加载相邻帧", "contactSheet": "联系表",
+    "unsaved": "修改待确认", "oversized": "原片不能超过 256 MiB"
   },
   "workspace": {
     "title": "我的工作区",

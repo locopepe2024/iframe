@@ -1,0 +1,62 @@
+import React from "react";
+import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../messages/en.json";
+import RecreationPage from "./RecreationPage";
+import { recreationApi, RecreationProject } from "@/lib/recreation";
+
+vi.mock("@/lib/recreation", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/recreation")>(),
+  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn() },
+}));
+
+const project: RecreationProject = {
+  id: "source", title: "Original.mp4", source_url: "/source.mp4", revision: 3, analysis_id: "analysis",
+  status: "review", error: null, timeline: null,
+  analysis: { time_base: "1/60000", start_pts: 0, end_pts: 900000,
+    frame_pts: [0, 1000, 241000, 545000, 624000, 899000], duration_seconds: 15,
+    width: 1080, height: 1920, audio_streams: 0, contact_sheet_url: "/contact.jpg",
+    candidates: [{ pts: 241000, before_pts: 1000, before_url: "/before.jpg", after_url: "/after.jpg", source: "detected" }] },
+};
+
+beforeEach(() => {
+  vi.mocked(recreationApi.list).mockResolvedValue([project]);
+  vi.mocked(recreationApi.get).mockResolvedValue(project);
+  vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
+    timeline: { cuts: [], shots: [{ start_pts: 0, end_pts: 900000 }] } });
+});
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+async function open() {
+  render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: /Original.mp4/ }));
+  await screen.findByRole("button", { name: "Confirm timeline" });
+}
+
+describe("recreation confirmation", () => {
+  it("never confirms on analysis load, submits exact imported PTS only on user action", async () => {
+    await open();
+    expect(recreationApi.confirm).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Cut times in seconds" }), { target: { value: "4.016667, 9.083333, 10.400000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import cuts" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirm timeline" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
+    await waitFor(() => expect(recreationApi.confirm).toHaveBeenCalledWith(project, [241000, 545000, 624000]));
+  });
+  it("rejects an off-frame import and retains the detected cut", async () => {
+    await open();
+    fireEvent.change(screen.getByRole("textbox", { name: "Cut times in seconds" }), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import cuts" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("source-frame times");
+    expect(screen.getAllByText(/4.016667 s/).length).toBeGreaterThan(0);
+    expect(recreationApi.confirm).not.toHaveBeenCalled();
+  });
+  it("can remove all candidates and confirm a single continuous shot", async () => {
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Remove cut" }));
+    expect(screen.getByText("One continuous shot")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
+    await waitFor(() => expect(recreationApi.confirm).toHaveBeenCalledWith(project, []));
+  });
+});
