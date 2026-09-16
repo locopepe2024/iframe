@@ -21,7 +21,7 @@ def test_large_video_image_references_are_urls_not_inline_bytes(tmp_path, monkey
         assert endpoint == '/videos'
         assert len(json.dumps(body).encode()) < 2048
         assert 'data:' not in json.dumps(body)
-        urls = [c[c['type']]['url'] for c in body['content']] if mode != 'i2v' else [body['input_reference']]
+        urls = [c[c['type']]['url'] for c in body['content'] if c['type'] != 'text']
         assert all(url.startswith('https://storage.example/') for url in urls)
         return {'task_id': 'task'}
     monkeypatch.setattr(uniart, '_post', post)
@@ -56,6 +56,8 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     refs = [] if mode == 't2v' else ['https://storage.example/a.mp4' if mode == 'v2v' else 'https://storage.example/a.png']
     if mode in {'r2v', 'f2v', 'v2v'}:
         refs.append('https://storage.example/b.mp4' if mode == 'v2v' else 'https://storage.example/b.png')
+    if mode == 'v2v':
+        refs.insert(0, 'https://storage.example/a.png')
     gen = PlaygroundGeneration(id='test', model_id='uniart/' + model, mode=mode, prompt='walk', input_media=refs, created_at='2026-09-16', parameters={'resolution': resolution})
     storage = Mock(output_dir=str(tmp_path))
     service = PlaygroundService(storage, provider_config_loader=lambda: {})
@@ -73,12 +75,14 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
         assert endpoint == '/videos'
         assert 'data:' not in json.dumps(body)
         if mode in {'r2v', 'f2v', 'v2v'}:
-            urls = [c[c['type']]['url'] for c in body['content']]
+            urls = [c[c['type']]['url'] for c in body['content'] if c['type'] != 'text']
             assert urls == refs
         elif mode == 'i2v':
-            assert body['input_reference'] == refs[0]
+            assert body['content'][1] == {'type': 'image_url', 'role': 'image', 'image_url': {'url': refs[0]}}
         else:
-            assert 'input_reference' not in body and 'content' not in body
+            assert body['content'] == [{'type': 'text', 'text': 'walk'}]
+        assert 'prompt' not in body and 'input_reference' not in body and 'aspect_ratio' not in body
+        assert body['ratio'] == '16:9'
         captured.append(body)
         return {'task_id': 'accepted'}
     def poll(config, task_id, **kwargs):

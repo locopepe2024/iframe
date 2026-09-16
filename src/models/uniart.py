@@ -317,10 +317,12 @@ class UniArtVideoModel(VideoGenModel):
             _download_result(self.config, result, "video", output_path)
             return output_path, time.time() - started
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
-        body: Dict[str, Any] = {"model": model, "prompt": prompt}
-        for key in ("mode", "duration", "resolution", "size", "ratio", "aspect_ratio", "watermark", "generate_audio"):
+        body: Dict[str, Any] = {"model": model}
+        for key in ("mode", "duration", "resolution", "size", "ratio", "watermark", "generate_audio"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
+        if kwargs.get("aspect_ratio") and not body.get("ratio"):
+            body["ratio"] = kwargs["aspect_ratio"]
         first_frame = _media(kwargs.get("first_frame"))
         last_frame = _media(kwargs.get("last_frame"))
         if first_frame or last_frame:
@@ -330,18 +332,25 @@ class UniArtVideoModel(VideoGenModel):
                 {"type": "image_url", "role": "first_frame", "image_url": {"url": first_frame}},
                 {"type": "image_url", "role": "last_frame", "image_url": {"url": last_frame}},
             ]
-        elif kwargs.get("ref_image_urls") or kwargs.get("ref_video_urls"):
+        elif kwargs.get("ref_image_urls") or kwargs.get("ref_video_urls") or kwargs.get("ref_audio_urls"):
             body["content"] = [
                 {"type": "image_url", "role": "reference_image", "image_url": {"url": _media(ref)}}
                 for ref in kwargs.get("ref_image_urls", [])
             ] + [
                 {"type": "video_url", "role": "reference_video", "video_url": {"url": _media(ref)}}
                 for ref in kwargs.get("ref_video_urls", [])
+            ] + [
+                {"type": "audio_url", "role": "reference_audio", "audio_url": {"url": _media(ref)}}
+                for ref in kwargs.get("ref_audio_urls", [])
             ]
         else:
             image = _media(kwargs.get("img_url") or kwargs.get("img_path"))
             if image:
-                body["input_reference"] = image
+                body["content"] = [{"type": "image_url", "role": "image", "image_url": {"url": image}}]
+        media = body.get("content", [])
+        if not body.get("mode"):
+            body["mode"] = "frames2video" if first_frame else "reference2video" if any(c["role"].startswith("reference_") for c in media) else "image2video" if media else "text2video"
+        body["content"] = [{"type": "text", "text": prompt}] + media
         task = _post(self.config, "/videos", body)
         task_id = task.get("task_id") or task.get("id")
         if not task_id:

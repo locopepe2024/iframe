@@ -67,10 +67,10 @@ def test_linked_conversation_and_image_context(setup, monkeypatch):
     complete = Mock(return_value='看见一只小狗')
     monkeypatch.setattr(agent, 'complete', complete)
     agent.send(first['id'], agent.MessageCreate(content='这是什么？', input_media=['/playground/input-media/a.png']), ctx)
-    assert complete.call_args.args[2][-1]['content'][1] == {
+    assert complete.call_args.args[2][-1]['content'][2] == {
         'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}}
     agent.send(first['id'], agent.MessageCreate(content='它的颜色？'), ctx)
-    assert complete.call_args.args[2][1]['content'][1]['type'] == 'image_url'
+    assert complete.call_args.args[2][1]['content'][2]['type'] == 'image_url'
     assert isinstance(complete.call_args.args[2][2]['content'], str)
     assert len(agent.playground_conversation('canvas', ctx)['messages']) == 4
 
@@ -124,3 +124,34 @@ def test_audio_and_text_payloads(setup, tmp_path, monkeypatch):
     text.write_text('分镜：小狗跳舞', encoding='utf-8')
     monkeypatch.setattr(agent, 'reference_path', lambda ctx, ref: str(text))
     assert '分镜：小狗跳舞' in agent.reference_content(setup, 'reference')['text']
+
+
+def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkeypatch):
+    from src.models import uniart
+    files = []
+    for name in ['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt']:
+        path = tmp_path / name
+        path.write_bytes(b'sample')
+        files.append(str(path))
+    monkeypatch.setattr(agent, 'reference_path', lambda ctx, ref: ref)
+    monkeypatch.setattr(uniart, '_image_reference_url', lambda path: 'https://cdn.example/' + path.split('/')[-1])
+    call = Mock(return_value='answer')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='Use @face.png with @walk.mp4', input_media=files,
+        asset_names=['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt']), setup)
+    parts = call.call_args.args[2][-1]['content']
+    assert parts[0]['text'].startswith('Use @1 with @3')
+    assert [parts[i]['type'] for i in [2, 4, 6, 8, 10]] == ['image_url', 'image_url', 'video_url', 'input_audio', 'text']
+    assert parts[2]['image_url']['url'] == 'https://cdn.example/face.png'
+    assert parts[6]['video_url'] == 'https://cdn.example/walk.mp4'
+    assert '参考素材 @4：sound.wav' in parts[7]['text']
+    agent.send(sid, agent.MessageCreate(content='Continue'), setup)
+    assert call.call_args.args[2][1]['content'] == parts
+
+
+def test_chat_large_inline_history_is_rejected_before_network(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'api_key': 'test', 'base_url': 'https://example.test/v1'})))
+    with pytest.raises(HTTPException) as exc:
+        agent.complete(setup, 'qwen', [{'role': 'user', 'content': 'x' * (901 * 1024)}])
+    assert exc.value.status_code == 422

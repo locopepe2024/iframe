@@ -21,6 +21,7 @@ from .models import (
 )
 from .storage import PlaygroundStorage
 from ...utils import get_logger
+from ...models.reference_binding import bind_reference_names, media_kind
 
 logger = get_logger(__name__)
 
@@ -243,7 +244,7 @@ class PlaygroundService:
         from ...models.uniart import UniArtImageModel
 
         runtime_config = self._load_provider_config()
-        use_uniart = bool(runtime_config) or "uniart.fun" in (
+        use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
             os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
         )
         model = UniArtImageModel(runtime_config) if use_uniart else MuleRouterImageModel({})
@@ -259,10 +260,12 @@ class PlaygroundService:
         if use_uniart and params.get("aspect_ratio"):
             kwargs["aspect_ratio"] = params["aspect_ratio"]
         if gen.mode == PlaygroundMode.I2I and gen.input_media:
+            if use_uniart and any(media_kind(ref) != "image" for ref in gen.input_media):
+                raise ValueError("Image editing accepts image references only")
             kwargs["ref_image_paths"] = list(gen.input_media)
 
         model.generate(
-            prompt=gen.prompt,
+            prompt=bind_reference_names(gen.prompt, [gen.media_names.get(ref, "") for ref in gen.input_media]) if use_uniart else gen.prompt,
             output_path=out_path,
             model_name=gen.model_id,
             **kwargs,
@@ -365,6 +368,10 @@ class PlaygroundService:
             os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
         )
         model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
+        saved_task = gen.provider_tasks.get(str(batch_index))
+        if use_uniart and saved_task:
+            model.generate(prompt=gen.prompt, output_path=out_path, resume_task_id=saved_task)
+            return
 
         params = gen.parameters
         img_path, img_url = self._resolve_first_input_media(gen)
@@ -392,6 +399,23 @@ class PlaygroundService:
             kwargs["on_task_submitted"] = save_task
             kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
+            references = list(gen.input_media)
+            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V):
+                grouped = {kind: [ref for ref in references if media_kind(ref) == kind] for kind in ("image", "video", "audio")}
+                references = grouped["image"] + grouped["video"] + grouped["audio"]
+                kwargs["ref_image_urls"] = grouped["image"]
+                kwargs["ref_video_urls"] = grouped["video"]
+                kwargs["ref_audio_urls"] = grouped["audio"]
+                img_path, img_url = None, None
+                if not grouped["image"]:
+                    raise ValueError("UniArt reference video mode requires at least one reference image")
+            elif gen.mode == PlaygroundMode.I2V:
+                if len(references) != 1 or media_kind(references[0]) != "image":
+                    raise ValueError("Image-to-video requires exactly one image; use reference mode for multiple materials")
+            elif gen.mode == PlaygroundMode.F2V and any(media_kind(ref) != "image" for ref in references):
+                raise ValueError("First/last-frame mode requires images")
+            kwargs["reference_prompt"] = bind_reference_names(gen.prompt, [gen.media_names.get(ref, "") for ref in references])
+            kwargs["generate_audio"] = params.get("audio")
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",
                 PlaygroundMode.I2V: "image2video",
@@ -400,9 +424,6 @@ class PlaygroundService:
                 PlaygroundMode.V2V: "reference2video",
             }[gen.mode]
             if gen.mode == PlaygroundMode.T2V:
-                img_path, img_url = None, None
-            if gen.mode == PlaygroundMode.V2V:
-                kwargs["ref_video_urls"] = list(gen.input_media)
                 img_path, img_url = None, None
 
         if gen.mode == PlaygroundMode.F2V:
@@ -413,7 +434,7 @@ class PlaygroundService:
             kwargs["last_frame"] = gen.input_media[1]
 
         model.generate(
-            prompt=gen.prompt,
+            prompt=kwargs.pop("reference_prompt", gen.prompt),
             output_path=out_path,
             img_url=img_url,
             img_path=img_path,

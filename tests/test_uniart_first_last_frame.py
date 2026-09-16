@@ -48,6 +48,7 @@ def test_uniart_video_uses_canonical_first_last_frame_content(monkeypatch, tmp_p
 
     assert captured["path"] == "/videos"
     assert captured["body"]["content"] == [
+        {"type": "text", "text": "camera moves between frames"},
         {
             "type": "image_url",
             "role": "first_frame",

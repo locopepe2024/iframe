@@ -227,8 +227,12 @@ def reference_content(ctx, reference):
 
 
 def complete(ctx, model, history):
-    from openai import OpenAI
     config = get_user_config_store().get_runtime_uniart(ctx)
+    # Chat audio is inline per the gateway schema; reject oversized histories
+    # before the gateway's default nginx limit, without dropping references.
+    if len(json.dumps({"model": model, "messages": history}, ensure_ascii=True).encode()) > 900 * 1024:
+        raise HTTPException(422, "多模态对话请求过大，请缩短音频或文本参考，或新建会话后重试")
+    from openai import OpenAI
     with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
         reply = client.chat.completions.create(model=model, messages=history)
     answer = None
@@ -288,10 +292,18 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             if message["role"] == "user":
                 content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
             if message["role"] == "user" and message.get("input_media"):
-                content = [{"type": "text", "text": content}] + [
-                    content_for(ref)
-                    for ref in message["input_media"]
-                ]
+                from ..models.reference_binding import bind_reference_names
+                refs = message["input_media"]
+                names = message.get("asset_names", [])
+                labels = [names[i] if i < len(names) else "" for i in range(len(refs))]
+                try:
+                    bound_content = bind_reference_names(content, labels)
+                except ValueError as exc:
+                    raise HTTPException(422, "参考素材名称重复，请使用 @1、@2 等编号明确指定素材") from exc
+                content = [{"type": "text", "text": bound_content}]
+                for index, ref in enumerate(refs):
+                    content.append({"type": "text", "text": f"参考素材 @{index + 1}：{labels[index] or '未命名素材'}（紧随此说明的附件）"})
+                    content.append(content_for(ref))
             history.append({"role": message["role"], "content": content})
         answer = complete(ctx, session["model"], history)
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
