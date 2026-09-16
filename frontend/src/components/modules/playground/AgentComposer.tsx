@@ -81,8 +81,8 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
   const prompt = usePlaygroundStore((state) => state.prompt);
-  const promptLimit = agent?.active ? 16000 : 2000;
-  const promptTooLong = prompt.length > promptLimit;
+  const promptLimit = agent?.active ? 16000 : null;
+  const promptTooLong = promptLimit !== null && prompt.length > promptLimit;
   usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
@@ -248,7 +248,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             }}
           />
 
-          <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length} / {promptLimit}</span>
+          <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length}{promptLimit !== null ? ` / ${promptLimit}` : ' 字'}</span>
           <button
             type="button"
             onClick={handleSubmit}

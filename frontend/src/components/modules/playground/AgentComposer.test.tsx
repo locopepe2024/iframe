@@ -21,7 +21,7 @@ it('keeps one add button and separates creation methods from media selection', (
     expect(screen.getAllByRole('button', { name: '添加参考素材' })).toHaveLength(1);
     expect(within(screen.getByLabelText('参考素材列表')).getByRole('button', { name: '添加参考素材' })).toBeInTheDocument();
     expect(within(screen.getByLabelText('参考素材列表')).getByRole('img')).toBeInTheDocument();
-    expect(screen.getByLabelText('字数统计')).toHaveTextContent('5 / 2000');
+    expect(screen.getByLabelText('字数统计')).toHaveTextContent('5 字');
     fireEvent.click(screen.getByRole('button', { name: 'mode.i2i' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'mode.t2i' })).toBeInTheDocument();
@@ -79,10 +79,11 @@ it('preserves long drafts across modes and gates only submission by the active l
     expect(screen.getByLabelText('字数统计')).toHaveTextContent('2800 / 16000');
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled();
     view.rerender(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={{ ...agent, active: false }} />);
-    expect(screen.getByRole('alert')).toHaveTextContent('内容已完整保留');
-    expect(screen.getByRole('button', { name: 'compose.generate' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'compose.generate' })).toBeEnabled();
+    expect(screen.getByLabelText('字数统计')).toHaveTextContent('2800 字');
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', ctrlKey: true });
-    expect(send).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledOnce();
     expect(usePlaygroundStore.getState().prompt).toBe(text);
     view.rerender(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={agent} />);
     act(() => usePlaygroundStore.getState().setPrompt('字'.repeat(16001)));
