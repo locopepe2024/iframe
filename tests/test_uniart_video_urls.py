@@ -80,8 +80,11 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
         elif mode == 'i2v':
             assert body['content'][1] == {'type': 'image_url', 'role': 'image', 'image_url': {'url': refs[0]}}
         else:
-            assert body['content'] == [{'type': 'text', 'text': 'walk'}]
-        assert 'prompt' not in body and 'input_reference' not in body and 'aspect_ratio' not in body
+            assert body['prompt'] == 'walk'
+            assert 'content' not in body
+        if mode != 't2v':
+            assert 'prompt' not in body
+        assert 'input_reference' not in body and 'aspect_ratio' not in body
         assert body['ratio'] == '16:9'
         captured.append(body)
         return {'task_id': 'accepted'}

@@ -350,7 +350,13 @@ class UniArtVideoModel(VideoGenModel):
         media = body.get("content", [])
         if not body.get("mode"):
             body["mode"] = "frames2video" if first_frame else "reference2video" if any(c["role"].startswith("reference_") for c in media) else "image2video" if media else "text2video"
-        body["content"] = [{"type": "text", "text": prompt}] + media
+        # The public API accepts prompt OR content text. Its content normalizer
+        # clears text2video before H3's explicit-mode routing check; keep pure
+        # text requests on the documented prompt form so the mode survives.
+        if body["mode"] == "text2video" and not media:
+            body["prompt"] = prompt
+        else:
+            body["content"] = [{"type": "text", "text": prompt}] + media
         task = _post(self.config, "/videos", body)
         task_id = task.get("task_id") or task.get("id")
         if not task_id:
