@@ -1796,7 +1796,12 @@ export async function agentRequest<T>(path: string, method = 'GET', body?: unkno
     method, headers: { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Chat 服务尚未就绪');
+  if (!response.headers.get('content-type')?.includes('application/json')) {
+    const detail = response.status >= 500
+      ? `Chat 连接中断（HTTP ${response.status}），服务可能正在重启或网关暂时不可用；请等待当前会话结束后重试`
+      : `Chat 返回非预期响应（HTTP ${response.status}），请刷新后重试`;
+    throw new Error(detail);
+  }
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Chat 请求失败');
   return data as T;
