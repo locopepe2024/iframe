@@ -9,7 +9,7 @@ from src.apps.identity import UserContext
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     monkeypatch.setenv('LUMENX_AGENT_DB', str(tmp_path / 'agent.sqlite3'))
-    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen', 'capabilities': ['chat']}, {'api_model_id': 'gpt-5.6-sol', 'capabilities': ['chat']}, {'api_model_id': 'image', 'capabilities': ['t2i']}])
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen', 'capabilities': ['chat']}])
     return UserContext('user', 'profile', 'name', 'token')
 
 
@@ -89,3 +89,13 @@ def test_delete_message_is_persistent_and_owner_scoped(setup, monkeypatch):
         agent.delete_message(sid, reply['id'], other)
     agent.delete_message(sid, reply['id'], ctx)
     assert agent.messages(sid, ctx)['messages'] == [user]
+
+
+def test_agent_catalog_exact_models_and_order(monkeypatch):
+    import io
+    models = ['glm-5.3', 'gpt-5.6-luna-2026-07-09', 'qwen3.8-flash', 'gpt-5.6-sol', 'gpt-5.6-luna', 'chatgpt-6']
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'base_url': 'https://example.test/v1', 'api_key': 'test'})))
+    monkeypatch.setattr(agent, 'urlopen', lambda *a, **kw: io.StringIO(agent.json.dumps({'data': [{'id': m} for m in models]})))
+    result = agent.catalog(UserContext('a','a','a','token'))
+    assert [m['api_model_id'] for m in result] == ['gpt-5.6-sol', 'gpt-5.6-luna', 'qwen3.8-flash', 'glm-5.3']
+    assert result[0]['display_name'] == 'GPT 5.6 Sol'

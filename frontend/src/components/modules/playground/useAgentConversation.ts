@@ -34,13 +34,14 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     let cancelled = false;
     agentRequest<{ models: ChatModel[] }>('/models').then(catalog => {
       if (cancelled) return;
-      let selected: string[] | null = null;
-      try { selected = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null'); } catch { /* catalog default */ }
-      const available = catalog.models.filter(m => !selected || selected.includes(m.id));
-      setModels(available); setModel(current => current || available[0]?.api_model_id || '');
+      const available = catalog.models;
+      setModels(available); setModel(current => available.some(m => m.api_model_id === current) ? current : available[0]?.api_model_id || '');
     }).catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [enabled, revision]);
+  useEffect(() => {
+    if (models.length && !models.some(m => m.api_model_id === model)) setModel(models[0].api_model_id);
+  }, [models, model]);
   async function removeMessage(id: string) {
     if (!sessionId) return;
     try {
