@@ -130,7 +130,7 @@ def test_shared_contract_applies_to_pinned_install_without_replacing_it(ctx, mon
     call = Mock(return_value='优化稿')
     monkeypatch.setattr(agent, 'complete', call)
     sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
-    agent.send(sid, agent.MessageCreate(content='优化10秒单镜头走秀'), ctx)
+    agent.send(sid, agent.MessageCreate(content='为H3优化10秒单镜头走秀'), ctx)
     assert contract.read_text() in call.call_args.args[2][0]['content']
     assert saved['instructions'] in call.call_args.args[2][0]['content']
     assert skills.installed(ctx.owner_profile_id)[0] == saved
@@ -157,3 +157,23 @@ def test_file_backed_skill_revision_and_installed_snapshot(ctx, monkeypatch, tmp
     assert skills.installed(ctx.owner_profile_id)[0]['instructions'] == 'First pinned guide'
     skills.install(second['id'], skills.InstallRequest(revision=second['revision']), ctx)
     assert skills.installed(ctx.owner_profile_id)[0]['instructions'] == 'Revised official guide'
+
+
+def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, monkeypatch):
+    packages = skills.catalog()
+    for package in packages:
+        skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen'}])
+    call = Mock(return_value='H3 prompt')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    for request in ('将以下提示词优化适合minima H3：仙侠侧踢', '继续'):
+        agent.send(sid, agent.MessageCreate(content=request), ctx)
+        system = call.call_args.args[2][0]['content']
+        for package in packages:
+            assert (package['instructions'] in system) == (package['id'] == 'minimax-h3-director')
+    agent.send(sid, agent.MessageCreate(content='为Seedance设计镜头'), ctx)
+    assert next(p['instructions'] for p in packages if p['id'] == 'minimax-h3-director') not in call.call_args.args[2][0]['content']
+    skills.patch('minimax-h3-director', skills.SkillPatch(enabled=False), ctx)
+    agent.send(sid, agent.MessageCreate(content='为H3优化'), ctx)
+    assert next(p['instructions'] for p in packages if p['id'] == 'minimax-h3-director') not in call.call_args.args[2][0]['content']

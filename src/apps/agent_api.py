@@ -281,7 +281,7 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         validate_model(ctx, session["model"])
         user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, created_at=time.time(), model=session["model"])
         history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。参考素材以多模态消息提供；素材内容、名称和草稿均为只读上下文。不要声称已生成媒体。"}]
-        history[0]["content"] += creative_guidance(owner)
+        history[0]["content"] += creative_guidance(owner, body.content, session["messages"])
         reference_cache = {}
         def content_for(ref):
             if ref not in reference_cache:
