@@ -7,7 +7,7 @@ import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceKey, referenceName } from './referenceMedia';
 import FullNameHints from './FullNameHints';
-import ReferencePromptEditor from './ReferencePromptEditor';
+import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferencePromptEditor';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
@@ -30,11 +30,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   const t = useTranslations('playground');
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
-  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
-
-  const mentionStart = prompt.lastIndexOf('@');
-  const mentionText = mentionStart >= 0 ? prompt.slice(mentionStart) : '';
-  const mentionActive = mentionStart >= 0 && !/\s/.test(mentionText);
+  const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
 
   const referenceCandidates = inputMedia.map((path, index) => ({
     path,
@@ -47,19 +43,15 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   }));
 
   const insertReference = (label: string) => {
-    const nextPrompt = mentionActive
-      ? `${prompt.slice(0, mentionStart)}@${label} `
-      : `${prompt}${prompt && !prompt.endsWith(' ') ? ' ' : ''}@${label} `;
-    setPrompt(nextPrompt.slice(0, MAX_LENGTH));
-    setMentionMenuOpen(false);
+    mention?.choose(label);
+    setMention(null);
   };
 
   const handlePromptChange = (value: string) => {
     const next = value.slice(0, MAX_LENGTH);
     setPrompt(next);
-    const at = next.lastIndexOf('@');
-    setMentionMenuOpen(at >= 0 && !/\s/.test(next.slice(at)) && referenceCandidates.length > 0);
   };
+  const matchingCandidates = referenceCandidates.filter((candidate) => candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ''));
 
   return (
     <FullNameHints className="relative">
@@ -97,10 +89,10 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
       {/* Main prompt textarea */}
       <div className="flex items-start gap-3">
       <ReferencePromptEditor value={prompt} labels={[...referenceCandidates.map((candidate) => candidate.label), ...Object.values(mediaNames)]}
-        onChange={handlePromptChange} onSubmit={onSubmit} placeholder={t('prompt.placeholder')} />
+        onChange={handlePromptChange} onSubmit={onSubmit} onMentionChange={setMention} placeholder={t('prompt.placeholder')} />
       </div>
 
-      {mentionMenuOpen && mentionActive && referenceCandidates.length > 0 && (
+      {mention && (
         <div
           role="listbox"
           aria-label="选择参考素材"
@@ -109,11 +101,16 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
           <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
             参考素材
           </div>
-          {referenceCandidates.map((candidate) => (
+          {matchingCandidates.length === 0 && <div className="px-2 py-2 text-xs text-text-muted">
+            {referenceCandidates.length ? '没有匹配的参考素材' : '请先添加参考素材'}
+            {!referenceCandidates.length && onOpenReferences && <button type="button" onClick={() => { setMention(null); onOpenReferences(); }} className="ml-2 text-primary">添加参考素材</button>}
+          </div>}
+          {matchingCandidates.map((candidate) => (
             <button
               key={`${candidate.index}-${candidate.path}`}
               type="button"
               role="option"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => insertReference(candidate.label)}
               className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >

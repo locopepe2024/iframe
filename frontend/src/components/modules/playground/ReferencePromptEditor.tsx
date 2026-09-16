@@ -7,6 +7,24 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 import { shortReferenceLabel } from './referenceMedia';
+import type { Editor } from '@tiptap/core';
+
+export type ReferenceSuggestion = { query: string; choose: (label: string) => void };
+
+function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
+  const { selection } = editor.state;
+  if (!selection.empty) return null;
+  const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
+  const match = before.match(/(?:^|[\s“”"'（(，。！？、\u3400-\u9fff])@([^@\n]*)$/);
+  if (!match) return null;
+  const from = selection.from - match[1].length - 1;
+  const to = selection.from;
+  return { query: match[1], choose: (label) => {
+    editor.chain().focus().insertContentAt({ from, to }, [
+      { type: 'referenceToken', attrs: { label } }, { type: 'text', text: ' ' },
+    ]).run();
+  } };
+}
 
 const ReferenceToken = Node.create({
   name: 'referenceToken', group: 'inline', inline: true, atom: true,
@@ -51,14 +69,15 @@ export function referencePromptDocument(value: string, labels: string[], restore
   }) };
 }
 
-export default function ReferencePromptEditor({ value, labels, placeholder, onChange, onSubmit }: {
+export default function ReferencePromptEditor({ value, labels, placeholder, onChange, onSubmit, onMentionChange }: {
   value: string; labels: string[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
+  onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
 }) {
   const lastLocalValue = useRef<string | null>(null);
   const currentLabels = useRef(labels);
   currentLabels.current = labels;
-  const callbacks = useRef({ onChange, onSubmit });
-  callbacks.current = { onChange, onSubmit };
+  const callbacks = useRef({ onChange, onSubmit, onMentionChange });
+  callbacks.current = { onChange, onSubmit, onMentionChange };
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit.configure({ heading: false, bulletList: false, orderedList: false, blockquote: false, codeBlock: false, horizontalRule: false }),
@@ -67,6 +86,7 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: 'min-h-[120px] max-h-[260px] overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none' },
       handleKeyDown: (_view, event) => {
+        if (event.key === 'Escape') callbacks.current.onMentionChange?.(null);
         if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           callbacks.current.onSubmit?.(); return true;
         }
@@ -84,8 +104,11 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
       const text = editor.getText({ blockSeparator: '\n' });
       lastLocalValue.current = text;
       callbacks.current.onChange(text);
+      callbacks.current.onMentionChange?.(referenceSuggestion(editor));
     },
+    onSelectionUpdate: ({ editor }) => callbacks.current.onMentionChange?.(referenceSuggestion(editor)),
     onBlur: ({ editor }) => {
+      callbacks.current.onMentionChange?.(null);
       const text = editor.getText({ blockSeparator: '\n' });
       const document = referencePromptDocument(text, currentLabels.current);
       if (!editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {

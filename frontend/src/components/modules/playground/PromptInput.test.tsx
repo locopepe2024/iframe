@@ -110,4 +110,37 @@ describe('selected reference mentions', () => {
         openMentions();
         expect(screen.getAllByRole('option')).toHaveLength(13);
     });
+
+    it('opens mentions at the cursor and preserves the rest of the prompt when choosing', () => {
+        usePlaygroundStore.setState({ prompt: '让 在跳舞' });
+        render(<PromptInput />);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        act(() => { editor.commands.setTextSelection(3); editor.commands.insertContent('@'); });
+        expect(screen.getAllByRole('option')).toHaveLength(2);
+        const option = screen.getAllByRole('option')[1];
+        fireEvent.mouseDown(option);
+        fireEvent.click(option);
+        expect(usePlaygroundStore.getState().prompt).toBe('让 @Library portrait 在跳舞');
+        expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveTextContent('@Libra...');
+    });
+
+    it('offers adding materials instead of silently hiding an empty index', () => {
+        usePlaygroundStore.setState({ inputMedia: [], history: [] });
+        const open = vi.fn();
+        render(<PromptInput onOpenReferences={open} />);
+        openMentions();
+        expect(screen.getByRole('listbox')).toHaveTextContent('请先添加参考素材');
+        fireEvent.click(within(screen.getByRole('listbox')).getByRole('button', { name: '添加参考素材' }));
+        expect(open).toHaveBeenCalledOnce();
+    });
+
+    it('filters names including spaces and dismisses the index with Escape', () => {
+        render(<PromptInput />);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        act(() => { editor.commands.insertContent('@Library p'); });
+        expect(screen.getAllByRole('option')).toHaveLength(1);
+        expect(screen.getByRole('option')).toHaveTextContent('Library portrait');
+        fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
 });
