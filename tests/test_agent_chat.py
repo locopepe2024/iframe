@@ -9,7 +9,7 @@ from src.apps.identity import UserContext
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     monkeypatch.setenv('LUMENX_AGENT_DB', str(tmp_path / 'agent.sqlite3'))
-    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen', 'capabilities': ['chat']}])
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen', 'capabilities': ['chat']}, {'api_model_id': 'gpt-5.6-sol', 'capabilities': ['chat']}, {'api_model_id': 'image', 'capabilities': ['t2i']}])
     return UserContext('user', 'profile', 'name', 'token')
 
 
