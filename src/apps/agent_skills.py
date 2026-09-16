@@ -125,10 +125,11 @@ def creative_guidance(owner, request="", history=()):
         target_text = next((m["content"] for m in reversed(history) if m.get("role") == "user" and re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺|seedance", m.get("content", ""), re.I)), request)
     h3 = bool(re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target_text, re.I))
     seedance = bool(re.search(r"seedance", target_text, re.I))
+    h3_skills = {'minimax-h3-director', 'h3-product-recreation'}
     if h3 and not seedance:
-        skills = [p for p in skills if p['id'] == 'minimax-h3-director']
+        skills = [p for p in skills if p['id'] in h3_skills]
     elif seedance and not h3:
-        skills = [p for p in skills if p['id'] != 'minimax-h3-director']
+        skills = [p for p in skills if p['id'] not in h3_skills]
     elif request and not h3 and not seedance:
         skills = [p for p in skills if p['id'] not in {'minimax-h3-director', 'seedance-camera', 'seedance-prompt'}]
     if not skills:

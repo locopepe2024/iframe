@@ -16,7 +16,7 @@ def ctx(tmp_path, monkeypatch):
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 5
+    assert len(packages) == len({p['id'] for p in packages}) == 6
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -171,7 +171,7 @@ def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, mo
         agent.send(sid, agent.MessageCreate(content=request), ctx)
         system = call.call_args.args[2][0]['content']
         for package in packages:
-            assert (package['instructions'] in system) == (package['id'] == 'minimax-h3-director')
+            assert (package['instructions'] in system) == (package['id'] in {'minimax-h3-director', 'h3-product-recreation'})
     agent.send(sid, agent.MessageCreate(content='为Seedance设计镜头'), ctx)
     assert next(p['instructions'] for p in packages if p['id'] == 'minimax-h3-director') not in call.call_args.args[2][0]['content']
     skills.patch('minimax-h3-director', skills.SkillPatch(enabled=False), ctx)
@@ -194,3 +194,20 @@ def test_h3_clarification_keeps_skill_without_overriding_explicit_new_target(ctx
     assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '帮我写一封邮件', history)
     skills.patch(h3['id'], skills.SkillPatch(enabled=False), ctx)
     assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '15秒允许切镜', history)
+
+
+def test_product_recreation_installs_alone_reaches_chat_and_respects_target(ctx, monkeypatch):
+    package = next(p for p in skills.catalog() if p['id'] == 'h3-product-recreation')
+    skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen'}])
+    call = Mock(return_value='参考再生成提示词')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    for request in ('用H3参考视频，把商品换成图片中的商品，口播名称换为新商品名', '继续'):
+        agent.send(sid, agent.MessageCreate(content=request), ctx)
+        assert package['instructions'] in call.call_args.args[2][0]['content']
+    assert package['instructions'] in skills.creative_guidance(ctx.owner_profile_id, '参考原片重新生成并替换商品')
+    assert package['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '改为Seedance复刻视频')
+    assert package['instructions'] not in skills.creative_guidance('other-owner', '用H3换商品')
+    skills.patch(package['id'], skills.SkillPatch(enabled=False), ctx)
+    assert package['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '用H3换商品')
