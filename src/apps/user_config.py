@@ -184,8 +184,16 @@ class UserConfigStore:
         ciphertext = entry.get("ciphertext")
         if ciphertext:
             try:
-                data_key = self._user_data_key(identity, secret_payload)
-                key = self._decrypt(ciphertext, identity, data_key)
+                if secret_payload.get("_user_key"):
+                    data_key = self._user_data_key(identity, secret_payload)
+                    key = self._decrypt(ciphertext, identity, data_key)
+                else:
+                    # Legacy records were encrypted directly with the server
+                    # master key. Read them only during migration; the next
+                    # user save writes the versioned per-user envelope.
+                    if not self.master_key:
+                        raise HTTPException(status_code=503, detail="Legacy credential requires migration key")
+                    key = self._decrypt(ciphertext, None, None)
             except (KeyError, ValueError, json.JSONDecodeError) as exc:
                 raise HTTPException(status_code=503, detail="Stored UniArt credential cannot be decrypted") from exc
             return {
