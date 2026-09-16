@@ -236,20 +236,20 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
     try:
         validate_model(ctx, session["model"])
-        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media)
+        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, created_at=time.time(), model=session["model"])
         history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。参考图片会以图片消息提供；素材名称和草稿为只读上下文。不要声称已生成媒体。"}]
         for message in session["messages"][-30:] + [user]:
             content = message["content"]
             if message["role"] == "user":
                 content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
-            if message.get("input_media"):
+            if message["role"] == "user" and message.get("input_media"):
                 content = [{"type": "text", "text": content}] + [
                     {"type": "image_url", "image_url": {"url": image_reference(ctx, ref)}}
                     for ref in message["input_media"]
                 ]
             history.append({"role": message["role"], "content": content})
         answer = complete(ctx, session["model"], history)
-        assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer)
+        assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
         session["messages"].extend([user, assistant])
         session["updated_at"] = time.time()
         with database() as db:
@@ -265,3 +265,19 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     finally:
         with database() as db:
             db.execute("UPDATE sessions SET busy=0 WHERE owner=? AND id=? AND busy=?", (owner, sid, lease))
+
+
+@router.delete("/sessions/{sid}/messages/{mid}")
+def delete_message(sid: str, mid: str, ctx: UserContext = Depends(require_user_context)):
+    if sid.startswith("playground-"):
+        require_playground(ctx, sid.removeprefix("playground-"))
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row, session = read_session(db, ctx.owner_profile_id, sid)
+        if row["busy"] > time.time():
+            raise HTTPException(409, "请等待当前回复完成")
+        if not any(m["id"] == mid for m in session["messages"]):
+            raise HTTPException(404, "消息不存在")
+        session["messages"] = [m for m in session["messages"] if m["id"] != mid]
+        db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?", (json.dumps(session), ctx.owner_profile_id, sid))
+    return {"ok": True}

@@ -71,4 +71,21 @@ def test_linked_conversation_and_image_context(setup, monkeypatch):
         'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}}
     agent.send(first['id'], agent.MessageCreate(content='它的颜色？'), ctx)
     assert complete.call_args.args[2][1]['content'][1]['type'] == 'image_url'
+    assert isinstance(complete.call_args.args[2][2]['content'], str)
     assert len(agent.playground_conversation('canvas', ctx)['messages']) == 4
+
+
+def test_delete_message_is_persistent_and_owner_scoped(setup, monkeypatch):
+    ctx = setup
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='建议'))
+    sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    result = agent.send(sid, agent.MessageCreate(content='你好'), ctx)
+    user = result['user_message']
+    reply = result['assistant_message']
+    assert user['created_at'] <= reply['created_at']
+    assert reply['model'] == 'qwen'
+    other = UserContext('other', 'other', 'other', 'token')
+    with pytest.raises(HTTPException):
+        agent.delete_message(sid, reply['id'], other)
+    agent.delete_message(sid, reply['id'], ctx)
+    assert agent.messages(sid, ctx)['messages'] == [user]
