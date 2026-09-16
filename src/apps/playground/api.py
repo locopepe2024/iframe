@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
 from .models import (
@@ -24,7 +24,7 @@ from .models import (
 )
 from .service import PlaygroundService
 from .storage import PlaygroundStorage
-from ..identity import UserContext, _resolve_request_context, require_user_context
+from ..identity import BROWSER_PROFILE_COOKIE, UserContext, _resolve_request_context, require_user_context
 from ..user_config import get_user_config_store
 from ...utils import get_logger
 
@@ -218,9 +218,13 @@ def get_generation_media(
     expires: int = 0,
     signature: str = "",
     authorization: str | None = Header(default=None),
+    browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
 ):
-    if authorization:
-        identity, _ = _resolve_request_context(authorization, None)
+    # Original downloads use the same browser identity as history and uploads.
+    # Signed previews still validate their signature; invalid bearer credentials
+    # must not silently fall back to a different browser owner.
+    if authorization or (browser_profile and not signature and not expires):
+        identity, _ = _resolve_request_context(authorization, browser_profile)
     else:
         if expires < int(time.time()):
             raise HTTPException(status_code=401, detail="Media URL expired")
