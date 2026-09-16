@@ -317,6 +317,23 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     except HTTPException:
         raise
     except Exception as exc:
+        from openai import APIStatusError, APITimeoutError, APIConnectionError
+        if isinstance(exc, (APIStatusError, APIConnectionError)):
+            status = getattr(exc, "status_code", None)
+            logger.warning("UniArt chat transport failed: model=%s type=%s status=%s", session["model"], type(exc).__name__, status)
+            if isinstance(exc, APITimeoutError):
+                detail = "UniArt 对话响应超时，请稍后重试；当前输入已保留"
+            elif status in (401, 403):
+                detail = f"UniArt 对话鉴权或访问权限失败（HTTP {status}），请检查当前用户的密钥和模型权限"
+            elif status == 429:
+                detail = "UniArt 对话请求受限（HTTP 429），请检查配额或稍后重试"
+            elif status is not None and status >= 500:
+                detail = f"UniArt 对话网关返回 HTTP {status}，本次请求未完成；当前输入已保留，请稍后重试"
+            elif status is not None:
+                detail = f"UniArt 拒绝对话请求（HTTP {status}），请核对模型及参考素材要求"
+            else:
+                detail = "无法连接 UniArt 对话服务，请稍后重试；当前输入已保留"
+            raise HTTPException(502, detail) from None
         logger.exception("Agent chat failed: %s", type(exc).__name__)
         raise HTTPException(502, "UniArt 对话失败，请检查模型和凭据后重试")
     finally:

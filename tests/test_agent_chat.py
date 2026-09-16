@@ -1,9 +1,36 @@
 from unittest.mock import Mock
 
 import pytest
+import httpx
+from openai import APIStatusError, APITimeoutError
 from fastapi import HTTPException
 from src.apps import agent_api as agent
 from src.apps.identity import UserContext
+
+
+@pytest.mark.parametrize('status,expected', [(502, '对话网关返回'), (401, '鉴权'), (429, '请求受限'), (400, '拒绝对话请求')])
+def test_provider_failures_are_distinguished_and_release_session(setup, monkeypatch, status, expected):
+    ctx = setup
+    sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    response = httpx.Response(status, request=httpx.Request('POST', 'https://example.com/chat'))
+    error = APIStatusError('sensitive-provider-body', response=response, body=None)
+    monkeypatch.setattr(agent, 'complete', Mock(side_effect=error))
+    with pytest.raises(HTTPException) as caught:
+        agent.send(sid, agent.MessageCreate(content='draft'), ctx)
+    assert expected in caught.value.detail
+    assert f'HTTP {status}' in caught.value.detail
+    assert 'sensitive-provider-body' not in caught.value.detail
+    with agent.database() as db:
+        row, session = agent.read_session(db, ctx.owner_profile_id, sid)
+    assert row['busy'] == 0
+    assert session['messages'] == []
+
+
+def test_provider_timeout_is_not_reported_as_bad_credentials(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    monkeypatch.setattr(agent, 'complete', Mock(side_effect=APITimeoutError(request=httpx.Request('POST', 'https://example.com/chat'))))
+    with pytest.raises(HTTPException, match='响应超时'):
+        agent.send(sid, agent.MessageCreate(content='draft'), setup)
 
 
 @pytest.fixture
