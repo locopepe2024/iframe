@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine } from 'lucide-react';
+import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
 import OverflowActions from './OverflowActions';
+import { useLightbox } from '@/components/shared/preview/LightboxProvider';
 
 interface ResultCardProps {
   generation: PlaygroundGeneration;
@@ -130,6 +131,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const { prompt, model_id, mode, outputs, created_at } = generation;
   const t = useTranslations('playground');
   const output = outputs[outputIndex];
+  const lightbox = useLightbox();
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -191,15 +193,13 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   return (
     <div
       className={`group rounded-[20px] border bg-glass atelier-asset-card overflow-hidden transition cursor-pointer ${saved ? 'border-primary/40 ring-1 ring-primary/30' : 'border-glass-border hover:border-foreground/30'}`}
-      onClick={() => onOpenDetail?.(generation, output.id)}
+      onClick={() => { if (mediaUrl) lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? "video" : "image" }); }}
     >
       {/* Media area */}
       <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio: '16/9' }}>
         {mediaUrl ? (
           isVideo ? (
-            <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex items-center justify-center">
-              <Video className="w-8 h-8 text-text-muted" />
-            </div>
+            <video src={mediaUrl} preload="metadata" muted playsInline className="w-full h-full object-contain" />
           ) : imgError ? (
             <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex flex-col items-center justify-center gap-1.5">
               <svg className="w-8 h-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -213,6 +213,10 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-elevated to-surface" />
         )}
+
+        {mediaUrl && <button type="button" aria-label={isVideo ? '放大视频' : '放大图片'} title="放大预览"
+          onClick={event => { event.stopPropagation(); lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? 'video' : 'image' }); }}
+          className="absolute right-2 top-10 z-[4] flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 focus-visible:ring-2 focus-visible:ring-primary"><Expand size={18} /></button>}
 
         {/* Amber halation overlay — only when saved to library */}
         {saved && (
