@@ -114,3 +114,18 @@ def test_discount_preserves_structured_reference_contract(monkeypatch, model):
     monkeypatch.setattr(uniart, '_poll', lambda *a, **kw: pytest.fail('sync result must not poll'))
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
     uniart.UniArtImageModel({}).generate('edit', 'unused.png', model_name=model, ref_image_paths=['https://storage.example/reference.png'])
+
+
+@pytest.mark.parametrize('tier', ['1k', '2k', '4k'])
+@pytest.mark.parametrize('quality', ['high', '4k'])
+def test_nano_banana_resolution_is_not_overridden_by_gpt_quality(monkeypatch, tier, quality):
+    def post(config, endpoint, body):
+        assert body['resolution'] == tier
+        assert 'quality' not in body
+        assert 'size' not in body
+        return {'data': [{'url': 'https://storage.example/result.png'}]}
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
+    uniart.UniArtImageModel({}).generate('edit', 'unused.png',
+        model_name='uniart/nano-banana-2-special', size=tier, quality=quality,
+        ref_image_paths=['https://storage.example/source.png'])
