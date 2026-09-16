@@ -280,11 +280,6 @@ class UniArtImageModel(ImageGenModel):
         for key in ("size", "quality", "n"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
-        if model == "nano-banana-2-special":
-            # This SKU uses resolution tiers, not GPT low/medium/high quality.
-            # The service default (or a restored GPT draft) must not introduce
-            # a second output tier that conflicts with the user's size choice.
-            body.pop("quality", None)
         size = kwargs.get("size")
         if isinstance(size, str) and size.lower() in {"1k", "2k", "4k"}:
             body.pop("size", None)
