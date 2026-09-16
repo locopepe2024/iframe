@@ -4,6 +4,7 @@ import os
 import sqlite3
 import time
 import uuid
+import logging
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
 
@@ -15,6 +16,7 @@ from .user_config import get_user_config_store
 from ..utils.uniart_catalog import normalize_uniart_catalog
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -132,10 +134,22 @@ def complete(ctx, model, history):
     config = get_user_config_store().get_runtime_uniart(ctx)
     with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
         reply = client.chat.completions.create(model=model, messages=history)
-    answer = reply.choices[0].message.content
+    answer = None
+    choices = getattr(reply, "choices", None)
+    if choices:
+        first = choices[0]
+        message = getattr(first, "message", None)
+        answer = getattr(message, "content", None) if message else None
+    if not answer and isinstance(reply, dict):
+        choices = reply.get("choices") or []
+        if choices:
+            answer = ((choices[0].get("message") or {}).get("content") or choices[0].get("text"))
+        answer = answer or reply.get("content") or reply.get("output")
     if not answer:
+        raw = getattr(reply, "model_dump", lambda: {})()
+        logger.error("UniArt chat response has no text; keys=%s", sorted(raw.keys()) if isinstance(raw, dict) else type(reply).__name__)
         raise ValueError("Empty model response")
-    return answer
+    return str(answer)
 
 
 @router.post("/sessions/{sid}/messages")
@@ -170,7 +184,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         return dict(session=public(session), user_message=user, assistant_message=assistant)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.exception("Agent chat failed: %s", type(exc).__name__)
         raise HTTPException(502, "UniArt 对话失败，请检查模型和凭据后重试")
     finally:
         with database() as db:
