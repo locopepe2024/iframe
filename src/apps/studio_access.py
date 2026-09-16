@@ -14,7 +14,7 @@ import os
 import shutil
 import time
 from typing import Any, Dict, List, Mapping, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, parse_qs, unquote
 
 from fastapi import HTTPException
 
@@ -127,6 +127,37 @@ def verify_studio_media(owner_key: str, relative_path: str, expires: int, signat
     if not candidate.startswith(root + os.sep):
         raise HTTPException(status_code=404, detail="Media not found")
     return candidate
+
+
+def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
+    """Resolve a submitted reference before any local file can reach a provider."""
+    if not owner_profile_id:
+        raise ValueError("Media reference requires an authenticated owner")
+    parsed = urlsplit(value)
+    path = unquote(parsed.path)
+    owner_key = studio_owner_key(owner_profile_id)
+    if path.startswith("/studio/media/"):
+        parts = path.removeprefix("/studio/media/").split("/", 1)
+        if len(parts) != 2 or parts[0] != owner_key:
+            raise ValueError("Media reference belongs to another owner")
+        query = parse_qs(parsed.query)
+        try:
+            candidate = verify_studio_media(parts[0], parts[1], int(query["expires"][0]), query["signature"][0])
+        except (KeyError, ValueError, HTTPException) as exc:
+            raise ValueError("Invalid or expired Studio media reference") from exc
+    elif parsed.scheme in ("http", "https") and parsed.netloc and not parsed.username and not parsed.password:
+        return value
+    elif parsed.scheme or parsed.netloc:
+        raise ValueError("Unsupported media reference")
+    else:
+        candidate = os.path.realpath(value if value.startswith("output/") or os.path.isabs(value)
+                                     else os.path.join("output", value))
+    root = os.path.realpath(os.path.join("output", "users", owner_key))
+    if not candidate.startswith(root + os.sep):
+        raise ValueError("Media reference belongs to another owner")
+    if not os.path.isfile(candidate):
+        raise ValueError("Media reference file not found")
+    return os.path.relpath(candidate, "output")
 
 
 def sign_studio_media_paths(value: Any, owner_profile_id: str) -> Any:

@@ -26,6 +26,7 @@ from ..studio_access import (
     runtime_uniart_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
+    resolve_studio_reference,
 )
 
 logger = get_logger(__name__)
@@ -2148,7 +2149,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         task_id = str(uuid.uuid4())
         
         # If R2V mode is selected, use the appropriate R2V model
-        if generation_mode == "r2v":
+        is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
+        if generation_mode == "r2v" and not is_uniart_video:
             # Skip auto-switch if user already selected an R2V model directly
             if not (model and model.endswith("-r2v")):
                 if model and model.startswith("happyhorse-"):
@@ -2180,6 +2182,29 @@ class ComicGenPipeline(StudioOwnerMixin):
         # now match on the "-r2v" suffix so new R2V families inherit
         # the check automatically. Only wan2.6-r2v (legacy) takes
         # video refs; everything else takes image refs.
+        if is_uniart_video:
+            references = (reference_image_urls or []) + (reference_video_urls or [])
+            if generation_mode == "r2v" and not references and not audio_url:
+                raise ValueError("Reference-to-video requires image, video or audio references")
+            if generation_mode not in ("r2v", "i2v", "t2v"):
+                raise ValueError("Unsupported Studio UniArt generation mode")
+            if generation_mode != "r2v" and references:
+                raise ValueError("Reference lists require reference-to-video mode")
+            if generation_mode == "r2v" and image_url:
+                raise ValueError("Use the ordered reference list instead of an additional input image")
+            if generation_mode == "i2v" and not image_url:
+                raise ValueError("Image-to-video requires an input image")
+            if generation_mode == "i2v" and audio_url:
+                raise ValueError("Audio references require reference-to-video mode")
+            if generation_mode == "t2v" and (image_url or audio_url):
+                raise ValueError("Text-to-video cannot accept media references")
+            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
+            reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_video_urls or []]
+            if image_url:
+                image_url = resolve_studio_reference(image_url, script.owner_profile_id)
+            if audio_url:
+                audio_url = resolve_studio_reference(audio_url, script.owner_profile_id)
+
         is_r2v_model = isinstance(model, str) and model.endswith("-r2v")
         if is_r2v_model:
             needs_video_refs = model == "wan2.6-r2v"
@@ -2219,7 +2244,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     shutil.copy2(src_path, snapshot_path)
                     
                     # Update URL to relative path
-                    snapshot_url = f"video_inputs/{snapshot_filename}"
+                    snapshot_url = os.path.relpath(snapshot_path, "output")
         except Exception as e:
             logger.error(f"Failed to snapshot input image: {e}")
             # Fallback to original URL
@@ -3291,10 +3316,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Update status to processing
             task.status = "processing"
             self._save_data()
+
+            # Persisted tasks and asset motion tasks also need ownership validation.
+            is_uniart_task = (task.model or "").startswith(("uniart/minimax-h3-", "uniart/seedance-"))
+            if is_uniart_task and not (task.provider_name == "uniart" and task.provider_task_id):
+                task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in task.reference_image_urls]
+                task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in task.reference_video_urls]
+                if task.image_url:
+                    task.image_url = resolve_studio_reference(task.image_url, script.owner_profile_id)
+                if task.audio_url:
+                    task.audio_url = resolve_studio_reference(task.audio_url, script.owner_profile_id)
             
             # Download image to temp file
             img_path = None
-            if task.image_url:
+            if task.image_url and not (task.provider_name == "uniart" and task.provider_task_id):
                 img_path = self._download_temp_image(task.image_url)
             
             # Generate video
@@ -3353,10 +3388,26 @@ class ComicGenPipeline(StudioOwnerMixin):
                         script_owner.owner_profile_id,
                     )
                 )
+                def save_provider_task(provider_task_id):
+                    task.provider_name = "uniart"
+                    task.provider_task_id = provider_task_id
+                    self._save_data()
+
+                reference_images = list(task.reference_image_urls)
+                # Asset motion references use image_url as their sole visual input.
+                if task.generation_mode == "r2v" and task.image_url and task.image_url not in reference_images:
+                    reference_images.insert(0, task.image_url)
                 video_path, _ = uniart_model.generate(
                     prompt=task.prompt, output_path=output_path, img_url=img_url, img_path=img_path,
                     duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
-                    model=task.model, generation_mode=task.generation_mode,
+                    model=task.model,
+                    mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
+                    ref_image_urls=reference_images if task.generation_mode == "r2v" else [],
+                    ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else [],
+                    ref_audio_urls=[task.audio_url] if task.audio_url and task.generation_mode == "r2v" else [],
+                    generate_audio=task.generate_audio,
+                    on_task_submitted=save_provider_task,
+                    resume_task_id=task.provider_task_id if task.provider_name == "uniart" else None,
                 )
             elif use_mulerouter:
                 if self._mulerouter_video_model is None:
@@ -3454,6 +3505,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             task.video_url = os.path.relpath(output_path, "output")
             task.status = "completed"
+            task.error = None
             
             # Sync with asset if this is an asset video
             if task.asset_id:
@@ -3464,6 +3516,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             logger.exception("Failed to process video task")
             logger.error(f"Video generation failed: {e}")
             task.status = "failed"
+            task.error = str(e)
             if task.asset_id:
                 self._sync_asset_video_task(script, task)
             
