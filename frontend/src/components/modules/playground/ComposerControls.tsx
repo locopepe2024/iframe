@@ -120,7 +120,9 @@ export function getComposerControlState(modelId: string, parameters: Record<stri
   const params = getModelParams(modelId);
   const duration = getModelDuration(modelId);
   const size = (parameters.size as string | undefined) ?? params?.size?.default;
-  const resolution = (parameters.resolution as string | undefined) ?? params?.resolution?.default ?? size;
+  const resolution = params?.resolution
+    ? (params.resolution.options.includes(parameters.resolution) ? parameters.resolution : params.resolution.default)
+    : params?.size ? (params.size.options.includes(parameters.size) ? parameters.size : params.size.default) : undefined;
   const imageOptions = imageControlOptions(modelId);
   const ratio = (parameters.aspect_ratio as string | undefined) ?? params?.ratio?.default ?? (size ? ratioFromSize(size) : null) ?? imageOptions.ratios[0];
   const durationValue = duration

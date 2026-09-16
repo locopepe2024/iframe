@@ -57,3 +57,15 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     expect(send).toHaveBeenCalledOnce();
 });
+
+it('switches video resolution to image tiers without submitting stale video parameters', () => {
+    usePlaygroundStore.setState({ mode: 't2v', modelId: 'video-model', modelPreferences: {}, parameters: { resolution: '720p', duration: 5, audio: true }, prompt: 'keep me' });
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'mode.outputVideo' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'mode.outputImage' }));
+    expect(usePlaygroundStore.getState().parameters).toEqual({});
+    expect(usePlaygroundStore.getState().prompt).toBe('keep me');
+    fireEvent.click(screen.getByRole('button', { name: '1k' }));
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: '2k' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '720p' })).not.toBeInTheDocument();
+});

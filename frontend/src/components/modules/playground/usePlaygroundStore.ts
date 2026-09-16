@@ -335,9 +335,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   },
 
   setModelId: (modelId) => {
-    const { mode, modelPreferences } = get();
+    const { mode, modelPreferences, modelId: previousModel } = get();
     set({
       modelId,
+      ...(modelId !== previousModel ? { parameters: {} } : {}),
       modelPreferences: { ...modelPreferences, [mode]: modelId },
     });
   },

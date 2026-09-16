@@ -38,7 +38,9 @@ export function OutputTypeSelector({ agentActive = false, onAgentChange }: { age
               onAgentChange?.(false);
               const nextMode = getDefaultModeForOutput(output);
               setMode(nextMode);
-              if (!getModelCapabilities(modelId).includes(nextMode)) {
+              if (outputType !== output) usePlaygroundStore.getState().setParameters({});
+              const nextModel = usePlaygroundStore.getState().modelId;
+              if (!getModelCapabilities(nextModel).includes(nextMode)) {
                 setModelId(getDefaultModelForMode(nextMode));
               }
             }}
