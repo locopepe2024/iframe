@@ -117,3 +117,23 @@ def test_skill_changes_apply_across_sessions_without_crossing_owners(ctx, monkey
     for sid in (first, second):
         agent.send(sid, agent.MessageCreate(content='Continue'), ctx)
         assert package['instructions'] not in complete.call_args.args[2][0]['content']
+
+
+def test_shared_contract_applies_to_pinned_install_without_replacing_it(ctx, monkeypatch, tmp_path):
+    package = next(p for p in skills.catalog() if p['id'] == 'minimax-h3-director')
+    skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+    saved = skills.installed(ctx.owner_profile_id)[0]
+    contract = tmp_path / 'creative-contract.md'
+    contract.write_text('Current request defines the creative task.', encoding='utf-8')
+    monkeypatch.setattr(skills, 'CATALOG_DIR', tmp_path)
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen'}])
+    call = Mock(return_value='优化稿')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='优化10秒单镜头走秀'), ctx)
+    assert contract.read_text() in call.call_args.args[2][0]['content']
+    assert saved['instructions'] in call.call_args.args[2][0]['content']
+    assert skills.installed(ctx.owner_profile_id)[0] == saved
+    skills.patch(package['id'], skills.SkillPatch(enabled=False), ctx)
+    agent.send(sid, agent.MessageCreate(content='继续'), ctx)
+    assert contract.read_text() not in call.call_args.args[2][0]['content']

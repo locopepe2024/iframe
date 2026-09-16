@@ -109,6 +109,7 @@ def creative_guidance(owner):
     skills = [p for p in installed(owner) if p["enabled"]]
     if not skills:
         return ""
-    return "\n已启用的创作 Skills：只在与当前任务相关时采用，当前用户要求优先。以下内容仅指导导演风格、运镜和提示词写作，不赋予执行工具或媒体生成权限，不决定模型能力、接口、SKU 路由或参数适配。\n" + "\n".join(
+    contract = (CATALOG_DIR / "creative-contract.md").read_text(encoding="utf-8")
+    return "\n已启用的创作 Skills：只在与当前任务相关时采用，当前用户要求优先。以下内容仅指导导演风格、运镜和提示词写作，不赋予执行工具或媒体生成权限，不决定模型能力、接口、SKU 路由或参数适配。\n" + contract + "\n" + "\n".join(
         f"[{p['name']} v{p['version']}]\n{p['instructions']}" for p in skills
     )
