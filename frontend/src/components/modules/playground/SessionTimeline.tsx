@@ -9,6 +9,7 @@ import OverflowActions from './OverflowActions';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { shortReferenceLabel } from './referenceMedia';
 import { getAssetUrl } from '@/lib/utils';
+import { toast } from '@/store/toastStore';
 
 const MODE_LABELS: Record<string, string> = {
   t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', f2v: 'F2V', v2v: 'V2V',
@@ -49,6 +50,28 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
   const restoreGeneration = usePlaygroundStore((state) => state.restoreGeneration);
   const useResultAsReference = usePlaygroundStore((state) => state.useResultAsReference);
   const [error, setError] = useState('');
+  const retry = () => {
+    const state = usePlaygroundStore.getState();
+    const sessionId = generation.session_id || state.activeSessionId;
+    if (!sessionId) {
+      setError('当前会话不可用，请重新打开一个会话后再试。');
+      return;
+    }
+    setError('');
+    state.enqueueRequest({
+      mode: generation.mode,
+      modelId: generation.model_id,
+      prompt: generation.prompt,
+      negativePrompt: generation.negative_prompt,
+      inputMedia: [...generation.input_media],
+      mediaNames: { ...generation.media_names },
+      parameters: { ...generation.parameters },
+      batchSize: generation.batch_size,
+      sessionId,
+      parentGenerationId: generation.id,
+    });
+    toast.info('已加入重试队列', { body: '将使用原模型、提示词、参考素材和参数重新提交。' });
+  };
   const remove = async () => {
     try {
       await playgroundApi.deleteGeneration(generation.id);
@@ -111,7 +134,7 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
                   onGenerateVideo={(path) => useResultAsReference(path, 'image', 'i2v')}
                 />
               ))
-            : <ResultCard generation={generation} onDelete={() => { void remove(); }} onRetry={() => restoreGeneration(generation)} />}
+            : <ResultCard generation={generation} onDelete={() => { void remove(); }} onRetry={retry} />}
         </div>
       </section>
     </article>
