@@ -61,7 +61,7 @@
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.3.0",
+      "version": "1.4.0",
       "description": "依据 MiniMax 官方指南区分关键帧三段与全参考六段格式，绑定主体、素材用途和音画时间线。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
