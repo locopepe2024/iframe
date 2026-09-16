@@ -253,7 +253,7 @@ export default function PlaygroundPage() {
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <SessionTimeline />
-        <AgentComposer canGenerate={canGenerate} batchSize={batchSize} onGenerate={handleGenerate} />
+        <AgentComposer canGenerate={canGenerate} batchSize={batchSize} onGenerate={handleGenerate} onAgentMode={() => setChatMode(true)} />
       </main>
       </div>
       {chatMode && <ChatPanel onUseDraft={text => { usePlaygroundStore.setState({ prompt: text }); setChatMode(false); }} />}

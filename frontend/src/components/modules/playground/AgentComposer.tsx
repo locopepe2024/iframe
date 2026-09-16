@@ -35,6 +35,7 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
+  onAgentMode?: () => void;
 }
 
 function shortSku(value: string): string { return value.length > 10 ? `${value.slice(0, 10)}...` : value; }
@@ -68,7 +69,7 @@ function ToolButton({
   );
 }
 
-export default function AgentComposer({ canGenerate, batchSize, onGenerate }: AgentComposerProps) {
+export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAgentMode }: AgentComposerProps) {
   const t = useTranslations('playground');
   const [activePanel, setActivePanel] = useState<ComposerPanel>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -158,6 +159,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate }: Ag
         </div>
 
         <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-border-subtle px-2 py-2 md:px-3">
+          <div className="mr-1 flex shrink-0 rounded-lg border border-border-subtle p-0.5" role="group" aria-label="创作能力">
+            <button type="button" onClick={onAgentMode} className="rounded px-2 py-1 text-xs text-text-muted hover:bg-hover-bg">Agent</button>
+            <span className="rounded bg-primary/10 px-2 py-1 text-xs text-primary">{outputType === 'image' ? '图片' : '视频'}</span>
+          </div>
           <ToolButton
             active={activePanel === 'output'}
             icon={OutputIcon}
