@@ -312,6 +312,10 @@ class UniArtVideoModel(VideoGenModel):
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()
+        if kwargs.get("resume_task_id"):
+            result = _poll(self.config, kwargs["resume_task_id"])
+            _download_result(self.config, result, "video", output_path)
+            return output_path, time.time() - started
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
         body: Dict[str, Any] = {"model": model, "prompt": prompt}
         for key in ("duration", "resolution", "size", "ratio", "aspect_ratio", "watermark", "generate_audio"):
@@ -339,6 +343,11 @@ class UniArtVideoModel(VideoGenModel):
             if image:
                 body["input_reference"] = image
         task = _post(self.config, "/videos", body)
-        result = _poll(self.config, task.get("task_id") or task.get("id"))
+        task_id = task.get("task_id") or task.get("id")
+        if not task_id:
+            raise RuntimeError("UniArt video response has no task id")
+        if kwargs.get("on_task_submitted"):
+            kwargs["on_task_submitted"](task_id)
+        result = _poll(self.config, task_id)
         _download_result(self.config, result, "video", output_path)
         return output_path, time.time() - started

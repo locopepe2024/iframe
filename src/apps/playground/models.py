@@ -54,6 +54,7 @@ class PlaygroundGeneration(BaseModel):
     parameters: dict = Field(default_factory=dict, description="Generation parameters (resolution, duration, aspect_ratio, etc.)")
     batch_size: int = Field(1, ge=1, le=4, description="Number of outputs to generate per request (1-4)")
     outputs: List[PlaygroundOutput] = Field(default_factory=list, description="Generated outputs")
+    provider_tasks: dict[str, str] = Field(default_factory=dict, description="Accepted upstream video task IDs by batch index")
     status: str = Field("pending", description="Generation status: pending/processing/completed/failed")
     error: Optional[str] = Field(None, description="Error message if generation failed")
     created_at: str = Field(..., description="Creation timestamp in ISO 8601 format")

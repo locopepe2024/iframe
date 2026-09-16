@@ -45,6 +45,20 @@ def _storage_for(identity: UserContext) -> PlaygroundStorage:
                 owner_profile_id=identity.owner_profile_id,
             )
             _storages[identity.owner_profile_id] = storage
+            # Only recover tasks read from disk on first access after restart.
+            # Never submit a new paid generation during recovery.
+            service = PlaygroundService(
+                storage,
+                provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+            )
+            for generation in storage.list_history(limit=1000000):
+                if generation.status == "processing" and generation.provider_tasks:
+                    threading.Thread(
+                        target=service.process_generation,
+                        args=(generation.id,),
+                        kwargs={"resume_only": True},
+                        daemon=True,
+                    ).start()
         return storage
 
 

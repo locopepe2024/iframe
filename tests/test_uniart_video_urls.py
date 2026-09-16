@@ -83,3 +83,78 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
     service._process_video_generation(gen)
     assert len(captured) == 1
+    assert gen.provider_tasks == {'0': 'accepted'}
+
+
+def test_video_restart_resumes_saved_task_without_resubmission(monkeypatch, tmp_path):
+    from src.apps.playground.service import PlaygroundService
+    from src.apps.playground.storage import PlaygroundStorage
+    from src.apps.playground.models import PlaygroundGeneration
+    monkeypatch.chdir(tmp_path)
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    gen = PlaygroundGeneration(id='restart', model_id='uniart/minimax-h3-vip', mode='r2v',
+        prompt='walk', input_media=['missing-original.png'], created_at='2026-09-16',
+        owner_user_id='user', owner_profile_id='profile', status='processing')
+    storage.add_generation(gen)
+    monkeypatch.setattr(uniart, '_media', lambda value: 'https://storage.example/ref.png' if value else None)
+    monkeypatch.setattr(uniart, '_post', lambda *a: {'task_id': 'accepted-before-restart'})
+    def interrupt(config, task_id, **kwargs):
+        persisted = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile').get_generation(gen.id)
+        assert persisted.provider_tasks == {'0': task_id}
+        raise SystemExit('simulate process termination')
+    monkeypatch.setattr(uniart, '_poll', interrupt)
+    with pytest.raises(SystemExit):
+        PlaygroundService(storage).process_generation(gen.id)
+    reloaded = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    monkeypatch.setattr(uniart, '_post', lambda *a: pytest.fail('recovery must not submit'))
+    monkeypatch.setattr(uniart, '_media', lambda *a: pytest.fail('recovery must not re-upload references'))
+    monkeypatch.setattr(uniart, '_poll', lambda config, task_id: {'status': 'completed', 'id': task_id})
+    def download(config, result, kind, path):
+        assert result['id'] == 'accepted-before-restart'
+        from pathlib import Path
+        Path(path).write_bytes(b'video')
+    monkeypatch.setattr(uniart, '_download_result', download)
+    service = PlaygroundService(reloaded)
+    service.process_generation(gen.id, resume_only=True)
+    recovered = reloaded.get_generation(gen.id)
+    assert recovered.status == 'completed'
+    assert len(recovered.outputs) == 1
+    service.process_generation(gen.id, resume_only=True)
+    assert len(recovered.outputs) == 1
+
+
+def test_recovery_without_saved_task_never_submits(monkeypatch, tmp_path):
+    from src.apps.playground.service import PlaygroundService
+    from src.apps.playground.storage import PlaygroundStorage
+    from src.apps.playground.models import PlaygroundGeneration
+    monkeypatch.chdir(tmp_path)
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    gen = PlaygroundGeneration(id='missing-task', model_id='uniart/minimax-h3-vip', mode='t2v',
+        prompt='walk', created_at='2026-09-16', owner_user_id='user', owner_profile_id='profile', status='processing')
+    storage.add_generation(gen)
+    monkeypatch.setattr(uniart, '_post', lambda *a: pytest.fail('must not submit'))
+    PlaygroundService(storage).process_generation(gen.id, resume_only=True)
+    assert gen.status == 'failed'
+    assert 'automatic resubmission is disabled' in gen.error
+
+
+def test_first_storage_access_schedules_saved_task_once(monkeypatch, tmp_path):
+    from src.apps.playground import api
+    from src.apps.playground.storage import PlaygroundStorage
+    from src.apps.playground.models import PlaygroundGeneration
+    from src.apps.identity import UserContext
+    monkeypatch.chdir(tmp_path)
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    storage.add_generation(PlaygroundGeneration(id='saved', model_id='uniart/minimax-h3-vip', mode='t2v',
+        prompt='walk', created_at='2026-09-16', owner_user_id='user', owner_profile_id='profile',
+        status='processing', provider_tasks={'0': 'accepted'}))
+    from unittest.mock import Mock
+    thread = Mock()
+    monkeypatch.setattr(api.threading, 'Thread', thread)
+    monkeypatch.setattr(api, '_storages', {})
+    identity = UserContext(user_id='user', owner_profile_id='profile', display_name='', access_token='')
+    assert api._storage_for(identity) is api._storage_for(identity)
+    thread.assert_called_once()
+    assert thread.call_args.kwargs['args'] == ('saved',)
+    assert thread.call_args.kwargs['kwargs'] == {'resume_only': True}
+    thread.return_value.start.assert_called_once()

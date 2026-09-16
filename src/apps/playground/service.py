@@ -99,7 +99,7 @@ class PlaygroundService:
         self.storage.save_session_draft(session.id, draft, request.prompt)
         return gen
 
-    def process_generation(self, generation_id: str) -> None:
+    def process_generation(self, generation_id: str, *, resume_only: bool = False) -> None:
         """Execute the actual generation.  Intended to run in a background
         thread -- all calls are synchronous (blocking)."""
         gen = self.storage.get_generation(generation_id)
@@ -120,7 +120,7 @@ class PlaygroundService:
             if mode in (PlaygroundMode.T2I, PlaygroundMode.I2I):
                 self._process_image_generation(gen)
             elif mode in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V, PlaygroundMode.F2V, PlaygroundMode.V2V):
-                self._process_video_generation(gen)
+                self._process_video_generation(gen, resume_only=resume_only)
             else:
                 raise ValueError(f"Unsupported playground mode: {mode}")
 
@@ -272,7 +272,7 @@ class PlaygroundService:
     # Video generation (t2v / i2v / r2v / v2v)
     # ------------------------------------------------------------------
 
-    def _process_video_generation(self, gen: PlaygroundGeneration) -> None:
+    def _process_video_generation(self, gen: PlaygroundGeneration, *, resume_only: bool = False) -> None:
         video_output_dir = os.path.join(self.storage.output_dir, "videos")
         os.makedirs(video_output_dir, exist_ok=True)
 
@@ -284,8 +284,12 @@ class PlaygroundService:
             out_path = os.path.join(video_output_dir, out_filename)
 
             try:
+                if any(output.media_path == out_path for output in gen.outputs):
+                    continue
+                if resume_only and str(idx) not in gen.provider_tasks:
+                    raise RuntimeError("Interrupted before upstream task ID was saved; automatic resubmission is disabled")
                 if model_lower.startswith("uniart/") or model_lower.startswith("seedance") or model_lower.startswith("minimax"):
-                    self._generate_video_mulerouter(gen, out_path)
+                    self._generate_video_mulerouter(gen, out_path, batch_index=idx)
                 elif model_lower.startswith("kling"):
                     self._generate_video_kling(gen, out_path)
                 elif model_lower.startswith("vidu") or model_lower.startswith("viduq"):
@@ -351,7 +355,7 @@ class PlaygroundService:
             **kwargs,
         )
 
-    def _generate_video_mulerouter(self, gen: PlaygroundGeneration, out_path: str) -> None:
+    def _generate_video_mulerouter(self, gen: PlaygroundGeneration, out_path: str, *, batch_index: int = 0) -> None:
         """Delegate to :class:`MuleRouterVideoModel` (Seedance 2.0)."""
         from ...models.mulerouter import MuleRouterVideoModel
         from ...models.uniart import UniArtVideoModel
@@ -379,6 +383,12 @@ class PlaygroundService:
             kwargs["ref_image_urls"] = list(gen.input_media)
 
         if use_uniart:
+            def save_task(task_id: str) -> None:
+                gen.provider_tasks[str(batch_index)] = task_id
+                self.storage.update_generation(gen)
+
+            kwargs["on_task_submitted"] = save_task
+            kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
             if gen.mode == PlaygroundMode.T2V:
                 img_path, img_url = None, None
