@@ -73,7 +73,7 @@ def catalog(ctx):
             items = normalize_uniart_catalog(json.load(response))
     except Exception:
         raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
-    labels = {"gpt-5.6-sol": "GPT 5.6 Sol", "gpt-5.6-luna": "GPT 5.6 Luna", "qwen3.8-flash": "Qwen 3.8 Flash", "glm-5.3": "GLM 5.3"}
+    labels = {"gpt-5.6-sol": "GPT 5.6 Sol", "gpt-5.6-luna": "GPT 5.6 Luna", "qwen3.8-flash": "Qwen 3.8 Flash", "glm-5.3": "GLM 5.3", "glm-5.3-flash": "GLM 5.3 Flash", "deepseek-v4.1-flash": "DeepSeek V4.1 Flash"}
     by_id = {m["api_model_id"]: m for m in items if "chat" in m.get("capabilities", [])}
     return [{**by_id[model], "display_name": label} for model, label in labels.items() if model in by_id]
 

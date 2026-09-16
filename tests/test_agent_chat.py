@@ -93,11 +93,11 @@ def test_delete_message_is_persistent_and_owner_scoped(setup, monkeypatch):
 
 def test_agent_catalog_exact_models_and_order(monkeypatch):
     import io
-    models = ['glm-5.3', 'gpt-5.6-luna-2026-07-09', 'qwen3.8-flash', 'gpt-5.6-sol', 'gpt-5.6-luna', 'chatgpt-6']
+    models = ['glm-5.3-flash', 'deepseek-v4.1-flash', 'glm-5.3', 'gpt-5.6-luna-2026-07-09', 'qwen3.8-flash', 'gpt-5.6-sol', 'gpt-5.6-luna', 'chatgpt-6']
     monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'base_url': 'https://example.test/v1', 'api_key': 'test'})))
     monkeypatch.setattr(agent, 'urlopen', lambda *a, **kw: io.StringIO(agent.json.dumps({'data': [{'id': m} for m in models]})))
     result = agent.catalog(UserContext('a','a','a','token'))
-    assert [m['api_model_id'] for m in result] == ['gpt-5.6-sol', 'gpt-5.6-luna', 'qwen3.8-flash', 'glm-5.3']
+    assert [m['api_model_id'] for m in result] == ['gpt-5.6-sol', 'gpt-5.6-luna', 'qwen3.8-flash', 'glm-5.3', 'glm-5.3-flash', 'deepseek-v4.1-flash']
     assert result[0]['display_name'] == 'GPT 5.6 Sol'
 
 
