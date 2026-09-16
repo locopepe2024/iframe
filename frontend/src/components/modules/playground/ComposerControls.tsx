@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { getModelAudioControl, getModelDuration, getModelParams, getModelRatioOptions, usePlaygroundCatalogRevision } from './playgroundModels';
+import { getModelAudioControl, getModelDuration, getModelParams, getModelRatioOptions, getVideoResolution, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 export type ComposerControl = 'resolution' | 'ratio' | 'quality' | 'seed' | 'audio' | 'batch';
@@ -121,7 +121,7 @@ export function getComposerControlState(modelId: string, parameters: Record<stri
   const duration = getModelDuration(modelId);
   const size = (parameters.size as string | undefined) ?? params?.size?.default;
   const resolution = params?.resolution
-    ? (params.resolution.options.includes(parameters.resolution) ? parameters.resolution : params.resolution.default)
+    ? getVideoResolution(modelId, parameters)
     : params?.size ? (params.size.options.includes(parameters.size) ? parameters.size : params.size.default) : undefined;
   const imageOptions = imageControlOptions(modelId);
   const ratio = (parameters.aspect_ratio as string | undefined) ?? params?.ratio?.default ?? (size ? ratioFromSize(size) : null) ?? imageOptions.ratios[0];
@@ -165,7 +165,7 @@ export default function ComposerControls({ control }: { control: ComposerControl
     const options = params?.resolution?.options ?? params?.size?.options ?? [];
     const key = params?.resolution ? 'resolution' : 'size';
     const fallback = params?.resolution?.default ?? params?.size?.default ?? '';
-    const value = (parameters[key] as string | undefined) ?? fallback;
+    const value = params?.resolution ? getVideoResolution(modelId, parameters) ?? fallback : (parameters[key] as string | undefined) ?? fallback;
     return (
       <div className="space-y-4">
         {options.length > 0 && (

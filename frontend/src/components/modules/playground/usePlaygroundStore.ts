@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { referenceKey } from './referenceMedia';
+import { getVideoResolution } from './playgroundModels';
 
 // ---------------------------------------------------------------------------
 // Featured (best-of-batch) persistence — client-side localStorage only.
@@ -305,7 +306,11 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     set((s) => ({
       queue: [
         ...s.queue,
-        { ...req, id: `q${++queueSeq}`, status: 'pending' as const, enqueuedAt: Date.now() },
+        { ...req,
+          parameters: ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(req.mode)
+            ? { ...req.parameters, resolution: getVideoResolution(req.modelId, req.parameters) }
+            : { ...req.parameters },
+          id: `q${++queueSeq}`, status: 'pending' as const, enqueuedAt: Date.now() },
       ],
     })),
   markDispatching: (id) =>

@@ -48,14 +48,15 @@ def test_video_material_storage_failure_prevents_submission(monkeypatch, tmp_pat
 
 @pytest.mark.parametrize('model', ['minimax-h3-vip', 'seedance-2.5-vip', 'kling', 'vidu', 'wan', 'happyhorse', 'pixverse'])
 @pytest.mark.parametrize('mode', ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'])
-def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tmp_path, model, mode):
+@pytest.mark.parametrize('resolution', ['480p', '720p'])
+def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tmp_path, model, mode, resolution):
     from unittest.mock import Mock
     from src.apps.playground.service import PlaygroundService
     from src.apps.playground.models import PlaygroundGeneration
     refs = [] if mode == 't2v' else ['https://storage.example/a.mp4' if mode == 'v2v' else 'https://storage.example/a.png']
     if mode in {'r2v', 'f2v', 'v2v'}:
         refs.append('https://storage.example/b.mp4' if mode == 'v2v' else 'https://storage.example/b.png')
-    gen = PlaygroundGeneration(id='test', model_id='uniart/' + model, mode=mode, prompt='walk', input_media=refs, created_at='2026-09-16', parameters={})
+    gen = PlaygroundGeneration(id='test', model_id='uniart/' + model, mode=mode, prompt='walk', input_media=refs, created_at='2026-09-16', parameters={'resolution': resolution})
     storage = Mock(output_dir=str(tmp_path))
     service = PlaygroundService(storage, provider_config_loader=lambda: {})
     monkeypatch.delenv('UNIART_BASE_URL', raising=False)
@@ -64,6 +65,7 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     captured = []
     def post(config, endpoint, body):
         assert body['model'] == model
+        assert body['resolution'] == resolution
         assert body['mode'] == {
             't2v': 'text2video', 'i2v': 'image2video', 'r2v': 'reference2video',
             'f2v': 'frames2video', 'v2v': 'reference2video',
@@ -98,7 +100,7 @@ def test_video_restart_resumes_saved_task_without_resubmission(monkeypatch, tmp_
     storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
     gen = PlaygroundGeneration(id='restart', model_id='uniart/minimax-h3-vip', mode='r2v',
         prompt='walk', input_media=['missing-original.png'], created_at='2026-09-16',
-        owner_user_id='user', owner_profile_id='profile', status='processing')
+        owner_user_id='user', owner_profile_id='profile', status='processing', parameters={'resolution': '720p'})
     storage.add_generation(gen)
     monkeypatch.setattr(uniart, '_media', lambda value: 'https://storage.example/ref.png' if value else None)
     monkeypatch.setattr(uniart, '_post', lambda *a: {'task_id': 'accepted-before-restart'})
@@ -162,3 +164,16 @@ def test_first_storage_access_schedules_saved_task_once(monkeypatch, tmp_path):
     assert thread.call_args.kwargs['args'] == ('saved',)
     assert thread.call_args.kwargs['kwargs'] == {'resume_only': True}
     thread.return_value.start.assert_called_once()
+
+
+def test_missing_video_resolution_does_not_silently_submit_1080p(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    from src.apps.playground.service import PlaygroundService
+    from src.apps.playground.models import PlaygroundGeneration
+    gen = PlaygroundGeneration(id='missing-resolution', model_id='uniart/seedance-2.5-special',
+        mode='i2v', prompt='walk', input_media=['https://storage.example/a.png'],
+        parameters={'duration': 10}, created_at='2026-09-16')
+    service = PlaygroundService(Mock(output_dir=str(tmp_path)))
+    monkeypatch.setattr(uniart, '_post', lambda *a: pytest.fail('must not invent resolution'))
+    with pytest.raises(RuntimeError, match='Video resolution is required'):
+        service._process_video_generation(gen)

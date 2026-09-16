@@ -405,3 +405,10 @@ export function getModelRatioOptions(modelId: string, resolution?: string): stri
   }
   return params?.ratio?.options ?? [];
 }
+
+/** Use the same catalog-backed video resolution for display and submission. */
+export function getVideoResolution(modelId: string, parameters: Record<string, any>): string | undefined {
+  const resolution = getModelParams(modelId)?.resolution;
+  if (!resolution) return parameters.resolution;
+  return resolution.options.includes(parameters.resolution) ? parameters.resolution : resolution.default;
+}

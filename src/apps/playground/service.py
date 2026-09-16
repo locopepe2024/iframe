@@ -371,7 +371,7 @@ class PlaygroundService:
 
         kwargs = {
             "duration": params.get("duration", 5),
-            "resolution": params.get("resolution", "1080p"),
+            "resolution": params.get("resolution") if use_uniart else params.get("resolution", "1080p"),
             "aspect_ratio": params.get("aspect_ratio", "16:9"),
             "seed": params.get("seed"),
             "watermark": params.get("watermark", False),
@@ -383,6 +383,8 @@ class PlaygroundService:
             kwargs["ref_image_urls"] = list(gen.input_media)
 
         if use_uniart:
+            if not params.get("resolution") and not gen.provider_tasks.get(str(batch_index)):
+                raise ValueError("Video resolution is required; refresh the page and select a resolution before retrying")
             def save_task(task_id: str) -> None:
                 gen.provider_tasks[str(batch_index)] = task_id
                 self.storage.update_generation(gen)
