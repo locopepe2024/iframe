@@ -116,7 +116,7 @@ export default function AssetPickerModal({
             items.push({
               id: 'input-' + inputPath,
               path: inputPath,
-              type: isVideo ? 'video' : /\.(mp3|wav)(?:[?#].*)?$/i.test(inputPath) ? 'audio' : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(inputPath) ? 'text' : 'image',
+              type: isVideo ? 'video' : /\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(inputPath) ? 'audio' : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(inputPath) ? 'text' : 'image',
               label: referenceName(inputPath, gen.media_names || {}, history),
             });
           }

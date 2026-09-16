@@ -37,7 +37,9 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
     source: path.includes('/input-media/') ? '上传文件' : path.includes('/studio/media/') ? '素材库' : '历史生成',
     mediaType: history.flatMap((generation) => generation.outputs)
       .find((output) => referenceKey(output.media_path) === referenceKey(path))?.media_type
-      || (/\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path) ? 'video' : 'image'),
+      || (/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? 'audio'
+        : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? 'text'
+        : /\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path) ? 'video' : 'image'),
   }));
 
   const insertReference = (label: string) => {
@@ -61,7 +63,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 data-full-name={label}
                 className="group relative h-12 w-12 overflow-hidden rounded-xl border border-primary/30 bg-surface-inset"
               >
-                {/\.(mp3|wav)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
+                {/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
                   <video src={getAssetUrl(path)} muted className="h-full w-full object-cover" />
                 ) : (
                   <img src={getAssetUrl(path)} alt={label} className="h-full w-full object-cover" />
@@ -112,7 +114,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
               className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
               <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
-                {candidate.mediaType === 'video' ? (
+                {candidate.mediaType === 'audio' ? <Music size={15} aria-label="音频参考" /> : candidate.mediaType === 'text' ? <FileText size={15} aria-label="文本参考" /> : candidate.mediaType === 'video' ? (
                   <Film size={15} className="text-text-muted" aria-hidden="true" />
                 ) : (
                   <img src={getAssetUrl(candidate.path)} alt="" className="h-full w-full object-cover" />

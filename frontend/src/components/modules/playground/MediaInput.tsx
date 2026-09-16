@@ -124,6 +124,11 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   }
 
   if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: 16, accept: "image/*,video/*,.mp3,.wav,.txt,.md,.csv,.json,.srt,.vtt" };
+  // Uploading a reference is separate from the provider's per-model capacity checks.
+  if (agentMode || mode === 'r2v') config = {
+    ...config!, multiple: true, maxFiles: Math.max(config?.maxFiles || 0, 16),
+    accept: 'image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.aiff,.aif,.wma,.txt,.md,.csv,.json,.srt,.vtt',
+  };
 
   // Don't render for t2v mode (no input media needed)
   if (!config) return null;
@@ -218,7 +223,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
   // Determine accept type for AssetPickerModal
   const acceptType: 'image' | 'video' | 'all' =
-    agentMode || catalogMixed || mode === 'r2v' && isSeedance
+    agentMode || catalogMixed || mode === 'r2v'
       ? 'all'
       : config.icon === 'video'
         ? 'video'
@@ -276,7 +281,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
             {atLimit ? t('media.limitReached', { count: config.maxFiles }) : uploading ? t('media.uploading') : t('media.dragOrClick')}
           </span>
 
-          <span className="text-[0.6875rem] text-text-muted">{agentMode ? t('media.agentHint') : t(`media.hints.${config.hintKey}`)}</span>
+          <span className="text-[0.6875rem] text-text-muted">{agentMode ? t('media.agentHint') : mode === 'r2v' ? t('media.omniHint') : t(`media.hints.${config.hintKey}`)}</span>
         </div>
 
         {/* Action buttons */}

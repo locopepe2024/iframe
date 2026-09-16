@@ -18,6 +18,8 @@ export function referenceName(path: string, names: Record<string, string>, histo
     const pathname = new URL(path, 'https://lumenx.invalid').pathname;
     const filename = decodeURIComponent(pathname.split('/').pop() || '');
     if (/\.[a-z0-9]{2,5}$/i.test(filename) && !/^[0-9a-f-]{36}\./i.test(filename)) return filename;
+    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)$/i.test(pathname)) return 'Untitled audio';
+    if (/\.(txt|md|csv|json|srt|vtt)$/i.test(pathname)) return 'Untitled text';
     return /\.(mp4|mov|webm|avi|mkv)$/i.test(pathname) ? 'Untitled video' : 'Untitled image';
 }
 

@@ -30,7 +30,14 @@ it('uses UniArt reference modality capacities rather than a legacy model prefix'
   installUniArtCatalog([{ id: 'uniart/seedance-2.5-special', api_model_id: 'seedance-2.5-special', display_name: 'Seedance', description: '', family: 'seedance', provider: 'uniart', capabilities: ['r2v'], inputs: { reference_images: { max: 9 }, reference_videos: { max: 3 }, reference_audios: { max: 3 } } }]);
   usePlaygroundStore.setState({ mode: 'r2v', modelId: 'uniart/seedance-2.5-special', inputMedia: [] });
   const { container } = render(<MediaInput />);
-  expect(container.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*,video/*,audio/*');
+  expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toContain('image/*,video/*,audio/*');
+  expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toContain('.txt');
+});
+it.each([true, false])('offers audio/video/text uploads with agentMode=%s even without catalog limits', (agentMode) => {
+  usePlaygroundStore.setState({ mode: 'r2v', modelId: 'uniart/minimax-h3-vip', inputMedia: [] });
+  const { container } = render(<MediaInput agentMode={agentMode} />);
+  const accept = container.querySelector('input[type="file"]')?.getAttribute('accept');
+  for (const type of ['image/*', 'video/*', 'audio/*', '.m4a', '.txt', '.srt']) expect(accept).toContain(type);
 });
 it('retains one upload/library panel and appends image-edit references on upload', async () => {
   usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: ['/old.png'] });

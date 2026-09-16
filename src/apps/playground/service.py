@@ -21,7 +21,7 @@ from .models import (
 )
 from .storage import PlaygroundStorage
 from ...utils import get_logger
-from ...models.reference_binding import bind_reference_names, media_kind
+from ...models.reference_binding import bind_reference_names, media_kind, video_reference_prompt
 
 logger = get_logger(__name__)
 
@@ -407,14 +407,14 @@ class PlaygroundService:
                 kwargs["ref_video_urls"] = grouped["video"]
                 kwargs["ref_audio_urls"] = grouped["audio"]
                 img_path, img_url = None, None
-                if not grouped["image"]:
-                    raise ValueError("UniArt reference video mode requires at least one reference image")
+                if not references:
+                    raise ValueError("全能参考需要图片、视频或音频素材；只有文本时请选择文生视频")
             elif gen.mode == PlaygroundMode.I2V:
                 if len(references) != 1 or media_kind(references[0]) != "image":
                     raise ValueError("Image-to-video requires exactly one image; use reference mode for multiple materials")
             elif gen.mode == PlaygroundMode.F2V and any(media_kind(ref) != "image" for ref in references):
                 raise ValueError("First/last-frame mode requires images")
-            kwargs["reference_prompt"] = bind_reference_names(gen.prompt, [gen.media_names.get(ref, "") for ref in references])
+            kwargs["reference_prompt"] = video_reference_prompt(gen.prompt, gen.input_media, references, gen.media_names)
             kwargs["generate_audio"] = params.get("audio")
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",

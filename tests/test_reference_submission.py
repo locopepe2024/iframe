@@ -62,3 +62,42 @@ def test_i2v_never_silently_drops_second_image(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match='exactly one image'):
         PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()
+
+
+def test_video_text_is_prompt_context_and_does_not_consume_media_indices(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    script = tmp_path / 'script.txt'
+    script.write_text('替换商品，台词是“晨光精华”。', encoding='utf-8')
+    refs = [str(script), 'https://cdn.example/original.mp4', 'https://cdn.example/product.png', 'https://cdn.example/voice.m4a']
+    gen = PlaygroundGeneration(id='text-media', model_id='uniart/minimax-h3-vip', mode='r2v',
+        prompt='根据 @script.txt 将 @2 中商品替换为 @3，声音参考 @4', input_media=refs,
+        media_names=dict(zip(refs, ['script.txt', 'original.mp4', 'product.png', 'voice.m4a'])),
+        parameters={'resolution': '720p'}, created_at='today')
+    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    content = post.call_args.args[2]['content']
+    assert content[0]['text'].startswith('根据 [Text 1] 将 @2 中商品替换为 @1，声音参考 @3')
+    assert '台词是“晨光精华”' in content[0]['text']
+    assert [part['type'] for part in content] == ['text', 'image_url', 'video_url', 'audio_url']
+    assert [part[part['type']]['url'] for part in content[1:]] == [refs[2], refs[1], refs[3]]
+    assert gen.input_media == refs
+
+
+def test_video_reference_does_not_require_an_unrelated_image(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    gen = PlaygroundGeneration(id='video-only', model_id='uniart/minimax-h3-vip', mode='r2v',
+        prompt='参考运镜', input_media=['https://cdn.example/original.mp4'],
+        parameters={'resolution': '720p'}, created_at='today')
+    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    assert post.call_args.args[2]['content'][1]['type'] == 'video_url'
+
+
+def test_invalid_text_reference_fails_before_generation(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    script = tmp_path / 'script.txt'
+    script.write_bytes(b'\xff\xfe\x80')
+    gen = PlaygroundGeneration(id='bad-text', model_id='uniart/minimax-h3-vip', mode='r2v',
+        prompt='使用脚本', input_media=[str(script), 'https://cdn.example/original.mp4'],
+        parameters={'resolution': '720p'}, created_at='today')
+    with pytest.raises(RuntimeError, match='UTF-8'):
+        PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    post.assert_not_called()

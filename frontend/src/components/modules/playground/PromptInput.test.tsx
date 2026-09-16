@@ -47,6 +47,16 @@ describe('selected reference mentions', () => {
         expect(usePlaygroundStore.getState().mode).toBe('i2i');
     });
 
+    it('shows audio and text references as icons in the mention picker', () => {
+        usePlaygroundStore.setState({ inputMedia: ['/playground/input-media/voice.m4a', '/playground/input-media/script.txt'], history: [] });
+        render(<PromptInput />);
+        openMentions();
+        const options = screen.getAllByRole('option');
+        expect(within(options[0]).getByLabelText('音频参考')).toBeInTheDocument();
+        expect(within(options[1]).getByLabelText('文本参考')).toBeInTheDocument();
+        expect(options.every(option => !option.querySelector('img'))).toBe(true);
+    });
+
     it('tracks reference removal and session draft replacement without requiring history', () => {
         render(<PromptInput />);
         openMentions();
