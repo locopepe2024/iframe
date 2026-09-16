@@ -9,6 +9,7 @@ import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundSt
 
 import OverflowActions from './OverflowActions';
 import { useLightbox } from '@/components/shared/preview/LightboxProvider';
+import { downloadOutput } from './downloadOutput';
 
 interface ResultCardProps {
   generation: PlaygroundGeneration;
@@ -135,6 +136,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
@@ -147,22 +150,16 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 
   const handleDownload = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!mediaUrl) return;
+    if (!output || downloading) return;
+    setDownloading(true); setActionError('');
     try {
-      const resp = await fetch(mediaUrl);
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = output?.media_path?.split('/').pop() || 'download';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      window.open(mediaUrl, '_blank');
+      await downloadOutput(generation.id, output.id, output.media_type);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '下载失败，请重试');
+    } finally {
+      setDownloading(false);
     }
-  }, [mediaUrl, output]);
+  }, [generation.id, output, downloading]);
 
   const handleSaveToLibrary = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -258,6 +255,10 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
             <Expand className="w-3.5 h-3.5 text-foreground" />
           </button>}
           <button
+            type="button"
+            disabled={downloading}
+            aria-busy={downloading}
+            aria-label={downloading ? '正在下载' : t('card.download')}
             onClick={(event) => { event.stopPropagation(); void handleDownload(event); }}
             className="w-7 h-7 rounded-full bg-elevated backdrop-blur-sm flex items-center justify-center hover:bg-hover-bg transition"
             title={t('card.download')}
@@ -307,6 +308,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 
       {/* Info area */}
       <div className="px-3 py-[10px]">
+        {downloading && <p role="status" className="mb-1 text-xs text-text-muted">正在准备下载…</p>}
+        {actionError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{actionError}</p>}
         <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">

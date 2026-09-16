@@ -18,6 +18,7 @@ import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
+import { downloadOutput } from './downloadOutput';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -79,6 +80,8 @@ export default function DetailPanel({
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const history = usePlaygroundStore((s) => s.history);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -137,14 +140,12 @@ export default function DetailPanel({
     });
   };
 
-  const handleDownload = () => {
-    if (!mediaUrl) return;
-    const a = document.createElement('a');
-    a.href = mediaUrl;
-    a.download = output?.media_path?.split('/').pop() || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async () => {
+    if (!output || downloading) return;
+    setDownloading(true); setDownloadError('');
+    try { await downloadOutput(generation.id, output.id, output.media_type); }
+    catch (error) { setDownloadError(error instanceof Error ? error.message : '下载失败，请重试'); }
+    finally { setDownloading(false); }
   };
 
   const handleSaveToLibrary = async () => {
@@ -415,15 +416,18 @@ export default function DetailPanel({
             )}
 
             {/* Secondary row: Download + Generate Video (neutral ghosts) */}
+            {downloadError && <p role="alert" className="text-xs text-status-failed-fg">{downloadError}</p>}
             {(mediaUrl || (!isVideo && output?.media_path && onGenerateVideo)) && (
               <div className="flex gap-2">
                 {mediaUrl && (
                   <button
                     onClick={handleDownload}
+                    disabled={downloading}
+                    aria-busy={downloading}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-full bg-surface-inset border border-glass-border text-text-secondary text-[0.8125rem] font-medium hover:text-foreground hover:bg-hover-bg transition"
                   >
                     <Download className="w-4 h-4" />
-                    Download
+                    {downloading ? '正在下载…' : 'Download'}
                   </button>
                 )}
                 {!isVideo && output?.media_path && onGenerateVideo && (
