@@ -23,7 +23,7 @@ interface AssetPickerModalProps {
 interface AssetItem {
   id: string;
   path: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio' | 'text';
   thumbnail?: string;
   label: string;
 }
@@ -116,7 +116,7 @@ export default function AssetPickerModal({
             items.push({
               id: 'input-' + inputPath,
               path: inputPath,
-              type: isVideo ? 'video' : 'image',
+              type: isVideo ? 'video' : /\.(mp3|wav)(?:[?#].*)?$/i.test(inputPath) ? 'audio' : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(inputPath) ? 'text' : 'image',
               label: referenceName(inputPath, gen.media_names || {}, history),
             });
           }
@@ -350,7 +350,7 @@ export default function AssetPickerModal({
                         `}
                       >
                         {/* Thumbnail */}
-                        {asset.type === 'video' ? (
+                        {asset.type === 'audio' || asset.type === 'text' ? <span className="flex h-full items-center justify-center text-xs text-text-muted">{asset.type === 'audio' ? '音频' : '文本'}</span> : asset.type === 'video' ? (
                           <video
                             src={thumbUrl}
                             className="w-full h-full object-cover"

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Film, Plus, X } from 'lucide-react';
+import { Film, Plus, X, FileText, Music } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
@@ -72,7 +72,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 data-full-name={label}
                 className="group relative h-12 w-12 overflow-hidden rounded-xl border border-primary/30 bg-surface-inset"
               >
-                {isVideo ? (
+                {/\.(mp3|wav)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
                   <video src={getAssetUrl(path)} muted className="h-full w-full object-cover" />
                 ) : (
                   <img src={getAssetUrl(path)} alt={label} className="h-full w-full object-cover" />

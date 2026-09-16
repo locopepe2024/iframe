@@ -114,7 +114,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     };
   }
 
-  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: 16 };
+  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: 16, accept: "image/*,video/*,.mp3,.wav,.txt,.md,.csv,.json,.srt,.vtt" };
 
   // Don't render for t2v mode (no input media needed)
   if (!config) return null;
@@ -201,7 +201,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
   // Determine accept type for AssetPickerModal
   const acceptType: 'image' | 'video' | 'all' =
-    mode === 'r2v' && isSeedance
+    agentMode || mode === 'r2v' && isSeedance
       ? 'all'
       : config.icon === 'video'
         ? 'video'
