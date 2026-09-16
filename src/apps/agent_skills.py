@@ -20,6 +20,8 @@ MAX_GUIDANCE_CHARS = 16000
 def catalog():
     packages = json.loads((CATALOG_DIR / "catalog.json").read_text(encoding="utf-8"))["skills"]
     for package in packages:
+        if package.get("instructions_file"):
+            package["instructions"] = (CATALOG_DIR / package["instructions_file"]).read_text(encoding="utf-8")
         package["license_text"] = (CATALOG_DIR / package["license_file"]).read_text(encoding="utf-8")
         package["revision"] = hashlib.sha256(json.dumps(package, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return packages

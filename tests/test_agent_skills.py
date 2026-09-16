@@ -137,3 +137,23 @@ def test_shared_contract_applies_to_pinned_install_without_replacing_it(ctx, mon
     skills.patch(package['id'], skills.SkillPatch(enabled=False), ctx)
     agent.send(sid, agent.MessageCreate(content='继续'), ctx)
     assert contract.read_text() not in call.call_args.args[2][0]['content']
+
+
+def test_file_backed_skill_revision_and_installed_snapshot(ctx, monkeypatch, tmp_path):
+    import json
+    package = dict(skills.catalog()[-1])
+    package['instructions_file'] = 'guide.md'
+    (tmp_path / 'catalog.json').write_text(json.dumps({'skills': [package]}))
+    (tmp_path / package['license_file']).write_text(package['license_text'])
+    guide = tmp_path / 'guide.md'
+    guide.write_text('First pinned guide')
+    monkeypatch.setattr(skills, 'CATALOG_DIR', tmp_path)
+    first = skills.catalog()[0]
+    skills.install(first['id'], skills.InstallRequest(revision=first['revision']), ctx)
+    guide.write_text('Revised official guide')
+    second = skills.catalog()[0]
+    assert first['revision'] != second['revision']
+    assert second['instructions'] == 'Revised official guide'
+    assert skills.installed(ctx.owner_profile_id)[0]['instructions'] == 'First pinned guide'
+    skills.install(second['id'], skills.InstallRequest(revision=second['revision']), ctx)
+    assert skills.installed(ctx.owner_profile_id)[0]['instructions'] == 'Revised official guide'
