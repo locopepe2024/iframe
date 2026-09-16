@@ -4,7 +4,7 @@ Image generation/edit may return final data or an accepted image task.
 Image tasks use /v1/images/{task_id}; video tasks use /v1/videos/{task_id}.
 """
 from __future__ import annotations
-import base64, mimetypes, os, time
+import base64, os, time
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 import requests
@@ -47,26 +47,19 @@ def _headers(config: Dict[str, Any]) -> Dict[str, str]:
 def _media(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
-    if value.startswith(("http://", "https://", "data:")):
-        return value
-    path = value if os.path.exists(value) else os.path.join("output", value)
-    if not os.path.exists(path):
-        return value
-    mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
-    with open(path, "rb") as f:
-        return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+    return _image_reference_url(value)
 
 
 def _image_reference_url(value: str) -> str:
-    """Publish local edit inputs through managed storage; never inline bytes."""
+    """Publish image references through managed storage; never inline bytes."""
     if value.startswith(("https://", "http://")):
         return value
     if value.startswith(("data:", "blob:")):
-        raise ValueError("UniArt image edits require HTTP(S) material URLs")
+        raise ValueError("UniArt image references require HTTP(S) material URLs")
     from ..utils.oss_utils import OSSImageUploader
     uploader = OSSImageUploader()
     if not uploader.is_configured:
-        raise RuntimeError("Image edit material storage is not configured")
+        raise RuntimeError("Image reference material storage is not configured")
     path = value if os.path.isfile(value) else os.path.join("output", value)
     if not os.path.isfile(path):
         raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
