@@ -8,6 +8,24 @@ vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ playgroundApi: { uploadMedia: upload } }));
 vi.mock('./AssetPickerModal', () => ({ default: ({ isOpen, onSelect }: { isOpen: boolean; onSelect: (path: string) => void }) => isOpen ? <button onClick={() => onSelect('/library.png')}>select asset</button> : null }));
 beforeEach(() => vi.clearAllMocks());
+it('uploads mixed Agent references without changing the media generation mode', async () => {
+  upload.mockResolvedValueOnce({ path: '/playground/input-media/clip.mp4' }).mockResolvedValueOnce({ path: '/playground/input-media/voice.wav' });
+  usePlaygroundStore.setState({ mode: 't2v', modelId: 'test', inputMedia: ['/old.png'] });
+  const { container } = render(<MediaInput agentMode />);
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['v'], 'clip.mp4', { type: 'video/mp4' }), new File(['a'], 'voice.wav', { type: 'audio/wav' })] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png', '/playground/input-media/clip.mp4', '/playground/input-media/voice.wav']));
+  expect(usePlaygroundStore.getState().mode).toBe('t2v');
+  expect(screen.getByText('media.agentHint')).toBeInTheDocument();
+});
+
+it('keeps successful references and reports an upload failure', async () => {
+  upload.mockResolvedValueOnce({ path: '/clip.mp4' }).mockRejectedValueOnce(new Error('Network error'));
+  usePlaygroundStore.setState({ mode: 't2v', modelId: 'test', inputMedia: [] });
+  const { container } = render(<MediaInput agentMode />);
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['v'], 'clip.mp4'), new File(['a'], 'voice.wav')] } });
+  expect(await screen.findByRole('alert')).toHaveTextContent('voice.wav');
+  expect(usePlaygroundStore.getState().inputMedia).toEqual(['/clip.mp4']);
+});
 it('uses UniArt reference modality capacities rather than a legacy model prefix', () => {
   installUniArtCatalog([{ id: 'uniart/seedance-2.5-special', api_model_id: 'seedance-2.5-special', display_name: 'Seedance', description: '', family: 'seedance', provider: 'uniart', capabilities: ['r2v'], inputs: { reference_images: { max: 9 }, reference_videos: { max: 3 }, reference_audios: { max: 3 } } }]);
   usePlaygroundStore.setState({ mode: 'r2v', modelId: 'uniart/seedance-2.5-special', inputMedia: [] });

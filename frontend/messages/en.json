@@ -1743,6 +1743,8 @@
       "uploading": "Uploading…",
       "dragOrClick": "Drag or click to upload",
       "localUpload": "Local upload",
+      "agentHint": "Add images, videos, MP3/WAV audio and text together, up to 16 references. Videos: max 100 MB. Use short audio clips.",
+      "uploadFailed": "Upload failed; please retry. Successful uploads were kept",
       "pickFromLibrary": "Pick from library",
       "replaceFile": "Replace file",
       "fileCount": "{current} / {max}",

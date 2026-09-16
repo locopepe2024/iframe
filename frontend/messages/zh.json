@@ -1743,6 +1743,8 @@
       "uploading": "上传中...",
       "dragOrClick": "拖拽或点击上传",
       "localUpload": "本地上传",
+      "agentHint": "可同时添加图片、视频、MP3/WAV 音频和文本，最多 16 个参考素材。视频最大 100 MB；音频请使用短片段。",
+      "uploadFailed": "上传失败，请重试；已成功上传的素材已保留",
       "pickFromLibrary": "从资产库选取",
       "replaceFile": "替换文件",
       "fileCount": "{current} / {max} 张",

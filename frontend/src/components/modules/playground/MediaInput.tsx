@@ -92,6 +92,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
 
@@ -133,6 +134,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   // -------------------------------------------------------------------------
 
   const handleFiles = async (files: FileList | File[]) => {
+    if (uploading) return;
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
@@ -142,19 +144,26 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     if (!toUpload.length) return;
 
     setUploading(true);
+    setUploadError('');
     try {
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         toUpload.map((file) => playgroundApi.uploadMedia(file))
       );
-      const newPaths = results.map((r) => r.path);
-      if (mode === 't2v' && newPaths.length) usePlaygroundStore.getState().setMode('i2v');
+      const newPaths: string[] = [];
+      const failed: string[] = [];
       results.forEach((result, index) => {
-        usePlaygroundStore.getState().rememberMediaName(result.path, toUpload[index].name);
+        if (result.status === 'fulfilled') {
+          newPaths.push(result.value.path);
+          usePlaygroundStore.getState().rememberMediaName(result.value.path, toUpload[index].name);
+        } else {
+          failed.push(toUpload[index].name);
+        }
       });
-
+      if (!agentMode && mode === 't2v' && newPaths.length) usePlaygroundStore.getState().setMode('i2v');
       setInputMedia([...usePlaygroundStore.getState().inputMedia, ...newPaths].slice(0, config.maxFiles));
-    } catch (err) {
-      console.error('[MediaInput] upload failed:', err);
+      if (failed.length) setUploadError(`${t('media.uploadFailed')}: ${failed.join(', ')}`);
+    } catch {
+      setUploadError(t('media.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -199,11 +208,11 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
         handleFiles(e.dataTransfer.files);
       }
     },
-    [inputMedia, config]
+    [inputMedia, config, uploading, agentMode, mode]
   );
 
   const handleAssetSelect = (path: string) => {
-    if (mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
+    if (!agentMode && mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
     setInputMedia([...usePlaygroundStore.getState().inputMedia, path].slice(0, config.maxFiles));
   };
 
@@ -267,7 +276,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
             {atLimit ? t('media.limitReached', { count: config.maxFiles }) : uploading ? t('media.uploading') : t('media.dragOrClick')}
           </span>
 
-          <span className="text-[0.6875rem] text-text-muted">{t(`media.hints.${config.hintKey}`)}</span>
+          <span className="text-[0.6875rem] text-text-muted">{agentMode ? t('media.agentHint') : t(`media.hints.${config.hintKey}`)}</span>
         </div>
 
         {/* Action buttons */}
@@ -290,6 +299,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
           </button>
         </div>
 
+        {uploadError && <p role="alert" className="text-xs text-status-failed-fg">{uploadError}</p>}
         {fileInput}
 
         <AssetPickerModal
