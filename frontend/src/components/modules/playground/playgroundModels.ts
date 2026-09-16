@@ -35,6 +35,8 @@ export interface PlaygroundModelOption {
     sound?: boolean;
   };
   maxReferenceImages: number;
+  maxReferenceVideos: number;
+  maxReferenceAudios: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +65,8 @@ interface CatalogModel {
   params?: Record<string, unknown>;
   inputs?: {
     reference_images?: { max?: number };
+    reference_videos?: { max?: number };
+    reference_audios?: { max?: number };
   };
   ui: {
     selection_group: string;
@@ -286,6 +290,8 @@ function toOption(model: CatalogModel): PlaygroundModelOption {
     duration: normalizeDuration(model.duration),
     params: normalizeParams(model.params),
     maxReferenceImages: model.inputs?.reference_images?.max ?? 0,
+    maxReferenceVideos: model.inputs?.reference_videos?.max ?? 0,
+    maxReferenceAudios: model.inputs?.reference_audios?.max ?? 0,
   };
 }
 

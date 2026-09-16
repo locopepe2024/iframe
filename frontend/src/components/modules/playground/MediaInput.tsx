@@ -96,6 +96,8 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   const [showAssetPicker, setShowAssetPicker] = useState(false);
 
   const isSeedance = modelId.startsWith('seedance');
+  const selectedModel = getModelsForMode(mode).find((model) => model.id === modelId);
+  const catalogMixed = mode === 'r2v' && !!(selectedModel?.maxReferenceVideos || selectedModel?.maxReferenceAudios);
 
   let config = MODE_CONFIG[mode === 't2v' ? 'i2v' : mode];
 
@@ -111,6 +113,12 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
       labelKey: 'media.labelRefMaterialAV',
       accept: 'image/*,video/*,audio/*',
       hintKey: 'r2vSeedance',
+    };
+  }
+  if (config && mode === 'r2v' && modelId.startsWith('uniart/') && selectedModel) {
+    config = { ...config,
+      accept: ['image/*', ...(selectedModel.maxReferenceVideos ? ['video/*'] : []), ...(selectedModel.maxReferenceAudios ? ['audio/*'] : [])].join(','),
+      maxFiles: selectedModel.maxReferenceImages + selectedModel.maxReferenceVideos + selectedModel.maxReferenceAudios || config.maxFiles,
     };
   }
 
@@ -201,7 +209,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
   // Determine accept type for AssetPickerModal
   const acceptType: 'image' | 'video' | 'all' =
-    agentMode || mode === 'r2v' && isSeedance
+    agentMode || catalogMixed || mode === 'r2v' && isSeedance
       ? 'all'
       : config.icon === 'video'
         ? 'video'

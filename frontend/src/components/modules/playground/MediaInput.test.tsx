@@ -8,6 +8,12 @@ vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ playgroundApi: { uploadMedia: upload } }));
 vi.mock('./AssetPickerModal', () => ({ default: ({ isOpen, onSelect }: { isOpen: boolean; onSelect: (path: string) => void }) => isOpen ? <button onClick={() => onSelect('/library.png')}>select asset</button> : null }));
 beforeEach(() => vi.clearAllMocks());
+it('uses UniArt reference modality capacities rather than a legacy model prefix', () => {
+  installUniArtCatalog([{ id: 'uniart/seedance-2.5-special', api_model_id: 'seedance-2.5-special', display_name: 'Seedance', description: '', family: 'seedance', provider: 'uniart', capabilities: ['r2v'], inputs: { reference_images: { max: 9 }, reference_videos: { max: 3 }, reference_audios: { max: 3 } } }]);
+  usePlaygroundStore.setState({ mode: 'r2v', modelId: 'uniart/seedance-2.5-special', inputMedia: [] });
+  const { container } = render(<MediaInput />);
+  expect(container.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*,video/*,audio/*');
+});
 it('retains one upload/library panel and appends image-edit references on upload', async () => {
   usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: ['/old.png'] });
   const { container } = render(<MediaInput />);
