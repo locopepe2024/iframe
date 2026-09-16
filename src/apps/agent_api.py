@@ -135,18 +135,23 @@ def complete(ctx, model, history):
     with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
         reply = client.chat.completions.create(model=model, messages=history)
     answer = None
-    choices = getattr(reply, "choices", None)
-    if choices:
-        first = choices[0]
-        message = getattr(first, "message", None)
-        answer = getattr(message, "content", None) if message else None
-    if not answer and isinstance(reply, dict):
-        choices = reply.get("choices") or []
+    raw = getattr(reply, "model_dump", lambda: reply)()
+    if isinstance(raw, dict):
+        choices = raw.get("choices") or []
         if choices:
-            answer = ((choices[0].get("message") or {}).get("content") or choices[0].get("text"))
-        answer = answer or reply.get("content") or reply.get("output")
+            first = choices[0] if isinstance(choices[0], dict) else {}
+            message = first.get("message") or first.get("delta") or {}
+            if isinstance(message, dict):
+                answer = message.get("content") or message.get("text") or message.get("reasoning_content")
+            answer = answer or first.get("text") or first.get("content")
+        answer = answer or raw.get("content") or raw.get("output")
     if not answer:
-        raw = getattr(reply, "model_dump", lambda: {})()
+        choices = getattr(reply, "choices", None) or []
+        if choices:
+            first = choices[0]
+            message = getattr(first, "message", None)
+            answer = getattr(message, "content", None) if message else None
+    if not answer:
         logger.error("UniArt chat response has no text; keys=%s", sorted(raw.keys()) if isinstance(raw, dict) else type(reply).__name__)
         raise ValueError("Empty model response")
     return str(answer)
