@@ -61,7 +61,7 @@
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.5.0",
+      "version": "1.6.0",
       "description": "先解析分镜板与素材用途，再编写关键帧三段或全参考六段提示词；统一 LumenX 附件引用。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
@@ -82,7 +82,7 @@
       "targets": [
         "MiniMax H3"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "description": "以原视频动作、运镜和节奏为参考，替换商品外观及指定口播名称；重新生成，不是精确局部编辑。",
       "instructions_file": "h3-product-recreation/SKILL.md",
       "source": "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/ref-en.txt",
