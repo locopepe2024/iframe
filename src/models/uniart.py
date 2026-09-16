@@ -1,8 +1,7 @@
 """UniArt OpenAI-compatible image/video adapter.
 
-The UniArt gateway exposes async image generation at /v1/images/generations and
-async video generation at /v1/videos. Task status and authenticated result
-content are read from /v1/videos/{task_id}.
+Image generation/edit may return final data or an accepted image task.
+Image tasks use /v1/images/{task_id}; video tasks use /v1/videos/{task_id}.
 """
 from __future__ import annotations
 import base64, mimetypes, os, time
@@ -14,6 +13,13 @@ from .image import ImageGenModel
 from ..utils import get_logger
 
 logger = get_logger(__name__)
+
+# AtlasCloud/Cangyuan routes consume URL arrays. NewToken Discount edits use
+# image_url objects instead; do not generalize that provider format to all SKUs.
+_URL_ARRAY_IMAGE_MODELS = frozenset({
+    "gpt-image-2", "gpt-image-2-special", "nano-banana-2-special",
+    "gpt-image-2.5-flare-special", "gpt-image-2.5-sunburst-special",
+})
 
 
 def _base_url(config: Dict[str, Any]) -> str:
@@ -284,10 +290,8 @@ class UniArtImageModel(ImageGenModel):
         if kwargs.get("ref_image_path"):
             refs.insert(0, kwargs["ref_image_path"])
         if refs:
-            # UniArt image-edit accepts structured image inputs. Sending bare
-            # strings makes the gateway reject the request with
-            # `images[].image_url is required`.
-            body["images"] = [{"image_url": _image_reference_url(ref)} for ref in refs]
+            urls = [_image_reference_url(ref) for ref in refs]
+            body["images"] = urls if model in _URL_ARRAY_IMAGE_MODELS else [{"image_url": url} for url in urls]
         mask = kwargs.get("mask")
         if mask:
             if not refs:

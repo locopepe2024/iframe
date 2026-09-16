@@ -32,7 +32,7 @@ def test_image_edit_forwards_reference_and_semantic_size(monkeypatch, tmp_path):
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
     uniart.UniArtImageModel({}).generate('edit', 'unused.png', size='2k', aspect_ratio='16:9', ref_image_paths=[str(image)])
     assert captured['endpoint'] == '/images/edits'
-    assert captured['body']['images'] == [{'image_url': 'https://storage.example/reference.png'}]
+    assert captured['body']['images'] == ['https://storage.example/reference.png']
     assert 'image' not in captured['body']
     assert captured['body']['resolution'] == '2k'
     assert 'size' not in captured['body']
@@ -68,7 +68,7 @@ def test_mask_edit_uses_urls_and_polls_image_task(monkeypatch):
     monkeypatch.setattr(uniart, '_download_result', lambda *args: None)
     uniart.UniArtImageModel({}).generate('edit', 'unused.png', ref_image_paths=['https://storage.example/source.png'], mask='https://storage.example/mask.png')
     assert captured['endpoint'] == '/images/edits'
-    assert captured['body']['images'] == [{'image_url': 'https://storage.example/source.png'}]
+    assert captured['body']['images'] == ['https://storage.example/source.png']
     assert captured['body']['mask'] == 'https://storage.example/mask.png'
     assert captured['body']['async'] is True
 
@@ -81,3 +81,36 @@ def test_sync_url_result_does_not_poll(monkeypatch):
     monkeypatch.setattr(uniart, '_download_result', lambda config, data, kind, path: downloaded.append(data))
     uniart.UniArtImageModel({}).generate('test', 'unused.png')
     assert downloaded == [result]
+
+
+@pytest.mark.parametrize('model', ['uniart/gpt-image-2', 'uniart/nano-banana-2-special', 'uniart/gpt-image-2.5-flare-special'])
+@pytest.mark.parametrize('asynchronous', [True, False])
+def test_url_array_edit_contract_and_response_lifecycle(monkeypatch, model, asynchronous):
+    references = ['https://storage.example/a.png', 'https://storage.example/b.png']
+    result = {'data': [{'url': 'https://storage.example/result.png'}]}
+    def post(config, endpoint, body):
+        assert endpoint == '/images/edits'
+        assert body['images'] == references
+        assert 'async' not in body  # Gateway route owns provider sync/async choice.
+        return {'task_id': 'accepted-task'} if asynchronous else result
+    def poll(config, task_id, endpoint):
+        assert asynchronous, 'synchronous result must not be polled'
+        assert (task_id, endpoint) == ('accepted-task', 'images')
+        return result
+    downloaded = []
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_poll', poll)
+    monkeypatch.setattr(uniart, '_download_result', lambda config, data, kind, path: downloaded.append(data))
+    uniart.UniArtImageModel({}).generate('edit', 'unused.png', model_name=model, ref_image_paths=references)
+    assert downloaded == [result]
+
+
+@pytest.mark.parametrize('model', ['gpt-image-2.5-flare-discount', 'gpt-image-2.5-sunburst-discount'])
+def test_discount_preserves_structured_reference_contract(monkeypatch, model):
+    def post(config, endpoint, body):
+        assert body['images'] == [{'image_url': 'https://storage.example/reference.png'}]
+        return {'data': [{'url': 'https://storage.example/result.png'}]}
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_poll', lambda *a, **kw: pytest.fail('sync result must not poll'))
+    monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
+    uniart.UniArtImageModel({}).generate('edit', 'unused.png', model_name=model, ref_image_paths=['https://storage.example/reference.png'])
