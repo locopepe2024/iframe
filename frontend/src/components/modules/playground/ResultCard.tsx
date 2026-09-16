@@ -142,7 +142,6 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
-  const useResultAsReference = usePlaygroundStore((s) => s.useResultAsReference);
   const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
@@ -185,8 +184,11 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const handleUseAsReference = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!output?.media_path) return;
-    useResultAsReference(output.media_path, output.media_type);
-  }, [output, useResultAsReference]);
+    const { inputMedia, setInputMedia } = usePlaygroundStore.getState();
+    if (!inputMedia.includes(output.media_path)) {
+      setInputMedia([...inputMedia, output.media_path]);
+    }
+  }, [output]);
 
   return (
     <div

@@ -3,10 +3,25 @@ import { downloadOutput } from './downloadOutput';
 import { playgroundApi } from '@/lib/api';
 import { expect, it, vi } from 'vitest';
 import ResultCard from './ResultCard';
-import type { PlaygroundGeneration } from './usePlaygroundStore';
+import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', playgroundApi: { saveToLibrary: vi.fn() } }));
 vi.mock('./downloadOutput', () => ({ downloadOutput: vi.fn() }));
+
+it.each(['image', 'video'] as const)('appends a %s card reference without replacing or reordering the current draft', (mediaType) => {
+  const existing = ['/first.png', '/second.mp4'];
+  const path = mediaType === 'image' ? '/new.png' : '/new.mp4';
+  usePlaygroundStore.setState({ inputMedia: existing, mode: 'r2v', modelId: 'uniart/minimax-h3-vip', prompt: 'use @1 and @2', parameters: { duration: 15 } });
+  render(<ResultCard generation={{
+    id: 'reference', mode: 't2i', model_id: 'model', prompt: 'old prompt', input_media: [], parameters: {},
+    batch_size: 1, outputs: [{ id: 'out', media_path: path, media_type: mediaType, saved_to_library: false }],
+    status: 'completed', created_at: '2026-09-15T08:00:00Z',
+  }} />);
+  fireEvent.click(screen.getByTitle('card.useAsReference'));
+  expect(usePlaygroundStore.getState()).toMatchObject({ inputMedia: [...existing, path], mode: 'r2v', modelId: 'uniart/minimax-h3-vip', prompt: 'use @1 and @2', parameters: { duration: 15 } });
+  fireEvent.click(screen.getByTitle('card.useAsReference'));
+  expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, path]);
+});
 
 it('toggles the featured mark and reports a failed library save', async () => {
   vi.mocked(playgroundApi.saveToLibrary).mockRejectedValueOnce(new Error('保存失败'));
