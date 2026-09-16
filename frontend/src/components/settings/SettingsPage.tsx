@@ -21,7 +21,8 @@ import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import LumenXBranding from "@/components/layout/LumenXBranding";
 import UpdateChecker from "./UpdateChecker";
-type SettingsCategory = "general" | "models" | "prompts" | "apikeys" | "storage" | "about";
+import SkillsSettings from "./SkillsSettings";
+type SettingsCategory = "general" | "models" | "prompts" | "skills" | "apikeys" | "storage" | "about";
 import {
   FormRow,
   FieldLabel,
@@ -951,6 +952,8 @@ export default function SettingsPage() {
         return renderModels();
       case "prompts":
         return renderPrompts();
+      case "skills":
+        return <SkillsSettings />;
       case "apikeys":
         return renderApiKeys();
       case "storage":
@@ -966,6 +969,7 @@ export default function SettingsPage() {
     general: t("eyebrowGeneral"),
     models: t("eyebrowModels"),
     prompts: t("eyebrowPrompts"),
+    skills: "Skills",
     apikeys: t("eyebrowApikeys"),
     storage: t("eyebrowStorage"),
     about: t("eyebrowAbout"),
@@ -976,6 +980,7 @@ export default function SettingsPage() {
     { id: "general", label: t("tabGeneral") },
     { id: "models", label: t("tabModels") },
     { id: "prompts", label: t("eyebrowPrompts") },
+    { id: "skills", label: "Skills" },
     { id: "apikeys", label: t("eyebrowApikeys") },
     { id: "storage", label: t("tabStorage") },
     { id: "about", label: t("eyebrowAbout") },
