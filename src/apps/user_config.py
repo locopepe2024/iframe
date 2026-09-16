@@ -57,9 +57,9 @@ class UserConfigStore:
             )
 
     def _encryption_key(self, identity: UserContext | None = None) -> bytes:
-        # Prefer a per-user key derived from the authenticated identity token.
+        # Prefer a per-user key derived from stable owner identity.
         # The server master key remains only as legacy migration fallback.
-        seed = identity.access_token if identity and identity.access_token else self.master_key
+        seed = (f"{identity.owner_profile_id}:{identity.user_id}" if identity else self.master_key)
         if not seed:
             raise HTTPException(status_code=503, detail="User encryption key is unavailable")
         return hashlib.sha256(("lumenx:user:" + seed).encode("utf-8")).digest()
