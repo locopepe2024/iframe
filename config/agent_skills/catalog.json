@@ -61,8 +61,8 @@
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.4.0",
-      "description": "依据 MiniMax 官方指南区分关键帧三段与全参考六段格式，绑定主体、素材用途和音画时间线。",
+      "version": "1.5.0",
+      "description": "先解析分镜板与素材用途，再编写关键帧三段或全参考六段提示词；统一 LumenX 附件引用。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
         "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md",
@@ -73,8 +73,7 @@
       "source_revision": "5a8e380b86ccbff20d29edae8e32037348adf47d",
       "license": "Apache-2.0",
       "license_file": "h3-Apache-2.0.txt",
-      "adaptation": "初版来自 Apache-2.0 的第三方 H3 Director；1.2 为 LumenX 独立编写的官方指南摘要，未打包官方模型或指南全文。参考官方 h3-prompt-writing（d21241f），官方资料许可见 MiniMax H3 Community License，不因原版 Apache-2.0 而重新授权。非托管 IR 实现，效果待评估。",
-      "instructions": "适用：明确面向 MiniMax/H3 的提示词润色、导演规划、参考素材创作，或用户要求沿用正在讨论的 H3 方案；不因启用本 skill 而改写其他模型任务。先识别当前待优化稿及不可改条件，再组织主体定义、公共设定、时间段动作与声音。主体定义只使用实际附件中可见的依据及用户明确描述，将同一人物的不同视图归为同一主体。分析时区分计划保留与用户允许修改：例如仅参考身份且明确换装，可保留脸与发型、改服装；若原稿要求蓝白裙装不换装，就不能自行换成黑风衣。不得把参考保持要求写成已完全保留的结果。沿用系统提供的 @N 素材编号，不输出下载文件名、签名 URL 或 <Picture N> 内部槽位。单镜头采用公共设定加连续动作阶段，不生成切镜表；多镜头才逐镜指定起止时间、主体状态、景别与运动、动作终点、道具状态和音画事件。所有时间段连续覆盖用户总时长，包含最后停顿；不要把最后一个切点当作片长。先保证动作因果和可执行的空间关系，再补光线与质感。相机与人物同速后退应保持距离和景别；若要收紧景别，应减少后退速度或在允许时改变焦段。复杂接物动作需明确每只手的初始占用、道具脱手顺序、支撑腿、接触点和最终归属；时间冻结需说明哪些对象冻结、哪些仍可移动。遇到物理或时序冲突，优先提出最小可行调整，不许借优化重写主剧情。声音按动作节点安排配乐进出、环境音、拟音和对白，用户要求无对白时不得添加。输出前用原稿核对场景、造型、剧情、时长、镜头数量、画幅与约束，消除无授权变化。默认中文输入得到中文输出；只要提示词时仅给一份可复制正文，要求分析时附简短保留／修改清单与待确认冲突。用户提供 IR 与原稿时，先核对两者是否同一剧情；结构精细不证明输入正确或视频效果更好。只指导创作，不决定模型参数能力、SKU 或接口。"
+      "adaptation": "初版来自 Apache-2.0 的第三方 H3 Director；1.2 为 LumenX 独立编写的官方指南摘要，未打包官方模型或指南全文。参考官方 h3-prompt-writing（d21241f），官方资料许可见 MiniMax H3 Community License，不因原版 Apache-2.0 而重新授权。非托管 IR 实现，效果待评估。"
     },
     {
       "id": "h3-product-recreation",
@@ -83,7 +82,7 @@
       "targets": [
         "MiniMax H3"
       ],
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "以原视频动作、运镜和节奏为参考，替换商品外观及指定口播名称；重新生成，不是精确局部编辑。",
       "instructions_file": "h3-product-recreation/SKILL.md",
       "source": "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/ref-en.txt",
