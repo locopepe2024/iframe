@@ -1,0 +1,74 @@
+{
+  "skills": [
+    {
+      "id": "director-style",
+      "name": "导演风格与视觉叙事",
+      "category": "导演风格",
+      "targets": ["Seedance", "MiniMax H3"],
+      "version": "1.0.0",
+      "description": "场景意图、视点、表演、光线与镜头风格统一。",
+      "source": "https://github.com/LeoYeAI/seedance-skills/blob/797e16efaa3c5ac01c0e391d0b8466a87cc5aadc/references/directing-engine.md",
+      "source_revision": "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+      "license": "MIT",
+      "license_file": "seedance-MIT.txt",
+      "adaptation": "LumenX 创作指导改编；导演方法可通用，跨模型效果待验证。",
+      "instructions": "适用：用户要求导演风格、电影感、艺术指导或整体创作方案时。先读懂场景的叙事功能、情绪转折、人物视点、关系与潜台词，用一句话明确观众应感受到什么。将导演或作品风格要求具体化为构图、镜头距离、运动节奏、光源、色彩、表演和声音，不以空泛的电影感形容词代替决策。选择并保持一个主风格，例如观察式自然主义、亲密极简、几何构图或动感纪实；这些是创作选择而非模型参数。镜头、光线、表演、声音都服务同一情绪意图，每个动作写出可观察的变化和终点。多段保持同一角色、服装、场景、光线方向和视觉风格，在叙事转折处才有意变化。用户给定的参考素材名称与引用保持原样，不杜撰其内容。输出：简短导演意图、风格要点、可直接使用的自然语言提示词；用户仅要求提示词时只输出提示词。"
+    },
+    {
+      "id": "seedance-camera",
+      "name": "Seedance 运镜设计",
+      "category": "运镜",
+      "targets": ["Seedance"],
+      "version": "1.0.0",
+      "description": "景别、机位、运动速度、主体关系与落幅设计。",
+      "source": "https://github.com/LeoYeAI/seedance-skills/blob/797e16efaa3c5ac01c0e391d0b8466a87cc5aadc/skills/seedance-camera/SKILL.md",
+      "source_revision": "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+      "license": "MIT",
+      "license_file": "seedance-MIT.txt",
+      "adaptation": "LumenX 自包含改编，整合关键规则，移除外部引用加载要求。",
+      "instructions": "适用：Seedance 运镜、镜头设计、机位或图生视频提示词。每个短镜头选择一个主运镜，写清起始景别、角度、运动路径、速度、与主体的相对关系及结束构图。情绪领悟可缓慢推进；人物移动可跟拍；揭示空间可后拉或升起；精细表演与产品身份可固定机位。区分机位平移与原地摇摄、物理推进与镜头变焦，避免将矛盾运动堆在同一镜头。焦距词只在帮助空间表达时使用，并说明距离和主体。图生视频默认保留原构图与身份，明确允许变化的部分。视频参考明确只借用运镜、节奏或动作，不擅自借用人物身份或环境。多镜头维持屏幕方向、视线与轴线，复杂变化拆成分镜。输出一条可直接粘贴的运镜提示词；必要时附起幅、运动和落幅，不虚构模型支持的特殊语法或时长。"
+    },
+    {
+      "id": "seedance-prompt",
+      "name": "Seedance 提示词优化",
+      "category": "提示词优化",
+      "targets": ["Seedance"],
+      "version": "1.0.0",
+      "description": "保留主体与参考关系，压缩冗词并明确动作终点。",
+      "source": "https://github.com/LeoYeAI/seedance-skills/blob/797e16efaa3c5ac01c0e391d0b8466a87cc5aadc/skills/seedance-prompt-short/SKILL.md",
+      "source_revision": "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+      "license": "MIT",
+      "license_file": "seedance-MIT.txt",
+      "adaptation": "LumenX 自包含中文改编，保留用户素材索引，不引入接口参数。",
+      "instructions": "适用：Seedance 提示词改写、压缩、润色。按参考素材及用途、主体身份、可观察动作及终点、一个主要运镜、环境与实际光源、必要声音、保留约束组织自然语言。先删重复形容词和装饰性词汇，再删非必要细节；不删身份、引用、起始状态、连续性或终点。图生视频明确哪些元素保持、哪些允许移动；视频参考明确转移的是动作、运镜还是节奏。保留用户原有素材引用标记，不编造图片编号或没有上传的参考。续作不重复已完成动作，也不提前发生后续剧情。中文请求优先中文；仅在必要时补充准确镜头术语。输出一个可复制提示词，除非用户要求方案，否则不附长篇解释。缺少关键素材或目标时提出一个必要问题，其他创作假设明确标为建议。"
+    },
+    {
+      "id": "sequence-continuity",
+      "name": "连续分镜与风格一致性",
+      "category": "分镜",
+      "targets": ["Seedance", "MiniMax H3"],
+      "version": "1.0.0",
+      "description": "跨镜头角色、动作、画面方向及声音连续性规划。",
+      "source": "https://github.com/LeoYeAI/seedance-skills/blob/797e16efaa3c5ac01c0e391d0b8466a87cc5aadc/skills/seedance-sequence/SKILL.md",
+      "source_revision": "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+      "license": "MIT",
+      "license_file": "seedance-MIT.txt",
+      "adaptation": "LumenX 创作规划改编，移除上游状态工具依赖和模型时长假设。",
+      "instructions": "适用：多镜头、续拍、长故事、广告或连贯视频方案。先明确故事目标与结局，再按时间地点分场景，为每个镜头指定叙事任务、情绪意图、开场状态、唯一主要动作、结束状态、前后衔接、保留元素和允许变化。全局记录人物身份、服装、道具、位置、光线与屏幕方向。区分已发生、当前镜头、未来镜头；输出后续规划不等于已经生成。用户提供成片或尾帧后才依据观察修订下一段，未看到结果时将衔接标为计划，不能假设成功。连续生成出现身份漂移时建议回到原参考素材重新建立镜头，不保证跨段自动连续。声音分为对白、环境音、动作声、音乐；跨段音乐统一是后期规划。输出简明分镜表与当前待制作镜头的完整提示词，后续镜头保留为计划；不替用户提交生成，不硬编码模型时长、数量或专用接口语法。"
+    },
+    {
+      "id": "minimax-h3-director",
+      "name": "MiniMax H3 分段导演",
+      "category": "导演规划",
+      "targets": ["MiniMax H3"],
+      "version": "1.0.0",
+      "description": "公共风格、逐段提示词、参考素材角色与音画衔接。",
+      "source": "https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director/blob/5a8e380b86ccbff20d29edae8e32037348adf47d/README.md",
+      "source_revision": "5a8e380b86ccbff20d29edae8e32037348adf47d",
+      "license": "Apache-2.0",
+      "license_file": "h3-Apache-2.0.txt",
+      "adaptation": "从 H3 Director 工作流改编为 LumenX Skill；非上游原生 Skill，未接入 ComfyUI。",
+      "instructions": "适用：MiniMax H3 导演、分段脚本、参考素材视频创作与提示词优化。采用公共创作设定加逐段导演指令：公共设定包括人物身份、造型、视觉风格、空间关系与声音基调；每段只描述该段动作、镜头路径、起止状态、光线变化与具体音效。为每个已有图片、视频、音频素材注明用途，如角色身份、首帧构图、动作节奏、环境、声音参考，不把多个素材含混地写成全部参考。保持 LumenX 原有素材引用，不自动替换为 ComfyUI 的 Picture/Video/Audio 槽位语法。首尾帧方案描述两者间合理动作与过渡；视频编辑方案区分保留原画面、改变主体或参考动作。段间继承最后可观察的姿态、动作方向和声音状态，尚未生成的尾帧只能作为计划。分别给出画面、对白、环境音和转场意图，禁止声称跨段已无缝。输出公共风格说明、逐段分镜表与可复制提示词；只用自然语言，不输出采样器、模型权重、分辨率能力或接口适配配置。"
+    }
+  ]
+}
