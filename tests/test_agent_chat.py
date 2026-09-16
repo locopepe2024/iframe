@@ -63,7 +63,7 @@ def test_linked_conversation_and_image_context(setup, monkeypatch):
     first = agent.create(agent.SessionCreate(model='qwen', playground_session_id='canvas'), ctx)['session']
     second = agent.create(agent.SessionCreate(model='qwen', playground_session_id='canvas'), ctx)['session']
     assert first['id'] == second['id']
-    monkeypatch.setattr(agent, 'image_reference', lambda ctx, ref: 'https://media.example/image.png')
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}})
     complete = Mock(return_value='看见一只小狗')
     monkeypatch.setattr(agent, 'complete', complete)
     agent.send(first['id'], agent.MessageCreate(content='这是什么？', input_media=['/playground/input-media/a.png']), ctx)
@@ -111,3 +111,16 @@ def test_linked_status_tracks_lease_and_releases_on_failure(setup, monkeypatch):
     with pytest.raises(HTTPException):
         agent.send(sid, agent.MessageCreate(content='hello'), setup)
     assert agent.playground_conversation('status', setup)['busy_until'] == 0
+
+
+def test_audio_and_text_payloads(setup, tmp_path, monkeypatch):
+    audio = tmp_path / 'reference.wav'
+    audio.write_bytes(b'RIFFtest')
+    monkeypatch.setattr(agent, 'reference_path', lambda ctx, ref: str(audio))
+    result = agent.reference_content(setup, 'owner-scoped-reference')
+    assert result['type'] == 'input_audio'
+    assert agent.base64.b64decode(result['input_audio']['data']) == b'RIFFtest'
+    text = tmp_path / 'script.md'
+    text.write_text('分镜：小狗跳舞', encoding='utf-8')
+    monkeypatch.setattr(agent, 'reference_path', lambda ctx, ref: str(text))
+    assert '分镜：小狗跳舞' in agent.reference_content(setup, 'reference')['text']
