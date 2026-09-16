@@ -6,6 +6,9 @@ import { referenceName } from './referenceMedia';
 export function useAgentConversation(enabled: boolean, sessionId: string | null) {
   const [models, setModels] = useState<ChatModel[]>([]);
   const [model, setModel] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState('');
+  const shouldLoadModels = enabled || !!sessionId;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [remoteBusy, setRemoteBusy] = useState(false);
@@ -43,15 +46,17 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     return () => { cancelled = true; clearTimeout(timer); };
   }, [sessionId]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!shouldLoadModels) return;
     let cancelled = false;
+    setModelsLoading(true); setModelsError('');
     agentRequest<{ models: ChatModel[] }>('/models').then(catalog => {
       if (cancelled) return;
       const available = catalog.models;
       setModels(available); setModel(current => available.some(m => m.api_model_id === current) ? current : available[0]?.api_model_id || '');
-    }).catch(e => { if (!cancelled) setError(e.message); });
+    }).catch(e => { if (!cancelled) setModelsError(e instanceof Error ? e.message : '加载模型失败'); })
+      .finally(() => { if (!cancelled) setModelsLoading(false); });
     return () => { cancelled = true; };
-  }, [enabled, revision]);
+  }, [shouldLoadModels, revision]);
   useEffect(() => {
     if (models.length && !models.some(m => m.api_model_id === model)) setModel(models[0].api_model_id);
   }, [models, model]);
@@ -63,7 +68,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     } catch (e) { if (active.current === sessionId) setError(e instanceof Error ? e.message : '删除失败'); }
   }
   async function send() {
-    if (!sessionId || sending.current || remoteBusy || loading) return;
+    if (!sessionId || sending.current || remoteBusy || loading || modelsLoading || modelsError || !models.some(m => m.api_model_id === model)) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
     sending.current = true; setBusy(true); setError('');
@@ -82,5 +87,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     } catch (e) { if (active.current === sessionId) { const message = e instanceof Error ? e.message : '发送失败'; setError(message); if (message === '当前会话正在回复') setRemoteBusy(true); } }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, messages, busy: busy || remoteBusy, loading, error, send, removeMessage };
+  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage };
 }

@@ -36,7 +36,7 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -148,7 +148,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
               {panelTitle}
             </div>
             {activePanel === 'output' && <OutputTypeSelector agentActive={agent?.active} onAgentChange={onAgentChange} />}
-            {activePanel === 'model' && (agent?.active ? <div className="grid gap-2 sm:grid-cols-2">{agent.models.map(model => <button key={model.api_model_id} type="button" aria-pressed={agent.model === model.api_model_id} onClick={() => { agent.setModel(model.api_model_id); setActivePanel(null); }} className="rounded-xl border border-border-subtle p-3 text-left text-sm">{model.display_name}</button>)}{!agent.models.length && <p className="text-sm text-text-muted">请在原设置入口获取并勾选 Chat 模型。</p>}</div> : <ModelSelector />)}
+            {activePanel === 'model' && (agent?.active ? <div className="grid gap-2 sm:grid-cols-2">{agent.models.map(model => <button key={model.api_model_id} type="button" aria-pressed={agent.model === model.api_model_id} onClick={() => { agent.setModel(model.api_model_id); setActivePanel(null); }} className="rounded-xl border border-border-subtle p-3 text-left text-sm">{model.display_name}</button>)}{agent.modelsLoading ? <p role="status" className="text-sm text-text-muted">正在加载 Chat 模型…</p> : agent.modelsError ? <div role="alert" className="text-sm text-text-muted">{agent.modelsError}<button type="button" onClick={agent.reloadModels} className="ml-2 text-primary">重新加载模型</button></div> : !agent.models.length && <p className="text-sm text-text-muted">请在原设置入口获取并勾选 Chat 模型。</p>}</div> : <ModelSelector />)}
             {activePanel === 'method' && <CreationMethodSelector />}
             {activePanel === 'reference' && (
               <MediaInput agentMode={agent?.active} />
@@ -178,7 +178,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             shorten
             active={activePanel === 'model'}
             icon={Boxes}
-            label={agent?.active ? (agent.models.find(m => m.api_model_id === agent.model)?.display_name || t('agent.selectSku')) : model?.displayName || modelId || t('agent.selectSku')}
+            label={agent?.active ? (agent.models.find(m => m.api_model_id === agent.model)?.display_name || (agent.modelsLoading ? '加载模型中…' : agent.modelsError ? '模型加载失败' : t('agent.selectSku'))) : model?.displayName || modelId || t('agent.selectSku')}
             onClick={() => togglePanel('model')}
           />
           {!agent?.active && <>
