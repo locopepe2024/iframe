@@ -165,6 +165,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
     e.stopPropagation();
     if (!output || saving) return;
     setSaving(true);
+    setActionError('');
     try {
       const newSaved = !saved;
       if (newSaved) {
@@ -175,7 +176,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       );
       updateGeneration({ ...generation, outputs: updatedOutputs });
     } catch (err) {
-      console.error('[Playground] Save to library failed:', err);
+      setActionError(err instanceof Error ? err.message : '保存到资产库失败，请重试');
     } finally {
       setSaving(false);
     }
@@ -293,11 +294,16 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
             onClick={(e) => { e.stopPropagation(); if (output) toggleFeatured(generation.id, output.id); }}
             className={`w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center transition ${featured ? 'bg-status-starred-bg' : 'bg-elevated hover:bg-hover-bg'}`}
             title={t('card.featured')}
+            aria-label={t('card.featured')}
+            aria-pressed={featured}
           >
             <Crown className={`w-3.5 h-3.5 ${featured ? 'text-status-starred-solid fill-status-starred-solid' : 'text-foreground'}`} />
           </button>
           <button
             onClick={handleSaveToLibrary}
+            disabled={saving}
+            aria-busy={saving}
+            aria-label={saved ? t('card.saved') : t('card.saveToLibrary')}
             className={`w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center transition ${saved ? 'bg-primary/15' : 'bg-elevated hover:bg-hover-bg'}`}
             title={saved ? t('card.saved') : t('card.saveToLibrary')}
           >
@@ -309,6 +315,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       {/* Info area */}
       <div className="px-3 py-[10px]">
         {downloading && <p role="status" className="mb-1 text-xs text-text-muted">正在准备下载…</p>}
+        {saving && <p role="status" className="mb-1 text-xs text-text-muted">正在保存到资产库…</p>}
         {actionError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{actionError}</p>}
         <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-1.5 flex-wrap">

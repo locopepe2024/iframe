@@ -1,11 +1,28 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { downloadOutput } from './downloadOutput';
+import { playgroundApi } from '@/lib/api';
 import { expect, it, vi } from 'vitest';
 import ResultCard from './ResultCard';
 import type { PlaygroundGeneration } from './usePlaygroundStore';
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', playgroundApi: {} }));
+vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', playgroundApi: { saveToLibrary: vi.fn() } }));
 vi.mock('./downloadOutput', () => ({ downloadOutput: vi.fn() }));
+
+it('toggles the featured mark and reports a failed library save', async () => {
+  vi.mocked(playgroundApi.saveToLibrary).mockRejectedValueOnce(new Error('保存失败'));
+  render(<ResultCard generation={{
+    id: 'mark-test', mode: 't2i', model_id: 'model', prompt: 'test', input_media: [], parameters: {},
+    batch_size: 1, outputs: [{ id: 'out', media_path: '/image.png', media_type: 'image', saved_to_library: false }],
+    status: 'completed', created_at: '2026-09-15T08:00:00Z',
+  }} />);
+  const mark = screen.getByRole('button', { name: 'card.featured' });
+  fireEvent.click(mark);
+  expect(mark).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(mark);
+  expect(mark).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(screen.getByRole('button', { name: 'card.saveToLibrary' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');
+});
 
 it('reports a failed download on the card', async () => {
   vi.mocked(downloadOutput).mockRejectedValueOnce(new Error('下载失败（HTTP 401）'));
