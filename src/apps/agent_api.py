@@ -62,10 +62,10 @@ class SessionPatch(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    input_media: list[str] = Field(default_factory=list, max_length=16)
-    content: str = Field(min_length=1, max_length=16000)
-    asset_names: list[str] = Field(default_factory=list, max_length=16)
-    context: str = Field(default="", max_length=16000)
+    input_media: list[str] = Field(default_factory=list)
+    content: str = Field(min_length=1)
+    asset_names: list[str] = Field(default_factory=list)
+    context: str = Field(default="")
 
 
 def catalog(ctx):
@@ -229,8 +229,10 @@ def complete(ctx, model, history):
     config = get_user_config_store().get_runtime_uniart(ctx)
     # Chat audio is inline per the gateway schema; reject oversized histories
     # before the gateway's default nginx limit, without dropping references.
-    if len(json.dumps({"model": model, "messages": history}, ensure_ascii=True).encode()) > 900 * 1024:
-        raise HTTPException(422, "多模态对话请求过大，请缩短音频或文本参考，或新建会话后重试")
+    # Match the SDK's compact UTF-8 JSON encoding, not escaped Unicode length.
+    payload_bytes = len(json.dumps({"model": model, "messages": history}, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if payload_bytes > 900 * 1024:
+        raise HTTPException(422, f"本次对话含历史和素材约 {payload_bytes / 1024:.0f} KB，超过当前网关请求预算 900 KB；不是素材数量上限。请减少音频或文本内容，或新建会话；内容未截断")
     from openai import OpenAI
     with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
         reply = client.chat.completions.create(model=model, messages=history)

@@ -123,7 +123,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     };
   }
 
-  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: 16, accept: "image/*,video/*,.mp3,.wav,.txt,.md,.csv,.json,.srt,.vtt" };
+  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: Number.POSITIVE_INFINITY };
   // Uploading a reference is separate from the provider's per-model capacity checks.
   if (agentMode || mode === 'r2v') config = {
     ...config!, multiple: true, maxFiles: Math.max(config?.maxFiles || 0, 16),
@@ -151,9 +151,11 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     setUploading(true);
     setUploadError('');
     try {
-      const results = await Promise.allSettled(
-        toUpload.map((file) => playgroundApi.uploadMedia(file))
-      );
+      // Bound in-flight requests without limiting how many references can be added.
+      const results: PromiseSettledResult<{ path: string }>[] = [];
+      for (let index = 0; index < toUpload.length; index += 4) {
+        results.push(...await Promise.allSettled(toUpload.slice(index, index + 4).map((file) => playgroundApi.uploadMedia(file))));
+      }
       const newPaths: string[] = [];
       const failed: string[] = [];
       results.forEach((result, index) => {

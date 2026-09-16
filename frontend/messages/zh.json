@@ -1743,7 +1743,7 @@
       "uploading": "上传中...",
       "dragOrClick": "拖拽或点击上传",
       "localUpload": "本地上传",
-      "agentHint": "可同时添加图片、视频、音频（含 MP3/WAV/M4A）及 TXT/MD/CSV/JSON/SRT/VTT 文本。音频格式自动转换；超出对话请求容量会提示。",
+      "agentHint": "可添加图片、视频、音频（含 MP3/WAV/M4A）及 TXT/MD/CSV/JSON/SRT/VTT 文本，不再固定限制 16 个。音频格式自动转换；提交时检查总请求容量，模型仍可能有自身限制。",
       "omniHint": "可添加图片、视频、音频和 TXT/MD/CSV/JSON/SRT/VTT 文本。文本内容随提示词提交；媒体数量和时长按所选模型要求。",
       "uploadFailed": "上传失败，请重试；已成功上传的素材已保留",
       "pickFromLibrary": "从资产库选取",

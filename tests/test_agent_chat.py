@@ -182,3 +182,32 @@ def test_chat_large_inline_history_is_rejected_before_network(setup, monkeypatch
     with pytest.raises(HTTPException) as exc:
         agent.complete(setup, 'qwen', [{'role': 'user', 'content': 'x' * (901 * 1024)}])
     assert exc.value.status_code == 422
+
+
+def test_chat_keeps_more_than_sixteen_references_and_long_text(setup, monkeypatch):
+    references = [f'/playground/input-media/{i}.png' for i in range(32)]
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': 'https://cdn.example/' + ref.rsplit('/', 1)[-1]}})
+    call = Mock(return_value='分析完成')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    prompt = '分析素材。' * 4000
+    agent.send(sid, agent.MessageCreate(content=prompt, context=prompt, input_media=references,
+        asset_names=[f'{i}.png' for i in range(32)]), setup)
+    parts = call.call_args.args[2][-1]['content']
+    assert parts[0]['text'].startswith(prompt)
+    images = [part['image_url']['url'] for part in parts if part['type'] == 'image_url']
+    assert images == [f'https://cdn.example/{i}.png' for i in range(32)]
+    assert agent.messages(sid, setup)['messages'][0]['input_media'] == references
+
+
+def test_chat_payload_budget_counts_utf8_bytes_not_escaped_chinese(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'api_key': 'test', 'base_url': 'https://example.test/v1'})))
+    import openai
+    client = Mock()
+    client.chat.completions.create.return_value.model_dump.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+    factory = Mock()
+    factory.return_value.__enter__ = Mock(return_value=client)
+    factory.return_value.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr(openai, 'OpenAI', factory)
+    assert agent.complete(setup, 'qwen', [{'role': 'user', 'content': '文' * 200000}]) == 'ok'
+    client.chat.completions.create.assert_called_once()

@@ -8,6 +8,15 @@ vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ playgroundApi: { uploadMedia: upload } }));
 vi.mock('./AssetPickerModal', () => ({ default: ({ isOpen, onSelect }: { isOpen: boolean; onSelect: (path: string) => void }) => isOpen ? <button onClick={() => onSelect('/library.png')}>select asset</button> : null }));
 beforeEach(() => vi.clearAllMocks());
+it('appends Agent uploads beyond sixteen references without dropping any', async () => {
+  const existing = Array.from({ length: 16 }, (_, i) => `/old-${i}.png`);
+  usePlaygroundStore.setState({ mode: 'i2v', modelId: 'test', inputMedia: existing });
+  const { container } = render(<MediaInput agentMode />);
+  expect(screen.getByText('media.localUpload')).not.toBeDisabled();
+  upload.mockResolvedValueOnce({ path: '/voice.wav' }).mockResolvedValueOnce({ path: '/clip.mp4' });
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['a'], 'voice.wav'), new File(['v'], 'clip.mp4')] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, '/voice.wav', '/clip.mp4']));
+});
 it('uploads mixed Agent references without changing the media generation mode', async () => {
   upload.mockResolvedValueOnce({ path: '/playground/input-media/clip.mp4' }).mockResolvedValueOnce({ path: '/playground/input-media/voice.wav' });
   usePlaygroundStore.setState({ mode: 't2v', modelId: 'test', inputMedia: ['/old.png'] });
