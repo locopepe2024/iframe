@@ -8,6 +8,7 @@ import ResultCard from './ResultCard';
 import OverflowActions from './OverflowActions';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { shortReferenceLabel } from './referenceMedia';
+import { getAssetUrl } from '@/lib/utils';
 
 const MODE_LABELS: Record<string, string> = {
   t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', f2v: 'F2V', v2v: 'V2V',
@@ -21,7 +22,7 @@ function parameterSummary(parameters: Record<string, any>): string {
     .join(' · ');
 }
 
-function PromptWithReferences({ prompt, mediaNames }: { prompt: string; mediaNames: string[] }) {
+function PromptWithReferences({ prompt, mediaNames, mediaPaths = [], mediaMap = {} }: { prompt: string; mediaNames: string[]; mediaPaths?: string[]; mediaMap?: Record<string, string> }) {
   const names = mediaNames.filter(Boolean).sort((a, b) => b.length - a.length);
   if (!names.length) return <>{prompt}</>;
   const pattern = new RegExp(`@(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
@@ -31,7 +32,11 @@ function PromptWithReferences({ prompt, mediaNames }: { prompt: string; mediaNam
     const index = match.index ?? 0;
     if (index > cursor) parts.push(prompt.slice(cursor, index));
     const fullName = match[1];
-    parts.push(<span key={`${index}-${fullName}`} title={fullName} className="mx-0.5 inline-flex max-w-[13rem] cursor-help items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 align-baseline text-emerald-300 ring-1 ring-inset ring-emerald-400/20">@{shortReferenceLabel(fullName)}</span>);
+    const path = Object.entries(mediaMap).find(([, name]) => name === fullName)?.[0] || mediaPaths[names.indexOf(fullName)] || mediaPaths[0];
+    parts.push(<span key={`${index}-${fullName}`} title={fullName} className="mx-0.5 inline-flex max-w-[9rem] items-center gap-1 rounded-md bg-emerald-500/15 px-1 py-0.5 align-baseline text-emerald-300 ring-1 ring-inset ring-emerald-400/20">
+      {path && <img src={getAssetUrl(path)} alt="" className="h-5 w-5 rounded object-cover" />}
+      <span className="truncate">@{shortReferenceLabel(fullName)}</span>
+    </span>);
     cursor = index + match[0].length;
   }
   if (!parts.length) return <>{prompt}</>;
@@ -70,7 +75,7 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
             </span>
           )}
         </div>
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground"><PromptWithReferences prompt={generation.prompt} mediaNames={Object.values(generation.media_names || {})} /></p>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground"><PromptWithReferences prompt={generation.prompt} mediaNames={Object.values(generation.media_names || {})} mediaPaths={generation.input_media} mediaMap={generation.media_names || {}} /></p>
         {(generation.input_media.length > 0 || summary) && (
           <div className="mt-3 flex flex-wrap gap-2 text-[0.6875rem] text-text-muted">
             {generation.input_media.length > 0 && (
@@ -128,7 +133,7 @@ function ChatCard({ message, onDelete }: { message: ChatMessage; onDelete: (id: 
     <div className="absolute left-0 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-glass-border bg-surface text-text-muted"><Sparkles size={12} /></div>
     <section className="rounded-[18px] border border-glass-border bg-glass px-4 py-3">
       <div className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] text-text-muted"><span>{message.role === 'user' ? '你 · Agent' : 'Agent'}</span><span title={message.model}>{message.model && (message.model.length > 10 ? message.model.slice(0, 10) + '...' : message.model)}</span></div>
-      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"><PromptWithReferences prompt={message.content} mediaNames={message.asset_names || []} /></p>
+      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"><PromptWithReferences prompt={message.content} mediaNames={message.asset_names || []} mediaPaths={message.input_media || []} mediaMap={Object.fromEntries((message.input_media || []).map((path, i) => [path, message.asset_names?.[i] || path]))} /></p>
       {!!message.asset_names?.length && <div className="mt-3 flex flex-wrap gap-2">{message.asset_names.map((name, i) => <span key={i} title={name} className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">@{shortReferenceLabel(name)}</span>)}</div>}
       <button type="button" onClick={restore} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-glass-border px-3 text-xs text-text-secondary hover:text-primary"><ArrowUpLeft size={14} />{message.role === 'assistant' ? '填入输入框' : '编辑继续'}</button>
       <div className="mt-2 flex items-center text-xs text-text-muted"><time>{message.created_at ? new Date(message.created_at * 1000).toLocaleString() : '历史消息'}</time><OverflowActions label="消息操作" actions={[
