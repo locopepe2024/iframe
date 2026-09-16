@@ -412,6 +412,7 @@
     "offlineBannerText": "You're offline — you can continue once reconnected"
   },
   "nav": {
+    "recreation": "Recreation",
     "workspace": "Workspace",
     "library": "Library",
     "editor": "Script Editor",
@@ -419,6 +420,19 @@
     "settings": "Settings",
     "workspaceAria": "LumenX Studio · Workspace",
     "mainNavAria": "Main navigation"
+  },
+  "recreation": {
+    "title": "Video Recreation", "upload": "Import source", "sources": "Source videos",
+    "loading": "Loading", "empty": "No source videos", "selectSource": "Select a source video",
+    "registered": "Registered", "queued": "Queued", "analyzing": "Analyzing", "review": "Awaiting confirmation",
+    "confirmed": "Timeline confirmed", "failed": "Analysis failed", "requestFailed": "Request failed. Please retry.",
+    "invalidTimeline": "Timestamps must be ordered, unique source-frame times, excluding the start and end.",
+    "refresh": "Refresh", "analyze": "Analyze source", "audioTracks": "{count} audio tracks", "timeline": "Timeline",
+    "shots": "shots", "confirm": "Confirm timeline", "frame": "Source frame", "addCut": "Add cut",
+    "timestamps": "Cut times in seconds", "import": "Import cuts", "noCuts": "One continuous shot",
+    "detected": "Detected", "manual": "Manual", "remove": "Remove cut", "before": "Previous frame",
+    "after": "First frame after cut", "evidence": "Load adjacent frames", "contactSheet": "Contact sheet",
+    "unsaved": "Unconfirmed changes", "oversized": "Source exceeds 256 MiB"
   },
   "workspace": {
     "title": "My Workspace",

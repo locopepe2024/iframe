@@ -27,6 +27,7 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
+const RecreationPage = dynamic(() => import("@/components/modules/recreation/RecreationPage"), { ssr: false });
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
 
 // ── Create Series Dialog ──
@@ -462,7 +463,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'recreation' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -614,6 +615,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/recreation') {
+        setCurrentView('recreation');
+        setActiveTab('recreation');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       if (hash === '#/settings') {
         setCurrentView('settings');
         setActiveTab('settings');
@@ -687,6 +696,9 @@ export default function Home() {
 
   // Determine content based on activeTab
   const renderContent = () => {
+    if (currentView === 'recreation') {
+      return <RecreationPage />;
+    }
     if (currentView === 'library') {
       return <AssetLibraryPage />;
     }
