@@ -214,10 +214,6 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           <div className="w-full h-full bg-gradient-to-br from-elevated to-surface" />
         )}
 
-        {mediaUrl && <button type="button" aria-label={isVideo ? '放大视频' : '放大图片'} title="放大预览"
-          onClick={event => { event.stopPropagation(); lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? 'video' : 'image' }); }}
-          className="absolute right-2 top-10 z-[4] flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 focus-visible:ring-2 focus-visible:ring-primary"><Expand size={18} /></button>}
-
         {/* Amber halation overlay — only when saved to library */}
         {saved && (
           <div className="atelier-proj-halation pointer-events-none absolute inset-0 z-[1]" />
@@ -252,8 +248,17 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 
         {/* Bottom gradient toolbar — appears on hover */}
         <div className="absolute bottom-0 left-0 right-0 z-[2] h-12 bg-gradient-to-t from-black/70 to-transparent flex items-end justify-end gap-1.5 px-3 pb-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {mediaUrl && <button
+            type="button"
+            aria-label={isVideo ? '放大视频' : '放大图片'}
+            onClick={(event) => { event.stopPropagation(); lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? 'video' : 'image' }); }}
+            className="w-7 h-7 rounded-full bg-elevated backdrop-blur-sm flex items-center justify-center hover:bg-hover-bg transition"
+            title="放大预览"
+          >
+            <Expand className="w-3.5 h-3.5 text-foreground" />
+          </button>}
           <button
-            onClick={handleDownload}
+            onClick={(event) => { event.stopPropagation(); void handleDownload(event); }}
             className="w-7 h-7 rounded-full bg-elevated backdrop-blur-sm flex items-center justify-center hover:bg-hover-bg transition"
             title={t('card.download')}
           >
