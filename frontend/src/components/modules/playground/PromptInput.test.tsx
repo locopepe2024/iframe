@@ -104,6 +104,30 @@ describe('selected reference mentions', () => {
         expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toBeNull();
     });
 
+    it('restores and pastes long drafts without silently dropping or truncating text', () => {
+        usePlaygroundStore.setState({ prompt: 'draft', inputMedia: [], mediaNames: {}, history: [] });
+        render(<PromptInput />);
+        const textbox = screen.getByRole('textbox');
+        const editor = (textbox as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        const longPrompt = '镜头描述'.repeat(700);
+        act(() => usePlaygroundStore.getState().setPrompt(longPrompt));
+        expect(editor.getText({ blockSeparator: '\n' })).toBe(longPrompt);
+        act(() => editor.commands.selectAll());
+        fireEvent.paste(textbox, { clipboardData: { getData: () => longPrompt + '\n最后一镜' } });
+        expect(usePlaygroundStore.getState().prompt).toBe(longPrompt + '\n最后一镜');
+    });
+
+    it('copies full reference names and preserves them through rich clipboard parsing', () => {
+        usePlaygroundStore.setState({ prompt: '使用 @Library portrait 跳舞' });
+        render(<PromptInput />);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        act(() => editor.commands.selectAll());
+        const clipboard = editor.view.serializeForClipboard(editor.state.selection.content());
+        expect(clipboard.text).toBe('使用 @Library portrait 跳舞');
+        act(() => editor.commands.setContent(clipboard.dom.innerHTML));
+        expect(editor.getText({ blockSeparator: '\n' })).toBe('使用 @Library portrait 跳舞');
+    });
+
     it('does not truncate the selected reference list to twelve items', () => {
         usePlaygroundStore.setState({ history: [], inputMedia: Array.from({ length: 13 }, (_, i) => `/playground/input-media/${i}.png`) });
         render(<PromptInput />);

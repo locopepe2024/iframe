@@ -81,6 +81,8 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
   const prompt = usePlaygroundStore((state) => state.prompt);
+  const promptLimit = agent?.active ? 16000 : 2000;
+  const promptTooLong = prompt.length > promptLimit;
   usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
@@ -121,7 +123,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   }, [activePanel]);
 
   const handleSubmit = () => {
-    if (!canGenerate) return;
+    if (!canGenerate || promptTooLong) return;
     setActivePanel(null);
     onGenerate();
   };
@@ -162,6 +164,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             onSubmit={handleSubmit}
             onOpenReferences={() => togglePanel('reference')}
           />
+          {promptTooLong && <p role="alert" className="pb-2 text-xs text-red-400">内容已完整保留；{agent?.active ? 'Agent' : '媒体生成'}单次提交最多 {promptLimit} 字，请精简后提交。</p>}
         </div>
 
         <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-border-subtle px-2 py-2 md:px-3">
@@ -245,11 +248,11 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             }}
           />
 
-          <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length} / 2000</span>
+          <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length} / {promptLimit}</span>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!canGenerate}
+            disabled={!canGenerate || promptTooLong}
             aria-label={agent?.active ? '发送' : batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
             className="inline-flex shrink-0 min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
           >

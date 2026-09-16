@@ -11,8 +11,6 @@ import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferenceProm
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
-const MAX_LENGTH = 2000;
-
 interface PromptInputProps {
   onSubmit?: () => void;
   onOpenReferences?: () => void;
@@ -48,8 +46,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
   };
 
   const handlePromptChange = (value: string) => {
-    const next = value.slice(0, MAX_LENGTH);
-    setPrompt(next);
+    setPrompt(value);
   };
   const matchingCandidates = referenceCandidates.filter((candidate) => candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ''));
 

@@ -5,7 +5,6 @@ import { Node, type JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import CharacterCount from '@tiptap/extension-character-count';
 import { shortReferenceLabel } from './referenceMedia';
 import type { Editor } from '@tiptap/core';
 
@@ -28,7 +27,7 @@ function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
 
 const ReferenceToken = Node.create({
   name: 'referenceToken', group: 'inline', inline: true, atom: true,
-  addAttributes: () => ({ label: { default: '' } }),
+  addAttributes: () => ({ label: { default: '', parseHTML: (element) => element.getAttribute('data-reference-label') || '' } }),
   parseHTML: () => [{ tag: 'span[data-reference-label]' }],
   renderHTML: ({ node }) => ['span', {
     'data-reference-label': node.attrs.label,
@@ -81,7 +80,7 @@ export default function ReferencePromptEditor({ value, labels, placeholder, onCh
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit.configure({ heading: false, bulletList: false, orderedList: false, blockquote: false, codeBlock: false, horizontalRule: false }),
-      ReferenceToken, Placeholder.configure({ placeholder }), CharacterCount.configure({ limit: 2000 })],
+      ReferenceToken, Placeholder.configure({ placeholder })],
     content: referencePromptDocument(value, labels),
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: 'min-h-[120px] max-h-[260px] overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none' },
