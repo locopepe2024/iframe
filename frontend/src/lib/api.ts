@@ -1789,7 +1789,7 @@ export const playgroundApi = {
 };
 
 export interface ChatSession { id: string; title: string; model: string; updated_at: number }
-export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[] }
+export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; created_at?: number; model?: string }
 export interface ChatModel { id: string; api_model_id: string; display_name: string }
 export async function agentRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await authenticatedFetch(`${API_URL}/agent${path}`, {

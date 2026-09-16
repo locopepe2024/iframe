@@ -252,12 +252,7 @@ export default function PlaygroundPage() {
 
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {chatMode ? <div className="min-h-0 flex-1 overflow-y-auto space-y-3 p-4" aria-live="polite">
-          {agent.loading && <p>正在加载…</p>}
-          {agent.messages.map(message => <article key={message.id} className="rounded-xl border border-border-subtle bg-glass p-4"><div className="mb-2 text-xs text-text-muted">{message.role === 'user' ? '你' : 'Agent'}</div><p className="whitespace-pre-wrap break-words text-sm">{message.content}</p></article>)}
-          {agent.busy && <p>Agent 正在回复…</p>}
-          {agent.error && <p role="alert" className="text-sm text-red-400">{agent.error}</p>}
-        </div> : <SessionTimeline />}
+        <SessionTimeline messages={agent.messages} busy={agent.busy} error={agent.error} onDeleteMessage={agent.removeMessage} />
         <AgentComposer canGenerate={chatMode ? !!prompt.trim() && !agent.busy && !agent.loading && agent.models.some(m => m.api_model_id === agent.model) : canGenerate} batchSize={batchSize} onGenerate={chatMode ? agent.send : handleGenerate} agent={{ active: chatMode, model: agent.model, models: agent.models, setModel: agent.setModel }} onAgentChange={setChatMode} />
       </main>
     </div>

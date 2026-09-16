@@ -20,24 +20,34 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     return () => window.removeEventListener('lumenx:uniart-skus-changed', changed);
   }, []);
   useEffect(() => {
-    if (!enabled || !sessionId) return;
+    if (!sessionId) { setMessages([]); return; }
     let cancelled = false;
     setLoading(true); setError(''); setMessages([]);
-    Promise.all([
-      agentRequest<{ models: ChatModel[] }>('/models'),
-      agentRequest<{ session: ChatSession | null; messages: ChatMessage[] }>(`/playground/${sessionId}`),
-    ]).then(([catalog, conversation]) => {
-      if (cancelled) return;
-      let enabledSkus: string[] | null = null;
-      try { enabledSkus = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null'); } catch { /* catalog default */ }
-      const available = catalog.models.filter(m => !enabledSkus || enabledSkus.includes(m.id));
-      setModels(available);
-      setModel(conversation.session?.model || available[0]?.api_model_id || '');
-      setMessages(conversation.messages);
-    }).catch(e => { if (!cancelled) setError(e.message); })
+    agentRequest<{ session: ChatSession | null; messages: ChatMessage[] }>(`/playground/${sessionId}`)
+      .then(conversation => { if (!cancelled) { setMessages(conversation.messages); if (conversation.session) setModel(conversation.session.model); } })
+      .catch(e => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [enabled, sessionId, revision]);
+  }, [sessionId]);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    agentRequest<{ models: ChatModel[] }>('/models').then(catalog => {
+      if (cancelled) return;
+      let selected: string[] | null = null;
+      try { selected = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null'); } catch { /* catalog default */ }
+      const available = catalog.models.filter(m => !selected || selected.includes(m.id));
+      setModels(available); setModel(current => current || available[0]?.api_model_id || '');
+    }).catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [enabled, revision]);
+  async function removeMessage(id: string) {
+    if (!sessionId) return;
+    try {
+      await agentRequest(`/sessions/playground-${sessionId}/messages/${id}`, 'DELETE');
+      if (active.current === sessionId) setMessages(m => m.filter(x => x.id !== id));
+    } catch (e) { if (active.current === sessionId) setError(e instanceof Error ? e.message : '删除失败'); }
+  }
   async function send() {
     if (!sessionId || sending.current || loading) return;
     const snapshot = usePlaygroundStore.getState();
@@ -58,5 +68,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     } catch (e) { if (active.current === sessionId) setError(e instanceof Error ? e.message : '发送失败'); }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, messages, busy, loading, error, send };
+  return { models, model, setModel, messages, busy, loading, error, send, removeMessage };
 }
