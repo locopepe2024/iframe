@@ -17,7 +17,7 @@ export function getDefaultModeForOutput(output: PlaygroundOutputType): Playgroun
   return output === 'image' ? 't2i' : 't2v';
 }
 
-export function OutputTypeSelector() {
+export function OutputTypeSelector({ agentActive = false, onAgentChange }: { agentActive?: boolean; onAgentChange?: (value: boolean) => void } = {}) {
   const t = useTranslations('playground');
   const mode = usePlaygroundStore((s) => s.mode);
   const setMode = usePlaygroundStore((s) => s.setMode);
@@ -26,14 +26,16 @@ export function OutputTypeSelector() {
   const outputType = getOutputType(mode);
 
   return (
-    <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-inset p-1 atelier-pill-tabs">
+    <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface-inset p-1 atelier-pill-tabs">
+      {onAgentChange && <button type="button" aria-pressed={agentActive} onClick={() => onAgentChange(true)} className={`min-h-11 rounded-lg px-3 text-sm font-semibold ${agentActive ? 'bg-surface text-foreground' : 'text-text-muted'}`}>Agent</button>}
       {(['video', 'image'] as const).map((output) => {
-        const active = outputType === output;
+        const active = !agentActive && outputType === output;
         return (
           <button
             key={output}
             type="button"
             onClick={() => {
+              onAgentChange?.(false);
               const nextMode = getDefaultModeForOutput(output);
               setMode(nextMode);
               if (!getModelCapabilities(modelId).includes(nextMode)) {

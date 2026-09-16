@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import AgentComposer from './AgentComposer';
-import ChatPanel from './ChatPanel';
+import { useAgentConversation } from './useAgentConversation';
 import { getOutputType } from './ModeSelector';
 import SessionRail from './SessionRail';
 import SessionTimeline from './SessionTimeline';
@@ -42,6 +42,7 @@ export default function PlaygroundPage() {
   const history = usePlaygroundStore((state) => state.history);
   const sessions = usePlaygroundStore((state) => state.sessions);
   const activeSessionId = usePlaygroundStore((state) => state.activeSessionId);
+  const agent = useAgentConversation(chatMode, activeSessionId);
   const parentGenerationId = usePlaygroundStore((state) => state.parentGenerationId);
   const queue = usePlaygroundStore((state) => state.queue);
   const activeCount = usePlaygroundStore((state) => state.activeGenerationIds.length);
@@ -246,17 +247,19 @@ export default function PlaygroundPage() {
           <span className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.2em] text-text-muted">FREEFORM STUDIO <span className="font-semibold text-primary">· {t('header.eyebrowAccent')}</span></span>
           <div className="flex items-baseline gap-2"><h1 className="truncate font-display text-[1.625rem] font-semibold tracking-tight text-foreground md:text-[2.125rem]">{t('header.title')}</h1><span className="font-mono text-[0.625rem] uppercase tracking-[0.1em] text-text-muted">{t('header.resultsCount', { count: resultCount })}</span></div>
         </div>
-        <div className="flex items-center gap-3"><div role="group" aria-label="创作台模式" className="flex rounded-lg border border-border-subtle p-1">{[false, true].map(chat => <button key={String(chat)} aria-pressed={chatMode === chat} onClick={() => setChatMode(chat)} className={`rounded px-3 py-1 text-sm ${chatMode === chat ? "bg-glass text-foreground" : "text-text-muted"}`}>{chat ? "Chat" : "创作"}</button>)}</div>{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
+        <div className="flex items-center gap-3">{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{chatMode ? 'Agent' : t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
       </header>
 
-      <div className={chatMode ? "hidden" : "contents"}>
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <SessionTimeline />
-        <AgentComposer canGenerate={canGenerate} batchSize={batchSize} onGenerate={handleGenerate} onAgentMode={() => setChatMode(true)} />
+        {chatMode ? <div className="min-h-0 flex-1 overflow-y-auto space-y-3 p-4" aria-live="polite">
+          {agent.loading && <p>正在加载…</p>}
+          {agent.messages.map(message => <article key={message.id} className="rounded-xl border border-border-subtle bg-glass p-4"><div className="mb-2 text-xs text-text-muted">{message.role === 'user' ? '你' : 'Agent'}</div><p className="whitespace-pre-wrap break-words text-sm">{message.content}</p></article>)}
+          {agent.busy && <p>Agent 正在回复…</p>}
+          {agent.error && <p role="alert" className="text-sm text-red-400">{agent.error}</p>}
+        </div> : <SessionTimeline />}
+        <AgentComposer canGenerate={chatMode ? !!prompt.trim() && !agent.busy && !agent.loading && agent.models.some(m => m.api_model_id === agent.model) : canGenerate} batchSize={batchSize} onGenerate={chatMode ? agent.send : handleGenerate} agent={{ active: chatMode, model: agent.model, models: agent.models, setModel: agent.setModel }} onAgentChange={setChatMode} />
       </main>
-      </div>
-      {chatMode && <ChatPanel onUseDraft={text => { usePlaygroundStore.setState({ prompt: text }); setChatMode(false); }} />}
     </div>
   );
 }

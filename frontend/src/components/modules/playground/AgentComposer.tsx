@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
+  MessageSquare,
   Boxes,
   Hash,
   History,
@@ -35,7 +36,8 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  onAgentMode?: () => void;
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void };
+  onAgentChange?: (active: boolean) => void;
 }
 
 function shortSku(value: string): string { return value.length > 10 ? `${value.slice(0, 10)}...` : value; }
@@ -45,8 +47,10 @@ function ToolButton({
   label,
   icon: Icon,
   onClick,
+  shorten = false,
 }: {
   active?: boolean;
+  shorten?: boolean;
   label: string;
   icon: LucideIcon;
   onClick: () => void;
@@ -64,12 +68,12 @@ function ToolButton({
       )}
     >
       <Icon size={15} aria-hidden="true" className="shrink-0" />
-      <span className="truncate" title={label}>{shortSku(label)}</span>
+      <span className="truncate" title={label}>{shorten ? shortSku(label) : label}</span>
     </button>
   );
 }
 
-export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAgentMode }: AgentComposerProps) {
+export default function AgentComposer({ canGenerate, batchSize, onGenerate, agent, onAgentChange }: AgentComposerProps) {
   const t = useTranslations('playground');
   const [activePanel, setActivePanel] = useState<ComposerPanel>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -82,13 +86,15 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
   const model = getModelDisplayInfo(modelId);
   const outputType = getOutputType(mode);
-  const OutputIcon = outputType === 'image' ? ImageIcon : Video;
-  const outputLabel = t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo');
+  const OutputIcon = agent?.active ? MessageSquare : outputType === 'image' ? ImageIcon : Video;
+  const outputLabel = agent?.active ? 'Agent' : t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo');
   const controls = getComposerControlState(modelId, parameters, batchSize);
   const referenceLabel = t(`mode.${mode}`);
   const resolutionLabel = [controls.resolution, controls.duration != null ? `${controls.duration}s` : null]
     .filter(Boolean)
     .join(' · ');
+
+  useEffect(() => { setActivePanel(null); }, [agent?.active]);
 
   const panelTitle = activePanel
     ? activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
@@ -139,11 +145,11 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
             <div className="mb-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary">
               {panelTitle}
             </div>
-            {activePanel === 'output' && <OutputTypeSelector />}
-            {activePanel === 'model' && <ModelSelector />}
+            {activePanel === 'output' && <OutputTypeSelector agentActive={agent?.active} onAgentChange={onAgentChange} />}
+            {activePanel === 'model' && (agent?.active ? <div className="grid gap-2 sm:grid-cols-2">{agent.models.map(model => <button key={model.api_model_id} type="button" aria-pressed={agent.model === model.api_model_id} onClick={() => { agent.setModel(model.api_model_id); setActivePanel(null); }} className="rounded-xl border border-border-subtle p-3 text-left text-sm">{model.display_name}</button>)}{!agent.models.length && <p className="text-sm text-text-muted">请在原设置入口获取并勾选 Chat 模型。</p>}</div> : <ModelSelector />)}
             {activePanel === 'method' && <CreationMethodSelector />}
             {activePanel === 'reference' && (
-              <MediaInput />
+              <MediaInput agentMode={agent?.active} />
             )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
               <ComposerControls control={activePanel as ComposerControl} />
@@ -159,10 +165,6 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
         </div>
 
         <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-border-subtle px-2 py-2 md:px-3">
-          <div className="mr-1 flex shrink-0 rounded-lg border border-border-subtle p-0.5" role="group" aria-label="创作能力">
-            <button type="button" onClick={onAgentMode} className="rounded px-2 py-1 text-xs text-text-muted hover:bg-hover-bg">Agent</button>
-            <span className="rounded bg-primary/10 px-2 py-1 text-xs text-primary">{outputType === 'image' ? '图片' : '视频'}</span>
-          </div>
           <ToolButton
             active={activePanel === 'output'}
             icon={OutputIcon}
@@ -170,11 +172,13 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
             onClick={() => togglePanel('output')}
           />
           <ToolButton
+            shorten
             active={activePanel === 'model'}
             icon={Boxes}
-            label={model?.displayName || modelId || t('agent.selectSku')}
+            label={agent?.active ? (agent.models.find(m => m.api_model_id === agent.model)?.display_name || t('agent.selectSku')) : model?.displayName || modelId || t('agent.selectSku')}
             onClick={() => togglePanel('model')}
           />
+          {!agent?.active && <>
           <ToolButton
             active={activePanel === 'method'}
             icon={mode === 't2i' || mode === 't2v' ? Workflow : Paperclip}
@@ -223,6 +227,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
             label={`×${batchSize}`}
             onClick={() => togglePanel('batch')}
           />
+          </>}
           <ToolButton
             icon={LayoutTemplate}
             label={t('sessions.templates')}
@@ -245,12 +250,12 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, onAg
             type="button"
             onClick={handleSubmit}
             disabled={!canGenerate}
-            aria-label={batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            aria-label={agent?.active ? '发送' : batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
+            className="inline-flex shrink-0 min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-accent shadow-[var(--glow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
           >
             <ArrowUp size={17} aria-hidden="true" />
             <span className="hidden sm:inline">
-              {batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
+              {agent?.active ? '发送' : batchSize > 1 ? t('compose.generateBatch', { count: batchSize }) : t('compose.generate')}
             </span>
           </button>
         </div>

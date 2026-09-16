@@ -83,7 +83,7 @@ const ACTION_BTN_CLASS =
   'text-foreground/80 hover:bg-hover-bg hover:text-foreground ' +
   'transition-colors disabled:opacity-40';
 
-export default function MediaInput() {
+export default function MediaInput({ agentMode = false }: { agentMode?: boolean } = {}) {
   const mode = usePlaygroundStore((s) => s.mode);
   const modelId = usePlaygroundStore((s) => s.modelId);
   const inputMedia = usePlaygroundStore((s) => s.inputMedia);
@@ -113,6 +113,8 @@ export default function MediaInput() {
       hintKey: 'r2vSeedance',
     };
   }
+
+  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: 16 };
 
   // Don't render for t2v mode (no input media needed)
   if (!config) return null;

@@ -39,3 +39,21 @@ it('persists image ratio and quality selection in submission parameters', () => 
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'medium' }));
     expect(usePlaygroundStore.getState().parameters).toEqual({ aspect_ratio: '16:9', quality: 'medium' });
 });
+
+it('uses the existing type popup and composer for Agent while keeping shared actions', () => {
+    const change = vi.fn();
+    const send = vi.fn();
+    render(<AgentComposer canGenerate batchSize={4} onGenerate={send} onAgentChange={change}
+        agent={{ active: true, model: 'chat-real', models: [{ api_model_id: 'chat-real', display_name: 'GPT 6' }], setModel: vi.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'mode.outputImage' }));
+    expect(change).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole('button', { name: '×4' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'mode.i2i' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'sessions.templates' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'sessions.allHistory' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(send).toHaveBeenCalledOnce();
+});
