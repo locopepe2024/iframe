@@ -8,6 +8,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const [model, setModel] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [remoteBusy, setRemoteBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const active = useRef(sessionId);
@@ -20,14 +21,26 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     return () => window.removeEventListener('lumenx:uniart-skus-changed', changed);
   }, []);
   useEffect(() => {
-    if (!sessionId) { setMessages([]); return; }
+    if (!sessionId) { setMessages([]); setRemoteBusy(false); return; }
     let cancelled = false;
-    setLoading(true); setError(''); setMessages([]);
-    agentRequest<{ session: ChatSession | null; messages: ChatMessage[] }>(`/playground/${sessionId}`)
-      .then(conversation => { if (!cancelled) { setMessages(conversation.messages); if (conversation.session) setModel(conversation.session.model); } })
-      .catch(e => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    let timer: ReturnType<typeof setTimeout>;
+    let first = true;
+    setLoading(true); setError(''); setMessages([]); setRemoteBusy(false);
+    async function refresh() {
+      try {
+        const conversation = await agentRequest<{ session: ChatSession | null; messages: ChatMessage[]; busy_until: number }>(`/playground/${sessionId}`);
+        if (cancelled) return;
+        setMessages(conversation.messages);
+        setRemoteBusy(conversation.busy_until > Date.now() / 1000);
+        if (first && conversation.session) setModel(conversation.session.model);
+        if (!conversation.busy_until) setError(current => current === '当前会话正在回复' ? '' : current);
+      } catch (e) { if (!cancelled && first) setError(e instanceof Error ? e.message : '加载失败'); }
+      finally {
+        if (!cancelled) { first = false; setLoading(false); timer = setTimeout(refresh, 2500); }
+      }
+    }
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [sessionId]);
   useEffect(() => {
     if (!enabled) return;
@@ -50,7 +63,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     } catch (e) { if (active.current === sessionId) setError(e instanceof Error ? e.message : '删除失败'); }
   }
   async function send() {
-    if (!sessionId || sending.current || loading) return;
+    if (!sessionId || sending.current || remoteBusy || loading) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
     sending.current = true; setBusy(true); setError('');
@@ -63,11 +76,11 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
       });
       if (active.current === sessionId) {
-        setMessages(m => [...m, result.user_message, result.assistant_message]);
+        setMessages(m => [...m.filter(x => x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
         if (usePlaygroundStore.getState().prompt === snapshot.prompt) usePlaygroundStore.getState().setPrompt('');
       }
-    } catch (e) { if (active.current === sessionId) setError(e instanceof Error ? e.message : '发送失败'); }
+    } catch (e) { if (active.current === sessionId) { const message = e instanceof Error ? e.message : '发送失败'; setError(message); if (message === '当前会话正在回复') setRemoteBusy(true); } }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, messages, busy, loading, error, send, removeMessage };
+  return { models, model, setModel, messages, busy: busy || remoteBusy, loading, error, send, removeMessage };
 }

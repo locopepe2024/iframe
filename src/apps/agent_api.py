@@ -158,9 +158,9 @@ def require_playground(ctx, sid):
 def playground_conversation(sid: str, ctx: UserContext = Depends(require_user_context)):
     require_playground(ctx, sid)
     with database() as db:
-        row = db.execute("SELECT payload FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, "playground-" + sid)).fetchone()
+        row = db.execute("SELECT payload,busy FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, "playground-" + sid)).fetchone()
     session = json.loads(row[0]) if row else None
-    return {"session": public(session) if session else None, "messages": session["messages"] if session else []}
+    return {"session": public(session) if session else None, "messages": session["messages"] if session else [], "busy_until": row["busy"] if row and row["busy"] > time.time() else 0}
 
 
 def image_reference(ctx, reference):

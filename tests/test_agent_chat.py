@@ -99,3 +99,15 @@ def test_agent_catalog_exact_models_and_order(monkeypatch):
     result = agent.catalog(UserContext('a','a','a','token'))
     assert [m['api_model_id'] for m in result] == ['gpt-5.6-sol', 'gpt-5.6-luna', 'qwen3.8-flash', 'glm-5.3']
     assert result[0]['display_name'] == 'GPT 5.6 Sol'
+
+
+def test_linked_status_tracks_lease_and_releases_on_failure(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'require_playground', lambda ctx, sid: None)
+    sid = agent.create(agent.SessionCreate(model='qwen', playground_session_id='status'), setup)['session']['id']
+    def fail(*args):
+        assert agent.playground_conversation('status', setup)['busy_until'] > agent.time.time()
+        raise ValueError('upstream failure')
+    monkeypatch.setattr(agent, 'complete', fail)
+    with pytest.raises(HTTPException):
+        agent.send(sid, agent.MessageCreate(content='hello'), setup)
+    assert agent.playground_conversation('status', setup)['busy_until'] == 0
