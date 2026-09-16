@@ -70,13 +70,13 @@ it('switches video resolution to image tiers without submitting stale video para
     expect(screen.queryByRole('button', { name: '720p' })).not.toBeInTheDocument();
 });
 
-it('preserves long drafts across modes and gates only submission by the active limit', () => {
+it('preserves long drafts across modes and submits Chat beyond sixteen thousand characters', () => {
     const send = vi.fn();
     const agent = { active: true, model: 'chat', models: [], setModel: vi.fn() };
     const text = '长提示词'.repeat(700);
     usePlaygroundStore.setState({ prompt: text });
     const view = render(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={agent} />);
-    expect(screen.getByLabelText('字数统计')).toHaveTextContent('2800 / 16000');
+    expect(screen.getByLabelText('字数统计')).toHaveTextContent('2800 字');
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled();
     view.rerender(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={{ ...agent, active: false }} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -87,6 +87,11 @@ it('preserves long drafts across modes and gates only submission by the active l
     expect(usePlaygroundStore.getState().prompt).toBe(text);
     view.rerender(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={agent} />);
     act(() => usePlaygroundStore.getState().setPrompt('字'.repeat(16001)));
-    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
-    expect(screen.getByRole('alert')).toHaveTextContent('16000');
+    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('字数统计')).toHaveTextContent('16001 字');
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', ctrlKey: true });
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(usePlaygroundStore.getState().prompt).toBe('字'.repeat(16001));
 });
