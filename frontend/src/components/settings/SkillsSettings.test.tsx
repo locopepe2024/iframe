@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import SkillsSettings, { type CreativeSkill } from './SkillsSettings';
 import { agentRequest } from '@/lib/api';
@@ -50,4 +50,17 @@ it('shows install failure without falsely marking the Skill installed', async ()
   fireEvent.click(install);
   expect(await screen.findByRole('alert')).toHaveTextContent('安装失败');
   expect(screen.getByRole('button', { name: '安装 Seedance 运镜' })).toBeEnabled();
+});
+
+it('does not let an older catalog response erase a successful installation', async () => {
+  let finishOldRequest!: (value: unknown) => void;
+  vi.mocked(agentRequest).mockImplementationOnce(() => new Promise(resolve => { finishOldRequest = resolve; }));
+  render(<SkillsSettings />);
+  fireEvent.click(screen.getByRole('button', { name: '获取 Skill' }));
+  fireEvent.click(await screen.findByRole('button', { name: '安装 Seedance 运镜' }));
+  await screen.findByRole('button', { name: '已安装 Seedance 运镜' });
+  await act(async () => { finishOldRequest({ catalog: [skill], installed: [] }); });
+  await waitFor(() => expect(screen.queryByRole('button', { name: '安装 Seedance 运镜' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+  expect(screen.getByRole('checkbox', { name: '启用 Seedance 运镜' })).toBeChecked();
 });

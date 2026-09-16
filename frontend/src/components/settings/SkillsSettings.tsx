@@ -38,15 +38,18 @@ export default function SkillsSettings() {
   const [query, setQuery] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
   const operation = useRef(false);
+  const requestVersion = useRef(0);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const refresh = useCallback(async () => {
+    if (operation.current) return;
+    const version = ++requestVersion.current;
     setLoading(true); setError('');
     try {
       const data = await agentRequest<SkillInventory>('/skills');
-      if (mounted.current) setInventory(data);
-    } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : 'Skill request failed'); }
-    finally { if (mounted.current) setLoading(false); }
+      if (mounted.current && version === requestVersion.current) setInventory(data);
+    } catch (e) { if (mounted.current && version === requestVersion.current) setError(e instanceof Error ? e.message : 'Skill request failed'); }
+    finally { if (mounted.current && version === requestVersion.current) setLoading(false); }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -60,6 +63,9 @@ export default function SkillsSettings() {
   async function mutate(skill: CreativeSkill, method: string, body?: unknown) {
     if (operation.current) return;
     operation.current = true;
+    // Earlier catalog reads must not overwrite a completed mutation.
+    ++requestVersion.current;
+    setLoading(false);
     setBusy(skill.id); setError(''); setNotice('');
     try {
       await agentRequest(`/skills/${encodeURIComponent(skill.id)}`, method, body);

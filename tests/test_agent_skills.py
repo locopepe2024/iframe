@@ -96,3 +96,24 @@ def test_http_endpoints_require_identity_and_persist(ctx):
         assert client.get('/agent/skills').json()['installed'][0]['enabled'] is False
         assert client.delete(path).status_code == 200
         assert client.get('/agent/skills').json()['installed'] == []
+
+
+def test_skill_changes_apply_across_sessions_without_crossing_owners(ctx, monkeypatch):
+    package = skills.catalog()[0]
+    other = UserContext('other', 'other-profile', 'name', 'token')
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen'}])
+    complete = Mock(return_value='Creative plan')
+    monkeypatch.setattr(agent, 'complete', complete)
+    first = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    second = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
+    foreign = agent.create(agent.SessionCreate(model='qwen'), other)['session']['id']
+    skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+    for sid in (first, second):
+        agent.send(sid, agent.MessageCreate(content='Director plan'), ctx)
+        assert package['instructions'] in complete.call_args.args[2][0]['content']
+    agent.send(foreign, agent.MessageCreate(content='Director plan'), other)
+    assert package['instructions'] not in complete.call_args.args[2][0]['content']
+    skills.uninstall(package['id'], ctx)
+    for sid in (first, second):
+        agent.send(sid, agent.MessageCreate(content='Continue'), ctx)
+        assert package['instructions'] not in complete.call_args.args[2][0]['content']
