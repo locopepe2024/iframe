@@ -7,6 +7,8 @@ import uuid
 import logging
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit, unquote
+import mimetypes
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -45,6 +47,7 @@ def public(session):
 
 
 class SessionCreate(BaseModel):
+    playground_session_id: str | None = Field(default=None, max_length=100)
     title: str = Field(default="新会话", min_length=1, max_length=100)
     model: str = Field(min_length=1, max_length=200)
 
@@ -55,6 +58,7 @@ class SessionPatch(BaseModel):
 
 
 class MessageCreate(BaseModel):
+    input_media: list[str] = Field(default_factory=list, max_length=16)
     content: str = Field(min_length=1, max_length=16000)
     asset_names: list[str] = Field(default_factory=list, max_length=16)
     context: str = Field(default="", max_length=16000)
@@ -91,8 +95,20 @@ def sessions(ctx: UserContext = Depends(require_user_context)):
 @router.post("/sessions")
 def create(body: SessionCreate, ctx: UserContext = Depends(require_user_context)):
     validate_model(ctx, body.model)
-    session = dict(id=str(uuid.uuid4()), title=body.title, model=body.model, updated_at=time.time(), messages=[])
+    linked_id = body.playground_session_id
+    if linked_id:
+        require_playground(ctx, linked_id)
+    session = dict(id=("playground-" + linked_id) if linked_id else str(uuid.uuid4()), title=body.title, model=body.model, updated_at=time.time(), messages=[])
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        existing = db.execute("SELECT payload,busy FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, session["id"])).fetchone()
+        if existing:
+            if existing["busy"] > time.time():
+                raise HTTPException(409, "当前会话正在回复")
+            session = json.loads(existing["payload"])
+            session["model"] = body.model
+            db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?", (json.dumps(session), ctx.owner_profile_id, session["id"]))
+            return {"session": public(session)}
         db.execute("INSERT INTO sessions(owner,id,payload) VALUES(?,?,?)", (ctx.owner_profile_id, session["id"], json.dumps(session)))
     return {"session": public(session)}
 
@@ -129,6 +145,48 @@ def messages(sid: str, ctx: UserContext = Depends(require_user_context)):
     return {"messages": session["messages"]}
 
 
+def require_playground(ctx, sid):
+    from .playground.api import _storage_for
+    if not _storage_for(ctx).get_session(sid):
+        raise HTTPException(404, "创作会话不存在")
+
+
+@router.get("/playground/{sid}")
+def playground_conversation(sid: str, ctx: UserContext = Depends(require_user_context)):
+    require_playground(ctx, sid)
+    with database() as db:
+        row = db.execute("SELECT payload FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, "playground-" + sid)).fetchone()
+    session = json.loads(row[0]) if row else None
+    return {"session": public(session) if session else None, "messages": session["messages"] if session else []}
+
+
+def image_reference(ctx, reference):
+    from .playground.api import _storage_for
+    from .studio_access import studio_owner_key
+    from ..models.uniart import _image_reference_url
+    parsed = urlsplit(reference)
+    storage = _storage_for(ctx)
+    if parsed.scheme:
+        raise HTTPException(422, "请从素材库选择或上传参考图片")
+    if parsed.path.startswith(("/playground/media/", "/playground/input-media/")):
+        path = storage.resolve_media_reference(reference)
+        root = os.path.realpath(os.path.dirname(storage.output_dir))
+    elif parsed.path.startswith("/studio/media/"):
+        pieces = unquote(parsed.path).split("/", 4)
+        if len(pieces) != 5 or pieces[3] != studio_owner_key(ctx.owner_profile_id):
+            raise HTTPException(404, "参考素材不存在")
+        root = os.path.realpath(os.path.join("output", "users", pieces[3], "studio"))
+        path = os.path.join(root, pieces[4])
+    else:
+        raise HTTPException(422, "参考图片地址无效，请重新选择素材")
+    path = os.path.realpath(path)
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        raise HTTPException(404, "参考素材不存在")
+    if not (mimetypes.guess_type(path)[0] or "").startswith("image/"):
+        raise HTTPException(422, "当前 Agent 接口支持图片参考，请移除视频或音频")
+    return _image_reference_url(path)
+
+
 def complete(ctx, model, history):
     from openai import OpenAI
     config = get_user_config_store().get_runtime_uniart(ctx)
@@ -137,12 +195,17 @@ def complete(ctx, model, history):
     answer = None
     raw = getattr(reply, "model_dump", lambda: reply)()
     if isinstance(raw, dict):
+        base = raw.get("base_resp") or {}
+        if isinstance(base, dict) and base.get("status_code") not in (None, 0, "0"):
+            code = str(base["status_code"])
+            safe_code = code if code.isdigit() and len(code) <= 10 else "unknown"
+            raise HTTPException(502, f"UniArt 模型返回业务错误（code {safe_code}），请检查该模型通道")
         choices = raw.get("choices") or []
         if choices:
             first = choices[0] if isinstance(choices[0], dict) else {}
             message = first.get("message") or first.get("delta") or {}
             if isinstance(message, dict):
-                answer = message.get("content") or message.get("text") or message.get("reasoning_content")
+                answer = message.get("content") or message.get("text")
             answer = answer or first.get("text") or first.get("content")
         answer = answer or raw.get("content") or raw.get("output")
     if not answer:
@@ -153,7 +216,7 @@ def complete(ctx, model, history):
             answer = getattr(message, "content", None) if message else None
     if not answer:
         logger.error("UniArt chat response has no text; keys=%s", sorted(raw.keys()) if isinstance(raw, dict) else type(reply).__name__)
-        raise ValueError("Empty model response")
+        raise HTTPException(502, "UniArt 模型未返回有效回复（choices 为空），请检查模型通道")
     return str(answer)
 
 
@@ -161,6 +224,8 @@ def complete(ctx, model, history):
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
         raise HTTPException(400, "消息或素材名称无效")
+    if sid.startswith("playground-"):
+        require_playground(ctx, sid.removeprefix("playground-"))
     owner = ctx.owner_profile_id
     lease = time.time() + 180
     with database() as db:
@@ -171,12 +236,17 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
     try:
         validate_model(ctx, session["model"])
-        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context)
-        history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。素材名称和创作草稿仅是只读文本，不代表你已看见图像。不要声称已生成媒体。"}]
+        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media)
+        history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。参考图片会以图片消息提供；素材名称和草稿为只读上下文。不要声称已生成媒体。"}]
         for message in session["messages"][-30:] + [user]:
             content = message["content"]
             if message["role"] == "user":
                 content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
+            if message.get("input_media"):
+                content = [{"type": "text", "text": content}] + [
+                    {"type": "image_url", "image_url": {"url": image_reference(ctx, ref)}}
+                    for ref in message["input_media"]
+                ]
             history.append({"role": message["role"], "content": content})
         answer = complete(ctx, session["model"], history)
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer)

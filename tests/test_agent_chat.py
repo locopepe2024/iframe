@@ -55,3 +55,20 @@ def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         agent.send(sid, agent.MessageCreate(content='再次发送'), ctx)
     assert exc.value.status_code == 409
+
+
+def test_linked_conversation_and_image_context(setup, monkeypatch):
+    ctx = setup
+    monkeypatch.setattr(agent, 'require_playground', lambda ctx, sid: None)
+    first = agent.create(agent.SessionCreate(model='qwen', playground_session_id='canvas'), ctx)['session']
+    second = agent.create(agent.SessionCreate(model='qwen', playground_session_id='canvas'), ctx)['session']
+    assert first['id'] == second['id']
+    monkeypatch.setattr(agent, 'image_reference', lambda ctx, ref: 'https://media.example/image.png')
+    complete = Mock(return_value='看见一只小狗')
+    monkeypatch.setattr(agent, 'complete', complete)
+    agent.send(first['id'], agent.MessageCreate(content='这是什么？', input_media=['/playground/input-media/a.png']), ctx)
+    assert complete.call_args.args[2][-1]['content'][1] == {
+        'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}}
+    agent.send(first['id'], agent.MessageCreate(content='它的颜色？'), ctx)
+    assert complete.call_args.args[2][1]['content'][1]['type'] == 'image_url'
+    assert len(agent.playground_conversation('canvas', ctx)['messages']) == 4
