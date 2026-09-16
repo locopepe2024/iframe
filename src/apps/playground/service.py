@@ -357,7 +357,7 @@ class PlaygroundService:
         from ...models.uniart import UniArtVideoModel
 
         runtime_config = self._load_provider_config()
-        use_uniart = bool(runtime_config) or "uniart.fun" in (
+        use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
             os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
         )
         model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
@@ -377,6 +377,14 @@ class PlaygroundService:
         if gen.mode == PlaygroundMode.R2V and gen.input_media:
             kwargs["generation_mode"] = "r2v"
             kwargs["ref_image_urls"] = list(gen.input_media)
+
+        if use_uniart:
+            kwargs["model"] = gen.model_id
+            if gen.mode == PlaygroundMode.T2V:
+                img_path, img_url = None, None
+            if gen.mode == PlaygroundMode.V2V:
+                kwargs["ref_video_urls"] = list(gen.input_media)
+                img_path, img_url = None, None
 
         if gen.mode == PlaygroundMode.F2V:
             if len(gen.input_media) != 2:

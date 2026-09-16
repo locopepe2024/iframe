@@ -326,6 +326,14 @@ class UniArtVideoModel(VideoGenModel):
                 {"type": "image_url", "role": "first_frame", "image_url": {"url": first_frame}},
                 {"type": "image_url", "role": "last_frame", "image_url": {"url": last_frame}},
             ]
+        elif kwargs.get("ref_image_urls") or kwargs.get("ref_video_urls"):
+            body["content"] = [
+                {"type": "image_url", "role": "reference_image", "image_url": {"url": _media(ref)}}
+                for ref in kwargs.get("ref_image_urls", [])
+            ] + [
+                {"type": "video_url", "role": "reference_video", "video_url": {"url": _media(ref)}}
+                for ref in kwargs.get("ref_video_urls", [])
+            ]
         else:
             image = _media(kwargs.get("img_url") or kwargs.get("img_path"))
             if image:
