@@ -318,7 +318,7 @@ class UniArtVideoModel(VideoGenModel):
             return output_path, time.time() - started
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
         body: Dict[str, Any] = {"model": model, "prompt": prompt}
-        for key in ("duration", "resolution", "size", "ratio", "aspect_ratio", "watermark", "generate_audio"):
+        for key in ("mode", "duration", "resolution", "size", "ratio", "aspect_ratio", "watermark", "generate_audio"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
         first_frame = _media(kwargs.get("first_frame"))

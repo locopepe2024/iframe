@@ -390,6 +390,13 @@ class PlaygroundService:
             kwargs["on_task_submitted"] = save_task
             kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
+            kwargs["mode"] = {
+                PlaygroundMode.T2V: "text2video",
+                PlaygroundMode.I2V: "image2video",
+                PlaygroundMode.R2V: "reference2video",
+                PlaygroundMode.F2V: "frames2video",
+                PlaygroundMode.V2V: "reference2video",
+            }[gen.mode]
             if gen.mode == PlaygroundMode.T2V:
                 img_path, img_url = None, None
             if gen.mode == PlaygroundMode.V2V:

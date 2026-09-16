@@ -64,6 +64,10 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     captured = []
     def post(config, endpoint, body):
         assert body['model'] == model
+        assert body['mode'] == {
+            't2v': 'text2video', 'i2v': 'image2video', 'r2v': 'reference2video',
+            'f2v': 'frames2video', 'v2v': 'reference2video',
+        }[mode]
         assert endpoint == '/videos'
         assert 'data:' not in json.dumps(body)
         if mode in {'r2v', 'f2v', 'v2v'}:
