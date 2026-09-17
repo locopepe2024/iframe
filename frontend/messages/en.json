@@ -1064,7 +1064,7 @@
     "saveConfig": "Save Configuration",
     "analysisFailed": "Script analysis failed: {error}",
     "analysisFailedShort": "Script analysis failed",
-    "analyzingScriptBody": "AI is parsing the script and extracting characters/scenes/props — usually 20-60s, you can keep working.",
+    "analyzingScriptBody": "AI is analyzing your script in the background. You can keep working; this may take over a minute. After a connection interruption, retrying the same script resumes the existing task.",
     "analysisDone": "✨ Entity extraction done",
     "analysisDoneBody": "Found {c} characters, {s} scenes, {p} props.",
     "extractConfirmTitle": "Confirm Entity Extraction",

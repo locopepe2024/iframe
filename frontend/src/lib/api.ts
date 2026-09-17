@@ -1,4 +1,5 @@
 import axios from "axios";
+import { extractScriptPreview } from "./scriptExtraction";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -279,8 +280,7 @@ export const api = {
     },
 
     extractPreview: async (scriptId: string, text: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/extract_preview`, { text });
-        return res.data as { characters: any[]; scenes: any[]; props: any[] };
+        return extractScriptPreview(API_URL, scriptId, text);
     },
 
     /** Persist `original_text` without LLM reparse. Used for textarea
