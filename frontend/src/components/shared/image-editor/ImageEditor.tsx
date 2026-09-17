@@ -91,26 +91,53 @@ export interface ImageEditorProps {
 export default function ImageEditor({ source, title, emptyState, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
-  const dialog = useRef<HTMLDialogElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dirty = useRef(false);
   const inFlight = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.showModal();
-    closeButton.current?.focus();
-    return () => { previous?.focus(); };
-  }, []);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
     onClose();
   };
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const root = dialog.current!;
+    // Engine menus/modals portal into body. Native showModal makes them inert.
+    const background = Array.from(document.body.children).filter(node => node !== root) as HTMLElement[];
+    const priorInert = background.map(node => node.inert);
+    background.forEach(node => { node.inert = true; });
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      const externalDialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
+        .find(node => node !== root && !root.contains(node) && node.getClientRects().length > 0);
+      if (event.key === 'Escape' && !externalDialog) { event.preventDefault(); close(); }
+      if (event.key !== 'Tab') return;
+      const scope = externalDialog || document.body;
+      const focusable = Array.from(scope.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]'))
+        .filter(node => node.tabIndex >= 0 && !node.closest('[inert]') && !node.matches(':disabled') && node.getClientRects().length > 0);
+      if (!focusable.length) { event.preventDefault(); closeButton.current?.focus(); return; }
+      const index = focusable.indexOf(document.activeElement as HTMLElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); focusable.at(-1)?.focus(); }
+      else if (!event.shiftKey && (index < 0 || index === focusable.length - 1)) { event.preventDefault(); focusable[0].focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      background.forEach((node, index) => { node.inert = priorInert[index]; });
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+    // Lifecycle isolation; close reads mutable dirty/in-flight refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return createPortal(
-    <dialog ref={dialog} aria-labelledby="image-editor-title" onCancel={event => { event.preventDefault(); close(); }}
-      className="fixed inset-0 m-auto h-[100dvh] max-h-none w-screen max-w-none border-0 bg-surface p-0 text-foreground backdrop:bg-black/70 sm:h-[94dvh] sm:w-[96vw] sm:rounded-xl">
+    <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="image-editor-title"
+      className="fixed z-[1000] inset-0 m-auto h-[100dvh] max-h-none w-screen max-w-none border-0 bg-surface p-0 text-foreground shadow-[0_0_0_100vmax_rgba(0,0,0,0.7)] sm:h-[94dvh] sm:w-[96vw] sm:rounded-xl">
       <div className="flex h-full min-w-0 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-glass-border px-4 py-2">
           <div className="min-w-0"><h2 id="image-editor-title" className="font-semibold">{t('title')}</h2><p className="truncate text-sm text-text-muted">{title}</p></div>
@@ -130,13 +157,13 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
                 catch { setError(t('saveFailed')); }
                 finally { inFlight.current = false; setSaving(false); }
               }}
-              closeAfterSave={false} defaultSavedImageType="png" defaultSavedImageName="edited-image"
+              onBeforeSave={() => false} closeAfterSave={false} defaultSavedImageType="png" defaultSavedImageName="edited-image"
               avoidChangesNotSavedAlertOnLeave disableSaveIfNoChanges savingPixelRatio={1} previewPixelRatio={1}
               tabsIds={['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize']}
-              defaultTabId="Adjust" defaultToolId="Crop" observePluginContainerSize />
+              defaultTabId="Adjust" defaultToolId="Rotate" observePluginContainerSize />
           </fieldset> : emptyState}
         </div>
         <p className="shrink-0 border-t border-glass-border px-4 py-2 text-xs text-text-muted">{t('hint')}</p>
       </div>
-    </dialog>, document.body);
+    </div>, document.body);
 }
