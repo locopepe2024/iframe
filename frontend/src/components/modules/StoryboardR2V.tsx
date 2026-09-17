@@ -1371,10 +1371,6 @@ export default function StoryboardR2V() {
     // through wan2.6-r2v / wan2.7-r2v — confusing and the source of
     // the "but I selected R2V" support thread.
     const isR2VWorkflow = (currentProject?.workflow_mode ?? "r2v") === "r2v";
-    const currentModelName = isR2VWorkflow
-        ? (VIDEO_R2V_MODELS.find(m => m.id === videoConfig.r2vModel)?.name ?? videoConfig.r2vModel)
-        : (VIDEO_I2V_MODELS.find(m => m.id === videoConfig.model)?.name ?? videoConfig.model);
-
     // ---- Project-level task derivations (drive Queue + Candidates) ----
     // We derive these via useMemo so per-render allocation is cheap and
     // children can rely on referentially-stable arrays (set-membership
@@ -1767,7 +1763,22 @@ export default function StoryboardR2V() {
                         {currentProject?.art_direction?.style_config?.name ? (
                             <StepPill label={t("artStyleLabel")} value={currentProject.art_direction.style_config.name} />
                         ) : null}
-                        <StepPill label={t("currentModel")} value={currentModelName} />
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
+                            <span className="text-text-muted">{t("currentModel")}</span>
+                            <select
+                                aria-label={t("currentModel")}
+                                value={isR2VWorkflow ? videoConfig.r2vModel : videoConfig.model}
+                                onChange={(event) => {
+                                    const value = event.target.value;
+                                    setVideoConfig(prev => isR2VWorkflow ? { ...prev, r2vModel: value } : { ...prev, model: value });
+                                }}
+                                className="max-w-[13rem] truncate bg-transparent text-primary outline-none"
+                            >
+                                {(isR2VWorkflow ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS).map(model => (
+                                    <option key={model.id} value={model.id}>{model.name}</option>
+                                ))}
+                            </select>
+                        </span>
                     </>
                 )}
                 trailing={(
