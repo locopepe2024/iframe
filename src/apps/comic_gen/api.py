@@ -3987,23 +3987,38 @@ def _polish_error_response(err) -> Dict[str, Any]:
 def _target_model_guidance(model_id: str) -> str:
     """Load the installed provider skill for storyboard prompt polishing."""
     value = (model_id or "").lower()
-    skills_root = Path(__file__).resolve().parents[3] / "config" / "agent_skills"
-    if "h3" in value or "minimax" in value:
-        path = skills_root / "h3-prompt-writing.md"
-        label = "MiniMax H3"
-    elif "seedance" in value:
-        path = skills_root / "catalog.json"
-        label = "Seedance"
-    else:
+    from ..agent_skills import catalog
+    label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
+    if not label:
         return ""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise RuntimeError("Target model prompt guidance unavailable") from exc
-    if label == "Seedance":
-        packages = json.loads(text).get("skills", [])
-        text = "\n\n".join(p.get("instructions", "") for p in packages if label in p.get("targets", []))
-    return f"\n\nTARGET VIDEO MODEL: {label}. Apply this provider skill guidance:\n{text}\nStoryboard editing contract takes precedence: return JSON with prompt_cn and prompt_en. Preserve all existing [characterN:name] editor tags and their identities exactly; do not convert them to provider labels in this editing step. Preserve explicit character replacement requirements, source/target identities, shot timing and sound constraints. Provider label conversion belongs to submission. Do not invent unattached media."
+    packages = [p for p in catalog() if label in p.get("targets", [])]
+    text = "\n\n".join(p["instructions"] for p in packages)
+    return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str) -> str:
+    guidance = _target_model_guidance(model_id)
+    if not guidance:
+        return custom or default
+    return guidance + "\n" + custom + """
+STORYBOARD OUTPUT CONTRACT:
+Return only JSON with string fields prompt_cn and prompt_en. Each string contains
+all fields required by the selected model skill and generation mode (H3 base:
+integrated_multimodal_description, overall_soundscape, non_diegetic_music;
+H3 reference mode: subject_definitions, summary, retention_analysis,
+detailed_description, overall_soundscape, non_diegetic_music).
+Do not replace that structure with scene/action/camera headings.
+Preserve every existing [characterN:name] editor token exactly, including its
+number and name. These are stable editor references; use them as source labels
+inside the model-specific structure. Do not invent or renumber references.
+Provider-native labels will be resolved at submission, not guessed here.
+References in order: {SLOTS}
+Preserve character/product replacement, scene, explicit dialogue and timing.
+Do not invent dialogue text, music, extra shots or replacement identities unless
+requested. Inspect all attached images, including scene, prop and storyboard
+images. Distinguish observed image content from user requirements; sampling
+cannot establish exact cut times. Missing images must not be described as seen.
+"""
 
 
 @app.post("/video/polish_prompt")
@@ -4027,7 +4042,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
-        custom_prompt = (_get_custom_prompt(request.script_id, "video_polish") or DEFAULT_VIDEO_POLISH_PROMPT) + _target_model_guidance(request.target_video_model)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4076,7 +4091,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
-        custom_prompt = (_get_custom_prompt(request.script_id, "r2v_polish") or DEFAULT_R2V_POLISH_PROMPT) + _target_model_guidance(request.target_video_model)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]

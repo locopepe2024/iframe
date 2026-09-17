@@ -558,5 +558,6 @@ export function isR2vImageBased(modelId: string): boolean {
     const family = model?.family;
     if (family === 'wan' && modelId === 'wan2.6-r2v') return false;
     return family === 'happyhorse' || family === 'wan' || family === 'kling'
-        || family === 'pixverse' || family === 'vidu' || family === 'seedance';
+        || family === 'pixverse' || family === 'vidu' || family === 'seedance'
+        || family === 'minimax' || modelId.startsWith('uniart/minimax-h3');
 }

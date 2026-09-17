@@ -1292,8 +1292,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
                 resolved = _resolve_image_for_vision(url)
-                if resolved:
-                    parts.append({"type": "image_url", "image_url": {"url": resolved}})
+                if not resolved:
+                    raise PolishError(reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。", message_en="Reference image could not be read; reselect it before polishing.")
+                parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
                 # All image URLs failed to resolve → fall back to text-only
                 # rather than crashing. log so users can diagnose later.
@@ -1436,8 +1437,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
                 resolved = _resolve_image_for_vision(url)
-                if resolved:
-                    parts.append({"type": "image_url", "image_url": {"url": resolved}})
+                if not resolved:
+                    raise PolishError(reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。", message_en="Reference image could not be read; reselect it before polishing.")
+                parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
                 # All image URLs failed to resolve → fall back to text-only
                 # rather than crashing. log so users can diagnose later.

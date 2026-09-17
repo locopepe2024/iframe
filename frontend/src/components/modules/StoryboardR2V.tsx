@@ -1894,6 +1894,7 @@ export default function StoryboardR2V() {
                         ref={(el) => { shotWrapperRefs.current.set(shot.id, el); }}
                     >
                         <ShotCard
+                            referenceImageUrls={isR2vImageBased(paramsState.model) ? parseAssetTags(shot.prompt) : []}
                             videoModel={paramsStateForShot(shot).model}
                             shot={shot}
                             index={index}

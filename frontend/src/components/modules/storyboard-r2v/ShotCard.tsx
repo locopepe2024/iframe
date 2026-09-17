@@ -107,6 +107,7 @@ export interface ShotNode {
 export const T2I_HISTORY_LIMIT = 10;
 
 interface ShotCardProps {
+    referenceImageUrls?: string[];
     videoModel?: string;
     shot: ShotNode;
     index: number;
@@ -159,6 +160,7 @@ interface ShotCardProps {
 }
 
 export default function ShotCard({
+    referenceImageUrls = [],
     videoModel,
     shot,
     index,
@@ -234,28 +236,14 @@ export default function ShotCard({
     //     image, dedup'd by id. No references → empty → text-only.
     const polishImageUrls = useCallback((): string[] => {
         if (shot.tabMode === "direct_r2v") {
-            const out: string[] = [];
-            const seen = new Set<string>();
-            const tagPattern = /\[character\d*:([^\]]+)\]/g;
-            let m;
-            while ((m = tagPattern.exec(shot.prompt)) !== null) {
-                const [, name] = m;
-                const char = characters.find((c: any) => c.name === name);
-                if (!char || seen.has(char.id)) continue;
-                seen.add(char.id);
-                const url = char.headshot_image_url || char.image_url || char.full_body_image_url
-                    || selectedVariantUrl(char.reference_sheet)
-                    || (char.full_body_asset?.variants?.[0]?.url);
-                if (url) out.push(url);
-            }
-            return out.slice(0, 4); // cap at 4 to keep payload reasonable
+            return referenceImageUrls;
         }
         // i2v: prefer active T2I image; fall back to storyboard frame.
         const active = (shot.t2iImageUrls && shot.t2iImageUrls.length > 0)
             ? shot.t2iImageUrls[Math.max(0, Math.min(shot.t2iSelectedIndex ?? 0, shot.t2iImageUrls.length - 1))]
             : (shot.t2iImageUrl || shot.imageUrl);
         return active ? [active] : [];
-    }, [shot.tabMode, shot.prompt, shot.t2iImageUrls, shot.t2iSelectedIndex, shot.t2iImageUrl, shot.imageUrl, characters])();
+    }, [shot.tabMode, shot.t2iImageUrls, shot.t2iSelectedIndex, shot.t2iImageUrl, shot.imageUrl, referenceImageUrls])();
 
     // castAvatars — character avatar group for the "Cast:" row above
     // the prompt textarea (L5 borrow from 火山剧创's 出镜角色). De-
