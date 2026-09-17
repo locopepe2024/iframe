@@ -88,8 +88,18 @@ class AssetGenerator:
         effective_size = size or "576*1024"  # Default to portrait for characters
         
         try:
-            # === R2V: Single unified reference sheet (T2I only) ===
+            # Snapshot the selected input before appending generated candidates.
             if generation_type == "reference_sheet":
+                reference = character.image_url
+                unit = character.reference_sheet
+                if unit and unit.selected_image_id:
+                    selected = next((v for v in unit.image_variants if v.id == unit.selected_image_id), None)
+                    if not selected or not selected.url:
+                        raise ValueError("Selected reference image is missing; select it again")
+                    reference = selected.url
+                reference_args = {}
+                if reference:
+                    reference_args["ref_image_path"] = reference if reference.startswith(("https://", "http://")) or is_object_key(reference) or os.path.isfile(reference) else os.path.join("output", reference)
                 effective_prompt = prompt if prompt else f"Character reference sheet for {character.name}. {character.description}. Multiple views: front, side, back. Clean background, studio lighting."
                 if positive_prompt and positive_prompt not in effective_prompt:
                     effective_prompt = f"{effective_prompt}, {positive_prompt}"
@@ -108,7 +118,8 @@ class AssetGenerator:
                             effective_prompt, sheet_path,
                             negative_prompt=negative_prompt,
                             model_name=model_name,
-                            size=effective_size
+                            size=effective_size,
+                            **reference_args,
                         )
 
                         rel_path = os.path.relpath(sheet_path, "output")
