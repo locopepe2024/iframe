@@ -1527,6 +1527,7 @@ export default function StoryboardR2V() {
         }
         setShotCounts(prev => ({ ...prev, [shot.id]: next.count }));
         setShots(prev => prev.map(item => item.id === shot.id ? { ...item, videoModel: next.model } : item));
+        persistWorkbench(shot.id, { video_model: next.model });
         // Sync duration back to structured field (single source of truth)
         if (next.duration !== (shot.duration ?? videoConfig.duration)) {
             const idx = shots.findIndex(s => s.id === shot.id);
