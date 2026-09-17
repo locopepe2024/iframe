@@ -2476,7 +2476,6 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     t2i_image_urls: Optional[List[str]] = None  # full ordered history, server caps at 10 FIFO
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
-    video_model: Optional[str] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2494,7 +2493,6 @@ def update_frame_workbench(
             t2i_image_urls=request.t2i_image_urls,
             t2i_selected_index=request.t2i_selected_index,
             workbench_generate_count=request.workbench_generate_count,
-            video_model=request.video_model,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -4000,12 +3998,12 @@ def _target_model_guidance(model_id: str) -> str:
         return ""
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
+    except OSError as exc:
+        raise RuntimeError("Target model prompt guidance unavailable") from exc
     if label == "Seedance":
         packages = json.loads(text).get("skills", [])
         text = "\n\n".join(p.get("instructions", "") for p in packages if label in p.get("targets", []))
-    return f"\n\nTARGET VIDEO MODEL: {label}. Apply this provider skill guidance:\n{text[:12000]}"
+    return f"\n\nTARGET VIDEO MODEL: {label}. Apply this provider skill guidance:\n{text}\nStoryboard editing contract takes precedence: return JSON with prompt_cn and prompt_en. Preserve all existing [characterN:name] editor tags and their identities exactly; do not convert them to provider labels in this editing step. Preserve explicit character replacement requirements, source/target identities, shot timing and sound constraints. Provider label conversion belongs to submission. Do not invent unattached media."
 
 
 @app.post("/video/polish_prompt")
@@ -4028,7 +4026,8 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     """
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "video_polish") + _target_model_guidance(request.target_video_model)
+        from .llm import DEFAULT_VIDEO_POLISH_PROMPT
+        custom_prompt = (_get_custom_prompt(request.script_id, "video_polish") or DEFAULT_VIDEO_POLISH_PROMPT) + _target_model_guidance(request.target_video_model)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4076,7 +4075,8 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     SYNC handler on purpose — see polish_video_prompt for rationale."""
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "r2v_polish") + _target_model_guidance(request.target_video_model)
+        from .llm import DEFAULT_R2V_POLISH_PROMPT
+        custom_prompt = (_get_custom_prompt(request.script_id, "r2v_polish") or DEFAULT_R2V_POLISH_PROMPT) + _target_model_guidance(request.target_video_model)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]

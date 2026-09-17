@@ -107,6 +107,7 @@ export interface ShotNode {
 export const T2I_HISTORY_LIMIT = 10;
 
 interface ShotCardProps {
+    videoModel?: string;
     shot: ShotNode;
     index: number;
     totalShots: number;
@@ -158,6 +159,7 @@ interface ShotCardProps {
 }
 
 export default function ShotCard({
+    videoModel,
     shot,
     index,
     totalShots,
@@ -754,6 +756,7 @@ export default function ShotCard({
                             r2v_polish from PromptConfig). Routes to
                             the right API by tabMode. */}
                         <PolishPanel
+                            videoModel={videoModel}
                             prompt={shot.prompt}
                             tabMode={shot.tabMode}
                             scriptId={currentProjectId ?? ""}
