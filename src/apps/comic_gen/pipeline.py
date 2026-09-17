@@ -520,6 +520,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.id = existing_script.id
         new_script.created_at = existing_script.created_at
         new_script.updated_at = time.time()
+
+        # Extraction creates a new Script, but ownership belongs to the
+        # existing project, never to the parser or its cached result.
+        new_script.owner_user_id = existing_script.owner_user_id
+        new_script.owner_profile_id = existing_script.owner_profile_id
+        self.stamp_owned_children(new_script)
         
         # Preserve project-level settings
         new_script.art_direction = existing_script.art_direction
