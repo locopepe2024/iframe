@@ -105,7 +105,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
 
       {/* Primary navigation */}
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2.5 scrollbar-thin" aria-label={t("mainNavAria")}>
-        {GLOBAL_NAV_ITEMS.slice(0, 4).map((item) => (
+        {GLOBAL_NAV_ITEMS.filter(item => item.id !== "settings").map((item) => (
           <div key={item.id}>
             <NavButton
               active={activeTab === item.id}
