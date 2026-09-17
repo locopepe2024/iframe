@@ -36,8 +36,16 @@ export function importCuts(text: string, analysis: SourceAnalysis): number[] {
   return cuts;
 }
 
+export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame";
+export interface RecreationMedia {
+  media_id: string; project_id: string; kind: RecreationMediaKind; display_name: string;
+  storage_path: string; sha256: string; created_at: number;
+  metadata: { parent_media_id?: string; analysis_id?: string; pts?: number | null; time_base?: string; role?: string };
+}
+export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
+
 export const recreationApi = {
-  searchMedia: (params: { q?: string; kind?: string; project_id?: string; limit?: number; cursor?: number } = {}) =>
+  searchMedia: (params: { q?: string; kind?: string; project_id?: string; limit?: number; cursor?: number } = {}): Promise<RecreationMediaPage> =>
     axios.get(`${API_URL}/recreation/media`, { params }).then(r => r.data),
   list: (): Promise<RecreationProject[]> => axios.get(`${API_URL}/recreation/projects`).then(r => {
     if (!Array.isArray(r.data)) throw new Error("Invalid recreation project list response");

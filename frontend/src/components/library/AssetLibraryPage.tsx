@@ -9,6 +9,7 @@ import { toast } from "@/store/toastStore";
 import { characterImageUrl, characterVariants } from "@/lib/characterImage";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
 import { rovingKeyDown } from "@/lib/a11y";
+import RecreationMediaLibrary from "./RecreationMediaLibrary";
 import AssetInspector from "./AssetInspector";
 import NewLibraryAssetDialog from "./NewLibraryAssetDialog";
 
@@ -85,6 +86,18 @@ function recencyOf(asset: Character | Scene | Prop, type: AssetTab): number {
 }
 
 export default function AssetLibraryPage() {
+  const t = useTranslations("recreationMedia");
+  const [section, setSection] = useState("assets");
+  return <div className="flex h-full min-h-0 flex-col">
+    <div className="flex flex-wrap gap-2 px-4 pt-3 md:px-7" role="group" aria-label={t("sections")}>
+      {["assets", "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
+        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{t(value)}</button>)}
+    </div>
+    {section === "assets" ? <SemanticAssetLibrary /> : <RecreationMediaLibrary />}
+  </div>;
+}
+
+function SemanticAssetLibrary() {
   const t = useTranslations("library");
   const tc = useTranslations("common");
   const [sources, setSources] = useState<AssetSource[]>([]);
@@ -315,7 +328,7 @@ export default function AssetLibraryPage() {
       : undefined;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header */}
       <header className="px-4 md:px-7 pt-5 md:pt-6 pb-3 flex items-end gap-5">
         <div className="flex-1 min-w-0">

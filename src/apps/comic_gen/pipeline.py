@@ -638,35 +638,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if script.style_prompt:
                     effective_positive_prompt += f", {script.style_prompt}"
         
-        asset_list = []
-        target_asset = None
-
-        if asset_type == "character":
-            asset_list = script.characters
-        elif asset_type == "scene":
-            asset_list = script.scenes
-        elif asset_type == "prop":
-            asset_list = script.props
-        else:
+        if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
-
-        target_asset = next((a for a in asset_list if a.id == asset_id), None)
-        # Fallback: /projects/{id} returns merged characters (episode +
-        # series + library, see get_project), so the frontend can pass a
-        # series-level asset id for an episode-scoped request. Look it up
-        # on the parent series if not on the episode itself.
-        asset_is_series_level = False
-        if not target_asset and script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series:
-                series_list = (
-                    series.characters if asset_type == "character"
-                    else series.scenes if asset_type == "scene"
-                    else series.props
-                )
-                target_asset = next((a for a in series_list if a.id == asset_id), None)
-                if target_asset:
-                    asset_is_series_level = True
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
@@ -675,9 +649,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.owner_user_id = script.owner_user_id
         if not target_asset.owner_profile_id:
             target_asset.owner_profile_id = script.owner_profile_id
-        self._save_data()
-        if asset_is_series_level:
-            self._save_series_data()
+        self._save_after_asset_mutation(source)
         
         try:
             # Generate with Art Direction style injected
@@ -711,13 +683,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.status = GenerationStatus.FAILED
             raise e
         finally:
-            self._save_data()
-            # If the asset lives on the parent series (not the episode),
-            # _save_data() (which persists scripts/episodes) won't capture
-            # the variant changes — persist the series too, otherwise the
-            # generated image disappears on the next reload.
-            if asset_is_series_level:
-                self._save_series_data()
+            self._save_after_asset_mutation(source)
 
         return script
 
@@ -732,38 +698,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
-        # Find the asset and set to PROCESSING
-        asset_list = []
-        if asset_type == "character":
-            asset_list = script.characters
-        elif asset_type == "scene":
-            asset_list = script.scenes
-        elif asset_type == "prop":
-            asset_list = script.props
-        else:
+        if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
-
-        target_asset = next((a for a in asset_list if a.id == asset_id), None)
-        # Fallback to parent series for series-level assets (see generate_asset
-        # for rationale — /projects returns merged characters).
-        asset_is_series_level = False
-        if not target_asset and script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series:
-                series_list = (
-                    series.characters if asset_type == "character"
-                    else series.scenes if asset_type == "scene"
-                    else series.props
-                )
-                target_asset = next((a for a in series_list if a.id == asset_id), None)
-                if target_asset:
-                    asset_is_series_level = True
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
         target_asset.status = GenerationStatus.PROCESSING
-        if asset_is_series_level:
-            self._save_series_data()
         
         # Create task
         task_id = str(uuid.uuid4())
@@ -792,7 +733,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             }
         }
         
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script, task_id
 
     def process_asset_generation_task(self, task_id: str):

@@ -94,3 +94,55 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
         assert not p.scripts['project'].characters
     finally:
         reset_studio_user(token)
+
+
+@pytest.mark.parametrize('source', ['script', 'series', 'global'])
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+@pytest.mark.parametrize('fail', [False, True])
+def test_shared_generation_task_resolves_saves_and_preserves_candidates(source, kind, fail, monkeypatch):
+    from src.apps.comic_gen.models import Series, GlobalAssetLibrary, GenerationStatus
+    from src.apps.comic_gen import pipeline as module
+    p, entity = pipeline(kind)
+    collection = {'character':'characters','scene':'scenes','prop':'props'}[kind]
+    p.library_store = GlobalAssetLibrary()
+    p._save_series_data = Mock()
+    p._save_library_data = Mock()
+    p.asset_generation_tasks = {}
+    if source != 'script':
+        setattr(p.scripts['project'],collection,[])
+    if source == 'series':
+        p.scripts['project'].series_id='series'
+        p.series_store={'series':Series(id='series',title='Series',created_at=1,updated_at=1,owner_user_id='owner',owner_profile_id='owner',**{collection:[entity]})}
+    elif source == 'global':
+        setattr(p.library_store,collection,[entity])
+    upload_type='reference_sheet' if kind=='character' else 'image'
+    p.add_uploaded_asset_variant('project',kind,entity.id,upload_type,'uploaded.png')
+    saver={'script':p._save_data,'series':p._save_series_data,'global':p._save_library_data}[source]
+    saver.reset_mock()
+    statuses=[]
+    saver.side_effect=lambda: statuses.append(entity.status)
+    def generate(asset,*args,**kwargs):
+        assert asset is entity
+        assert kwargs['model_name']=='test-image-model'
+        assert kwargs['size']=='1024*1024'
+        if fail: raise RuntimeError('provider failure')
+        variants=asset.reference_sheet.image_variants if kind=='character' else asset.image_asset.variants
+        variants.append(ImageVariant(id='generated',url='generated.png'))
+    p.asset_generator=Mock()
+    getattr(p.asset_generator,'generate_'+kind).side_effect=generate
+    monkeypatch.setattr(module,'runtime_uniart_for_owner',lambda *args:{})
+    _,tid=p.create_asset_generation_task('project',entity.id,kind,generation_type=upload_type,model_name='test-image-model',aspect_ratio='1:1')
+    assert p.asset_generation_tasks[tid]['owner_profile_id']=='owner'
+    p.process_asset_generation_task(tid)
+    assert p.asset_generation_tasks[tid]['status']==('failed' if fail else 'completed')
+    assert statuses==[GenerationStatus.PROCESSING,GenerationStatus.PROCESSING,GenerationStatus.FAILED if fail else GenerationStatus.COMPLETED]
+    variants=entity.reference_sheet.image_variants if kind=='character' else entity.image_asset.variants
+    assert [v.url for v in variants]==(['uploaded.png'] if fail else ['uploaded.png','generated.png'])
+    if source!='script':
+        assert getattr(p.scripts['project'],collection)==[]
+        entity.owner_profile_id='other'
+        if source=='series': p.series_store['series'].owner_profile_id='other'
+        count=len(p.asset_generation_tasks)
+        with pytest.raises(ValueError,match='not found'):
+            p.create_asset_generation_task('project',entity.id,kind)
+        assert len(p.asset_generation_tasks)==count
