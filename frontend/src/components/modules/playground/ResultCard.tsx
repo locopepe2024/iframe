@@ -8,6 +8,7 @@ import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
 import OverflowActions from './OverflowActions';
+import { usePlaygroundImageEditor } from './PlaygroundImageEditor';
 import { useLightbox } from '@/components/shared/preview/LightboxProvider';
 import { downloadOutput } from './downloadOutput';
 
@@ -132,6 +133,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const { prompt, model_id, mode, outputs, created_at } = generation;
   const t = useTranslations('playground');
   const output = outputs[outputIndex];
+  const openImageEditor = usePlaygroundImageEditor();
+  const editLabel = useTranslations('imageEditor');
   const lightbox = useLightbox();
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
@@ -245,6 +248,11 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
             {t('card.saved')}
           </span>
         )}
+
+        {!isVideo && output && openImageEditor && <button type="button"
+          onClick={event => { event.stopPropagation(); openImageEditor(output.media_path, 'image'); }}
+          className="absolute right-2 top-10 z-[3] inline-flex min-h-11 items-center gap-1 rounded-lg bg-elevated px-3 text-sm shadow-sm hover:bg-hover-bg"
+          aria-label={editLabel('edit')}><PencilLine size={16} />{editLabel('edit')}</button>}
 
         {/* Bottom gradient toolbar — appears on hover */}
         <div className="absolute bottom-0 left-0 right-0 z-[2] h-12 bg-gradient-to-t from-black/70 to-transparent flex items-end justify-end gap-1.5 px-3 pb-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
