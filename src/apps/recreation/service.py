@@ -6,6 +6,8 @@ import shutil
 import sqlite3
 import time
 import warnings
+import re
+from fractions import Fraction
 
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
@@ -222,7 +224,7 @@ class RecreationService:
             shutil.rmtree(folder)
             raise
 
-    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction):
+    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction, description=None):
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record["timeline"]:
@@ -236,8 +238,56 @@ class RecreationService:
             if len(instruction) > 4000:
                 raise HTTPException(422, "Instruction exceeds 4000 characters")
             shot.update(reference_media_id=reference_media_id, replacement_media_id=replacement_media_id, instruction=instruction)
+            if description is not None:
+                if len(description) > 6000:
+                    raise HTTPException(422, "Description exceeds 6000 characters")
+                shot["description"] = description
             self._save(db, record)
         return record
+
+    def generation_plan(self, project_id, revision):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
+                raise HTTPException(409, "Confirm the current timeline before preparing a plan")
+            if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
+                raise HTTPException(409, "Source fingerprint changed")
+            shots, blockers = [], []
+            for index, shot in enumerate(record["timeline"]["shots"], 1):
+                description = shot.get("description", "").strip()
+                instruction = shot.get("instruction", "").strip()
+                missing = []
+                if not description:
+                    missing.append("description_required")
+                if not shot.get("reference_media_id"):
+                    missing.append("reference_required")
+                if shot.get("replacement_media_id") and not instruction:
+                    missing.append("replacement_instruction_required")
+                if re.search(r"@|\b(?:picture|video|audio)\s*\d+", description + "\n" + instruction, re.I):
+                    missing.append("media_labels_reserved")
+                images = []
+                for role in ("reference", "replacement"):
+                    media_id = shot.get(role + "_media_id")
+                    if media_id:
+                        item = self._image(db, media_id)
+                        images.append({"media_id": media_id, "sha256": item["sha256"], "role": role,
+                                       "label": f"<Picture {len(images) + 1}>"})
+                duration = (shot["end_pts"] - shot["start_pts"]) * Fraction(record["analysis"]["time_base"])
+                prompt = None
+                if missing:
+                    blockers.append({"shot_id": shot["id"], "shot_number": index, "reasons": missing})
+                else:
+                    prompt = "Use <Picture 1> for composition, subject appearance and scene continuity.\n" + description
+                    if shot.get("replacement_media_id"):
+                        prompt += "\nUse <Picture 2> only for the replacement product appearance."
+                    if instruction:
+                        prompt += "\n" + instruction
+                    prompt += "\nOne continuous shot, no added cuts. Silent output; no dialogue, music or sound effects."
+                shots.append({"shot_id": shot["id"], "shot_number": index, "start_pts": shot["start_pts"],
+                              "end_pts": shot["end_pts"], "target_duration": str(duration), "images": images, "prompt": prompt})
+            return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
+                    "time_base": record["analysis"]["time_base"], "audio_policy": "silent", "ready": not blockers,
+                    "blockers": blockers, "shots": shots}
 
     def reindex(self, project_id):
         with self.db() as db:

@@ -351,3 +351,32 @@ def test_reference_api_upload_signing_binding_and_owner_isolation(service, video
     app.dependency_overrides[require_studio_user] = lambda: UserContext("foreign", "foreign", "Foreign", "")
     assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 404
     assert client.put(endpoint, json=payload).status_code == 404
+
+
+def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, video):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    plan = service.generation_plan(p['id'], p['revision'])
+    assert not plan['ready']
+    assert set(plan['blockers'][0]['reasons']) == {'description_required', 'reference_required'}
+    ref = service.upload_image(p['id'], image_stream(), 'frame.png', 'reference_image')
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+    p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'], 'Replace yellow box only', 'Medium shot; hand lifts box; static camera.')
+    plan = service.generation_plan(p['id'], p['revision'])
+    assert plan['ready']
+    row = plan['shots'][0]
+    assert [i['media_id'] for i in row['images']] == [ref['media_id'], product['media_id']]
+    assert [i['label'] for i in row['images']] == ['<Picture 1>', '<Picture 2>']
+    assert Fraction(row['target_duration']) == (shot['end_pts'] - shot['start_pts']) * Fraction(p['analysis']['time_base'])
+    assert 'Silent output' in row['prompt']
+    assert service.get(p['id'])['revision'] == p['revision']
+    with pytest.raises(HTTPException) as exc:
+        service.generation_plan(p['id'], p['revision'] - 1)
+    assert exc.value.status_code == 409
+    p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'], '', 'Use @1')
+    assert set(service.generation_plan(p['id'], p['revision'])['blockers'][0]['reasons']) == {'replacement_instruction_required', 'media_labels_reserved'}
+    (Path('output') / ref['storage_path']).write_bytes(b'changed')
+    with pytest.raises(HTTPException) as exc:
+        service.generation_plan(p['id'], p['revision'])
+    assert exc.value.status_code == 409
