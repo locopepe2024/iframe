@@ -510,7 +510,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Use cached extraction if available (from extract_preview)
         cached = self._extraction_cache.pop(script_id, None)
-        if cached and (time.time() - cached[0]) < 300:
+        if cached and (time.time() - cached[0]) < 300 and cached[1].original_text == text:
             new_script = cached[1]
         else:
             custom_extraction = getattr(getattr(existing_script, "prompt_config", None), "entity_extraction", "")

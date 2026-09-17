@@ -45,6 +45,13 @@ if run(['docker', 'exec', 'iframe-frontend', 'cat', '/etc/nginx/conf.d/default.c
 run(['docker', 'exec', 'iframe-frontend', 'nginx', '-t'])
 maintenance = '''
     # Drain existing Chat requests; refuse new submissions during deployment.
+    location ^~ /projects/ {
+        default_type application/json;
+        if ($request_method = POST) { return 503 '{"detail":"服务正在更新，请稍后重试；后台分析继续运行"}'; }
+        proxy_pass http://backend:17177;
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
     location ^~ /agent/ {
         default_type application/json;
         if ($request_method = POST) { return 503 '{"detail":"Chat 正在更新，请稍后重试；当前输入已保留"}'; }
@@ -62,13 +69,13 @@ try:
     time.sleep(2)
     for attempt in range(24):
         active = int(run(['docker', 'exec', 'iframe-backend', 'python', '-c',
-            'import sqlite3,os,time; db=sqlite3.connect(os.getenv("LUMENX_AGENT_DB","output/agent.sqlite3")); print(db.execute("SELECT count(*) FROM sessions WHERE busy>?",(time.time(),)).fetchone()[0])']))
+            'import sqlite3,os,time; db=sqlite3.connect(os.getenv("LUMENX_AGENT_DB","output/agent.sqlite3")); chat=db.execute("SELECT count(*) FROM sessions WHERE busy>?",(time.time(),)).fetchone()[0]; jobs=sqlite3.connect("output/extraction-jobs.sqlite3") if os.path.exists("output/extraction-jobs.sqlite3") else None; active=jobs.execute("SELECT count(*) FROM jobs WHERE status=? AND created>?",("running",time.time()-1800)).fetchone()[0] if jobs else 0; print(chat+active)']))
         if not active:
             break
-        print('Waiting for active Chat requests:', active, flush=True)
+        print('Waiting for active Chat/analysis requests:', active, flush=True)
         time.sleep(10)
     else:
-        raise RuntimeError('Active Chat requests did not drain; deployment aborted')
+        raise RuntimeError('Active Chat/analysis requests did not drain; deployment aborted')
     run(['docker', 'stop', '--time', '210', 'iframe-backend'])
     run(['docker', 'rename', 'iframe-backend', backup])
     renamed = True

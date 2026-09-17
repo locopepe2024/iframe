@@ -574,6 +574,44 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 
 
 
+# New clients use short requests so an interrupted browser cannot cancel extraction.
+from .extraction_jobs import ExtractionJobs
+extraction_jobs = ExtractionJobs()
+
+
+def extraction_response(job, script_id):
+    if job['status'] == 'completed':
+        # Rehydrate the apply cache, including after a backend restart.
+        result = Script(**job['result'])
+        pipeline._extraction_cache[script_id] = (time.time(), result)
+        job = {**job, 'result': {
+            'characters': [c.dict() for c in result.characters],
+            'scenes': [s.dict() for s in result.scenes],
+            'props': [p.dict() for p in result.props],
+        }}
+    return job
+
+
+@app.post("/projects/{script_id}/extraction-jobs", status_code=202)
+def start_extraction(script_id: str, request: ReparseProjectRequest,
+                     user: UserContext = Depends(require_studio_user)):
+    import hashlib
+    script = pipeline.scripts.get(script_id)
+    if not script:
+        raise HTTPException(404, 'Script not found')
+    llm = pipeline.script_processor.llm
+    prompt = getattr(getattr(script, 'prompt_config', None), 'entity_extraction', '')
+    fingerprint = hashlib.sha256(json.dumps([request.text, prompt, llm.provider, llm._get_default_model()], ensure_ascii=False).encode()).hexdigest()
+    job = extraction_jobs.start(user.owner_profile_id, script_id, fingerprint,
+                                lambda: pipeline.script_processor.parse_novel(script.title, request.text, prompt).dict())
+    return extraction_response(job, script_id)
+
+
+@app.get("/projects/{script_id}/extraction-jobs/{job_id}")
+def extraction_status(script_id: str, job_id: str, user: UserContext = Depends(require_studio_user)):
+    return extraction_response(extraction_jobs.get(user.owner_profile_id, script_id, job_id), script_id)
+
+
 @app.post("/projects/{script_id}/extract_preview")
 async def extract_preview(script_id: str, request: ReparseProjectRequest):
     """Dry-run entity extraction — returns entities without saving."""
