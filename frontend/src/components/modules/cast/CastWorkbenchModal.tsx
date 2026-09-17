@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
@@ -207,6 +207,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const variants = useMemo(() => readVariants(entity, kind ?? "character"), [entity, kind]);
     const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
 
+    const uploadInput = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [batchSize, setBatchSize] = useState(2);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
@@ -376,6 +378,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
     };
 
+    const handleUpload = async (file?: File) => {
+        if (!file || uploading) return;
+        setUploading(true);
+        try {
+            const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
+                kind === "character" ? "reference_sheet" : "image");
+            updateProject(currentProject.id, updated);
+            setGalleryFilter("all");
+            toast.success(t("uploadSuccess"));
+        } catch (err: any) {
+            toast.error(t("uploadFailed"), { body: String(err?.message || t("toastGenErrUnknown")) });
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleSelectVariant = async (variantId: string) => {
         try {
             const updated = await api.selectAssetVariant(
@@ -383,6 +401,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 entity.id,
                 kind,
                 variantId,
+                kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
             toast.success(t("toastSelected"), {
@@ -805,6 +824,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
                         {/* RIGHT — variants gallery */}
                         <div className="flex flex-col p-5 overflow-y-auto custom-scrollbar bg-surface">
+                            <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
+                                onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
+                            <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
+                                className="glass-button mb-3 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
+                                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                {t(uploading ? "uploading" : "uploadReference")}
+                            </button>
                             {/* Gallery header with filter tabs */}
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -838,7 +864,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <div className="flex-1 grid place-items-center text-center text-text-muted">
+                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />
@@ -846,7 +872,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         <p className="text-[0.875rem] text-foreground">{t("emptyVariantsTitle")}</p>
                                         <p className="text-[0.75rem] text-text-secondary mt-1">{t("emptyVariantsBody")}</p>
                                     </div>
-                                </div>
+                                </button>
                             ) : filteredVariants.length === 0 ? (
                                 <div className="flex-1 grid place-items-center text-center text-text-muted">
                                     <p className="text-[0.75rem]">{t("noFavoritedYet")}</p>
@@ -869,7 +895,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                         src={getAssetUrl(v.url)}
                                                         alt={`${entity.name} ${v.id}`}
                                                         className="w-full h-auto max-h-[280px] object-contain"
-                                                        clickToLightbox
                                                     />
                                                 </div>
                                                 {/* Favorite star */}

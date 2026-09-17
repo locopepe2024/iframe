@@ -165,6 +165,10 @@
     "cancel": "取消"
   },
   "castWorkbench": {
+    "uploadReference": "上传参考图",
+    "uploading": "上传中…",
+    "uploadSuccess": "参考图已上传并选用",
+    "uploadFailed": "参考图上传失败",
     "close": "关闭",
     "done": "完成",
     "retry": "重试",
@@ -205,7 +209,7 @@
     "generateMore": "✨ 再生成 ×{count}",
     "variantsTitle": "候选图",
     "emptyVariantsTitle": "还没有候选图",
-    "emptyVariantsBody": "点左侧「生成」按钮，AI 会按你的提示词产出参考图。",
+    "emptyVariantsBody": "点击此处上传参考图，或生成新的候选图。",
     "clickToSelect": "点击设为参考",
     "selectedFooter": "✓ 已选定 1 张作为参考",
     "noneSelectedFooter": "尚未选定参考图 — 点候选图设定",
