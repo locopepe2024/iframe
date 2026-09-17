@@ -35,6 +35,11 @@ async function open() {
 }
 
 describe("recreation confirmation", () => {
+  it("shows a recoverable error when the project API rejects an invalid response", async () => {
+    vi.mocked(recreationApi.list).mockRejectedValueOnce(new Error("Invalid recreation project list response"));
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    expect(await screen.findByRole("alert")).toHaveTextContent(messages.recreation.requestFailed);
+  });
   it("never confirms on analysis load, submits exact imported PTS only on user action", async () => {
     await open();
     expect(recreationApi.confirm).not.toHaveBeenCalled();

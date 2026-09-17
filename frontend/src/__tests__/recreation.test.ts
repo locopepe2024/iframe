@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { importCuts, seconds, SourceAnalysis } from "@/lib/recreation";
+import { describe, expect, it, vi } from "vitest";
+import { importCuts, seconds, SourceAnalysis, recreationApi } from "@/lib/recreation";
 
 const analysis: SourceAnalysis = {
   time_base: "1/60000", start_pts: 1000, end_pts: 901000,
@@ -19,4 +19,15 @@ describe("recreation timestamp import", () => {
     }
   });
   it("allows a single-shot timeline", () => expect(importCuts("", analysis)).toEqual([]));
+});
+
+vi.mock("axios", () => ({ default: { get: vi.fn() } }));
+import axios from "axios";
+it("rejects an HTML fallback instead of returning it as a project list", async () => {
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: "<!DOCTYPE html><html></html>" });
+  await expect(recreationApi.list()).rejects.toThrow("Invalid recreation project list response");
+});
+it("accepts an empty project list", async () => {
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: [] });
+  await expect(recreationApi.list()).resolves.toEqual([]);
 });
