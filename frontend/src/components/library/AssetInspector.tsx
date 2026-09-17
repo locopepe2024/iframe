@@ -18,10 +18,10 @@ const SINGULAR_TYPE: Record<AssetTab, string> = {
   props: "prop",
 };
 
-// 「生成更多变体」一次追加的张数 + 任务轮询参数（~5 分钟上限）。
+// 「生成更多变体」一次追加的张数 + 任务轮询参数（与 UniArt 15 分钟任务窗口匹配）。
 const VARIANT_BATCH = 3;
 const POLL_INTERVAL_MS = 2000;
-const POLL_MAX_ATTEMPTS = 150;
+const POLL_MAX_ATTEMPTS = 600;
 
 interface AssetInspectorProps {
   asset: Character | Scene | Prop;
