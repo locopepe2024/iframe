@@ -56,16 +56,19 @@ def _image_reference_url(value: str) -> str:
         return value
     if value.startswith(("data:", "blob:")):
         raise ValueError("UniArt image references require HTTP(S) material URLs")
-    from ..utils.oss_utils import OSSImageUploader
+    from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:
         raise RuntimeError("Image reference material storage is not configured")
-    path = value if os.path.isfile(value) else os.path.join("output", value)
-    if not os.path.isfile(path):
-        raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
-    key = uploader.upload_file(path, sub_path="image-edit-inputs")
-    if not key:
-        raise RuntimeError("Could not upload image edit material")
+    if is_object_key(value):
+        key = value
+    else:
+        path = value if os.path.isfile(value) else os.path.join("output", value)
+        if not os.path.isfile(path):
+            raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
+        key = uploader.upload_file(path, sub_path="image-edit-inputs")
+        if not key:
+            raise RuntimeError("Could not upload image edit material")
     url = uploader.sign_url_for_api(key)
     if not url or not url.startswith(("https://", "http://")):
         raise RuntimeError("Could not create image edit material URL")
