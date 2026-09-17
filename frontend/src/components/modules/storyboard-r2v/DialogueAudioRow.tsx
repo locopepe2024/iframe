@@ -183,6 +183,7 @@ function DialogueWorkbenchModal({
     const [dialogueDraft, setDialogueDraft] = useState(dialogue || "");
     const [emotion, setEmotion] = useState<string>(snapshotInstructions || "");
     const [freeText, setFreeText] = useState<string>("");
+    const [speed, setSpeed] = useState(1.0);
     const [busy, setBusy] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -240,7 +241,7 @@ function DialogueWorkbenchModal({
         setError(null);
         setBusy(true);
         try {
-            const result = await api.generateLineAudio(scriptId, frameId, 1.0, 1.0, 50, instructions);
+            const result = await api.generateLineAudio(scriptId, frameId, speed, 1.0, 50, instructions);
             const updatedFrame = result?.frames?.find((f: any) => f.id === frameId);
             if (updatedFrame?.audio_error) {
                 setError(updatedFrame.audio_error);
@@ -385,6 +386,12 @@ function DialogueWorkbenchModal({
                                     placeholder={t("freeTextPlaceholder")}
                                     className="w-full rounded-md border border-glass-border bg-black/30 px-3 py-1.5 text-[0.6875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40"
                                 />
+                                <label className="flex items-center gap-2 text-[0.6875rem] text-text-muted">
+                                    <span>语速</span>
+                                    <select value={speed} onChange={e => setSpeed(Number(e.target.value))} className="glass-input min-h-8 px-2">
+                                        {[0.75, 1, 1.25, 1.5].map(value => <option key={value} value={value}>{value}x</option>)}
+                                    </select>
+                                </label>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={handleGenerate}
