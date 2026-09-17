@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
 import { CutEvidence, importCuts, recreationApi, RecreationProject, seconds } from "@/lib/recreation";
+import ShotReferences from "./ShotReferences";
 
 const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
@@ -171,6 +172,9 @@ export default function RecreationPage() {
                 </li>;
               })}</ol>
             </section>
+            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} onSaved={record => {
+              setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
+            }} />}
             <details className="border-t border-border py-4"><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
               <img src={media(analysis.contact_sheet_url)} alt={t("contactSheet")} className="w-full mt-4" /></details>
           </>}

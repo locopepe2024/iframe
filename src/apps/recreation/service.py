@@ -5,6 +5,9 @@ from pathlib import Path
 import shutil
 import sqlite3
 import time
+import warnings
+
+from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -149,6 +152,93 @@ class RecreationService:
                             f'{record["title"]} · {role} · {pts if pts is not None else ""}',
                             path, digest, json.dumps(metadata), time.time()))
 
+    def _media(self, db, media_id):
+        row = db.execute("SELECT media_id, project_id, kind, display_name, storage_path, sha256, metadata, created_at FROM media_records WHERE media_id=? AND owner=?",
+                         (media_id, self.user.owner_profile_id)).fetchone()
+        if not row:
+            raise HTTPException(404, "Media not found")
+        return dict(zip(("media_id", "project_id", "kind", "display_name", "storage_path", "sha256", "metadata", "created_at"),
+                        (*row[:6], json.loads(row[6]), row[7])))
+
+    def media(self, media_id):
+        with self.db() as db:
+            return self._media(db, media_id)
+
+    def _image(self, db, media_id):
+        item = self._media(db, media_id)
+        if item["kind"] not in ("sample_frame", "evidence_frame", "contact_sheet", "reference_image", "replacement_image"):
+            raise HTTPException(422, "An image media record is required")
+        if fingerprint(self._path(item["storage_path"])) != item["sha256"]:
+            raise HTTPException(409, "Media fingerprint changed")
+        return item
+
+    def upload_image(self, project_id, stream, filename, kind, parent_media_id=None):
+        if kind not in ("reference_image", "replacement_image"):
+            raise HTTPException(422, "Invalid image role")
+        with self.db() as db:
+            self._get(db, project_id)
+            if parent_media_id:
+                self._image(db, parent_media_id)
+        media_id = uuid4().hex
+        folder = self.root / project_id / "images" / media_id
+        folder.mkdir(parents=True)
+        temporary = folder / "upload"
+        try:
+            size = 0
+            with temporary.open("xb") as target:
+                while chunk := stream.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > 25 * 1024 * 1024:
+                        raise HTTPException(413, "Image exceeds 25 MiB")
+                    target.write(chunk)
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", Image.DecompressionBombWarning)
+                    with Image.open(temporary) as image:
+                        fmt, width, height = image.format, image.width, image.height
+                        if fmt not in ("PNG", "JPEG", "WEBP") or width * height > 25000000 or getattr(image, "n_frames", 1) != 1:
+                            raise ValueError("Expected a still PNG, JPEG or WebP up to 25 megapixels")
+                        image.verify()
+                    with Image.open(temporary) as image:
+                        image.load()
+            except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
+                raise HTTPException(422, "Invalid image: use a still PNG, JPEG or WebP up to 25 megapixels") from exc
+            path = temporary.with_name("image." + {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[fmt])
+            temporary.rename(path)
+            metadata = {"width": width, "height": height, "bytes": size, "mime": Image.MIME[fmt]}
+            if parent_media_id:
+                metadata["parent_media_id"] = parent_media_id
+            item = {"media_id": media_id, "project_id": project_id, "kind": kind,
+                    "display_name": Path(filename).name[:200], "storage_path": path.relative_to(Path("output").resolve()).as_posix(),
+                    "sha256": fingerprint(path), "metadata": metadata, "created_at": time.time()}
+            with self.db() as db:
+                self._get(db, project_id)
+                if parent_media_id:
+                    self._image(db, parent_media_id)
+                db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (media_id, self.user.owner_profile_id, project_id, kind, item["display_name"], item["storage_path"], item["sha256"], json.dumps(metadata), item["created_at"]))
+            return item
+        except BaseException:
+            shutil.rmtree(folder)
+            raise
+
+    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record["timeline"]:
+                raise HTTPException(409, "Timeline changed; refresh before assigning references")
+            shot = next((s for s in record["timeline"]["shots"] if s["id"] == shot_id), None)
+            if not shot:
+                raise HTTPException(404, "Shot not found")
+            for media_id in (reference_media_id, replacement_media_id):
+                if media_id:
+                    self._image(db, media_id)
+            if len(instruction) > 4000:
+                raise HTTPException(422, "Instruction exceeds 4000 characters")
+            shot.update(reference_media_id=reference_media_id, replacement_media_id=replacement_media_id, instruction=instruction)
+            self._save(db, record)
+        return record
+
     def reindex(self, project_id):
         with self.db() as db:
             record = self._get(db, project_id)
@@ -245,11 +335,13 @@ class RecreationService:
                 raise HTTPException(422, "Cuts must be ordered unique source-frame PTS, excluding the start")
             boundaries = [analysis["start_pts"], *cuts, analysis["end_pts"]]
             detected = {c["pts"] for c in analysis["candidates"]}
+            previous = record.get("timeline") or {}
+            old_shots = {(shot["start_pts"], shot["end_pts"]): shot for shot in previous.get("shots", [])} if previous.get("analysis_id") == analysis_id else {}
             record["timeline"] = {"analysis_id": analysis_id, "source_fingerprint": record["source_fingerprint"],
                                   "time_base": analysis["time_base"], "confirmed_at": time.time(),
                                   "cuts": [{"pts": p, "source": "detected" if p in detected else "manual",
                                             "confirmed": True} for p in cuts],
-                                  "shots": [{"id": uuid4().hex, "start_pts": a, "end_pts": b}
+                                  "shots": [old_shots.get((a, b), {"id": uuid4().hex, "start_pts": a, "end_pts": b})
                                             for a, b in zip(boundaries, boundaries[1:])]}
             record["status"] = "confirmed"
             self._save(db, record)

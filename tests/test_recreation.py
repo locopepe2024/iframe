@@ -260,3 +260,94 @@ def test_authorized_fifteen_second_source(service):
     assert len(result["timeline"]["shots"]) == 4
     assert [c["pts"] for c in result["timeline"]["cuts"]] == cuts
     assert data["end_pts"] > data["frame_pts"][-1]
+
+
+def image_stream():
+    from PIL import Image
+    stream = BytesIO()
+    Image.new("RGB", (20, 20), "red").save(stream, format="PNG")
+    stream.seek(0)
+    return stream
+
+
+def test_shot_references_survive_only_unchanged_boundaries(service, video):
+    p = completed(service, video)
+    cuts = [p["analysis"]["candidates"][0]["pts"]]
+    p = service.confirm(p["id"], p["revision"], p["analysis_id"], cuts)
+    reference = service.search_media(kind="evidence_frame")["items"][0]
+    replacement = service.upload_image(p["id"], image_stream(), "product.png", "replacement_image")
+    original_hash = reference["sha256"]
+    edited = service.upload_image(p["id"], image_stream(), "edited.png", "reference_image", reference["media_id"])
+    assert edited["metadata"]["parent_media_id"] == reference["media_id"]
+    assert service.media(reference["media_id"])["sha256"] == original_hash
+    shot_id = p["timeline"]["shots"][0]["id"]
+    revision = p["revision"]
+    p = service.bind_shot(p["id"], shot_id, revision, p["analysis_id"], edited["media_id"], replacement["media_id"], "Replace yellow box only")
+    assert service.get(p["id"])["timeline"] == p["timeline"]
+    with pytest.raises(HTTPException) as exc:
+        service.bind_shot(p["id"], shot_id, revision, p["analysis_id"], None, None, "")
+    assert exc.value.status_code == 409
+    old = p["timeline"]["shots"]
+    p = service.confirm(p["id"], p["revision"], p["analysis_id"], cuts)
+    assert p["timeline"]["shots"] == old
+    p = service.confirm(p["id"], p["revision"], p["analysis_id"], [p["analysis"]["frame_pts"][1], *cuts])
+    assert p["timeline"]["shots"][-1] == old[-1]
+    assert all("reference_media_id" not in shot for shot in p["timeline"]["shots"][:-1])
+    assert service.media(edited["media_id"])["media_id"] == edited["media_id"]
+
+
+def test_reference_ownership_kinds_and_fingerprints(service, video):
+    p = completed(service, video)
+    p = service.confirm(p["id"], p["revision"], p["analysis_id"], [])
+    shot = p["timeline"]["shots"][0]["id"]
+    foreign = RecreationService(UserContext("other", "other", "Other", ""))
+    other = register(foreign, video)
+    image = foreign.upload_image(other["id"], image_stream(), "foreign.png", "reference_image")
+    for bad_id, status in [(image["media_id"], 404), (p["source_media_id"], 422)]:
+        with pytest.raises(HTTPException) as exc:
+            service.bind_shot(p["id"], shot, p["revision"], p["analysis_id"], bad_id, None, "")
+        assert exc.value.status_code == status
+    with pytest.raises(HTTPException) as exc:
+        service.upload_image(p["id"], image_stream(), "edit.png", "reference_image", image["media_id"])
+    assert exc.value.status_code == 404
+    image = service.upload_image(p["id"], image_stream(), "product.png", "replacement_image")
+    (Path("output") / image["storage_path"]).write_bytes(b"changed")
+    with pytest.raises(HTTPException) as exc:
+        service.bind_shot(p["id"], shot, p["revision"], p["analysis_id"], None, image["media_id"], "")
+    assert exc.value.status_code == 409
+
+
+def test_invalid_image_upload_cleans_files_and_index(service, video):
+    p = register(service, video)
+    for stream, status in [(BytesIO(b"not image"), 422), (BytesIO(b"x" * (25 * 1024 * 1024 + 1)), 413)]:
+        with pytest.raises(HTTPException) as exc:
+            service.upload_image(p["id"], stream, "fake.png", "reference_image")
+        assert exc.value.status_code == status
+    assert service.search_media(kind="reference_image")["items"] == []
+    assert list((service.root / p["id"] / "images").iterdir()) == []
+
+
+def test_reference_api_upload_signing_binding_and_owner_isolation(service, video, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.recreation.api import router
+    from src.apps.studio_access import require_studio_user
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only-signing-key")
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    app.dependency_overrides[require_studio_user] = lambda: service.user
+    p = completed(service, video)
+    p = service.confirm(p["id"], p["revision"], p["analysis_id"], [])
+    response = client.post(f'/recreation/projects/{p["id"]}/images', data={"kind": "replacement_image"}, files={"file": ("product.png", image_stream(), "image/png")})
+    assert response.status_code == 201
+    media = response.json()
+    assert "?" in media["storage_path"]
+    endpoint = f'/recreation/projects/{p["id"]}/shots/{p["timeline"]["shots"][0]["id"]}/references'
+    payload = {"revision": p["revision"], "analysis_id": p["analysis_id"], "replacement_media_id": media["media_id"]}
+    assert client.put(endpoint, json=payload).status_code == 200
+    assert client.put(endpoint, json=payload).status_code == 409
+    assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 200
+    app.dependency_overrides[require_studio_user] = lambda: UserContext("foreign", "foreign", "Foreign", "")
+    assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 404
+    assert client.put(endpoint, json=payload).status_code == 404

@@ -1,5 +1,5 @@
 """Authenticated recreation APIs. Processing stays in the backend's FFmpeg runtime."""
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query, Form
 from pydantic import BaseModel, Field, StrictInt
 
 from ..identity import UserContext
@@ -84,5 +84,36 @@ def confirm(project_id: str, request: ConfirmRequest, user: UserContext = Depend
 def evidence(project_id: str, request: EvidenceRequest, user: UserContext = Depends(require_studio_user)):
     try:
         return public(RecreationService(user).evidence(project_id, request.analysis_id, request.pts), user)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+class ShotReferencesRequest(AnalyzeRequest):
+    analysis_id: str
+    reference_media_id: str | None = Field(default=None, min_length=1, max_length=64)
+    replacement_media_id: str | None = Field(default=None, min_length=1, max_length=64)
+    instruction: str = Field(default="", max_length=4000)
+
+
+@router.get("/media/{media_id}")
+def get_media(media_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).media(media_id), user)
+
+
+@router.post("/projects/{project_id}/images", status_code=201)
+def upload_image(project_id: str, file: UploadFile = File(...), kind: str = Form(...),
+                 parent_media_id: str | None = Form(None), user: UserContext = Depends(require_studio_user)):
+    try:
+        return public(RecreationService(user).upload_image(project_id, file.file, file.filename or "image", kind, parent_media_id), user)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.put("/projects/{project_id}/shots/{shot_id}/references")
+def bind_shot(project_id: str, shot_id: str, request: ShotReferencesRequest,
+              user: UserContext = Depends(require_studio_user)):
+    try:
+        return public(RecreationService(user).bind_shot(project_id, shot_id, request.revision, request.analysis_id,
+                      request.reference_media_id, request.replacement_media_id, request.instruction), user)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
