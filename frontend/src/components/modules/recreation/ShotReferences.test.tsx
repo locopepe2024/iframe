@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import ShotReferences from './ShotReferences';
 import { recreationApi, RecreationProject, RecreationMedia } from '@/lib/recreation';
 
-vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn() } }));
+vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn() } }));
 vi.mock('next/dynamic', () => ({ default: () => ({ onSave }: { onSave: (file: File) => Promise<void> }) => <button onClick={() => void onSave(new File(['edited'], 'edited.png', { type: 'image/png' }))}>export edit</button> }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 const image: RecreationMedia = { media_id: 'image', project_id: 'p', kind: 'evidence_frame', display_name: 'Evidence', storage_path: '/image.png', sha256: 'hash', created_at: 1, metadata: {} };
@@ -24,7 +24,7 @@ it('selects a stable media ID and saves only on explicit action, retaining draft
   expect(screen.getByRole('textbox', { name: 'instruction' })).toHaveValue('Replace yellow box');
   fireEvent.click(screen.getByRole('button', { name: 'save' }));
   await waitFor(() => expect(onSaved).toHaveBeenCalledWith(project));
-  expect(recreationApi.bindShot).toHaveBeenLastCalledWith(project, 'shot', { reference_media_id: 'image', replacement_media_id: null, instruction: 'Replace yellow box' });
+  expect(recreationApi.bindShot).toHaveBeenLastCalledWith(project, 'shot', { reference_media_id: 'image', replacement_media_id: null, instruction: 'Replace yellow box', description: '' });
 });
 
 it('loads saved references and prevents writes while timeline cuts are unsaved', async () => {
@@ -55,4 +55,14 @@ it('exports reference edits as a new child media record before explicit binding'
   await screen.findByText('Edited');
   expect(recreationApi.uploadImage).toHaveBeenCalledWith('p', expect.any(File), 'reference_image', 'image');
   expect(recreationApi.bindShot).not.toHaveBeenCalled();
+});
+
+it('shows saved-plan blockers and clears the preview when revision changes', async () => {
+  vi.mocked(recreationApi.generationPlan).mockResolvedValue({ revision: 4, ready: false, blockers: [{ shot_id: 'shot', shot_number: 1, reasons: ['description_required'] }], shots: [] });
+  const view = render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'checkPlan' }));
+  await screen.findByText('planBlocked');
+  expect(screen.getByText(/description_required/)).toBeInTheDocument();
+  view.rerender(<ShotReferences project={{ ...project, revision: 5 }} disabled={false} onSaved={vi.fn()} />);
+  expect(screen.queryByText('planBlocked')).not.toBeInTheDocument();
 });

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Pencil, Save, Search, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
-import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, seconds } from "@/lib/recreation";
+import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 const url = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
@@ -55,6 +55,12 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const t = useTranslations("shotReferences");
   const [shotId, setShotId] = useState(project.timeline?.shots[0]?.id);
   const shot = project.timeline?.shots.find(s => s.id === shotId);
+  const [plan, setPlan] = useState<RecreationPlan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planError, setPlanError] = useState(false);
+  const revision = useRef(project.revision);
+  revision.current = project.revision;
+  useEffect(() => { setPlan(null); setPlanError(false); }, [project.revision]);
   return <section className="border-t border-border py-5 space-y-4">
     <h3 className="font-semibold">{t("title")}</h3>
     {disabled && <p role="status">{t("confirmFirst")}</p>}
@@ -62,12 +68,28 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
       {project.timeline?.shots.map((s, i) => <option key={s.id} value={s.id}>{t("shot")} {i + 1} · {seconds(project.analysis!, s.start_pts).toFixed(6)} - {seconds(project.analysis!, s.end_pts).toFixed(6)} s</option>)}
     </select>
     {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} onSaved={onSaved} />}
+    <button className="glass-button" disabled={disabled || planBusy} onClick={async () => {
+      const current = project.revision; setPlanBusy(true); setPlanError(false);
+      try { const result = await recreationApi.generationPlan(project); if (revision.current === current) setPlan(result); }
+      catch { if (revision.current === current) setPlanError(true); } finally { setPlanBusy(false); }
+    }}>{t("checkPlan")}</button>
+    {planError && <p role="alert">{t("failed")}</p>}
+    {plan && !disabled && <div className="space-y-3">
+      <p role="status">{t(plan.ready ? "planReady" : "planBlocked")}</p>
+      {plan.blockers.map(block => <p key={block.shot_id}>{t("shot")} {block.shot_number}: {block.reasons.map(reason => t(reason)).join(" / ")}</p>)}
+      {plan.shots.map(item => <details key={item.shot_id} className="border-t border-border py-2">
+        <summary>{t("shot")} {item.shot_number} · {item.target_duration} s</summary>
+        {item.images.map((image, i) => <p key={`${image.media_id}:${i}`} className="text-xs break-all">{image.label} · {image.media_id}</p>)}
+        {item.prompt && <pre className="whitespace-pre-wrap break-words text-sm mt-2">{item.prompt}</pre>}
+      </details>)}
+    </div>}
   </section>;
 }
 
 function ReferenceForm({ project, shot, disabled, onSaved }: { project: RecreationProject; shot: RecreationShot; disabled: boolean; onSaved: (project: RecreationProject) => void }) {
   const t = useTranslations("shotReferences");
   const [selected, setSelected] = useState<Partial<Record<Role, RecreationMedia>>>({});
+  const [description, setDescription] = useState(shot.description || "");
   const [instruction, setInstruction] = useState(shot.instruction || "");
   const [picker, setPicker] = useState<Role | null>(null);
   const [editor, setEditor] = useState(false);
@@ -115,11 +137,12 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
         </div>
       </div>)}</div>
       {picker && <Picker onClose={() => setPicker(null)} onSelect={item => { choose(picker, item); setPicker(null); }} />}
+      <label className="block text-sm">{t("description")}<textarea className="glass-input block w-full mt-2" rows={4} maxLength={6000} value={description} onChange={e => { setDescription(e.target.value); setSaved(false); }} /></label>
       <label className="block text-sm">{t("instruction")}<textarea className="glass-input block w-full mt-2" rows={3} maxLength={4000} value={instruction} onChange={e => { setInstruction(e.target.value); setSaved(false); }} /></label>
       <button type="button" className="glass-button flex items-center gap-2" onClick={async () => {
         setBusy(true); setFailed(false); setSaved(false);
         try {
-          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction });
+          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction, description });
           if (alive.current) { onSaved(result); setSaved(true); }
         } catch { if (alive.current) setFailed(true); } finally { if (alive.current) setBusy(false); }
       }}><Save size={16} />{t("save")}</button>

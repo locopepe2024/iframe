@@ -17,7 +17,7 @@ export interface RecreationProject {
 
 export interface RecreationShot {
   id?: string; start_pts: number; end_pts: number;
-  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string;
+  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string; description?: string;
 }
 
 export function seconds(analysis: SourceAnalysis, pts: number): number {
@@ -49,14 +49,21 @@ export interface RecreationMedia {
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 
+export interface RecreationPlan {
+  revision: number; ready: boolean;
+  blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
+  shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
+    images: { media_id: string; label: string }[] }[];
+}
 export const recreationApi = {
+  generationPlan: (project: RecreationProject): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
   uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
     const data = new FormData(); data.append("file", file); data.append("kind", kind);
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction">): Promise<RecreationProject> =>
+  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description">): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
       revision: project.revision, analysis_id: project.analysis_id, ...binding,
     }).then(r => r.data),
