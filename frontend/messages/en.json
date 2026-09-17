@@ -2168,5 +2168,25 @@
       "sceneHeading": "INT./EXT. SCENE - TIME",
       "startTyping": "Start typing..."
     }
+  },
+  "imageEditor": {
+    "title": "Image editor",
+    "close": "Close image editor",
+    "discard": "Discard unsaved changes?",
+    "saving": "Saving a new image…",
+    "saveFailed": "Save failed. Your edits are retained; retry, or reopen if the source changed.",
+    "hint": "Save creates a new image and appends it to current references. The original is preserved.",
+    "choose": "Import a PNG, JPEG or WebP original, or continue editing a saved copy.",
+    "upload": "Import image",
+    "loading": "Loading original…",
+    "loadFailed": "Could not load the image. Import again or reopen from the result card.",
+    "historyFailed": "Could not load saved copies. Close and retry.",
+    "tooLarge": "Image must be no larger than 25 MB.",
+    "copies": "Recently saved copies",
+    "empty": "Saved images will appear here.",
+    "edit": "Edit image",
+    "use": "Add to references",
+    "saved": "New image saved and available in saved copies.",
+    "added": "Added to references"
   }
 }

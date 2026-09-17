@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse, Response
 
 from .models import (
     CreateSessionRequest,
@@ -425,3 +425,36 @@ def get_input_media(
 
 router.add_api_route("/upload", upload_media, methods=["POST"])
 router.add_api_route("/input-media/{filename}", get_input_media, methods=["GET"])
+
+
+# Local image editing is separate from paid generation.
+@router.get("/image-editor/source")
+def image_editor_source(reference: str = Query(max_length=2000), identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore
+    return ImageEditStore(_storage_for(identity)).source(reference)
+
+
+@router.get("/image-editor/preview")
+def image_editor_preview(reference: str = Query(max_length=2000), expected_sha256: str = Query(pattern=r"^[0-9a-f]{64}$"),
+                         identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore
+    data, source = ImageEditStore(_storage_for(identity)).source_bytes(reference)
+    if source["sha256"] != expected_sha256:
+        raise HTTPException(409, "Source changed; reopen the editor")
+    return Response(data, media_type=source["mime"], headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/image-edits")
+def image_edits(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore
+    return ImageEditStore(_storage_for(identity)).list(limit, offset)
+
+
+@router.post("/image-edits", status_code=201)
+def save_image_edit(file: UploadFile = File(...), reference: str = Form(max_length=2000),
+                    source_sha256: str = Form(pattern=r"^[0-9a-f]{64}$"), operation_key: str = Form(min_length=8, max_length=200),
+                    identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore, MAX_IMAGE_BYTES
+    return ImageEditStore(_storage_for(identity)).save(reference, source_sha256,
+        file.file.read(MAX_IMAGE_BYTES + 1), file.filename or "edited.png", operation_key)
