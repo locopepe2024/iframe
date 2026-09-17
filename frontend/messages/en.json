@@ -165,6 +165,10 @@
     "cancel": "Cancel"
   },
   "castWorkbench": {
+    "uploadReference": "Upload reference image",
+    "uploading": "Uploading…",
+    "uploadSuccess": "Reference uploaded and selected",
+    "uploadFailed": "Reference upload failed",
     "close": "Close",
     "done": "Done",
     "retry": "Retry",
@@ -205,7 +209,7 @@
     "generateMore": "✨ Generate ×{count} more",
     "variantsTitle": "Variants",
     "emptyVariantsTitle": "No variants yet",
-    "emptyVariantsBody": "Click Generate on the left to have AI produce reference images from your prompt.",
+    "emptyVariantsBody": "Click here to upload a reference image, or generate a new candidate.",
     "clickToSelect": "Click to use as reference",
     "selectedFooter": "✓ Reference image set",
     "noneSelectedFooter": "No reference picked — click a variant",

@@ -1,0 +1,61 @@
+"""Reparsing must preserve access to the project and generated assets."""
+import json
+import tempfile
+import time
+import threading
+import unittest
+from pathlib import Path
+from unittest.mock import Mock
+
+from fastapi import HTTPException
+from src.apps.comic_gen.models import Script, Character, Scene, Prop
+from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.studio_access import verify_studio_resource_path
+
+
+class ReparseOwnershipTest(unittest.TestCase):
+    def test_cached_and_fresh_extraction_preserve_owner(self):
+        for cached in (False, True):
+            with self.subTest(cached=cached), tempfile.TemporaryDirectory() as root:
+                pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+                original = Script(id="project", title="Project", original_text="old",
+                                  created_at=1, updated_at=1,
+                                  owner_user_id="user-a", owner_profile_id="profile-a")
+                parsed = Script(id="parsed", title="Project", original_text="new",
+                                created_at=2, updated_at=2,
+                                characters=[Character(id="character", name="A", description="")],
+                                scenes=[Scene(id="scene", name="S", description="")],
+                                props=[Prop(id="prop", name="P", description="")])
+                pipeline.scripts = {original.id: original}
+                pipeline._save_lock = threading.Lock()
+                pipeline.series_store = {}
+                pipeline.data_file = str(Path(root) / "projects.json")
+                pipeline.script_processor = Mock()
+                pipeline.script_processor.parse_novel.return_value = parsed
+                pipeline._extraction_cache = {original.id: (time.time(), parsed)} if cached else {}
+
+                result = pipeline.reparse_project(original.id, "new")
+
+                self.assertEqual(result.owner_user_id, "user-a")
+                self.assertEqual(result.owner_profile_id, "profile-a")
+                self.assertEqual(result.id, original.id)
+                self.assertEqual(result.created_at, original.created_at)
+                for entity in result.characters + result.scenes + result.props:
+                    self.assertEqual(entity.owner_user_id, "user-a")
+                    self.assertEqual(entity.owner_profile_id, "profile-a")
+                verify_studio_resource_path("/projects/project/assets/generate", "profile-a",
+                                            pipeline.scripts, {})
+                with self.assertRaises(HTTPException) as error:
+                    verify_studio_resource_path("/projects/project/assets/generate", "profile-b",
+                                                pipeline.scripts, {})
+                self.assertEqual(error.exception.status_code, 404)
+                saved = json.loads(Path(pipeline.data_file).read_text())
+                rows = saved.values() if isinstance(saved, dict) else saved
+                persisted = next(row for row in rows if row["id"] == original.id)
+                self.assertEqual(persisted["owner_profile_id"], "profile-a")
+                self.assertEqual(persisted["owner_user_id"], "user-a")
+                self.assertEqual(pipeline.script_processor.parse_novel.call_count, 0 if cached else 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
