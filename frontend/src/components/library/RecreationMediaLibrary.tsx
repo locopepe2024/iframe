@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { API_URL } from "@/lib/api";
 import { recreationApi, RecreationMedia, RecreationMediaKind, RecreationProject } from "@/lib/recreation";
 
-const kinds: RecreationMediaKind[] = ["source_video", "contact_sheet", "evidence_frame", "sample_frame"];
+const kinds: RecreationMediaKind[] = ["source_video", "contact_sheet", "evidence_frame", "sample_frame", "reference_image", "replacement_image"];
 const mediaUrl = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
 export default function RecreationMediaLibrary() {

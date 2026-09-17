@@ -1,5 +1,8 @@
 {
+  "shotReferences": {"title":"镜头参考与替换","confirmFirst":"请先确认时间线修改。边界改变的镜头需要重新关联素材。","shot":"镜头","reference":"修正参考图","replacement":"替换产品图","choose":"从素材库选择","upload":"上传图片","edit":"编辑副本","detach":"解除关联","instruction":"保留与替换要求","save":"保存关联","saved":"关联已保存","failed":"请求失败。若时间线已变化，请刷新项目后重试。","retry":"重试","loading":"加载中…","empty":"没有匹配的图片","search":"搜索图片","kind":"图片类型","close":"关闭选择","previous":"上一页","next":"下一页","evidence_frame":"切点证据","sample_frame":"采样帧","contact_sheet":"联系表","reference_image":"参考图","replacement_image":"替换图"},
   "recreationMedia": {
+    "reference_image": "参考图",
+    "replacement_image": "替换图",
     "sections": "资产库分类",
     "assets": "角色、场景与道具",
     "media": "复刻素材",

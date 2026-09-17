@@ -1,5 +1,8 @@
 {
+  "shotReferences": {"title":"Shot references","confirmFirst":"Confirm timeline changes before assigning images. Changed shots lose their previous assignments.","shot":"Shot","reference":"Corrected reference","replacement":"Replacement product","choose":"Choose from library","upload":"Upload image","edit":"Edit a copy","detach":"Detach","instruction":"Keep and replace instructions","save":"Save assignments","saved":"Assignments saved","failed":"Request failed. Refresh the project if its timeline changed.","retry":"Retry","loading":"Loading...","empty":"No matching images","search":"Search images","kind":"Image type","close":"Close picker","previous":"Previous","next":"Next","evidence_frame":"Cut evidence","sample_frame":"Sample frame","contact_sheet":"Contact sheet","reference_image":"Reference image","replacement_image":"Replacement image"},
   "recreationMedia": {
+    "reference_image": "Reference image",
+    "replacement_image": "Replacement image",
     "sections": "Library sections",
     "assets": "Characters, scenes & props",
     "media": "Recreation media",

@@ -12,7 +12,12 @@ export interface RecreationProject {
   id: string; title: string; source_url: string; revision: number; analysis_id: string;
   status: "registered" | "queued" | "analyzing" | "review" | "confirmed" | "failed";
   error: string | null; analysis: SourceAnalysis | null;
-  timeline: { cuts: { pts: number; source: string }[]; shots: { start_pts: number; end_pts: number }[] } | null;
+  timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
+}
+
+export interface RecreationShot {
+  id?: string; start_pts: number; end_pts: number;
+  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string;
 }
 
 export function seconds(analysis: SourceAnalysis, pts: number): number {
@@ -36,7 +41,7 @@ export function importCuts(text: string, analysis: SourceAnalysis): number[] {
   return cuts;
 }
 
-export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame";
+export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image";
 export interface RecreationMedia {
   media_id: string; project_id: string; kind: RecreationMediaKind; display_name: string;
   storage_path: string; sha256: string; created_at: number;
@@ -45,6 +50,16 @@ export interface RecreationMedia {
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 
 export const recreationApi = {
+  media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
+  uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
+    const data = new FormData(); data.append("file", file); data.append("kind", kind);
+    if (parentId) data.append("parent_media_id", parentId);
+    return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
+  },
+  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction">): Promise<RecreationProject> =>
+    axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
+      revision: project.revision, analysis_id: project.analysis_id, ...binding,
+    }).then(r => r.data),
   searchMedia: (params: { q?: string; kind?: string; project_id?: string; limit?: number; cursor?: number } = {}): Promise<RecreationMediaPage> =>
     axios.get(`${API_URL}/recreation/media`, { params }).then(r => r.data),
   list: (): Promise<RecreationProject[]> => axios.get(`${API_URL}/recreation/projects`).then(r => {

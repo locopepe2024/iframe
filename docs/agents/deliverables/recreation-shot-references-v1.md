@@ -11,3 +11,7 @@ Timeline identity: preserve IDs and bindings only for shots with identical start
 Success: uploaded/edited files are searchable and original evidence remains immutable; reload retains shot bindings; stale revision and cross-owner IDs fail; unchanged shots survive reconfirmation; changed shots do not inherit stale references; invalid/oversized images are rejected. UI supports reference/replacement selection, upload, edit-as-copy, instruction and explicit save. Save failures preserve form drafts; switching projects does not publish stale results.
 
 Validation: focused backend and API tests, reference-panel UI tests, existing recreation/library tests, frontend typecheck/build. Merge/deployment by version administrator through PR.
+
+Local validation: 17 backend tests passed, 1 skipped; 13 UI tests passed; frontend typecheck and production build passed. The editor export integration is mocked in the new UI test; actual editing and signed-image delivery in the deployed browser still require acceptance. The neutral editor itself is reused unchanged. No H3 request or deployment performed.
+
+Uploads register a reusable image immediately; assigning it to a shot requires a separate save. Unsaved form changes are local to the selected shot and are discarded on navigation. There is no image deletion endpoint in this slice. Repeated upload retries may register separate media records; byte deduplication is not claimed.

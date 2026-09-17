@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
   vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
-    timeline: { cuts: [], shots: [{ start_pts: 0, end_pts: 900000 }] } });
+    timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
