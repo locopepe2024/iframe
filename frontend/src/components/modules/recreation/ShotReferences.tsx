@@ -7,6 +7,8 @@ import { Pencil, Save, Search, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
 
+import MaterialInstruction from "./MaterialInstruction";
+
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 const url = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 type Role = "reference" | "replacement";
@@ -138,11 +140,12 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
       </div>)}</div>
       {picker && <Picker onClose={() => setPicker(null)} onSelect={item => { choose(picker, item); setPicker(null); }} />}
       <label className="block text-sm">{t("description")}<textarea className="glass-input block w-full mt-2" rows={4} maxLength={6000} value={description} onChange={e => { setDescription(e.target.value); setSaved(false); }} /></label>
-      <label className="block text-sm">{t("instruction")}<textarea className="glass-input block w-full mt-2" rows={3} maxLength={4000} value={instruction} onChange={e => { setInstruction(e.target.value); setSaved(false); }} /></label>
+      <MaterialInstruction value={instruction} onChange={text => { setInstruction(text); setSaved(false); }} materials={(["reference", "replacement"] as Role[]).flatMap(role => selected[role] ? [{ role, media: selected[role]! }] : [])} />
       <button type="button" className="glass-button flex items-center gap-2" onClick={async () => {
         setBusy(true); setFailed(false); setSaved(false);
         try {
-          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction, description });
+          const instruction_refs = Array.from(instruction.matchAll(/@\{([a-f0-9]{32})\}/g)).map(match => ({ media_id: match[1], token: match[0] }));
+          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction, description, instruction_refs });
           if (alive.current) { onSaved(result); setSaved(true); }
         } catch { if (alive.current) setFailed(true); } finally { if (alive.current) setBusy(false); }
       }}><Save size={16} />{t("save")}</button>

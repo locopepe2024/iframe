@@ -94,6 +94,7 @@ class ShotReferencesRequest(AnalyzeRequest):
     replacement_media_id: str | None = Field(default=None, min_length=1, max_length=64)
     instruction: str = Field(default="", max_length=4000)
     description: str | None = Field(default=None, max_length=6000)
+    instruction_refs: list[dict] = Field(default_factory=list, max_length=4)
 
 
 @router.get("/media/{media_id}")
@@ -115,7 +116,7 @@ def bind_shot(project_id: str, shot_id: str, request: ShotReferencesRequest,
               user: UserContext = Depends(require_studio_user)):
     try:
         return public(RecreationService(user).bind_shot(project_id, shot_id, request.revision, request.analysis_id,
-                      request.reference_media_id, request.replacement_media_id, request.instruction, request.description), user)
+                      request.reference_media_id, request.replacement_media_id, request.instruction, request.description, request.instruction_refs), user)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

@@ -17,7 +17,7 @@ export interface RecreationProject {
 
 export interface RecreationShot {
   id?: string; start_pts: number; end_pts: number;
-  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string; description?: string;
+  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string; description?: string; instruction_refs?: { media_id: string; token: string }[];
 }
 
 export function seconds(analysis: SourceAnalysis, pts: number): number {
@@ -63,7 +63,7 @@ export const recreationApi = {
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description">): Promise<RecreationProject> =>
+  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description" | "instruction_refs">): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
       revision: project.revision, analysis_id: project.analysis_id, ...binding,
     }).then(r => r.data),

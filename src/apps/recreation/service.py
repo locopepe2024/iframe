@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from ..identity import UserContext
 from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
+from .mentions import compile_mentions
 
 LEASE_SECONDS = 600
 
@@ -224,7 +225,7 @@ class RecreationService:
             shutil.rmtree(folder)
             raise
 
-    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction, description=None):
+    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction, description=None, instruction_refs=None):
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record["timeline"]:
@@ -242,6 +243,11 @@ class RecreationService:
                 if len(description) > 6000:
                     raise HTTPException(422, "Description exceeds 6000 characters")
                 shot["description"] = description
+            refs = instruction_refs or []
+            allowed = {reference_media_id, replacement_media_id} - {None}
+            if any(not isinstance(ref, dict) or not ref.get("media_id") or not str(ref.get("token", "")).startswith("@{") or ref["media_id"] not in allowed for ref in refs):
+                raise HTTPException(422, "Invalid material reference")
+            shot["instruction_refs"] = refs
             self._save(db, record)
         return record
 
@@ -263,8 +269,6 @@ class RecreationService:
                     missing.append("reference_required")
                 if shot.get("replacement_media_id") and not instruction:
                     missing.append("replacement_instruction_required")
-                if re.search(r"@|\b(?:picture|video|audio)\s*\d+", description + "\n" + instruction, re.I):
-                    missing.append("media_labels_reserved")
                 images = []
                 for role in ("reference", "replacement"):
                     media_id = shot.get(role + "_media_id")
@@ -272,6 +276,10 @@ class RecreationService:
                         item = self._image(db, media_id)
                         images.append({"media_id": media_id, "sha256": item["sha256"], "role": role,
                                        "label": f"<Picture {len(images) + 1}>"})
+                description, bad_description = compile_mentions(description, images)
+                instruction, bad_instruction = compile_mentions(instruction, images)
+                if bad_description or bad_instruction:
+                    missing.append("media_labels_reserved")
                 duration = (shot["end_pts"] - shot["start_pts"]) * Fraction(record["analysis"]["time_base"])
                 prompt = None
                 if missing:
