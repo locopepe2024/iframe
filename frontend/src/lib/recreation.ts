@@ -56,7 +56,7 @@ export interface RecreationPlan {
     images: { media_id: string; label: string }[] }[];
 }
 export const recreationApi = {
-  generationPlan: (project: RecreationProject, model?: string): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model: model || "uniart/minimax-h3-vip" }).then(r => r.data),
+  generationPlan: (project: RecreationProject, model = "uniart/minimax-h3-vip", options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number> } = { audio_policy: "silent", soundscape: "", generation_durations: {} }): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model, ...options }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
   uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
     const data = new FormData(); data.append("file", file); data.append("kind", kind);

@@ -60,9 +60,15 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const [plan, setPlan] = useState<RecreationPlan | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState(false);
+  const [audioPolicy, setAudioPolicy] = useState("silent");
+  const [soundscape, setSoundscape] = useState("");
+  const [durations, setDurations] = useState<Record<string, number>>({});
   const revision = useRef(project.revision);
+  const planKey = JSON.stringify([project.revision, audioPolicy, soundscape, durations]);
+  const activePlan = useRef(planKey);
+  activePlan.current = planKey;
   revision.current = project.revision;
-  useEffect(() => { setPlan(null); setPlanError(false); }, [project.revision]);
+  useEffect(() => { setPlan(null); setPlanError(false); }, [planKey]);
   return <section className="border-t border-border py-5 space-y-4">
     <h3 className="font-semibold">{t("title")}</h3>
     {disabled && <p role="status">{t("confirmFirst")}</p>}
@@ -70,10 +76,17 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
       {project.timeline?.shots.map((s, i) => <option key={s.id} value={s.id}>{t("shot")} {i + 1} · {seconds(project.analysis!, s.start_pts).toFixed(6)} - {seconds(project.analysis!, s.end_pts).toFixed(6)} s</option>)}
     </select>
     {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} onSaved={onSaved} />}
+    <label className="block text-sm">{t("audioPolicy")}<select className="glass-input block" value={audioPolicy} onChange={e => setAudioPolicy(e.target.value)}>
+      <option value="silent">{t("silent")}</option><option value="generated">{t("generatedAudio")}</option><option value="preserve_source">{t("preserveAudio")}</option>
+    </select></label>
+    {audioPolicy === "generated" && <label className="block text-sm">{t("soundRequirements")}<textarea className="glass-input block w-full" maxLength={2000} value={soundscape} onChange={e => setSoundscape(e.target.value)} /></label>}
+    <div className="flex flex-wrap gap-3">{project.timeline?.shots.map((s, i) => <label key={s.id} className="text-sm">{t("shot")} {i + 1} · {t("generationSeconds")}
+      <input type="number" min={4} max={15} step={1} className="glass-input block w-24" value={durations[s.id!] ?? ""} onChange={e => setDurations(all => ({ ...all, [s.id!]: Number(e.target.value) }))} />
+    </label>)}</div>
     <button className="glass-button" disabled={disabled || planBusy} onClick={async () => {
-      const current = project.revision; setPlanBusy(true); setPlanError(false);
-      try { const result = await recreationApi.generationPlan(project); if (revision.current === current) setPlan(result); }
-      catch { if (revision.current === current) setPlanError(true); } finally { setPlanBusy(false); }
+      const current = planKey; setPlanBusy(true); setPlanError(false);
+      try { const result = await recreationApi.generationPlan(project, "uniart/minimax-h3-vip", { audio_policy: audioPolicy, soundscape, generation_durations: durations }); if (activePlan.current === current) setPlan(result); }
+      catch { if (activePlan.current === current) setPlanError(true); } finally { setPlanBusy(false); }
     }}>{t("checkPlan")}</button>
     {planError && <p role="alert">{t("failed")}</p>}
     {plan && !disabled && <div className="space-y-3">

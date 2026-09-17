@@ -66,3 +66,18 @@ it('shows saved-plan blockers and clears the preview when revision changes', asy
   view.rerender(<ShotReferences project={{ ...project, revision: 5 }} disabled={false} onSaved={vi.fn()} />);
   expect(screen.queryByText('planBlocked')).not.toBeInTheDocument();
 });
+
+it('passes explicit sound and generation duration and invalidates changed plans', async () => {
+  vi.mocked(recreationApi.generationPlan).mockResolvedValue({ revision: 4, ready: true, blockers: [], shots: [] });
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  fireEvent.change(screen.getByRole('combobox', { name: 'audioPolicy' }), { target: { value: 'generated' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'soundRequirements' }), { target: { value: 'Footsteps only' } });
+  fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '5' } });
+  fireEvent.click(screen.getByRole('button', { name: 'checkPlan' }));
+  await screen.findByText('planReady');
+  expect(recreationApi.generationPlan).toHaveBeenCalledWith(project, 'uniart/minimax-h3-vip', {
+    audio_policy: 'generated', soundscape: 'Footsteps only', generation_durations: { shot: 5 },
+  });
+  fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '6' } });
+  expect(screen.queryByText('planReady')).not.toBeInTheDocument();
+});
