@@ -1072,7 +1072,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-screen w-screen bg-background flex flex-col">
+    <main className="relative h-dvh w-full min-w-0 bg-background flex flex-col overflow-hidden">
       {/* Background Canvas */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <CreativeCanvas />

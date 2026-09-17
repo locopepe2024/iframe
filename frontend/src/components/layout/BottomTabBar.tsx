@@ -19,7 +19,7 @@ export default function BottomTabBar({
   const t = useTranslations("nav");
   return (
     <nav
-      className="md:hidden flex-shrink-0 flex items-stretch border-t border-glass-border bg-surface/80 backdrop-blur-xl"
+      className="md:hidden relative z-20 flex-shrink-0 grid grid-cols-6 items-stretch border-t border-glass-border bg-surface/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
       aria-label={t("mainNavAria")}
     >
       {GLOBAL_NAV_ITEMS.map(({ id, icon: Icon, hash }) => {
@@ -34,12 +34,12 @@ export default function BottomTabBar({
             }}
             aria-current={active ? "page" : undefined}
             className={clsx(
-              "flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-colors",
+              "min-w-0 min-h-14 flex flex-col items-center justify-center gap-1 px-0.5 py-2 transition-colors",
               active ? "text-primary" : "text-text-muted hover:text-foreground"
             )}
           >
             <Icon size={20} strokeWidth={1.8} />
-            <span className="text-[0.625rem] font-medium leading-none">{t(id)}</span>
+            <span className="max-w-full break-words text-center text-[0.625rem] font-medium leading-tight">{t(id)}</span>
           </button>
         );
       })}
