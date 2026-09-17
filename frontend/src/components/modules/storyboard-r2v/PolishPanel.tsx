@@ -53,6 +53,8 @@ interface PolishPanelProps {
      *  (T2I or storyboard render); r2v: reference image URLs. Empty/omit =
      *  pure text-only polish (back-compat for shots with no frame). */
     imageUrls?: string[];
+    /** Target video model; selects provider-specific prompt guidance. */
+    videoModel?: string;
     onApply: (text: string) => void;
 }
 
@@ -92,6 +94,7 @@ export default function PolishPanel({
     scriptId,
     slots = [],
     imageUrls = [],
+    videoModel = "",
     onApply,
 }: PolishPanelProps) {
     const t = useTranslations("storyboardR2V");
@@ -117,8 +120,8 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel);
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");
@@ -142,7 +145,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls]);
+    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);

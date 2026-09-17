@@ -38,6 +38,8 @@ export interface ShotNode {
     id: string;
     prompt: string;
     tabMode: "t2i_i2v" | "direct_r2v";
+    /** Optional per-shot video model override. */
+    videoModel?: string;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy
@@ -122,6 +124,7 @@ interface ShotCardProps {
     onMoveDown: () => void;
     onDuplicate: () => void;
     onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
+    videoModel?: string;
     onOpenDrawer: () => void;
     onInsertAsset: (type: string, name: string) => void;
     /** Duration editor config derived from model catalog */
@@ -173,6 +176,7 @@ export default function ShotCard({
     onMoveDown,
     onDuplicate,
     onSetTabMode,
+    videoModel,
     onOpenDrawer,
     onInsertAsset: _onInsertAsset,
     durationEditorConfig,
@@ -759,6 +763,7 @@ export default function ShotCard({
                             scriptId={currentProjectId ?? ""}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            videoModel={videoModel}
                             onApply={onUpdatePrompt}
                         />
 

@@ -1497,7 +1497,7 @@ export default function StoryboardR2V() {
     //    and uses across all shots in a project.
     const paramsStateForShot = useCallback((shot: ShotNode): ParamsState => {
         const isR2v = shot.tabMode === "direct_r2v";
-        const modelId = isR2v ? videoConfig.r2vModel : videoConfig.model;
+        const modelId = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
         return {
             model: modelId,
             duration: shot.duration ?? videoConfig.duration,
@@ -1530,6 +1530,7 @@ export default function StoryboardR2V() {
             persistWorkbench(shot.id, { workbench_generate_count: next.count });
         }
         setShotCounts(prev => ({ ...prev, [shot.id]: next.count }));
+        setShots(prev => prev.map(item => item.id === shot.id ? { ...item, videoModel: next.model } : item));
         // Sync duration back to structured field (single source of truth)
         if (next.duration !== (shot.duration ?? videoConfig.duration)) {
             const idx = shots.findIndex(s => s.id === shot.id);
@@ -1907,6 +1908,7 @@ export default function StoryboardR2V() {
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
+                            videoModel={paramsState.model}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
                             onInsertAsset={(type, name) => {
                                 // Direct chip insert (same as chip bar logic, delegated to chip bar)
