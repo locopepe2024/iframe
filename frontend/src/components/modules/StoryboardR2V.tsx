@@ -1301,6 +1301,7 @@ export default function StoryboardR2V() {
                                     .catch(err => debugLog.warn("Studio", "autoSelectLatestVideo failed:", err));
                             }
                         } else if (status.status === "failed") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: status.error || t("genFailed") }));
                             setShots(prev => prev.map(s =>
                                 s.id === shot.id ? { ...s, videoStatus: "failed" } : s
                             ));
@@ -1327,6 +1328,7 @@ export default function StoryboardR2V() {
                                 }));
                             }
                         } else if (status.status === "failed") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: status.error || t("genFailed") }));
                             setShots(prev => prev.map(s =>
                                 s.id === shot.id ? { ...s, t2iStatus: "failed" } : s
                             ));
@@ -2278,4 +2280,3 @@ export default function StoryboardR2V() {
         </div>
     );
 }
-

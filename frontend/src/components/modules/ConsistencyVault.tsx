@@ -139,11 +139,8 @@ export default function ConsistencyVault() {
                         // If status is "pending" or "processing", continue polling
                     } catch (pollError: any) {
                         console.error("Polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
+                        // A network failure does not cancel the backend task.
+                        // Keep polling so its final provider error is shown.
                     }
                 }, 2000); // Poll every 2 seconds
             } else {
@@ -276,13 +273,9 @@ export default function ConsistencyVault() {
                             const updatedProject = await api.getProject(currentProject.id);
                             updateProject(currentProject.id, updatedProject);
                         }
-                    } catch (pollError: any) {
-                        console.error("Video polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
+                        } catch (pollError: any) {
+                            console.error("Video polling error:", pollError);
+                            // The server task remains active; retry on the next tick.
                     }
                 }, 3000); // Poll every 3 seconds for video
             } else {
