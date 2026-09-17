@@ -1,4 +1,5 @@
 import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os
+from media_signing_config import media_signing_env
 
 
 def run(args):
@@ -24,7 +25,7 @@ backup = 'lumenx-backend-before-' + rev[:12]
 args = ['docker','create','--name','lumenx-backend','--network','lumenx-net','--network-alias','backend','--restart','unless-stopped']
 fd, envfile = tempfile.mkstemp(prefix='lumenx-env-', dir=root)
 with os.fdopen(fd, 'w') as f:
-    f.write('\n'.join(old['Config']['Env']) + '\n')
+    f.write('\n'.join(media_signing_env(old['Config']['Env'], repo.parent / 'secrets/media-signing.key')) + '\n')
 args += ['--env-file', envfile]
 for m in old['Mounts']:
     assert m['Type'] == 'bind'
