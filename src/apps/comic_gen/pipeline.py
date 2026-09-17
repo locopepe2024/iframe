@@ -1250,15 +1250,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
-        # Find target asset
-        target_asset = None
-        if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-        elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-        elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-        
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         
@@ -1357,7 +1350,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             logger.info(f"Added uploaded variant {new_variant.id} to {asset_type} {asset_id}")
         
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script
 
     def update_project_style(self, script_id: str, style_preset: str, style_prompt: Optional[str] = None) -> Script:
@@ -3764,16 +3757,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
             
         target_asset = None
-        asset_is_series_level = False
+        source = "script"
+        if asset_type in ("character", "scene", "prop"):
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-            # Fallback to parent series for series-level characters.
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((c for c in series.characters if c.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 # If generation_type is specified, only select from that specific asset
                 if generation_type == "full_body":
@@ -3819,26 +3808,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                             target_asset.avatar_url = variant.url
                         
         elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((s for s in series.scenes if s.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
                 if variant:
                     target_asset.image_url = variant.url
 
         elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((p for p in series.props if p.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
                 if variant:
@@ -3859,9 +3834,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     # If sketch, maybe don't update main image_url if rendered exists?
                     # For now, let's assume we only select rendered variants for frames usually.
 
-        self._save_data()
-        if asset_is_series_level:
-            self._save_series_data()
+        self._save_after_asset_mutation(source)
         return script
 
     def delete_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str) -> Script:
