@@ -24,7 +24,7 @@ it('selects a stable media ID and saves only on explicit action, retaining draft
   expect(screen.getByRole('textbox', { name: 'instruction' })).toHaveValue('Replace yellow box');
   fireEvent.click(screen.getByRole('button', { name: 'save' }));
   await waitFor(() => expect(onSaved).toHaveBeenCalledWith(project));
-  expect(recreationApi.bindShot).toHaveBeenLastCalledWith(project, 'shot', { reference_media_id: 'image', replacement_media_id: null, instruction: 'Replace yellow box', description: '' });
+  expect(recreationApi.bindShot).toHaveBeenLastCalledWith(project, 'shot', { reference_media_id: 'image', replacement_media_id: null, instruction: 'Replace yellow box', description: '', instruction_refs: [] });
 });
 
 it('loads saved references and prevents writes while timeline cuts are unsaved', async () => {

@@ -50,13 +50,13 @@ export interface RecreationMedia {
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 
 export interface RecreationPlan {
-  revision: number; ready: boolean;
+  revision: number; ready: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
   blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
   shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
     images: { media_id: string; label: string }[] }[];
 }
 export const recreationApi = {
-  generationPlan: (project: RecreationProject): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision }).then(r => r.data),
+  generationPlan: (project: RecreationProject, model?: string): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model: model || "uniart/minimax-h3-vip" }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
   uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
     const data = new FormData(); data.append("file", file); data.append("kind", kind);
