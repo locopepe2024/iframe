@@ -135,11 +135,20 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
     """
     started = time.time()
     while max_wait is None or time.time() - started < max_wait:
-        resp = requests.get(
-            f"{_base_url(config)}/{endpoint}/{task_id}",
-            headers=_headers(config),
-            timeout=30,
-        )
+        try:
+            resp = requests.get(
+                f"{_base_url(config)}/{endpoint}/{task_id}",
+                headers=_headers(config),
+                timeout=30,
+            )
+        except (requests.Timeout, requests.ConnectionError):
+            time.sleep(10)
+            continue
+        if resp.status_code in {408, 429} or resp.status_code >= 500:
+            time.sleep(10)
+            continue
+        if resp.status_code >= 400:
+            raise RuntimeError(_provider_error_detail(resp))
         resp.raise_for_status()
         data = resp.json()
         status = str(data.get("status") or "").lower()

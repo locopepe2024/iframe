@@ -24,7 +24,6 @@ import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } fr
 import { referenceKey, referenceName } from './referenceMedia';
 
 const POLL_INTERVAL = 2000;
-const MAX_POLL_ERRORS = 4;
 
 export default function PlaygroundPage() {
   return <PlaygroundImageEditor><PlaygroundContent /></PlaygroundImageEditor>;
@@ -75,7 +74,7 @@ function PlaygroundContent() {
 
   const startPolling = useCallback((generationId: string) => {
     if (pollTimers.current.has(generationId)) return;
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
         const full = toPlaygroundGeneration(await playgroundApi.getGenerationStatus(generationId));
         pollErrors.current.set(generationId, 0);
@@ -85,9 +84,10 @@ function PlaygroundContent() {
         const failures = (pollErrors.current.get(generationId) || 0) + 1;
         pollErrors.current.set(generationId, failures);
         console.error('[Playground] Poll failed:', generationId, error);
-        if (failures >= MAX_POLL_ERRORS) stopPolling(generationId);
+        // Observation errors never terminate a provider task; retry next tick.
       }
-    }, POLL_INTERVAL);
+    };
+    const timer = setInterval(poll, POLL_INTERVAL);
     pollTimers.current.set(generationId, timer);
   }, [stopPolling, updateGeneration]);
 
@@ -135,6 +135,28 @@ function PlaygroundContent() {
       .filter((item) => item.status === 'pending' || item.status === 'processing')
       .forEach((item) => startPolling(item.id));
   }, [history, startPolling]);
+
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState === "hidden") return;
+      for (const item of usePlaygroundStore.getState().history) {
+        if (item.status === "pending" || item.status === "processing") {
+          playgroundApi.getGenerationStatus(item.id).then(result => {
+            const full = toPlaygroundGeneration(result);
+            if (!full.session_id || full.session_id === activeSessionRef.current) updateGeneration(full);
+          }).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [updateGeneration]);
 
   useEffect(() => () => {
     pollTimers.current.forEach((timer) => clearInterval(timer));
