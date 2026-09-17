@@ -36,6 +36,12 @@ args += [image]
 renamed = False
 nginx_path = repo / 'docker/nginx.conf'
 nginx_original = nginx_path.read_text()
+# Git replaces the file inode; a single-file Docker bind can retain the old one.
+# Read inside the container (docker cp can observe the host-side mount instead).
+if run(['docker', 'exec', 'lumenx-frontend', 'cat', '/etc/nginx/conf.d/default.conf']) != nginx_original.strip():
+    run(['docker', 'restart', 'lumenx-frontend'])
+    assert run(['docker', 'exec', 'lumenx-frontend', 'cat', '/etc/nginx/conf.d/default.conf']) == nginx_original.strip(), 'Stale nginx bind mount'
+run(['docker', 'exec', 'lumenx-frontend', 'nginx', '-t'])
 maintenance = '''
     # Drain existing Chat requests; refuse new submissions during deployment.
     location ^~ /agent/ {
