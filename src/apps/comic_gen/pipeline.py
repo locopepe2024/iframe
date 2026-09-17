@@ -1278,7 +1278,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Add variant to the appropriate asset unit
         if asset_type == "character":
             # Map upload_type to the correct asset unit
-            if upload_type == "full_body":
+            if upload_type == "reference_sheet":
+                target_unit = target_asset.reference_sheet
+            elif upload_type == "full_body":
                 target_unit = target_asset.full_body
             elif upload_type == "head_shot":
                 target_unit = target_asset.head_shot
@@ -1290,7 +1292,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Ensure AssetUnit exists
             if target_unit is None:
                 target_unit = AssetUnit()
-                if upload_type == "full_body":
+                if upload_type == "reference_sheet":
+                    target_asset.reference_sheet = target_unit
+                elif upload_type == "full_body":
                     target_asset.full_body = target_unit
                 elif upload_type == "head_shot":
                     target_asset.head_shot = target_unit
@@ -1301,6 +1305,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_unit.image_variants.append(new_variant)
             target_unit.selected_image_id = new_variant.id
             target_unit.image_updated_at = time.time()
+            if upload_type == "reference_sheet":
+                target_asset.image_url = image_url
             
             # === ALSO UPDATE LEGACY FIELDS for frontend compatibility ===
             # Create variant for legacy ImageAsset structure
@@ -1340,14 +1346,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             logger.info(f"Added uploaded variant {new_variant.id} to character {asset_id} {upload_type}")
             
         elif asset_type in ["scene", "prop"]:
-            # Scene and Prop have a single 'image' asset unit
-            if not hasattr(target_asset, 'image') or target_asset.image is None:
-                target_asset.image = AssetUnit()
-            
-            target_asset.image.image_variants.append(new_variant)
-            target_asset.image.selected_image_id = new_variant.id
-            target_asset.image.image_updated_at = time.time()
-            
+            from .models import ImageAsset
+            if target_asset.image_asset is None:
+                target_asset.image_asset = ImageAsset()
+            target_asset.image_asset.variants.append(new_variant)
+            target_asset.image_asset.selected_id = new_variant.id
+
             # Also update legacy image_url field
             target_asset.image_url = image_url
             
@@ -3722,12 +3726,16 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def _select_variant_in_asset(self, image_asset: Any, variant_id: str) -> Any:
         """Helper to select a variant in an ImageAsset. Returns the selected variant if found."""
-        if not image_asset or not image_asset.variants:
+        from .models import AssetUnit
+        if image_asset is None:
             return None
-            
-        for variant in image_asset.variants:
+        variants = image_asset.image_variants if isinstance(image_asset, AssetUnit) else image_asset.variants
+        for variant in variants:
             if variant.id == variant_id:
-                image_asset.selected_id = variant_id
+                if isinstance(image_asset, AssetUnit):
+                    image_asset.selected_image_id = variant_id
+                else:
+                    image_asset.selected_id = variant_id
                 return variant
         return None
 
