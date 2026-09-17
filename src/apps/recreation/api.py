@@ -14,6 +14,9 @@ class AnalyzeRequest(BaseModel):
 
 class GenerationPlanRequest(AnalyzeRequest):
     model: str = Field(default="uniart/minimax-h3-vip", min_length=1, max_length=120)
+    audio_policy: str = "silent"
+    soundscape: str = Field(default="", max_length=2000)
+    generation_durations: dict[str, int] = Field(default_factory=dict)
 
 
 class ConfirmRequest(AnalyzeRequest):
@@ -127,6 +130,7 @@ def bind_shot(project_id: str, shot_id: str, request: ShotReferencesRequest,
 @router.post("/projects/{project_id}/generation-plan")
 def generation_plan(project_id: str, request: GenerationPlanRequest, user: UserContext = Depends(require_studio_user)):
     try:
-        return RecreationService(user).generation_plan(project_id, request.revision, request.model)
+        return RecreationService(user).generation_plan(project_id, request.revision, request.model,
+                   request.audio_policy, request.soundscape, request.generation_durations)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

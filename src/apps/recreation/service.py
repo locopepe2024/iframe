@@ -6,7 +6,6 @@ import shutil
 import sqlite3
 import time
 import warnings
-import re
 from fractions import Fraction
 
 from PIL import Image, UnidentifiedImageError
@@ -18,6 +17,7 @@ from ..identity import UserContext
 from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import compile_mentions
+from .prompt_contract import compile_h3, guidance_snapshot
 
 LEASE_SECONDS = 600
 
@@ -251,10 +251,16 @@ class RecreationService:
             self._save(db, record)
         return record
 
-    def generation_plan(self, project_id, revision, model="uniart/minimax-h3-vip"):
-        model_family = "minimax_h3" if "minimax" in model.lower() or "h3" in model.lower() else "seedance" if "seedance" in model.lower() else None
-        if not model_family:
-            raise HTTPException(422, "Unsupported recreation generation model")
+    def generation_plan(self, project_id, revision, model="uniart/minimax-h3-vip", audio_policy="silent", soundscape="", generation_durations=None):
+        # Until its native reference contract is verified, Seedance cannot pass H3 preflight.
+        if model != "uniart/minimax-h3-vip":
+            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+        if audio_policy not in ("silent", "generated", "preserve_source"):
+            raise HTTPException(422, "Unsupported audio policy")
+        if audio_policy == "generated" and not soundscape.strip():
+            raise HTTPException(422, "Generated audio requires explicit sound requirements")
+        guidance = guidance_snapshot()
+        generation_durations = generation_durations or {}
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
@@ -266,6 +272,11 @@ class RecreationService:
                 description = shot.get("description", "").strip()
                 instruction = shot.get("instruction", "").strip()
                 missing = []
+                generation_duration = generation_durations.get(shot["id"])
+                if type(generation_duration) is not int or not 4 <= generation_duration <= 15:
+                    missing.append("generation_duration_required")
+                if audio_policy == "preserve_source":
+                    missing.append("source_audio_assembly_pending")
                 if not description:
                     missing.append("description_required")
                 if not shot.get("reference_media_id"):
@@ -284,20 +295,24 @@ class RecreationService:
                 if bad_description or bad_instruction:
                     missing.append("media_labels_reserved")
                 duration = (shot["end_pts"] - shot["start_pts"]) * Fraction(record["analysis"]["time_base"])
+                if type(generation_duration) is int and generation_duration < duration:
+                    missing.append("generation_duration_too_short")
                 prompt = None
+                if not missing:
+                    prompt, errors = compile_h3(description, instruction, replacement=bool(shot.get("replacement_media_id")),
+                                                duration=generation_duration, audio_policy=audio_policy, soundscape=soundscape)
+                    if errors:
+                        missing.append("native_prompt_invalid")
+                        prompt = None
                 if missing:
                     blockers.append({"shot_id": shot["id"], "shot_number": index, "reasons": missing})
-                else:
-                    prompt = ("Use <Picture 1> for composition, subject appearance and scene continuity.\n" if model_family == "minimax_h3" else "Use the first assigned reference slot for composition, subject appearance and scene continuity.\n") + description
-                    if shot.get("replacement_media_id"):
-                        prompt += "\nUse <Picture 2> only for the replacement product appearance." if model_family == "minimax_h3" else "\nUse the second assigned reference slot only for the replacement product appearance."
-                    if instruction:
-                        prompt += "\n" + instruction
-                    prompt += "\nOne continuous shot, no added cuts. Silent output; no dialogue, music or sound effects."
                 shots.append({"shot_id": shot["id"], "shot_number": index, "start_pts": shot["start_pts"],
-                              "end_pts": shot["end_pts"], "target_duration": str(duration), "images": images, "prompt": prompt})
+                              "end_pts": shot["end_pts"], "target_duration": str(duration), "generation_duration": generation_duration,
+                              "generate_audio": audio_policy == "generated", "images": images, "prompt": prompt})
             return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
-                    "model": model, "model_family": model_family, "mapping_strategy": "h3_picture_labels" if model_family == "minimax_h3" else "seedance_reference_slots", "time_base": record["analysis"]["time_base"], "audio_policy": "silent", "ready": not blockers,
+                    "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_labels", "guidance": guidance,
+                    "time_base": record["analysis"]["time_base"], "audio_policy": audio_policy, "ready": not blockers,
+                    "submission_enabled": False,
                     "blockers": blockers, "shots": shots}
 
     def reindex(self, project_id):

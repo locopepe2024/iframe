@@ -358,24 +358,32 @@ def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, v
     p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
     plan = service.generation_plan(p['id'], p['revision'])
     assert not plan['ready']
-    assert set(plan['blockers'][0]['reasons']) == {'description_required', 'reference_required'}
+    assert set(plan['blockers'][0]['reasons']) == {'description_required', 'reference_required', 'generation_duration_required'}
     ref = service.upload_image(p['id'], image_stream(), 'frame.png', 'reference_image')
     product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
     shot = p['timeline']['shots'][0]
     p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'], 'Replace yellow box only', 'Medium shot; hand lifts box; static camera.')
-    plan = service.generation_plan(p['id'], p['revision'])
+    plan = service.generation_plan(p['id'], p['revision'], generation_durations={shot['id']: 5})
     assert plan['ready']
+    assert plan['submission_enabled'] is False
+    assert plan['guidance']['sha256']
+    with pytest.raises(HTTPException) as unsupported:
+        service.generation_plan(p['id'], p['revision'], model='uniart/seedance-2.5-vip')
+    assert unsupported.value.status_code == 422
+    preserved = service.generation_plan(p['id'], p['revision'], audio_policy='preserve_source', generation_durations={shot['id']: 5})
+    assert not preserved['ready']
+    assert 'source_audio_assembly_pending' in preserved['blockers'][0]['reasons']
     row = plan['shots'][0]
     assert [i['media_id'] for i in row['images']] == [ref['media_id'], product['media_id']]
     assert [i['label'] for i in row['images']] == ['<Picture 1>', '<Picture 2>']
     assert Fraction(row['target_duration']) == (shot['end_pts'] - shot['start_pts']) * Fraction(p['analysis']['time_base'])
-    assert 'Silent output' in row['prompt']
+    assert 'overall_soundscape:\nN/A' in row['prompt']
     assert service.get(p['id'])['revision'] == p['revision']
     with pytest.raises(HTTPException) as exc:
         service.generation_plan(p['id'], p['revision'] - 1)
     assert exc.value.status_code == 409
     p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'], '', 'Use @1')
-    assert set(service.generation_plan(p['id'], p['revision'])['blockers'][0]['reasons']) == {'replacement_instruction_required', 'media_labels_reserved'}
+    assert set(service.generation_plan(p['id'], p['revision'], generation_durations={shot['id']: 5})['blockers'][0]['reasons']) == {'replacement_instruction_required', 'media_labels_reserved'}
     (Path('output') / ref['storage_path']).write_bytes(b'changed')
     with pytest.raises(HTTPException) as exc:
         service.generation_plan(p['id'], p['revision'])
