@@ -4026,6 +4026,7 @@
       "id": "uniart/minimax-h3-vip",
       "inputs": {},
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -4116,6 +4117,7 @@
       "id": "uniart/seedance-2.0-vip",
       "inputs": {},
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -4207,6 +4209,7 @@
       "id": "uniart/seedance-2.5-special",
       "inputs": {},
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -4294,6 +4297,7 @@
       "id": "uniart/seedance-2.5-vip",
       "inputs": {},
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7652,6 +7656,7 @@
       "mode": "i2v",
       "model_line_id": "uniart/uniart/minimax-h3-vip",
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7751,6 +7756,7 @@
       "mode": "i2v",
       "model_line_id": "uniart/uniart/seedance-2.0-vip",
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7851,6 +7857,7 @@
       "mode": "i2v",
       "model_line_id": "uniart/uniart/seedance-2.5-special",
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7947,6 +7954,7 @@
       "mode": "i2v",
       "model_line_id": "uniart/uniart/seedance-2.5-vip",
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
