@@ -35,7 +35,7 @@ export default function RecreationPage() {
     activeId.current = record.id;
     setProject(record);
     setCuts(record.timeline?.cuts.map(c => c.pts) ?? record.analysis?.candidates.map(c => c.pts) ?? []);
-    setEvidence(Object.fromEntries(record.analysis?.candidates.map(c => [c.pts, c]) ?? []));
+    setEvidence(Object.fromEntries([...(record.analysis?.candidates ?? []), ...Object.values(record.analysis?.manual_evidence ?? {})].map(c => [c.pts, c])));
     setFrameIndex(1); setImportText(""); setError("");
     setProjects(all => [record, ...all.filter(p => p.id !== record.id)]);
   }

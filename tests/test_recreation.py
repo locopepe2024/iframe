@@ -147,6 +147,60 @@ def test_timeout_is_explicit(monkeypatch):
         analysis.run(["ffmpeg"])
 
 
+def test_derived_index_and_manual_evidence_survive_confirmation(service, video):
+    record = completed(service, video)
+    rows = service.search_media(project_id=record["id"], limit=100)["items"]
+    assert {"source_video", "contact_sheet", "evidence_frame"} <= {r["kind"] for r in rows}
+    assert len({r["storage_path"] for r in rows}) == len(rows)
+    assert all(len(r["sha256"]) == 64 for r in rows)
+    cut = record["analysis"]["frame_pts"][2]
+    pair = service.evidence(record["id"], record["analysis_id"], cut)
+    confirmed = service.confirm(record["id"], record["revision"], record["analysis_id"], [cut])
+    assert confirmed["analysis"]["manual_evidence"][str(cut)] == pair
+    restarted = RecreationService(service.user)
+    assert restarted.evidence(record["id"], record["analysis_id"], cut) == pair
+    before = restarted.search_media(project_id=record["id"], limit=100)
+    restarted.reindex(record["id"])
+    assert restarted.search_media(project_id=record["id"], limit=100) == before
+    found, cursor = [], 0
+    while cursor is not None:
+        page = restarted.search_media(project_id=record["id"], limit=2, cursor=cursor)
+        found.extend(r["media_id"] for r in page["items"])
+        cursor = page["next_cursor"]
+    assert found == [r["media_id"] for r in before["items"]]
+    stranger = RecreationService(UserContext("other", "other-profile", "Other", ""))
+    assert stranger.search_media(project_id=record["id"])["items"] == []
+    with pytest.raises(HTTPException):
+        stranger.reindex(record["id"])
+
+
+def test_reindex_backfills_old_analysis_without_changing_timeline(service, video):
+    record = completed(service, video)
+    confirmed = service.confirm(record["id"], record["revision"], record["analysis_id"], [])
+    with service.db() as db:
+        db.execute("DELETE FROM media_records WHERE project_id=? AND kind!='source_video'", (record["id"],))
+    assert len(service.search_media(project_id=record["id"])["items"]) == 1
+    rebuilt = service.reindex(record["id"])
+    assert rebuilt["timeline"] == confirmed["timeline"]
+    assert rebuilt["revision"] == confirmed["revision"]
+    assert len(service.search_media(project_id=record["id"])["items"]) > 1
+
+
+def test_index_failure_is_retryable_and_rolls_back_partial_records(service, video, monkeypatch):
+    record = register(service, video)
+    queued = service.start(record["id"], 0)
+    original = service._index_analysis
+    def fail_after_index(db, current):
+        original(db, current)
+        raise OSError("disk failure")
+    monkeypatch.setattr(service, "_index_analysis", fail_after_index)
+    service.process(record["id"], queued["analysis_id"])
+    failed = service.get(record["id"])
+    assert failed["status"] == "failed"
+    assert "indexing" in failed["error"]
+    assert len(service.search_media(project_id=record["id"])["items"]) == 1
+
+
 def test_non_frame_or_unsorted_cuts_rejected(service, video):
     record = completed(service, video)
     frames = record["analysis"]["frame_pts"]

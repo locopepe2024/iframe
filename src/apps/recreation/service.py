@@ -30,6 +30,7 @@ class RecreationService:
         try:
             connection.execute("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS media_records (media_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, kind TEXT NOT NULL, display_name TEXT NOT NULL, storage_path TEXT NOT NULL, sha256 TEXT NOT NULL, metadata TEXT NOT NULL, created_at REAL NOT NULL)")
+            connection.execute("CREATE INDEX IF NOT EXISTS media_owner_project ON media_records(owner, project_id, created_at, media_id)")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
@@ -109,14 +110,52 @@ class RecreationService:
     def search_media(self, *, query="", kind=None, project_id=None, limit=50, cursor=0):
         limit = max(1, min(int(limit), 100))
         query = query.strip().lower()
+        conditions, params = ["owner=?"], [self.user.owner_profile_id]
+        for column, value in [("kind", kind), ("project_id", project_id)]:
+            if value:
+                conditions.append(f"{column}=?")
+                params.append(value)
+        if query:
+            conditions.append("instr(lower(display_name), ?) > 0")
+            params.append(query)
         with self.db() as db:
-            rows = db.execute("SELECT media_id, project_id, kind, display_name, storage_path, sha256, metadata, created_at FROM media_records WHERE owner=? ORDER BY created_at DESC", (self.user.owner_profile_id,)).fetchall()
+            rows = db.execute("SELECT media_id, project_id, kind, display_name, storage_path, sha256, metadata, created_at FROM media_records WHERE " + " AND ".join(conditions) + " ORDER BY created_at DESC, media_id DESC LIMIT ? OFFSET ?", (*params, limit + 1, cursor)).fetchall()
         items = []
-        for row in rows:
-            if kind and row[2] != kind or project_id and row[1] != project_id: continue
-            if query and query not in row[3].lower(): continue
+        for row in rows[:limit]:
             items.append({"media_id": row[0], "project_id": row[1], "kind": row[2], "display_name": row[3], "storage_path": row[4], "sha256": row[5], "metadata": json.loads(row[6]), "created_at": row[7]})
-        return {"items": items[cursor:cursor + limit], "next_cursor": cursor + limit if cursor + limit < len(items) else None}
+        return {"items": items, "next_cursor": cursor + limit if len(rows) > limit else None}
+
+    def _index_analysis(self, db, record):
+        data = record["analysis"]
+        files = {}
+        for sample in data.get("samples", []):
+            files[sample["url"]] = ("sample_frame", sample["pts"], "sample")
+        for pair in [*data["candidates"], *data.get("manual_evidence", {}).values()]:
+            files[pair["before_url"]] = ("evidence_frame", pair["before_pts"], "before")
+            files[pair["after_url"]] = ("evidence_frame", pair["pts"], "after")
+        files[data["contact_sheet_url"]] = ("contact_sheet", None, "contact_sheet")
+        for path, (kind, pts, role) in files.items():
+            metadata = {"parent_media_id": record["source_media_id"], "analysis_id": record["analysis_id"],
+                        "pts": pts, "time_base": data["time_base"], "role": role}
+            digest = fingerprint(self._path(path))
+            existing = db.execute("SELECT media_id FROM media_records WHERE owner=? AND project_id=? AND storage_path=?",
+                                  (self.user.owner_profile_id, record["id"], path)).fetchone()
+            if existing:
+                db.execute("UPDATE media_records SET kind=?, sha256=?, metadata=? WHERE media_id=? AND owner=?",
+                           (kind, digest, json.dumps(metadata), existing[0], self.user.owner_profile_id))
+            else:
+                db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (uuid4().hex, self.user.owner_profile_id, record["id"], kind,
+                            f'{record["title"]} · {role} · {pts if pts is not None else ""}',
+                            path, digest, json.dumps(metadata), time.time()))
+
+    def reindex(self, project_id):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if not record.get("analysis"):
+                raise HTTPException(409, "Analysis is not ready")
+            self._index_analysis(db, record)
+        return record
 
     def start(self, project_id, revision):
         with self.db() as db:
@@ -140,8 +179,24 @@ class RecreationService:
         record = self.get(project_id)
         if record["analysis_id"] != analysis_id or not record["analysis"]:
             raise HTTPException(409, "Analysis changed; refresh before selecting a cut")
-        return extract_pair(self._path(record["source_url"]),
+        if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
+            raise HTTPException(409, "Source fingerprint changed")
+        for pair in [*record["analysis"]["candidates"], *record["analysis"].get("manual_evidence", {}).values()]:
+            if pair["pts"] == cut:
+                return pair
+        pair = extract_pair(self._path(record["source_url"]),
                             self.root / project_id / analysis_id / uuid4().hex, record["analysis"], cut)
+        with self.db() as db:
+            current = self._get(db, project_id)
+            if current["analysis_id"] != analysis_id or not current["analysis"]:
+                raise HTTPException(409, "Analysis changed while extracting evidence")
+            saved = current["analysis"].setdefault("manual_evidence", {})
+            pair = saved.setdefault(str(cut), pair)
+            self._index_analysis(db, current)
+            # Evidence is additive; it must not invalidate the user's timeline revision.
+            db.execute("UPDATE projects SET data=? WHERE id=? AND owner=?",
+                       (json.dumps(current), project_id, self.user.owner_profile_id))
+        return pair
 
     def process(self, project_id, attempt_id):
         with self.db() as db:
@@ -162,6 +217,15 @@ class RecreationService:
             if current["analysis_id"] != attempt_id or current["status"] != "analyzing":
                 return
             current.update(analysis=result, error=error, status="failed" if error else "review")
+            if result:
+                db.execute("SAVEPOINT media_index")
+                try:
+                    self._index_analysis(db, current)
+                except Exception:
+                    db.execute("ROLLBACK TO media_index")
+                    current.update(status="failed", error="Media indexing failed; retry analysis", analysis=None)
+                finally:
+                    db.execute("RELEASE media_index")
             self._save(db, current)
 
     def confirm(self, project_id, revision, analysis_id, cuts):

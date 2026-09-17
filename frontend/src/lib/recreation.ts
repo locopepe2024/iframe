@@ -3,6 +3,7 @@ import { API_URL } from "./api";
 
 export interface CutEvidence { pts: number; before_pts: number; before_url: string; after_url: string; source: string }
 export interface SourceAnalysis {
+  manual_evidence?: Record<string, CutEvidence>;
   time_base: string; start_pts: number; end_pts: number; frame_pts: number[];
   duration_seconds: number; width: number; height: number; audio_streams: number;
   candidates: CutEvidence[]; contact_sheet_url: string;

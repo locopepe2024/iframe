@@ -54,6 +54,14 @@ def project(project_id: str, user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).get(project_id), user)
 
 
+@router.post("/projects/{project_id}/reindex")
+def reindex(project_id: str, user: UserContext = Depends(require_studio_user)):
+    try:
+        return public(RecreationService(user).reindex(project_id), user)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @router.post("/projects/{project_id}/analyze", status_code=202)
 def start(project_id: str, request: AnalyzeRequest, background: BackgroundTasks,
           user: UserContext = Depends(require_studio_user)):
