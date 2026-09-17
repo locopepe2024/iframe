@@ -1064,7 +1064,7 @@
     "saveConfig": "保存配置",
     "analysisFailed": "剧本分析失败: {error}",
     "analysisFailedShort": "剧本分析失败",
-    "analyzingScriptBody": "AI 正在拆解剧本、抽取角色/场景/道具，通常 20-60 秒，期间可继续工作。",
+    "analyzingScriptBody": "AI 正在后台拆解剧本、抽取角色/场景/道具，可继续工作。分析可能超过一分钟；网络中断后，对相同剧本重试会读取已有任务。",
     "analysisDone": "✨ 实体提取完成",
     "analysisDoneBody": "发现 {c} 个角色、{s} 个场景、{p} 个道具。",
     "extractConfirmTitle": "确认实体提取结果",

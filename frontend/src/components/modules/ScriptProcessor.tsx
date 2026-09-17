@@ -126,6 +126,8 @@ export default function ScriptProcessor() {
                 }),
                 autoCloseMs: 5000,
             });
+            useProjectStore.setState({ isAnalyzing: false });
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
             useProjectStore.setState({
                 pendingExtraction: preview,
                 pendingExtractionScript: script,
