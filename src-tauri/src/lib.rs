@@ -1,4 +1,4 @@
-// LumenX Studio - Tauri 2.0 Main Entry
+// iFrame Studio - Tauri 2.0 Main Entry
 // Implements: transparent titlebar, Traffic Light, vibrancy, sidecar management, API proxy
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -86,7 +86,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .on_menu_event(|app, event| {
@@ -108,9 +108,9 @@ pub fn run() {
             }
             // External links: open in default browser
             match id {
-                "docs" => { let _ = open::that("https://github.com/alibaba/lumenx/wiki"); }
-                "release_notes" => { let _ = open::that("https://github.com/alibaba/lumenx/releases"); }
-                "report_issue" => { let _ = open::that("https://github.com/alibaba/lumenx/issues/new"); }
+                "docs" => { let _ = open::that("https://github.com/locopepe2024/iframe/wiki"); }
+                "release_notes" => { let _ = open::that("https://github.com/locopepe2024/iframe/releases"); }
+                "report_issue" => { let _ = open::that("https://github.com/locopepe2024/iframe/issues/new"); }
                 _ => {}
             }
         })
@@ -145,5 +145,5 @@ pub fn run() {
             check_backend_health,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running LumenX Studio");
+        .expect("error while running iFrame Studio");
 }

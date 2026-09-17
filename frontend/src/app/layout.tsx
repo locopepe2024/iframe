@@ -11,7 +11,7 @@ export default function RootLayout({
   return (
     <html lang="zh" className="atelier-dark" suppressHydrationWarning>
       <head>
-        <title>LumenX Studio</title>
+        <title>iFrame Studio</title>
         <meta name="description" content="AI-Native Motion Comic Creation Platform" />
         <script
           dangerouslySetInnerHTML={{

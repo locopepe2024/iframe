@@ -5,7 +5,7 @@ import { agentRequest } from '@/lib/api';
 
 vi.mock('next-intl', () => ({ useLocale: () => 'zh' }));
 vi.mock('@/lib/api', () => ({ agentRequest: vi.fn() }));
-const skill: CreativeSkill = { id: 'camera', name: 'Seedance 运镜', category: '运镜', targets: ['Seedance'], description: '运镜设计', version: '1.0.0', source: 'https://github.com/test/skills', source_revision: 'a'.repeat(40), revision: 'b'.repeat(64), license: 'MIT', license_text: 'MIT license', adaptation: 'LumenX 改编', instructions: 'Camera instructions' };
+const skill: CreativeSkill = { id: 'camera', name: 'Seedance 运镜', category: '运镜', targets: ['Seedance'], description: '运镜设计', version: '1.0.0', source: 'https://github.com/test/skills', source_revision: 'a'.repeat(40), revision: 'b'.repeat(64), license: 'MIT', license_text: 'MIT license', adaptation: 'iFrame 改编', instructions: 'Camera instructions' };
 let saved: CreativeSkill[];
 beforeEach(() => {
   saved = [];

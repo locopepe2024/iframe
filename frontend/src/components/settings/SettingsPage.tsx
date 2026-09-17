@@ -19,7 +19,7 @@ import { toast } from "@/store/toastStore";
 import { rovingKeyDown } from "@/lib/a11y";
 import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
-import LumenXBranding from "@/components/layout/LumenXBranding";
+import IFrameBranding from "@/components/layout/IFrameBranding";
 import UpdateChecker from "./UpdateChecker";
 import SkillsSettings from "./SkillsSettings";
 type SettingsCategory = "general" | "models" | "prompts" | "skills" | "apikeys" | "storage" | "about";
@@ -32,7 +32,7 @@ import {
   settingsInputClass,
 } from "./SettingsControls";
 
-const APP_VERSION = "v0.2.0";
+const APP_VERSION = "V0.1.0";
 
 type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   DASHSCOPE_API_KEY: string;
@@ -860,7 +860,7 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <input type="text" value={config.OSS_BUCKET_NAME} onChange={(e) => handleChange("OSS_BUCKET_NAME", e.target.value)} placeholder="Bucket" className={settingsInputClass} />
               <input type="text" value={config.OSS_ENDPOINT} onChange={(e) => handleChange("OSS_ENDPOINT", e.target.value)} placeholder="Endpoint" className={settingsInputClass} />
-              <input type="text" value={config.OSS_BASE_PATH} onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)} placeholder="lumenx" className={settingsInputClass} />
+              <input type="text" value={config.OSS_BASE_PATH} onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)} placeholder="iframe" className={settingsInputClass} />
             </div>
           </FormRow>
         </>
@@ -872,7 +872,7 @@ export default function SettingsPage() {
   const renderAbout = () => {
     const ff = system?.ffmpeg;
     const aboutRows: { k: string; v: string; tone?: "ok" | "warn" }[] = [
-      { k: t("aboutAppVersion"), v: `LumenX Studio ${APP_VERSION}` },
+      { k: t("aboutAppVersion"), v: `iFrame Studio ${APP_VERSION}` },
       { k: t("aboutBackendApi"), v: API_URL },
       { k: t("aboutDataDir"), v: dataDir || "—" },
       { k: t("logDirLabel"), v: logDir || "—" },
@@ -881,12 +881,12 @@ export default function SettingsPage() {
       <Section id="about" title={t("secAboutTitle")}>
         {/* Line B brand signature block — teal-glow logo, serif name, amber tagline */}
         <div className="flex flex-col items-start gap-3 pb-6 mb-6 border-b border-glass-border">
-          <LumenXBranding size="md" showSlogan={false} />
+          <IFrameBranding size="md" showSlogan={false} />
           <p className="font-display atelier-display text-base italic text-accent leading-snug">
-            “Powered by Lumenx”
+            “Powered by Lumenx & Uniart”
           </p>
           <div className="font-mono text-[0.625rem] tracking-[0.08em] text-text-muted uppercase">
-            VERSION {APP_VERSION.replace(/^v/, "")} · BUILD 20260613
+            VERSION {APP_VERSION.replace(/^[vV]/, "")}
           </div>
           <p className="text-[0.78125rem] text-text-secondary leading-relaxed max-w-md">
             {t("aboutTagline")}

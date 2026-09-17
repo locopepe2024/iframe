@@ -58,7 +58,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="AI Comic Gen API")
+app = FastAPI(title="iFrame Studio API", version="0.1.0")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -1322,7 +1322,7 @@ def get_user_config_path() -> str:
     """
     Returns the path to the user config file.
     - Development mode: Uses .env in project root
-    - Packaged app mode: Uses ~/.lumen-x/config.json
+    - Packaged app mode: Uses ~/.iframe/config.json
     """
     from ...utils import get_user_data_dir
     
@@ -4155,7 +4155,7 @@ def get_uniart_models():
     """Fetch the current UniArt OpenAI-compatible model list.
 
     The upstream response is normalized into the capability vocabulary used by
-    LumenX selectors; credentials stay server-side.
+    iFrame selectors; credentials stay server-side.
     """
     runtime_config = studio_uniart_config()
     base = runtime_config["base_url"].rstrip("/")

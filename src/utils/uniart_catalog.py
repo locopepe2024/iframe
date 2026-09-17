@@ -1,4 +1,4 @@
-"""Normalize UniArt's authoritative media capability catalog for LumenX."""
+"""Normalize UniArt's authoritative media capability catalog for iFrame."""
 
 from __future__ import annotations
 

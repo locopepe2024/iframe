@@ -10,7 +10,7 @@
 
 - 决策：把「Warm Bridge vs Full Atelier 二选一」升级为**用户可选 5 预设主题**（3 暗 + 2 亮），`atelier-dark`（Full Atelier）为默认；换主题时 **Logo 一并联动**。
 - 主题落地成本极低：现有前端颜色 100% 走 CSS 变量，只需「globals.css 加 token block + store 枚举升级 + tailwind 主色变量化」，**组件零改动**（除 Logo 组件）。
-- Logo 已重制：三个变体**同形**（电路枫叶），均由暗色 Logo 重着色、**透明底**，已弃用旧莲花图 `LumenX_亮色.png`。
+- Logo 已重制：三个变体**同形**（电路枫叶），均由暗色 Logo 重着色、**透明底**，已弃用旧莲花图 `iFrame_亮色.png`。
 - 9 个核心文件 + 3 个模态补稿已交付；原 3 项「需沟通」已全部补稿，**全程未删减任何功能**。
 - 落地分工见 §4；防阉割契约见 §5；逐文件清单见 §2。
 
@@ -83,7 +83,7 @@
 - `logo-light.png`（重制覆盖）：深墨 `#1e1b26` 描边 + 蓝 `#4a54e6` 核心 → `brand-light`。
 
 **落地接线**（`LumenXBranding.tsx` 必改，详见 `logo-adaptation.html`）：
-1. 写死的 `src="/LumenX-cybr.png"` → 按 presetId 切：暗 → `/LumenX-cybr.png`；`atelier-light` → teal PNG；`brand-light` → 蓝 PNG。
+1. 写死的 `src="/iFrame-cybr.png"` → 按 presetId 切：暗 → `/iFrame-cybr.png`；`atelier-light` → teal PNG；`brand-light` → 蓝 PNG。
 2. `atelier-dark` 加内联 `filter: hue-rotate(-64deg) saturate(1.35) brightness(1.08)` 把蓝着成 teal；其余 `none`。
 3. wordmark 文字色：`text-white` → `var(--color-text-primary)`；"X" `#646cff` → `var(--color-primary)`；slogan/Studio → secondary/muted token。**（修复亮色下白底白字不可读）**
 4. 真实项目落地时，把这三张 PNG（或对应 SVG）放入 `frontend/public/`，命名与 src map 对齐。
@@ -145,7 +145,7 @@
 ## 7. 关键参考文件（只读，保一致性）
 
 - 主题基建：`frontend/src/store/settingsStore.ts`、`frontend/src/app/globals.css`、`frontend/src/components/Providers.tsx`、`frontend/src/app/layout.tsx`、`frontend/tailwind.config.ts`
-- Logo：`frontend/src/components/layout/LumenXBranding.tsx`、`frontend/public/{LumenX-cybr.png,LumenX-cybr-transparent.png}`
+- Logo：`frontend/src/components/layout/LumenXBranding.tsx`、`frontend/public/{iFrame-cybr.png,iFrame-cybr-transparent.png}`
 - 侧栏/步骤：`frontend/src/components/layout/PipelineSidebar.tsx`（lucide 图标）、`frontend/src/components/project/ProjectClient.tsx`（`UNIFIED_STEPS`/`LEGACY_STEPS` 定义）
 - 数据/接线：`frontend/src/lib/api.ts`（全部端点）、`frontend/src/store/{projectStore,settingsStore,toastStore}.ts`、`frontend/src/components/modules/StoryboardR2V.tsx`（顶层 orchestrator，所有 api.* 汇聚处）
 - 模态源码：`frontend/src/components/modules/storyboard-r2v/shot-panel/CompareModal.tsx`、`.../DialogueAudioRow.tsx`、`.../StoryboardGenerateDialog.tsx`、`.../PromptExpandModal.tsx`、`.../PolishPanel.tsx`

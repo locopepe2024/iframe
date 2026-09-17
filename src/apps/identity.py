@@ -1,4 +1,4 @@
-"""UniArt-backed identity boundary for multi-user LumenX APIs."""
+"""UniArt-backed identity boundary for multi-user iFrame APIs."""
 
 from __future__ import annotations
 

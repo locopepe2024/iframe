@@ -4058,7 +4058,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_library_data_unlocked()
 
     # ------------------------------------------------------------------
-    # Global Asset Library — CRUD + feed channels (LumenX Core shared pool)
+    # Global Asset Library — CRUD + feed channels (iFrame Core shared pool)
     # ------------------------------------------------------------------
     # These methods are the single source of truth for mutating the
     # project-independent library. Both the /library/assets endpoints and
@@ -4482,7 +4482,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise RuntimeError("DASHSCOPE_API_KEY not configured")
 
             # Dashscope customization endpoint (Beijing region; intl uses
-            # dashscope-intl URL — TODO when LumenX supports intl deployment)
+            # dashscope-intl URL — TODO when iFrame supports intl deployment)
             url = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
             payload = {
                 "model": "voice-enrollment",

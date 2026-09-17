@@ -13,8 +13,8 @@
 ### Task 1: Add repo-native model onboarding workflow entry
 
 **Files:**
-- Create: `/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/lumenx-model-onboarding.md`
-- Create: `/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.claude/commands/lumenx-model-onboarding.md`
+- Create: `/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/iframe-model-onboarding.md`
+- Create: `/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.claude/commands/iframe-model-onboarding.md`
 - Modify: `/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/AGENTS.md`
 
 **Step 1: Write the workflow docs**

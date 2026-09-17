@@ -86,7 +86,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
                 </div>
                 <h2 id="user-uniart-config-title" className="font-display text-xl font-semibold">个人 UniArt 配置</h2>
                 <p className="mt-1 text-sm leading-6 text-text-secondary">
-                  密钥按当前登录账户加密保存，不与其他 LumenX 用户共享。
+                  密钥按当前登录账户加密保存，不与其他 iFrame 用户共享。
                 </p>
               </div>
               {(!isRequired || configured) && (

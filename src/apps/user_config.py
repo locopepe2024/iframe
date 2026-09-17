@@ -1,4 +1,4 @@
-"""Owner-scoped LumenX preferences and encrypted provider credentials."""
+"""Owner-scoped iFrame preferences and encrypted provider credentials."""
 
 from __future__ import annotations
 

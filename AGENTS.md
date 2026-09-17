@@ -13,73 +13,73 @@ This file provides guidance to AI coding agents (Codex CLI / Qoder) when working
 
 When the user asks to do any of the following in this repository:
 
-- publish to the LumenX GitHub mirror
-- run the LumenX GitHub publish workflow
-- follow the LumenX GitHub release or PR flow
-- prepare a GitHub-safe branch, commit, push, or PR for LumenX
-- use `/lumenx-git-publish`
+- publish to the iFrame GitHub mirror
+- run the iFrame GitHub publish workflow
+- follow the iFrame GitHub release or PR flow
+- prepare a GitHub-safe branch, commit, push, or PR for iFrame
+- use `/iframe-git-publish`
 
 Treat that as a request to load and follow:
 
-`.codex/workflows/lumenx-git-publish.md`
+`.codex/workflows/iframe-git-publish.md`
 
 When the user asks to do any of the following in this repository:
 
-- onboard a new model into LumenX
+- onboard a new model into iFrame
 - update model docs, model versions, defaults, or parameters
 - refresh Wan / Kling / Vidu / PixVerse model support
-- run the LumenX model onboarding workflow
+- run the iFrame model onboarding workflow
 - review whether a model change is catalog-only or also needs runtime / UI work
-- use `/lumenx-model-onboarding`
+- use `/iframe-model-onboarding`
 
 Treat that as a request to load and follow:
 
-`.codex/workflows/lumenx-model-onboarding.md`
+`.codex/workflows/iframe-model-onboarding.md`
 
 When the user asks to do any of the following in this repository:
 
-- build the LumenX desktop app
-- package LumenX Studio for macOS or Windows
+- build the iFrame desktop app
+- package iFrame Studio for macOS or Windows
 - create a DMG or EXE build
-- run the LumenX desktop build workflow
-- use `/lumenx-build`
+- run the iFrame desktop build workflow
+- use `/iframe-build`
 
 Treat that as a request to load and follow:
 
-`.codex/workflows/lumenx-build.md`
+`.codex/workflows/iframe-build.md`
 
-This repository does not rely on native slash commands in Codex. The strings `/lumenx-git-publish`, `/lumenx-build`, and `/lumenx-model-onboarding` are textual aliases for the workflows above.
+This repository does not rely on native slash commands in Codex. The strings `/iframe-git-publish`, `/iframe-build`, and `/iframe-model-onboarding` are textual aliases for the workflows above.
 
 ## Workflow Files
 
-- `.claude/commands/lumenx-git-publish.md` remains the Claude project command source.
-- `.claude/commands/lumenx-build.md` remains the Claude project command source.
-- `.claude/commands/lumenx-model-onboarding.md` remains the Claude project command source.
-- `.codex/workflows/lumenx-git-publish.md` is the Codex workflow mirror for the same project process.
-- `.codex/workflows/lumenx-build.md` is the Codex workflow mirror for the desktop build process.
-- `.codex/workflows/lumenx-model-onboarding.md` is the Codex workflow mirror for model onboarding, catalog updates, and verification.
+- `.claude/commands/iframe-git-publish.md` remains the Claude project command source.
+- `.claude/commands/iframe-build.md` remains the Claude project command source.
+- `.claude/commands/iframe-model-onboarding.md` remains the Claude project command source.
+- `.codex/workflows/iframe-git-publish.md` is the Codex workflow mirror for the same project process.
+- `.codex/workflows/iframe-build.md` is the Codex workflow mirror for the desktop build process.
+- `.codex/workflows/iframe-model-onboarding.md` is the Codex workflow mirror for model onboarding, catalog updates, and verification.
 
 If both Claude and Codex guidance exist, preserve behavior parity unless the user asks for divergence.
 
 After editing any file in `.claude/commands/` or `.codex/workflows/`, run `python3 scripts/check_workflow_parity.py` to verify mirror parity. Record intentional divergences with reasons in the script's `WAIVERS` table.
 
-# LumenX Product Family (Core + Studio + Atelier)
+# iFrame Product Family (Core + Studio + Atelier)
 
 ## Overview
 
-> **重要：项目已从单一产品演进为产品家族。** 旧记忆中"LumenX Studio = AI Comic Generator"的认知已过时。
+> **重要：项目已从单一产品演进为产品家族。** 旧记忆中"iFrame Studio = AI Comic Generator"的认知已过时。
 
-LumenX 现在是一个 **产品家族**，由 Codex 主导推进了重要的架构演进：
+iFrame 现在是一个 **产品家族**，由 Codex 主导推进了重要的架构演进：
 
 ```text
-LumenX Core              # 共享后端/运行时/API capability
-├── LumenX Studio        # Pipeline-first 漫剧/视频生产产品（原 Comic Generator）
-└── LumenX Atelier       # Graph-first 个人创作无限画布产品（代码在独立分支开发中）
+iFrame Core              # 共享后端/运行时/API capability
+├── iFrame Studio        # Pipeline-first 漫剧/视频生产产品（原 Comic Generator）
+└── iFrame Atelier       # Graph-first 个人创作无限画布产品（代码在独立分支开发中）
 ```
 
-- **LumenX Studio**：保持 pipeline-first（项目 → 剧本 → 分镜 → 资产 → R2V/I2V → 合成 → 导出）。面向工作室、团队、系列号。当前 Phase 1 重点：R2V workflow 稳定化。
-- **LumenX Atelier**：全新 graph-first 创作壳，面向个人创作者。"Seed → Plan → Draft Nodes → Generation → Takes → Judgment → Branches → Sequence → Export"。Agent 可在画布上提议、生成、变体探索。Atelier 代码在独立分支开发中（如 `feat/atelier-v4-canvas-uplift`），尚未合入 main。
-- **LumenX Core**：共享 model catalog、provider routing、media、generation jobs、export 等原语。Studio 与 Atelier 不共享前端状态，只共享 Core capability。
+- **iFrame Studio**：保持 pipeline-first（项目 → 剧本 → 分镜 → 资产 → R2V/I2V → 合成 → 导出）。面向工作室、团队、系列号。当前 Phase 1 重点：R2V workflow 稳定化。
+- **iFrame Atelier**：全新 graph-first 创作壳，面向个人创作者。"Seed → Plan → Draft Nodes → Generation → Takes → Judgment → Branches → Sequence → Export"。Agent 可在画布上提议、生成、变体探索。Atelier 代码在独立分支开发中（如 `feat/atelier-v4-canvas-uplift`），尚未合入 main。
+- **iFrame Core**：共享 model catalog、provider routing、media、generation jobs、export 等原语。Studio 与 Atelier 不共享前端状态，只共享 Core capability。
 
 技术栈：Next.js 14 前端 + FastAPI 后端，集成阿里云 DashScope/Qwen/Wanx、Kling、Vidu、PixVerse、HappyHorse、MuleRouter（Seedance/GPT-Image-2）等 provider。
 
@@ -136,7 +136,7 @@ frontend/
 frontend/
 ├── src/app/page.tsx              # hash #/atelier 切换到 Atelier shell
 ├── src/components/
-│   └── atelier/                  # ★ LumenX Atelier 产品壳（独立，不允许引入 Studio 模块）
+│   └── atelier/                  # ★ iFrame Atelier 产品壳（独立，不允许引入 Studio 模块）
 │       ├── AtelierShell.tsx      # 全屏画布 + Agent 面板 + Sequence strip
 │       └── AgentPanelTrace.tsx   # Agent 历史/会话/规划态视图
 ├── src/store/
@@ -177,7 +177,7 @@ src/
 └── config.py
 ```
 
-> **未来拆分计划**：Atelier 域将迁出到 `src/apps/atelier/`，前端 shell 迁到 `frontend/src/app/atelier/`，共享客户端到 `packages/lumenx-core-client/`。当前在同一仓库内仅作为 Atelier-domain APIs 存在，不可让 Studio 状态成为 Atelier canvas 状态的父级。
+> **未来拆分计划**：Atelier 域将迁出到 `src/apps/atelier/`，前端 shell 迁到 `frontend/src/app/atelier/`，共享客户端到 `packages/iframe-core-client/`。当前在同一仓库内仅作为 Atelier-domain APIs 存在，不可让 Studio 状态成为 Atelier canvas 状态的父级。
 
 ## Development Commands
 
@@ -259,7 +259,7 @@ python main.py
 ```
 
 ### Model Catalog Workflow
-For model onboarding, version/default updates, provider capability changes, or UI model exposure changes, load `.codex/workflows/lumenx-model-onboarding.md` before editing.
+For model onboarding, version/default updates, provider capability changes, or UI model exposure changes, load `.codex/workflows/iframe-model-onboarding.md` before editing.
 
 The executable catalog source lives under `config/model_catalog/`. After catalog YAML changes, regenerate and validate:
 ```bash
@@ -297,9 +297,9 @@ Development project data is stored in this repository under `output/`:
 - `output/atelier_projects.json` - **★ Atelier 画布/节点/Agent turn 持久化（独立于 Studio）**
 - generated media under `output/assets/`, `output/storyboard/`, `output/video/`, `output/audio/`, and `output/uploads/`
 
-Packaged desktop app configuration and logs are stored under `~/.lumen-x/`:
-- `~/.lumen-x/config.json` - App settings, API keys, and OSS configuration
-- `~/.lumen-x/logs/app.log` - Desktop app log file
+Packaged desktop app configuration and logs are stored under `~/.iframe/`:
+- `~/.iframe/config.json` - App settings, API keys, and OSS configuration
+- `~/.iframe/logs/app.log` - Desktop app log file
 
 ## Key API Endpoints
 
@@ -328,7 +328,7 @@ Packaged desktop app configuration and logs are stored under `~/.lumen-x/`:
 - `POST /projects/{id}/art_direction/save` - Save art direction
 - `GET /art_direction/presets` - Get style presets
 
-### LumenX Atelier（独立分支，合入后可用）
+### iFrame Atelier（独立分支，合入后可用）
 画布/节点 CRUD：
 - `POST /atelier/projects` / `GET /atelier/projects` / `GET|PUT|DELETE /atelier/projects/{id}`
 - `POST|PUT|DELETE /atelier/projects/{id}/nodes[/{node_id}]`
@@ -346,7 +346,7 @@ Agent runtime（Codex 风格 approval + 独立 planner）：
 > Atelier 代码在独立分支开发中（如 `feat/atelier-v4-canvas-uplift`）。以下规格描述的是已实现或正在实现的架构，合入 main 后即在主线可用。
 
 参考文档（必读）：
-- `docs/plans/2026-05-08-lumenx-studio-atelier-core-roadmap.md` — Core/Studio/Atelier 产品家族 roadmap
+- `docs/plans/2026-05-08-iframe-studio-atelier-core-roadmap.md` — Core/Studio/Atelier 产品家族 roadmap
 - `docs/plans/2026-05-08-atelier-v1-implementation-boundary.md` — Atelier v1 边界与任务清单
 - `docs/plans/2026-05-09-atelier-agent-runtime-implementation-plan.md` — Agent 运行时实现计划
 
@@ -406,7 +406,7 @@ Agent runtime（Codex 风格 approval + 独立 planner）：
 - API keys can be configured via `.env` file or app settings dialog
 - OSS configuration is optional but recommended for cloud storage
 - Model settings can be changed per project via `update_model_settings`
-- In development, `.env` is read from the project root. In packaged mode, `~/.lumen-x/config.json` is used.
+- In development, `.env` is read from the project root. In packaged mode, `~/.iframe/config.json` is used.
 
 ### Goal-Driven Execution
 
@@ -437,7 +437,7 @@ Strong success criteria enable autonomous looping; vague criteria like "make it 
 
 ### Logs
 - Backend logs appear in terminal when running start_backend.sh
-- Desktop app logs saved to: `~/.lumen-x/logs/app.log`
+- Desktop app logs saved to: `~/.iframe/logs/app.log`
 
 ## Deployment
 - Frontend: Built with Next.js, can be deployed as static files
@@ -450,13 +450,13 @@ Strong success criteria enable autonomous looping; vague criteria like "make it 
 Primary: independent creators (self-media, short-video makers) who need to turn text scripts into comic-style videos quickly. Secondary: professional teams using it as a pre-production tool. Both share a need for speed and creative control — they think in stories, not in software.
 
 ### Brand Personality
-**Creative · Immersive · Geeky** — LumenX feels like a creator's cockpit, not an admin panel. It respects the user's craft while putting AI power at their fingertips. The tagline "Render Noise into Narrative" captures the mission: raw ideas in, polished stories out.
+**Creative · Immersive · Geeky** — iFrame feels like a creator's cockpit, not an admin panel. It respects the user's craft while putting AI power at their fingertips. The tagline "Render Noise into Narrative" captures the mission: raw ideas in, polished stories out.
 
 ### Aesthetic Direction
 - **Dark-first**: Deep space black (#050508) background, no light mode. The darkness lets content (images, videos, storyboards) be the hero.
 - **Glassmorphism**: Frosted glass panels (5% white + backdrop-blur) for structure. Layered transparency creates depth without clutter.
 - **Neon accents**: Electric blue (#646cff) primary, hot pink (#ff0080) accent. Used sparingly for interactive elements and emphasis — not decoration.
-- **Brand gradient**: Purple → Indigo → Pink (the "X" in LumenX). Reserved for branding moments, not sprinkled everywhere.
+- **Brand gradient**: Purple → Indigo → Pink (the "X" in iFrame). Reserved for branding moments, not sprinkled everywhere.
 - **Typography**: Space Grotesk (display/headings — geometric, modern), Inter (body — clean, readable), JetBrains Mono (code/technical values).
 - **Anti-references**: No dense tables/forms that feel like enterprise admin. No excessive particles/animations that distract from content. No multi-panel professional tool complexity (not Figma/Photoshop).
 
@@ -482,5 +482,5 @@ Primary: independent creators (self-media, short-video makers) who need to turn 
 CDTR 仅用于 agent 协作工件；**不可** 把 `src/`、`frontend/`、`config/`、`scripts/`、`tests/`、`.codex/workflows/`、运行时数据移入或复制到 CDTR 文件夹。
 
 ### Codex / Claude 命令对偶
-- `.claude/commands/lumenx-*.md` 与 `.codex/workflows/lumenx-*.md` 是同一流程在两个 agent 上的镜像
+- `.claude/commands/iframe-*.md` 与 `.codex/workflows/iframe-*.md` 是同一流程在两个 agent 上的镜像
 - 修改任一边时，除非用户明确要求分叉，否则保持行为对等
