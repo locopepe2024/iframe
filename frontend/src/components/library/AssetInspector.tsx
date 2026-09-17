@@ -6,6 +6,7 @@ import { X, Star, Download, Sparkles, Loader2, Globe } from "lucide-react";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
 import { api } from "@/lib/api";
+import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
 
@@ -18,10 +19,8 @@ const SINGULAR_TYPE: Record<AssetTab, string> = {
   props: "prop",
 };
 
-// 「生成更多变体」一次追加的张数 + 任务轮询参数（与 UniArt 15 分钟任务窗口匹配）。
+// Number of variants requested per generation.
 const VARIANT_BATCH = 3;
-const POLL_INTERVAL_MS = 2000;
-const POLL_MAX_ATTEMPTS = 600;
 
 interface AssetInspectorProps {
   asset: Character | Scene | Prop;
@@ -200,23 +199,6 @@ export default function AssetInspector({
     }
   };
 
-  // 轮询生成任务直到完成（mirror ConsistencyVault 的 task 轮询）；失败/超时抛错。
-  const pollUntilDone = async (taskId: string): Promise<boolean> => {
-    for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-      if (!aliveRef.current) return false;
-      let status: { status?: string; error?: string } | undefined;
-      try {
-        status = await api.getTaskStatus(taskId);
-      } catch {
-        continue; // 瞬时网络错误：继续轮询
-      }
-      if (status?.status === "completed") return true;
-      if (status?.status === "failed") throw new Error(status.error || t("genFailed"));
-    }
-    throw new Error(t("genTimeout"));
-  };
-
   // 生成更多变体：仅 project 资产可用（series 无生成端点）。复用按项目 batch 生成管线，
   // 完成后 re-fetch 该项目，把新变体并入本地展示并高亮最新一张。
   const handleGenerateVariants = async () => {
@@ -243,7 +225,11 @@ export default function AssetInspector({
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
       if (taskId) {
-        const done = await pollUntilDone(taskId);
+        const done = await waitForAssetTask(
+          () => api.getTaskStatus(taskId),
+          () => aliveRef.current && currentAssetIdRef.current === assetId,
+          t("genFailed"),
+        );
         if (!done) return; // 已卸载
       }
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
