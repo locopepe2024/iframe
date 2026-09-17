@@ -130,3 +130,25 @@ def test_special_quality_is_forwarded_for_uniart_to_adapt(monkeypatch, tier, qua
     uniart.UniArtImageModel({}).generate('edit', 'unused.png',
         model_name=model, size=tier, quality=quality,
         ref_image_paths=['https://storage.example/source.png'])
+
+
+@pytest.mark.parametrize('size,tier,ratio', [('576*1024','1k','9:16'),('1024*576','1k','16:9'),('1024*1024','1k','1:1'),('1536*2048','2k','3:4')])
+def test_legacy_studio_gpt_size_uses_gateway_resolution_contract(monkeypatch,size,tier,ratio):
+    def post(config,endpoint,body):
+        assert 'size' not in body
+        assert body['resolution']==tier
+        assert body['aspect_ratio']==ratio
+        return {'data':[{'url':'https://example.test/result.png'}]}
+    monkeypatch.setattr(uniart,'_post',post)
+    monkeypatch.setattr(uniart,'_download_result',lambda *a:None)
+    uniart.UniArtImageModel({}).generate('reference','unused.png',model_name='uniart/gpt-image-2',size=size)
+
+
+def test_explicit_pixel_size_remains_explicit(monkeypatch):
+    def post(config,endpoint,body):
+        assert body['size']=='1024x1536'
+        assert 'resolution' not in body
+        return {'data':[{'url':'https://example.test/result.png'}]}
+    monkeypatch.setattr(uniart,'_post',post)
+    monkeypatch.setattr(uniart,'_download_result',lambda *a:None)
+    uniart.UniArtImageModel({}).generate('reference','unused.png',size='1024x1536')

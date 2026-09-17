@@ -277,6 +277,21 @@ class UniArtImageModel(ImageGenModel):
         if isinstance(size, str) and size.lower() in {"1k", "2k", "4k"}:
             body.pop("size", None)
             body["resolution"] = size.lower()
+        elif model.startswith("gpt-image-") and isinstance(size, str) and "*" in size:
+            # Studio legacy dimensions express its aspect preset. UniArt's
+            # managed GPT route accepts semantic resolution + aspect_ratio,
+            # not DashScope's W*H syntax. Keep explicit WxH callers unchanged.
+            from math import gcd
+            try:
+                width, height = (int(part) for part in size.split("*"))
+            except ValueError as exc:
+                raise ValueError(f"Invalid Studio image size: {size}") from exc
+            if min(width, height) <= 0 or max(width, height) > 4096:
+                raise ValueError(f"Invalid Studio image size: {size}")
+            divisor = gcd(width, height)
+            body.pop("size", None)
+            body["resolution"] = "1k" if max(width, height) <= 1024 else "2k" if max(width, height) <= 2048 else "4k"
+            body["aspect_ratio"] = f"{width // divisor}:{height // divisor}"
         if kwargs.get("aspect_ratio"):
             body["aspect_ratio"] = kwargs["aspect_ratio"]
         refs = list(kwargs.get("ref_image_paths") or [])
