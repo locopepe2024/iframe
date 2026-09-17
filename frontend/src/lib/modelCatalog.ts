@@ -526,7 +526,11 @@ for (const model of SORTED_MODEL_ENTRIES) {
 }
 
 export const VIDEO_R2V_MODELS: I2VModelConfig[] = SORTED_MODEL_ENTRIES
-    .filter((model) => model.ui.selection_group === 'r2v' && isVisibleModel(model, 'video_sidebar'))
+    // R2V-capable UniArt SKUs (H3/Seedance) are intentionally grouped under
+    // i2v in the catalog because the same SKU supports both modes. The video
+    // sidebar must follow published capabilities, otherwise they disappear
+    // from the storyboard Parameters/Takes picker.
+    .filter((model) => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
     .map(toI2VModel);
 export const DEFAULT_R2V_MODEL_ID = VIDEO_R2V_MODELS[0]?.id ?? R2V_SELECTION_MODEL_ID;
 
