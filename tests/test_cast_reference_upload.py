@@ -146,3 +146,30 @@ def test_shared_generation_task_resolves_saves_and_preserves_candidates(source, 
         with pytest.raises(ValueError,match='not found'):
             p.create_asset_generation_task('project',entity.id,kind)
         assert len(p.asset_generation_tasks)==count
+
+
+def test_cast_reference_generation_sends_valid_uniart_portrait_contract(tmp_path,monkeypatch):
+    import base64
+    from src.apps.comic_gen.assets import AssetGenerator
+    from src.models import uniart
+    from src.apps.comic_gen import assets
+    from src.utils import oss_utils
+    monkeypatch.chdir(tmp_path)
+    p,entity=pipeline('character')
+    generator=AssetGenerator.__new__(AssetGenerator)
+    monkeypatch.setattr(generator,'_output_dir_for',lambda _:str(tmp_path/'output'))
+    monkeypatch.setattr(assets,'studio_uniart_config',lambda:{'api_key':'test'})
+    monkeypatch.setattr(oss_utils,'OSSImageUploader',lambda:Mock(is_configured=False))
+    p.asset_generator=generator
+    captured=[]
+    def post(config,endpoint,body):
+        captured.append(body)
+        assert endpoint=='/images/generations'
+        assert body['resolution']=='1k' and body['aspect_ratio']=='9:16'
+        assert 'size' not in body
+        return {'data':[{'b64_json':base64.b64encode(b'generated-test-image').decode()}]}
+    monkeypatch.setattr(uniart,'_post',post)
+    p.generate_asset('project','asset','character',generation_type='reference_sheet',model_name='uniart/gpt-image-2',batch_size=1)
+    assert len(captured)==1
+    assert len(entity.reference_sheet.image_variants)==1
+    assert entity.status.value=='completed'

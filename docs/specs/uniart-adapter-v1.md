@@ -41,3 +41,9 @@ Verified deployed UniArt commit 5c9aaddd72c229964f7f3f36223018953a81aa1d, docs/a
 ## GPT Image route aliases
 
 Some UniArt GPT Image route aliases publish generic model metadata without an `image_capability` block. The stable `gpt-image-*` model prefix is an image API contract; Catalog preserves both `t2i` and `i2i` for these aliases so enabled Flare/Special/Discount SKUs remain available in the image model selector.
+
+## 2026-09-17 Studio GPT image dimensions
+
+Observed: Studio GPT Image 2 reference generation forwarded its legacy portrait size `576*1024` and UniArt rejected the size (HTTP 400). Project aspect is 9:16. UniArt `service/imageroute/contract.go` at previously verified deployment commit `5c9aaddd72c229964f7f3f36223018953a81aa1d` supports mutually exclusive concrete size versus resolution + aspect_ratio; its resolution tiers are 1k/2k/4k.
+
+At the UniArt GPT image adapter boundary, legacy W*H dimensions now become a resolution tier plus reduced aspect ratio. For example 576*1024 becomes resolution=1k, aspect_ratio=9:16. Explicit WxH requests remain explicit. This preserves the selected ratio instead of changing portrait output to 2:3. Tests cover outbound payload and Studio pipeline → AssetGenerator → UniArt adapter → saved variant, using a simulated provider response.
