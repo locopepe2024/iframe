@@ -1,4 +1,5 @@
 "use client";
+import { storyboardGeneratedAudio } from "./storyboard-r2v/generatedAudio";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
@@ -909,7 +910,7 @@ export default function StoryboardR2V() {
                     videoConfig.duration,
                     undefined, // seed
                     videoConfig.resolution,
-                    false, // generateAudio
+                    storyboardGeneratedAudio(routeModelId, videoConfig.audio), // generateAudio
                     "", // audioUrl
                     videoConfig.promptExtend,
                     videoConfig.negativePrompt,
@@ -982,7 +983,7 @@ export default function StoryboardR2V() {
                     videoConfig.duration,
                     undefined, // seed
                     videoConfig.resolution,
-                    false, // generateAudio
+                    storyboardGeneratedAudio(videoConfig.model, videoConfig.audio), // generateAudio
                     "", // audioUrl
                     videoConfig.promptExtend,
                     videoConfig.negativePrompt,
@@ -1118,7 +1119,7 @@ export default function StoryboardR2V() {
                         params?.duration ?? videoConfig.duration,
                         params?.seed,
                         params?.resolution ?? videoConfig.resolution,
-                        false,
+                        storyboardGeneratedAudio(routeModelId, params?.audio ?? videoConfig.audio),
                         "",
                         params?.promptExtend ?? videoConfig.promptExtend,
                         params?.negativePrompt ?? videoConfig.negativePrompt,
@@ -1153,7 +1154,7 @@ export default function StoryboardR2V() {
                     params?.duration ?? videoConfig.duration,
                     params?.seed,
                     params?.resolution ?? videoConfig.resolution,
-                    false,
+                    storyboardGeneratedAudio(i2vModelId, params?.audio ?? videoConfig.audio),
                     "",
                     params?.promptExtend ?? videoConfig.promptExtend,
                     params?.negativePrompt ?? videoConfig.negativePrompt,
@@ -1512,6 +1513,7 @@ export default function StoryboardR2V() {
             cfgScale: videoConfig.cfgScale,
             mode: videoConfig.mode,
             movementAmplitude: videoConfig.movementAmplitude,
+            audio: videoConfig.audio,
             sound: videoConfig.sound,
             viduAudio: videoConfig.viduAudio,
             watermark: videoConfig.watermark,
@@ -1561,6 +1563,7 @@ export default function StoryboardR2V() {
                 cfgScale: next.cfgScale ?? prev.cfgScale,
                 mode: next.mode ?? prev.mode,
                 movementAmplitude: next.movementAmplitude ?? prev.movementAmplitude,
+                audio: next.audio ?? false,
                 sound: next.sound ?? prev.sound,
                 viduAudio: next.viduAudio ?? prev.viduAudio,
                 // Watermark — preserve undefined (means "model doesn't expose

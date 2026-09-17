@@ -43,6 +43,7 @@ export interface ParamsState {
     cfgScale?: number;
     mode?: string;
     movementAmplitude?: string;
+    audio?: boolean;
     sound?: boolean;
     viduAudio?: boolean;
     shotType?: string;
@@ -148,6 +149,7 @@ export default function ParamsSection({
             cfgScale: np.cfgScale?.default ?? params.cfgScale,
             mode: np.mode?.default ?? params.mode,
             movementAmplitude: np.movementAmplitude?.default ?? params.movementAmplitude,
+            audio: np.audio ? (params.audio ?? false) : undefined,
             sound: typeof np.sound === "boolean" ? np.sound : params.sound,
             viduAudio: typeof np.viduAudio === "boolean" ? np.viduAudio : params.viduAudio,
             // Watermark: new model exposes the capability → reset to off (false);
@@ -440,6 +442,15 @@ export default function ParamsSection({
                         ) : null}
                     </div>
                 ) : null}
+
+                {modelParams.audio && (
+                    <ParamRow label={t("generatedAudio")}>
+                        <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
+                            checked={params.audio === true}
+                            onChange={(e) => set("audio", e.target.checked)}
+                            className="h-5 w-5 accent-primary" />
+                    </ParamRow>
+                )}
 
                 {/* Inline validation error (e.g. R2V model with no
                     references attached). Pops above the Generate CTA

@@ -1446,6 +1446,7 @@
     "noRefVideosAvailable": "No reference videos available. Generate Motion References in the Assets step first."
   },
   "storyboardR2V": {
+    "generatedAudio": "Generated video audio",
     "genShots": "✨ Generate shots",
     "genInFlight": "Generating...",
     "emptyTitle": "No shots yet",

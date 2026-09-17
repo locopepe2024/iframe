@@ -25,6 +25,7 @@ export interface VideoConfig {
     resolution: string;
     promptExtend: boolean;
     negativePrompt: string;
+    audio?: boolean;
     // Kling
     mode?: string;
     cfgScale?: number;
@@ -65,6 +66,7 @@ export const DEFAULT_VIDEO_CONFIG: VideoConfig = {
     negativePrompt: "",
     mode: "std",
     cfgScale: 0.5,
+    audio: false,
     sound: false,
     viduAudio: true,
     movementAmplitude: "auto",
@@ -141,6 +143,7 @@ export default function VideoConfigModal({ isOpen, onClose, config, onConfigChan
                 newDraft.promptExtend = !!np.promptExtend;
                 newDraft.negativePrompt = "";
                 newDraft.mode = np.mode?.default ?? "std";
+                newDraft.audio = false;
                 newDraft.sound = false;
                 newDraft.cfgScale = np.cfgScale?.default ?? 0.5;
                 newDraft.viduAudio = true;
@@ -242,6 +245,15 @@ export default function VideoConfigModal({ isOpen, onClose, config, onConfigChan
                                 />
                             </motion.section>
 
+                            {modelParams.audio && (
+                                <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                                    {t("generatedAudio")}
+                                    <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
+                                        checked={draft.audio === true}
+                                        onChange={(e) => updateDraft("audio", e.target.checked)}
+                                        className="h-5 w-5 accent-primary" />
+                                </label>
+                            )}
                             {/* Duration */}
                             <motion.section
                                 custom={1}
