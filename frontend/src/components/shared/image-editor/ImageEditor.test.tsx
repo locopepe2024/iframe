@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
 import ImageEditor from './ImageEditor';
@@ -7,7 +7,6 @@ import ImageEditor from './ImageEditor';
 vi.mock('next/dynamic', () => ({ default: () => function Engine(props: { onModify: () => void; onSave: (value: unknown) => void }) {
   return <><button onClick={props.onModify}>Modify</button><button onClick={() => props.onSave({ imageBase64: 'data:image/png;base64,YQ==', mimeType: 'image/png' })}>Save copy</button></>;
 } }));
-beforeEach(() => { HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); }; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const mount = (onSave: (file: File) => Promise<void>, onClose = vi.fn()) => {
   render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:owned-source" title="product.png" onSave={onSave} onClose={onClose} /></NextIntlClientProvider>);
@@ -33,4 +32,16 @@ it('requires confirmation before discarding unsaved edits', () => {
   fireEvent.click(screen.getByText('Modify')); fireEvent.click(screen.getByLabelText('Close image editor'));
   expect(confirm).toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
   confirm.mockReturnValue(true); fireEvent.click(screen.getByLabelText('Close image editor')); expect(close).toHaveBeenCalledTimes(1);
+});
+
+it('isolates the background and restores focus without trapping engine portals in a native modal', () => {
+  const opener = document.createElement('button'); document.body.append(opener); opener.focus();
+  const close = mount(vi.fn());
+  expect(opener.inert).toBe(true);
+  expect(screen.getByRole('dialog').tagName).toBe('DIV');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(close).toHaveBeenCalledTimes(1);
+  cleanup();
+  expect(opener.inert).toBeFalsy(); expect(document.activeElement).toBe(opener);
+  opener.remove();
 });
