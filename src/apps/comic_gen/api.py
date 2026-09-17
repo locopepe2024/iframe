@@ -478,7 +478,7 @@ def upload_asset(
         if not updated_script:
             raise HTTPException(status_code=404, detail="Script or asset not found")
         
-        return signed_response(updated_script)
+        return get_project(script_id)
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1615,17 +1615,17 @@ def get_project(script_id: str):
         seen_char_ids = {c["id"] for c in payload["characters"]}
         seen_scene_ids = {s["id"] for s in payload["scenes"]}
         seen_prop_ids = {p["id"] for p in payload["props"]}
-        for ch in lib.characters:
+        for ch in pipeline._library_list_for_type("character", script.owner_profile_id):
             if ch.id not in seen_char_ids:
                 d = ch.model_dump()
                 d["source"] = "global"
                 payload["characters"].append(d)
-        for sc in lib.scenes:
+        for sc in pipeline._library_list_for_type("scene", script.owner_profile_id):
             if sc.id not in seen_scene_ids:
                 d = sc.model_dump()
                 d["source"] = "global"
                 payload["scenes"].append(d)
-        for pr in lib.props:
+        for pr in pipeline._library_list_for_type("prop", script.owner_profile_id):
             if pr.id not in seen_prop_ids:
                 d = pr.model_dump()
                 d["source"] = "global"
@@ -2777,7 +2777,7 @@ class SelectVariantRequest(BaseModel):
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
 
-@app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/select")
 def select_asset_variant(script_id: str, request: SelectVariantRequest):
     """Selects a specific variant for an asset."""
     try:
@@ -2788,7 +2788,7 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
             request.variant_id,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
