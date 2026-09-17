@@ -97,7 +97,9 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     if ratios_by_resolution:
         params["ratiosByResolution"] = ratios_by_resolution
     if video.get("supports_generate_audio") is not None:
-        params["audio"] = bool(video.get("supports_generate_audio"))
+        # This public field does not gate whether generate_audio may be set.
+        # params.audio describes availability of the UI control, not its value.
+        params["audio"] = True
 
     duration = None
     if durations:
