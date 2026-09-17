@@ -13,7 +13,6 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
-MAX_RUNTIME = 1800
 RETENTION = 86400
 
 
@@ -39,8 +38,6 @@ class ExtractionJobs:
         now = time.time()
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
-            db.execute("UPDATE jobs SET status='failed', error=? WHERE status='running' AND created<?",
-                       ('分析任务超时或已中断，请重试。', now - MAX_RUNTIME))
             db.execute("DELETE FROM jobs WHERE status!='running' AND created<?", (now - RETENTION,))
             prior = db.execute("SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint=? AND status IN ('running','completed') ORDER BY created DESC LIMIT 1", (owner, project, fingerprint)).fetchone()
             if prior:
@@ -74,8 +71,6 @@ class ExtractionJobs:
 
     def get(self, owner, project, job_id):
         with closing(self.connect()) as db, db:
-            db.execute("UPDATE jobs SET status='failed', error=? WHERE id=? AND owner=? AND project=? AND status='running' AND created<?",
-                       ('分析任务超时或已中断，请重试。', job_id, owner, project, time.time() - MAX_RUNTIME))
             row = db.execute('SELECT * FROM jobs WHERE id=? AND owner=? AND project=?', (job_id, owner, project)).fetchone()
             if not row:
                 raise HTTPException(404, 'Analysis task not found')

@@ -25,10 +25,8 @@ export async function extractScriptPreview(baseUrl: string, projectId: string, t
   }
   if (!submitted?.id) throw new Error('Invalid analysis task response');
   let job: ExtractionJob = submitted;
-  const deadline = Date.now() + 31 * 60 * 1000;
   let failures = 0;
   while (job.status === 'running') {
-    if (Date.now() >= deadline) throw new Error('分析等待超时，请稍后重试以读取后台结果。');
     await pause(2000);
     try {
       const next: ExtractionJob = (await axios.get<ExtractionJob>(`${endpoint}/${job.id}`, { timeout: 15000 })).data;

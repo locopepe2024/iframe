@@ -2476,6 +2476,7 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     t2i_image_urls: Optional[List[str]] = None  # full ordered history, server caps at 10 FIFO
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
+    video_model: Optional[str] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2493,6 +2494,7 @@ def update_frame_workbench(
             t2i_image_urls=request.t2i_image_urls,
             t2i_selected_index=request.t2i_selected_index,
             workbench_generate_count=request.workbench_generate_count,
+            video_model=request.video_model,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -3966,6 +3968,7 @@ class PolishVideoPromptRequest(BaseModel):
     # 显式覆盖 polish 用的 LLM 模型；空 = 用 project / series PromptConfig
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
+    target_video_model: str = ""
 
 
 def _polish_error_response(err) -> Dict[str, Any]:
@@ -3981,6 +3984,28 @@ def _polish_error_response(err) -> Dict[str, Any]:
     if err.prompt_en:
         body["prompt_en"] = err.prompt_en
     return body
+
+
+def _target_model_guidance(model_id: str) -> str:
+    """Load the installed provider skill for storyboard prompt polishing."""
+    value = (model_id or "").lower()
+    skills_root = Path(__file__).resolve().parents[3] / "config" / "agent_skills"
+    if "h3" in value or "minimax" in value:
+        path = skills_root / "h3-prompt-writing.md"
+        label = "MiniMax H3"
+    elif "seedance" in value:
+        path = skills_root / "catalog.json"
+        label = "Seedance"
+    else:
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if label == "Seedance":
+        packages = json.loads(text).get("skills", [])
+        text = "\n\n".join(p.get("instructions", "") for p in packages if label in p.get("targets", []))
+    return f"\n\nTARGET VIDEO MODEL: {label}. Apply this provider skill guidance:\n{text[:12000]}"
 
 
 @app.post("/video/polish_prompt")
@@ -4003,7 +4028,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     """
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "video_polish")
+        custom_prompt = _get_custom_prompt(request.script_id, "video_polish") + _target_model_guidance(request.target_video_model)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4041,6 +4066,7 @@ class PolishR2VPromptRequest(BaseModel):
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
     polish_model: str = ""
+    target_video_model: str = ""
 
 
 @app.post("/video/polish_r2v_prompt")
@@ -4050,7 +4076,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     SYNC handler on purpose — see polish_video_prompt for rationale."""
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "r2v_polish")
+        custom_prompt = _get_custom_prompt(request.script_id, "r2v_polish") + _target_model_guidance(request.target_video_model)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]

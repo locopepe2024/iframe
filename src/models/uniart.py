@@ -126,9 +126,15 @@ def _provider_error_detail(resp: requests.Response) -> str:
     return f"UniArt request failed ({status}{code_part}): {message}{suffix}"
 
 
-def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900, endpoint: str = "videos") -> Dict[str, Any]:
+def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, endpoint: str = "videos") -> Dict[str, Any]:
+    """Observe an upstream task until it reaches a terminal state.
+
+    A provider task is not failed merely because our worker has been waiting;
+    ``max_wait`` remains available for bounded tests/callers, but production
+    polling is unbounded and ends only on provider success/failure/cancel.
+    """
     started = time.time()
-    while time.time() - started < max_wait:
+    while max_wait is None or time.time() - started < max_wait:
         resp = requests.get(
             f"{_base_url(config)}/{endpoint}/{task_id}",
             headers=_headers(config),
