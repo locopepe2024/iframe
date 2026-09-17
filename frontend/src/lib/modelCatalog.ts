@@ -159,6 +159,7 @@ if (typeof window !== 'undefined') {
             MODEL_CATALOG.models[id] = {
                 ...entry,
                 id,
+                provider: 'uniart',
                 display_name: entry.display_name || id.slice(7),
                 description: entry.description || `UniArt ${id.slice(7)}`,
                 family: entry.family || (image ? 'gpt-image' : 'uniart-video'),
@@ -188,6 +189,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
             MODEL_CATALOG.models[id] = {
                 id,
                 display_name: entry.display_name || id.replace(/^uniart\//, ''),
+                provider: 'uniart',
                 description: entry.description || `UniArt ${id.replace(/^uniart\//, '')}`,
                 family: entry.family || (isImage ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
@@ -492,6 +494,9 @@ function rebuildDynamicModelLists(): void {
     refresh(GLOBAL_I2V_MODELS, getVisibleModels('i2v', 'global_settings').map(toI2VModel));
     refresh(GLOBAL_R2V_MODELS, getVisibleModels('r2v', 'global_settings').map(toI2VModel));
     refresh(VIDEO_I2V_MODELS, getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
+    refresh(VIDEO_R2V_MODELS, SORTED_MODEL_ENTRIES
+        .filter(model => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
+        .map(toI2VModel));
 }
 
 export const DEFAULT_I2V_MODEL_ID = resolveModelId('i2v', undefined, 'video_sidebar');
