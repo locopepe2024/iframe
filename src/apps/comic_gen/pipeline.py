@@ -242,6 +242,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         workbench_generate_count: Optional[int] = None,
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
+        workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
     ) -> Optional["StoryboardFrame"]:
         """Persist Storyboard R2V workbench state onto a frame.
 
@@ -299,6 +300,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame.video_model = video_model.strip() or None
             if workbench_generate_audio is not None:
                 frame.workbench_generate_audio = bool(workbench_generate_audio)
+            if workbench_reference_variant_ids is not None:
+                cleaned_selections: Dict[str, List[str]] = {}
+                for asset_id, variant_ids in workbench_reference_variant_ids.items():
+                    if not isinstance(asset_id, str) or not asset_id.strip() or not isinstance(variant_ids, list):
+                        continue
+                    unique_ids: List[str] = []
+                    for variant_id in variant_ids:
+                        if isinstance(variant_id, str) and variant_id.strip() and variant_id not in unique_ids:
+                            unique_ids.append(variant_id)
+                    if unique_ids:
+                        cleaned_selections[asset_id] = unique_ids
+                frame.workbench_reference_variant_ids = cleaned_selections
             frame.updated_at = time.time()
             try:
                 self._save_data()
@@ -2172,6 +2185,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
                 raise ValueError("Text-to-video cannot accept media references")
+            if "minimax-h3" in model.lower() and len(reference_image_urls or []) > 9:
+                raise ValueError("MiniMax H3 accepts at most 9 reference images per video request")
             reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
             reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_video_urls or []]
             if image_url:

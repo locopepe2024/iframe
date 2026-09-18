@@ -42,6 +42,8 @@ export interface ShotNode {
     videoModel?: string;
     /** Explicit per-shot generated-audio choice. Undefined inherits the UI default. */
     generateAudio?: boolean;
+    /** Explicit image variants selected from each semantic asset for this shot. */
+    referenceVariantIds?: Record<string, string[]>;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy

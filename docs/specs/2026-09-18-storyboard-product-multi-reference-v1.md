@@ -1,6 +1,6 @@
 # Storyboard Product Multi-Reference V1
 
-Status: implementation in progress.
+Status: implemented and locally verified.
 
 ## Observed
 

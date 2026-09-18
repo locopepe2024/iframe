@@ -23,6 +23,10 @@ export interface ImageVariant {
     source_origin?: "upload" | "workbench" | "generation";
     source_generation_id?: string;
     source_output_id?: string;
+    reference_view_role?: string;
+    reference_distance?: string;
+    camera_yaw?: number;
+    camera_pitch?: number;
 }
 
 export interface ImageAsset {
@@ -142,6 +146,7 @@ export interface StoryboardFrame {
     status?: string;
     locked?: boolean;
     workbench_generate_audio?: boolean | null;
+    workbench_reference_variant_ids?: Record<string, string[]>;
     // ... other fields
 }
 

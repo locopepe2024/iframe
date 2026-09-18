@@ -135,6 +135,16 @@ class ImageVariant(BaseModel):
     source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
     source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
     source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
+    reference_view_role: Optional[str] = Field(
+        None,
+        description="Optional product view role such as front, right, three_quarter_right, or detail",
+    )
+    reference_distance: Optional[str] = Field(
+        None,
+        description="Optional framing distance: macro, close, medium, or full",
+    )
+    camera_yaw: Optional[float] = Field(None, description="Optional camera yaw in degrees")
+    camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
 
 # Maximum variants to keep per asset (excluding favorited ones)
 MAX_VARIANTS_PER_ASSET = 10
@@ -465,6 +475,10 @@ class StoryboardFrame(BaseModel):
     workbench_generate_audio: Optional[bool] = Field(
         None,
         description="Per-shot generated-audio choice; None inherits the current project/UI default",
+    )
+    workbench_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Explicit per-shot image variant selections keyed by semantic asset ID",
     )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top

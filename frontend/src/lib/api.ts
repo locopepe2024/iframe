@@ -407,6 +407,7 @@ export const api = {
             workbench_generate_count?: number;
             video_model?: string;
             workbench_generate_audio?: boolean;
+            workbench_reference_variant_ids?: Record<string, string[]>;
         },
     ) => {
         const res = await axios.patch(

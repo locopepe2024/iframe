@@ -2503,6 +2503,7 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
+    workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2522,6 +2523,7 @@ def update_frame_workbench(
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
+            workbench_reference_variant_ids=request.workbench_reference_variant_ids,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

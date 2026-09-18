@@ -51,6 +51,20 @@ def test_h3_missing_references_rejected_before_task_creation(studio):
     assert not script.video_tasks
 
 
+def test_h3_rejects_more_than_nine_reference_images(studio):
+    pipeline, script = studio
+    with pytest.raises(ValueError, match="at most 9"):
+        pipeline.create_video_task(
+            script.id,
+            "",
+            "product turntable",
+            model="uniart/minimax-h3-vip",
+            generation_mode="r2v",
+            reference_image_urls=[f"https://cdn.example/{index}.jpg" for index in range(10)],
+        )
+    assert not script.video_tasks
+
+
 def task(script, **overrides):
     values = dict(id="take", project_id=script.id, image_url="", prompt="replace product",
                   model="uniart/minimax-h3-vip", generation_mode="r2v", duration=6,

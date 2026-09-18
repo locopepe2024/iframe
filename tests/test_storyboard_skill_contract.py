@@ -177,3 +177,9 @@ def test_h3_submission_rejects_mixed_unresolved_syntax():
     from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
     with pytest.raises(ValueError):
         bind_storyboard_prompt('use @product and [Picture 1]', 'uniart/minimax-h3-vip', 1)
+
+
+def test_non_h3_submission_strips_semantic_editor_tags():
+    from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
+    prompt = '[character:主播] holds [prop:药盒] in [scene:直播间]'
+    assert bind_storyboard_prompt(prompt, 'uniart/seedance-2.5-vip', 3).strip() == 'holds  in'
