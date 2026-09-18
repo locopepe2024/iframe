@@ -1,6 +1,6 @@
 # Storyboard Product Multi-Reference V1
 
-Status: implemented and locally verified.
+Status: extended implementation in progress.
 
 ## Observed
 
@@ -34,6 +34,17 @@ The generated-audio choice must be stored per shot. Submission precedence is:
 - The prompt maps all of those pictures to one `<Subject N>` and states that
   they are views of the same physical product.
 - A shot with no explicit multi-selection continues to submit the primary image.
+- Distance and angle are child-reference metadata, not separate semantic assets:
+  `穿心莲` owns `远景 / 中景 / 近景` or `正面 / 侧面 / 斜侧面` views.
+- The asset chip inserts the stable semantic reference. Its adjacent view control
+  selects one or more child references for that shot without changing the prompt
+  asset name.
+- Cast revisions/reference images are deletable. Deleting the primary view
+  promotes another remaining view, or clears the primary when none remain.
+- Deletion removes the variant ID from every frame in the current project so a
+  later paid request cannot retain a stale view selection.
+- All selected child views across all referenced assets share H3's nine-picture
+  request budget; the UI must reject a selection that would exceed it.
 
 Optional variant metadata:
 
@@ -62,6 +73,9 @@ fallback when exact printed pixels are mandatory.
   assets' picture indices.
 - Existing one-image assets and old frames require no migration.
 - Invalid or foreign variant IDs are ignored or rejected before paid generation.
+- Character canonical `reference_sheet`, scene and prop revisions can be deleted
+  from Cast, including series/global shared assets, and persist to their owner.
+- Shot quick actions expose child views and reflect the shot's persisted selection.
 
 ## Affected Paths
 
