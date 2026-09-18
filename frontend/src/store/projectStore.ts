@@ -21,6 +21,8 @@ export interface ImageVariant {
     created_at: number;
     prompt_used?: string;
     source_origin?: "upload" | "workbench" | "generation";
+    source_generation_id?: string;
+    source_output_id?: string;
 }
 
 export interface ImageAsset {

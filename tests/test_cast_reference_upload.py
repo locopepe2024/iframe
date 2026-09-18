@@ -11,7 +11,7 @@ def test_workbench_import_resolves_owned_output_instead_of_preview_url(monkeypat
     from src.apps.comic_gen import api
 
     user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
-    generation = SimpleNamespace(outputs=[SimpleNamespace(
+    generation = SimpleNamespace(id='generation', outputs=[SimpleNamespace(
         id='output',
         media_type='image',
         media_path='output/users/profile/playground/result.png',
@@ -29,6 +29,8 @@ def test_workbench_import_resolves_owned_output_instead_of_preview_url(monkeypat
     ), user)
 
     assert payload['image_url'] == 'output/users/profile/playground/result.png'
+    assert payload['source_generation_id'] == 'generation'
+    assert payload['source_output_id'] == 'output'
     storage.get_generation.assert_called_once_with('generation')
 
 
@@ -65,6 +67,8 @@ def test_image_material_creates_selected_library_variant(kind, origin, is_upload
         'name': 'Imported material',
         'image_url': 'output/playground/images/result.png',
         'image_origin': origin,
+        'source_generation_id': 'generation' if origin == 'workbench' else None,
+        'source_output_id': 'output' if origin == 'workbench' else None,
     })
 
     unit = asset.reference_sheet if kind == 'character' else asset.image_asset
@@ -75,6 +79,8 @@ def test_image_material_creates_selected_library_variant(kind, origin, is_upload
     assert variants[0].source_origin == origin
     assert variants[0].is_uploaded_source is is_uploaded
     assert variants[0].upload_type == upload_type
+    assert variants[0].source_generation_id == ('generation' if origin == 'workbench' else None)
+    assert variants[0].source_output_id == ('output' if origin == 'workbench' else None)
     assert asset.owner_profile_id == 'profile'
 
 
