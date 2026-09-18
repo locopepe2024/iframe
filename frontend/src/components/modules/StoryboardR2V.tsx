@@ -900,7 +900,10 @@ export default function StoryboardR2V() {
                     ? explicitR2v
                     : getR2vRouteModelId(videoConfig.model);
                 const imageBased = isR2vImageBased(routeModelId);
-                const generateAudio = storyboardGeneratedAudio(routeModelId, videoConfig.audio);
+                const generateAudio = storyboardGeneratedAudio(
+                    routeModelId,
+                    shot.generateAudio ?? videoConfig.audio,
+                );
                 const promptText = buildGenerationPrompt(shot, generateAudio, routeModelId);
 
                 const tasks = await api.createVideoTask(
@@ -976,7 +979,10 @@ export default function StoryboardR2V() {
                     return;
                 }
 
-                const generateAudio = storyboardGeneratedAudio(videoConfig.model, videoConfig.audio);
+                const generateAudio = storyboardGeneratedAudio(
+                    videoConfig.model,
+                    shot.generateAudio ?? videoConfig.audio,
+                );
                 const promptText = buildGenerationPrompt(shot, generateAudio, videoConfig.model);
                 const tasks = await api.createVideoTask(
                     currentProject.id,
@@ -1042,7 +1048,10 @@ export default function StoryboardR2V() {
         const requestedModelId = params?.model ?? (tabMode === "direct_r2v"
             ? videoConfig.r2vModel
             : videoConfig.model);
-        const generateAudio = storyboardGeneratedAudio(requestedModelId, params?.audio ?? videoConfig.audio);
+        const generateAudio = storyboardGeneratedAudio(
+            requestedModelId,
+            params?.audio ?? shot.generateAudio ?? videoConfig.audio,
+        );
         const promptText = buildGenerationPrompt(shot, generateAudio, requestedModelId);
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
@@ -1531,7 +1540,7 @@ export default function StoryboardR2V() {
             cfgScale: videoConfig.cfgScale,
             mode: videoConfig.mode,
             movementAmplitude: videoConfig.movementAmplitude,
-            audio: videoConfig.audio,
+            audio: shot.generateAudio ?? videoConfig.audio,
             sound: videoConfig.sound,
             viduAudio: videoConfig.viduAudio,
             watermark: videoConfig.watermark,
@@ -1550,8 +1559,15 @@ export default function StoryboardR2V() {
             persistWorkbench(shot.id, { workbench_generate_count: next.count });
         }
         setShotCounts(prev => ({ ...prev, [shot.id]: next.count }));
-        setShots(prev => prev.map(item => item.id === shot.id ? { ...item, videoModel: next.model } : item));
-        persistWorkbench(shot.id, { video_model: next.model });
+        setShots(prev => prev.map(item => item.id === shot.id ? {
+            ...item,
+            videoModel: next.model,
+            generateAudio: next.audio === true,
+        } : item));
+        persistWorkbench(shot.id, {
+            video_model: next.model,
+            workbench_generate_audio: next.audio === true,
+        });
         // Sync duration back to structured field (single source of truth)
         if (next.duration !== (shot.duration ?? videoConfig.duration)) {
             const idx = shots.findIndex(s => s.id === shot.id);

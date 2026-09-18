@@ -4043,7 +4043,8 @@
             "720p",
             "2k"
           ]
-        }
+        },
+        "seed": true
       },
       "provider": "uniart",
       "release_stage": "stable",
@@ -7673,7 +7674,8 @@
             "720p",
             "2k"
           ]
-        }
+        },
+        "seed": true
       },
       "provider": "uniart",
       "release_stage": "stable",

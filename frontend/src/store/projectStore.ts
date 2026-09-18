@@ -141,6 +141,7 @@ export interface StoryboardFrame {
     rendered_image_asset?: ImageAsset;
     status?: string;
     locked?: boolean;
+    workbench_generate_audio?: boolean | null;
     // ... other fields
 }
 

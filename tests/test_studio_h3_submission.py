@@ -79,6 +79,13 @@ def test_studio_sends_image_and_source_video_with_explicit_mode(studio):
     assert current.status == "completed"
 
 
+def test_h3_seed_reaches_gateway_request(studio):
+    pipeline, script = studio
+    current = task(script, seed=24680)
+    pipeline.process_video_task(script.id, current.id)
+    assert uniart._post.call_args.args[2]["seed"] == 24680
+
+
 @pytest.mark.parametrize("model,duration,expected", [
     ("uniart/seedance-2.5-vip", 3, 4),
     ("uniart/minimax-h3-vip", 3, 4),

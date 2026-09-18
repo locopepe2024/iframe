@@ -389,6 +389,7 @@ def test_storyboard_frame_workbench_fields_default_empty():
     assert frame.t2i_image_urls == []
     assert frame.t2i_selected_index == 0
     assert frame.workbench_generate_count == 1
+    assert frame.workbench_generate_audio is None
 
 
 def test_storyboard_frame_workbench_fields_round_trip():
@@ -400,12 +401,25 @@ def test_storyboard_frame_workbench_fields_round_trip():
         t2i_image_urls=["http://a", "http://b", "http://c"],
         t2i_selected_index=2,
         workbench_generate_count=4,
+        workbench_generate_audio=False,
     )
     revived = StoryboardFrame.model_validate(frame.model_dump())
     assert revived.workbench_tab_mode == "t2i_i2v"
     assert revived.t2i_image_urls == ["http://a", "http://b", "http://c"]
     assert revived.t2i_selected_index == 2
     assert revived.workbench_generate_count == 4
+    assert revived.workbench_generate_audio is False
+
+
+def test_update_frame_workbench_persists_explicit_audio_false(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1", workbench_generate_audio=True)
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench(
+            "p1", "f1", workbench_generate_audio=False,
+        )
+    assert updated is not None
+    assert updated.workbench_generate_audio is False
 
 
 def test_video_task_workbench_tab_default_none():

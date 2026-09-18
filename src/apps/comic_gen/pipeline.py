@@ -241,6 +241,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         t2i_selected_index: Optional[int] = None,
         workbench_generate_count: Optional[int] = None,
         video_model: Optional[str] = None,
+        workbench_generate_audio: Optional[bool] = None,
     ) -> Optional["StoryboardFrame"]:
         """Persist Storyboard R2V workbench state onto a frame.
 
@@ -296,6 +297,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
             if video_model is not None:
                 frame.video_model = video_model.strip() or None
+            if workbench_generate_audio is not None:
+                frame.workbench_generate_audio = bool(workbench_generate_audio)
             frame.updated_at = time.time()
             try:
                 self._save_data()
@@ -3387,6 +3390,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else [],
                     ref_audio_urls=[task.audio_url] if task.audio_url and task.generation_mode == "r2v" else [],
                     generate_audio=task.generate_audio,
+                    seed=task.seed,
                     on_task_submitted=save_provider_task,
                     resume_task_id=task.provider_task_id if task.provider_name == "uniart" else None,
                 )

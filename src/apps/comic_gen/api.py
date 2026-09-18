@@ -2502,6 +2502,7 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
+    workbench_generate_audio: Optional[bool] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2520,6 +2521,7 @@ def update_frame_workbench(
             t2i_selected_index=request.t2i_selected_index,
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
+            workbench_generate_audio=request.workbench_generate_audio,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

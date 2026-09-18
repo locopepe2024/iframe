@@ -462,6 +462,10 @@ class StoryboardFrame(BaseModel):
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
     video_model: Optional[str] = Field(None, description="Per-shot video model override")
+    workbench_generate_audio: Optional[bool] = Field(
+        None,
+        description="Per-shot generated-audio choice; None inherits the current project/UI default",
+    )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"
