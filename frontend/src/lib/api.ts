@@ -1,5 +1,6 @@
 import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
+import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -929,6 +930,21 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
             text: text
         });
+        return res.data;
+    },
+
+    analyzeStoryboardPreview: async (scriptId: string, text: string) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text),
+
+    refineStoryboardPreview: async (
+        scriptId: string,
+        text: string,
+        draft: StoryboardDraftFrame[],
+        instructions: string[],
+    ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
+
+    applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
         return res.data;
     },
 

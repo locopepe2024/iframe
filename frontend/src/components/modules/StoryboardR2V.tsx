@@ -16,6 +16,8 @@ import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import { buildAssembledPrompt, buildGenerationPrompt } from "./storyboard-r2v/buildAssembledPrompt";
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
+import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
+import type { StoryboardDraftFrame } from "@/lib/storyboardAnalysis";
 import { toast } from "@/store/toastStore";
 import { Wand2 } from "lucide-react";
 import AssetDrawer from "./storyboard-r2v/AssetDrawer";
@@ -417,6 +419,10 @@ export default function StoryboardR2V() {
     // setShots() when the new frames come back.
     const [genDialogOpen, setGenDialogOpen] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [storyboardDraft, setStoryboardDraft] = useState<StoryboardDraftFrame[] | null>(null);
+    const [storyboardDraftText, setStoryboardDraftText] = useState("");
+    const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
+    const [storyboardDraftBusy, setStoryboardDraftBusy] = useState(false);
     const [bannerState, setBannerState] = useState<BannerState>(
         () => (currentProject?.frames?.length ?? 0) > 0 ? "summary" : "idle"
     );
@@ -499,50 +505,91 @@ export default function StoryboardR2V() {
         }
         setGenerating(true);
         setBannerState("phase1");
-        setShots([]);
         try {
-            // Phase 1: generate coarse frames
-            const updated = await api.analyzeToStoryboard(projectId, scriptText);
+            const draft = await api.analyzeStoryboardPreview(projectId, scriptText);
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            setStoryboardDraft(draft);
+            setStoryboardDraftText(scriptText);
+            setStoryboardFeedback([]);
+            setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("genToastErrUnknown");
+            toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
+            setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+        } finally {
+            setGenerating(false);
+        }
+    }, [currentProject, t]);
+
+    const handleRefineStoryboardDraft = useCallback(async (instruction: string) => {
+        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText) return;
+        const projectId = currentProject.id;
+        const instructions = [...storyboardFeedback, instruction.trim()];
+        setStoryboardDraftBusy(true);
+        try {
+            const revised = await api.refineStoryboardPreview(
+                projectId, storyboardDraftText, storyboardDraft, instructions,
+            );
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            setStoryboardDraft(revised);
+            setStoryboardFeedback(instructions);
+        } finally {
+            setStoryboardDraftBusy(false);
+        }
+    }, [currentProject?.id, storyboardDraft, storyboardDraftText, storyboardFeedback]);
+
+    const handleApplyStoryboardDraft = useCallback(async () => {
+        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText) return;
+        const projectId = currentProject.id;
+        setStoryboardDraftBusy(true);
+        try {
+            const updated = await api.applyStoryboardDraft(projectId, storyboardDraftText, storyboardDraft);
             const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
             updateProject(projectId, updated);
             if (Array.isArray(updated?.frames)) {
                 const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                const videoTasks: any[] = (updated as any).video_tasks ?? [];
+                const videoTasks: any[] = updated.video_tasks ?? [];
                 setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
             }
+            setStoryboardDraft(null);
+            setStoryboardDraftText("");
+            setStoryboardFeedback([]);
 
-            // Phase 2: batch refine (SSE)
             if (newFrameCount > 0) {
                 setBannerState("phase2");
                 setRefineProgress({ current: 0, total: newFrameCount });
-                await api.refineBatchFrames(projectId, (event: RefineSSEEvent) => {
-                    if (event.type === "frame_refine_start") {
-                        setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
+                try {
+                    await api.refineBatchFrames(projectId, (event: RefineSSEEvent) => {
+                        if (event.type === "frame_refine_start") {
+                            setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
+                        }
+                    });
+                    const refreshed = await api.getProject(projectId);
+                    if (refreshed?.frames && useProjectStore.getState().currentProject?.id === projectId) {
+                        updateProject(projectId, { frames: refreshed.frames });
+                        const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+                        const videoTasks: any[] = refreshed.video_tasks ?? [];
+                        setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
                     }
-                });
-                const refreshed = await api.getProject(projectId);
-                if (refreshed?.frames) {
-                    updateProject(projectId, { frames: refreshed.frames });
-                    const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                    const videoTasks: any[] = (refreshed as any).video_tasks ?? [];
-                    setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
+                } catch (error: any) {
+                    const detail = error?.response?.data?.detail || error?.message || t("genToastErrUnknown");
+                    toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
                 }
             }
             setBannerState("summary");
             toast.success(t("genToastDone", { count: newFrameCount }));
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || t("genToastErrUnknown");
-            toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
         } finally {
-            setGenerating(false);
             setRefineProgress(null);
-            // Determine final banner state based on actual current shots
-            setShots(currentShots => {
-                setBannerState(currentShots.length > 0 ? "summary" : "idle");
-                return currentShots;
-            });
+            setStoryboardDraftBusy(false);
         }
-    }, [currentProject, updateProject, t]);
+    }, [currentProject, storyboardDraft, storyboardDraftText, updateProject, t]);
+
+    const handleDiscardStoryboardDraft = useCallback(() => {
+        if (storyboardDraftBusy) return;
+        setStoryboardDraft(null);
+        setStoryboardDraftText("");
+        setStoryboardFeedback([]);
+    }, [storyboardDraftBusy]);
 
     const handleRefineFrame = useCallback(async (frameId: string) => {
         if (!currentProject?.id) return;
@@ -2373,12 +2420,22 @@ export default function StoryboardR2V() {
             isOpen={genDialogOpen}
             onClose={() => setGenDialogOpen(false)}
             project={currentProject as any}
-            existingShotCount={shots.length}
+            existingShotCount={currentProject?.frames?.length ?? 0}
             onConfirm={handleSmartGenerate}
             onJumpToScript={() => {
                 setGenDialogOpen(false);
                 window.dispatchEvent(new CustomEvent("navigateStep", { detail: "script" }));
             }}
+        />
+        <StoryboardAnalysisModal
+            isOpen={!!storyboardDraft}
+            draft={storyboardDraft}
+            feedback={storyboardFeedback}
+            existingShotCount={currentProject?.frames?.length ?? 0}
+            isBusy={storyboardDraftBusy}
+            onRefine={handleRefineStoryboardDraft}
+            onApply={handleApplyStoryboardDraft}
+            onDiscard={handleDiscardStoryboardDraft}
         />
         </div>
     );

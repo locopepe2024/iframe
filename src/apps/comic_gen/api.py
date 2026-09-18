@@ -2339,6 +2339,101 @@ class AnalyzeToStoryboardRequest(BaseModel):
     text: str
 
 
+class StoryboardAnalysisRefineRequest(BaseModel):
+    text: str
+    draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
+    instructions: List[str] = Field(min_length=1, max_length=12)
+
+
+class StoryboardAnalysisApplyRequest(BaseModel):
+    text: str
+    draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
+
+
+def _storyboard_analysis_fingerprint(script_id: str, text: str,
+                                     draft=None, instructions=None) -> str:
+    _, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    llm = pipeline.script_processor.llm
+    return hashlib.sha256(json.dumps([
+        text,
+        entities,
+        draft,
+        instructions,
+        prompt,
+        llm.provider,
+        llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@app.post("/projects/{script_id}/storyboard-analysis-jobs", status_code=202)
+def start_storyboard_analysis(
+    script_id: str,
+    request: AnalyzeToStoryboardRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Create or resume a durable storyboard draft without replacing frames."""
+    if not request.text.strip():
+        raise HTTPException(422, "Script text is required")
+    fingerprint = _storyboard_analysis_fingerprint(script_id, request.text)
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        "storyboard:" + fingerprint,
+        lambda: {"frames": pipeline.preview_storyboard_analysis(script_id, request.text)},
+    )
+
+
+@app.post("/projects/{script_id}/storyboard-analysis-jobs/refine", status_code=202)
+def start_storyboard_analysis_refinement(
+    script_id: str,
+    request: StoryboardAnalysisRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Revise a storyboard draft without replacing persisted frames."""
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    fingerprint = _storyboard_analysis_fingerprint(
+        script_id, request.text, request.draft, instructions
+    )
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        "storyboard:" + fingerprint,
+        lambda: {"frames": pipeline.refine_storyboard_analysis(
+            script_id, request.text, request.draft, instructions
+        )},
+    )
+
+
+@app.get("/projects/{script_id}/storyboard-analysis-jobs/{job_id}")
+def storyboard_analysis_status(
+    script_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
+
+
+@app.post("/projects/{script_id}/storyboard-analysis/apply", response_model=Script)
+def apply_storyboard_analysis(
+    script_id: str,
+    request: StoryboardAnalysisApplyRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Replace frames with the exact storyboard draft reviewed by the user."""
+    del user  # Ownership is enforced by the studio request boundary.
+    try:
+        return signed_response(
+            pipeline.analyze_text_to_frames(script_id, request.text, request.draft)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error applying storyboard analysis: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/projects/{script_id}/storyboard/analyze")
 def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     """

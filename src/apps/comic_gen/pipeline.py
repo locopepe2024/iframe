@@ -1379,15 +1379,50 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     # === STORYBOARD DRAMATIZATION v2 ===
 
-    def analyze_text_to_frames(self, script_id: str, text: str) -> Script:
+    def storyboard_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], str]:
+        """Return the stable project context used by storyboard analysis jobs."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        resolved = self.resolve_episode_assets(script)
+        entities_json = {
+            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in resolved["characters"]],
+            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
+            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
+        }
+        series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
+        prompt = self.get_effective_prompt("storyboard_extraction", script, series)
+        return script, entities_json, prompt
+
+    def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
+        """Generate a storyboard draft without mutating persisted frames."""
+        _, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        frames = self.script_processor.analyze_to_storyboard(
+            text, entities_json, custom_extraction_prompt=prompt
+        )
+        if not frames:
+            raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
+        return frames
+
+    def refine_storyboard_analysis(self, script_id: str, text: str,
+                                    draft: List[Dict[str, Any]],
+                                    instructions: List[str]) -> List[Dict[str, Any]]:
+        """Revise a storyboard draft without changing the project's frames."""
+        _, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        frames = self.script_processor.refine_storyboard_analysis(
+            text, entities_json, draft, instructions, custom_extraction_prompt=prompt
+        )
+        if not frames:
+            raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
+        return frames
+
+    def analyze_text_to_frames(self, script_id: str, text: str,
+                               draft: Optional[List[Dict[str, Any]]] = None) -> Script:
         """
         Analyzes script text and generates storyboard frames using LLM.
         Replaces existing frames with newly generated ones.
         """
-        script = self.scripts.get(script_id)
-        if not script:
-            raise ValueError("Script not found")
-        
+        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(script_id)
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)
@@ -1396,19 +1431,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
 
-        # Build entities JSON from resolved characters, scenes, props
-        entities_json = {
-            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in all_characters],
-            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in all_scenes],
-            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in all_props],
-        }
-
-        # Resolve effective storyboard-extraction prompt (Episode → Series → built-in default).
-        series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
-        storyboard_extraction_prompt = self.get_effective_prompt("storyboard_extraction", script, series)
-
-        # Call LLM to analyze text (may raise RuntimeError on parse failure)
-        raw_frames = self.script_processor.analyze_to_storyboard(
+        # An explicit reviewed draft is applied exactly as shown and never
+        # triggers a second analysis call.
+        raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt
         )
 

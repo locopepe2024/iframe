@@ -1055,6 +1055,51 @@ class ScriptProcessor:
             logger.error(f"Failed to parse storyboard analysis JSON: {e}")
             return None
 
+    def refine_storyboard_analysis(
+        self,
+        text: str,
+        entities_json: Dict[str, Any],
+        draft: List[Dict[str, Any]],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+    ) -> List[Dict[str, Any]]:
+        """Revise a storyboard draft using the source and accumulated direction."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        entities_str = json.dumps(entities_json, ensure_ascii=False, indent=2)
+        template = (
+            custom_extraction_prompt.strip()
+            if custom_extraction_prompt and custom_extraction_prompt.strip()
+            else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+        )
+        baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮分镜草稿：
+<current_storyboard>
+{json.dumps({"frames": draft}, ensure_ascii=False, indent=2)}
+</current_storyboard>
+
+用户累计提出的导演修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本和实体表修订 current_storyboard。保留未被要求改变的正确镜头，
+不要把修订要求当作剧本事实。只返回合法 JSON，顶层只能包含 frames；不要返回解释或 Markdown。"""
+        content = self.llm.chat(
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "请返回修订后的完整分镜列表。"},
+            ],
+            response_format={"type": "json_object"},
+        ).strip()
+        frames = self._parse_storyboard_json(content)
+        if frames is None:
+            raise RuntimeError("AI 模型输出的分镜修订 JSON 格式不合规，请重试。")
+        return frames
+
     def _mock_storyboard_frames(self, text: str) -> List[Dict[str, Any]]:
         """Returns mock storyboard frames for testing when API is unavailable."""
         return [
