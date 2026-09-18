@@ -1530,6 +1530,7 @@
     "polishErrorApi": "模型调用失败，请重试或检查网络。",
     "polishErrorJsonParse": "模型返回了无效响应，建议重试或简化提示词。",
     "polishErrorMissingKeys": "模型返回了不完整的双语结果，建议重试。",
+    "polishErrorModelContract": "润色模型未返回当前视频模型所需的提示词结构，请重试；本次结果未应用。",
     "polishWarningModelEcho": "模型未做明显修改。在下方反馈框补充具体要求（如运镜、光影、情绪）后重试。",
     "artStyleLabel": "画风",
     "artStyleHint": "全局画风设定（点击跳转 艺术指导 编辑）",

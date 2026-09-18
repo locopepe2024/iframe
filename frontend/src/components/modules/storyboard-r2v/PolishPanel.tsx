@@ -33,6 +33,7 @@ type PolishErrorReason =
     | "api_error"
     | "json_parse_error"
     | "missing_keys"
+    | "model_contract_mismatch"
     | "model_echo";
 
 interface PolishErrorState {
@@ -66,6 +67,7 @@ function reasonToI18nKey(reason: PolishErrorReason): string {
         case "api_error": return "polishErrorApi";
         case "json_parse_error": return "polishErrorJsonParse";
         case "missing_keys": return "polishErrorMissingKeys";
+        case "model_contract_mismatch": return "polishErrorModelContract";
         case "model_echo": return "polishWarningModelEcho";
     }
 }

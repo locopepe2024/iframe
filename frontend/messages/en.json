@@ -1530,6 +1530,7 @@
     "polishErrorApi": "Model call failed. Please retry or check your network.",
     "polishErrorJsonParse": "Model returned invalid response. Try again or simplify the prompt.",
     "polishErrorMissingKeys": "Model returned incomplete bilingual result. Please retry.",
+    "polishErrorModelContract": "The polish model did not return the prompt structure required by the selected video model. Retry; this result was not applied.",
     "polishWarningModelEcho": "Model made no notable changes. Add specific feedback below (camera, lighting, mood) and retry.",
     "artStyleLabel": "Style",
     "artStyleHint": "Global art style (click to edit in Art Direction)",

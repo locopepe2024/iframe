@@ -760,7 +760,7 @@ export const api = {
     // 后端契约（#117）：
     //   成功 → 200 + { prompt_cn, prompt_en }
     //   失败 → 502 + { detail: { reason, message_zh, message_en, prompt_cn?, prompt_en? } }
-    //     reason ∈ is_configured_false | api_error | json_parse_error | missing_keys | model_echo
+    //     reason ∈ is_configured_false | api_error | json_parse_error | missing_keys | model_contract_mismatch | model_echo
     //     model_echo 是 warning（带原文），其余是 hard error。
     //
     // prevCn（#119）：迭代时传入上一次 CN 实现双语锚点；首次留空。
