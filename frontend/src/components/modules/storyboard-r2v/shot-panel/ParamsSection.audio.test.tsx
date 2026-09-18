@@ -11,8 +11,8 @@ describe('storyboard generated audio', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'generatedAudio' }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ audio: !audio }));
   });
-  it('shows audio when optional capability metadata is absent', () => {
-    render(<ParamsSection shotId="shot" title="Parameters" modelList={[{ id: 'test', name: 'Test', description: '', duration: { type: 'fixed', value: 5 }, params: {} }]} params={{ model: 'test', duration: 5, count: 1, audio: true }} onChange={vi.fn()} />);
+  it.each([{}, { audio: false }])('shows audio when capability metadata is %o', (params) => {
+    render(<ParamsSection shotId="shot" title="Parameters" modelList={[{ id: 'test', name: 'Test', description: '', duration: { type: 'fixed', value: 5 }, params }]} params={{ model: 'test', duration: 5, count: 1, audio: true }} onChange={vi.fn()} />);
     expect(screen.getByRole('switch', { name: 'generatedAudio' })).toBeChecked();
   });
 });

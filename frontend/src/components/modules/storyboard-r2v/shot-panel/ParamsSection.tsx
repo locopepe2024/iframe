@@ -443,15 +443,14 @@ export default function ParamsSection({
                     </div>
                 ) : null}
 
-                {/* supports_generate_audio is optional provider metadata. */}
-                {modelParams.audio !== false && (
-                    <ParamRow label={t("generatedAudio")}>
+                {/* Audio is an optional request field. Catalog metadata must
+                    never remove this control, including when it is false. */}
+                <ParamRow label={t("generatedAudio")}>
                         <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
                             checked={params.audio === true}
                             onChange={(e) => set("audio", e.target.checked)}
                             className="h-5 w-5 accent-primary" />
-                    </ParamRow>
-                )}
+                </ParamRow>
 
                 {/* Inline validation error (e.g. R2V model with no
                     references attached). Pops above the Generate CTA
