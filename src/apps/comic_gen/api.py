@@ -2835,6 +2835,31 @@ class DeleteVariantRequest(BaseModel):
     asset_type: str
     variant_id: str
 
+class UpdateVariantMetadataRequest(BaseModel):
+    asset_id: str
+    asset_type: str
+    variant_id: str
+    reference_view_role: Optional[str] = None
+    reference_distance: Optional[str] = None
+
+@app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
+def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
+    """Updates the angle/distance labels for one child reference image."""
+    try:
+        updated_script = pipeline.update_asset_variant_metadata(
+            script_id,
+            request.asset_id,
+            request.asset_type,
+            request.variant_id,
+            request.reference_view_role,
+            request.reference_distance,
+        )
+        return signed_response(updated_script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/projects/{script_id}/assets/variant/delete", response_model=Script)
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""

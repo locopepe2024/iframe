@@ -172,6 +172,26 @@ def test_delete_final_reference_removes_asset_selection_key():
     assert frame.workbench_reference_variant_ids == {}
 
 
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+def test_update_reference_variant_view_metadata(kind):
+    p, entity = pipeline(kind)
+    upload_type = 'reference_sheet' if kind == 'character' else 'image'
+    p.add_uploaded_asset_variant('project', kind, entity.id, upload_type, 'view.png')
+    unit = entity.reference_sheet if kind == 'character' else entity.image_asset
+    variant = (unit.image_variants if kind == 'character' else unit.variants)[0]
+    p._save_data.reset_mock()
+
+    p.update_asset_variant_metadata(
+        'project', entity.id, kind, variant.id,
+        reference_view_role='three_quarter_right',
+        reference_distance='close',
+    )
+
+    assert variant.reference_view_role == 'three_quarter_right'
+    assert variant.reference_distance == 'close'
+    p._save_data.assert_called_once()
+
+
 @pytest.mark.parametrize('source', ['series', 'global'])
 def test_delete_shared_reference_persists_owner_and_project_cleanup(source):
     from src.apps.comic_gen.models import Series, GlobalAssetLibrary

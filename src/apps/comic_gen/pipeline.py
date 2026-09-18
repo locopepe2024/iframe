@@ -3758,6 +3758,49 @@ class ComicGenPipeline(StudioOwnerMixin):
         selected_id = image_asset.selected_image_id if isinstance(image_asset, AssetUnit) else image_asset.selected_id
         return next((variant for variant in variants if variant.id == selected_id), None)
 
+    @staticmethod
+    def _asset_image_containers(target_asset: Any, asset_type: str) -> List[Any]:
+        """Return every image-variant container owned by a semantic asset."""
+        if asset_type == "character":
+            return [
+                getattr(target_asset, "reference_sheet", None),
+                getattr(target_asset, "full_body_asset", None),
+                getattr(target_asset, "three_view_asset", None),
+                getattr(target_asset, "headshot_asset", None),
+            ]
+        return [getattr(target_asset, "image_asset", None)]
+
+    def update_asset_variant_metadata(
+        self,
+        script_id: str,
+        asset_id: str,
+        asset_type: str,
+        variant_id: str,
+        reference_view_role: Optional[str] = None,
+        reference_distance: Optional[str] = None,
+    ) -> Script:
+        """Label a child reference view while preserving its semantic asset identity."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if target_asset is None:
+            raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+
+        for container in self._asset_image_containers(target_asset, asset_type):
+            if container is None:
+                continue
+            from .models import AssetUnit
+            variants = container.image_variants if isinstance(container, AssetUnit) else container.variants
+            variant = next((item for item in variants if item.id == variant_id), None)
+            if variant is None:
+                continue
+            variant.reference_view_role = reference_view_role or None
+            variant.reference_distance = reference_distance or None
+            self._save_after_asset_mutation(source)
+            return script
+        raise ValueError(f"Variant {variant_id} not found")
+
     def select_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str, generation_type: str = None) -> Script:
         """Selects a specific variant for an asset."""
         script = self.scripts.get(script_id)
