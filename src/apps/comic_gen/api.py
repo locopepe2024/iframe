@@ -536,6 +536,12 @@ class ReparseProjectRequest(BaseModel):
     text: str
 
 
+class ExtractionRefineRequest(BaseModel):
+    text: str
+    draft: Dict[str, List[Dict[str, Any]]]
+    instructions: List[str] = Field(min_length=1, max_length=12)
+
+
 class UpdateScriptTextRequest(BaseModel):
     text: str
 
@@ -605,6 +611,45 @@ def start_extraction(script_id: str, request: ReparseProjectRequest,
     fingerprint = hashlib.sha256(json.dumps([request.text, prompt, llm.provider, llm._get_default_model()], ensure_ascii=False).encode()).hexdigest()
     job = extraction_jobs.start(user.owner_profile_id, script_id, fingerprint,
                                 lambda: pipeline.script_processor.parse_novel(script.title, request.text, prompt).dict())
+    return extraction_response(job, script_id)
+
+
+@app.post("/projects/{script_id}/extraction-jobs/refine", status_code=202)
+def start_extraction_refinement(
+    script_id: str,
+    request: ExtractionRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Revise the pending extraction draft without mutating project Cast."""
+    script = pipeline.scripts.get(script_id)
+    if not script:
+        raise HTTPException(404, "Script not found")
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "scenes", "props")}
+    llm = pipeline.script_processor.llm
+    prompt = getattr(getattr(script, "prompt_config", None), "entity_extraction", "")
+    fingerprint = hashlib.sha256(json.dumps([
+        request.text,
+        draft,
+        instructions,
+        prompt,
+        llm.provider,
+        llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    job = extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        fingerprint,
+        lambda: pipeline.script_processor.refine_entity_extraction(
+            script.title,
+            request.text,
+            draft,
+            instructions,
+            prompt,
+        ).dict(),
+    )
     return extraction_response(job, script_id)
 
 

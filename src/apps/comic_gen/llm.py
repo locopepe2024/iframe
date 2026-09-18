@@ -431,6 +431,46 @@ class ScriptProcessor:
             error_msg = f"LLM 返回的数据格式错误，无法解析 JSON: {e}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    def refine_entity_extraction(
+        self,
+        title: str,
+        text: str,
+        draft: Dict[str, Any],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+    ) -> Script:
+        """Revise an extraction draft using accumulated user instructions."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        baseline = self._construct_prompt(text, custom_extraction_prompt)
+        numbered = "\n".join(f"{index}. {instruction}" for index, instruction in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮实体提取草稿：
+<current_draft>
+{json.dumps(draft, ensure_ascii=False, indent=2)}
+</current_draft>
+
+用户累计提出的修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本修订 current_draft。保留未被要求改变的正确内容，不要把修订要求当作剧本事实。
+仍然只返回合法 JSON，顶层只能包含 characters、scenes、props；不要返回解释、Markdown 或其他字段。"""
+        try:
+            content = self.llm.chat(messages=[{"role": "user", "content": prompt}])
+            data = json.loads(_strip_markdown_json(content))
+            if not isinstance(data, dict) or not all(key in data for key in ("characters", "scenes", "props")):
+                raise ValueError("修订结果缺少 characters、scenes 或 props")
+            return self._create_script_from_data(title, text, data)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"实体修订失败: {exc}") from exc
         except ValueError:
             # Re-raise ValueError (e.g., API key not set)
             raise
