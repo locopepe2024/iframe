@@ -1103,7 +1103,7 @@ class ForkFromLibraryRequest(BaseModel):
 
 
 def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext) -> Dict[str, Any]:
-    payload = request.model_dump(exclude={"asset_type", "source_generation_id", "source_output_id"})
+    payload = request.model_dump(exclude={"asset_type"})
     if request.image_origin != "workbench":
         return payload
     if not request.source_generation_id or not request.source_output_id:
@@ -1115,6 +1115,8 @@ def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext
     if output is None or output.media_type != "image":
         raise ValueError("Workbench image output not found")
     payload["image_url"] = output.media_path
+    payload["source_generation_id"] = generation.id
+    payload["source_output_id"] = output.id
     return payload
 
 

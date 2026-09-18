@@ -37,7 +37,8 @@ Import does not reinterpret a path or output ID as an asset ID. It creates new
 asset and variant IDs while retaining the material URL and source provenance.
 Workbench import sends `generation_id + output_id`; the server resolves the
 owner-scoped internal path. A signed preview URL is never persisted as the
-asset image and is not accepted as proof of ownership.
+asset image and is not accepted as proof of ownership. The created image
+variant retains both source IDs as durable provenance.
 
 ## Not Yet Proven or Implemented
 

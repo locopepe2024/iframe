@@ -4083,6 +4083,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     is_uploaded_source=image_origin == "upload",
                     upload_type="image" if image_origin == "upload" else None,
                     source_origin=image_origin,
+                    source_generation_id=payload.get("source_generation_id") if image_origin == "workbench" else None,
+                    source_output_id=payload.get("source_output_id") if image_origin == "workbench" else None,
                 )
             if asset_type == "character":
                 ref_sheet = AssetUnit()
