@@ -2643,10 +2643,15 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
 
 @app.get("/tasks/{task_id}")
 def get_task_status(task_id: str):
-    """Returns the status of an asset generation task for polling."""
+    """Returns a recoverable asset or persisted video task status."""
     status = pipeline.get_asset_generation_task_status(task_id)
     if not status:
+        status = pipeline.get_video_task_status(task_id)
+    if not status:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if status.get("video_url"):
+        return signed_response(status)
     
     # If completed, return the updated script as well
     if status["status"] == "completed":

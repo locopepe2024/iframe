@@ -862,6 +862,28 @@ class ComicGenPipeline(StudioOwnerMixin):
             "created_at": task.get("created_at")
         }
 
+    def get_video_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Return a persisted storyboard video task for the active owner."""
+        requested_owner = self._requested_owner_profile_id()
+        if not requested_owner:
+            return None
+        for script in self.scripts.values():
+            if not owned_by(script, requested_owner):
+                continue
+            task = next((item for item in script.video_tasks if item.id == task_id), None)
+            if not task:
+                continue
+            return {
+                "task_id": task.id,
+                "status": task.status,
+                "error": task.error,
+                "video_url": task.video_url,
+                "result_url": task.video_url,
+                "script_id": script.id,
+                "frame_id": task.frame_id,
+            }
+        return None
+
     def create_motion_ref_task(self, script_id: str, asset_id: str, asset_type: str, 
                                 prompt: Optional[str] = None, audio_url: Optional[str] = None, 
                                 duration: int = 5, batch_size: int = 1) -> Tuple[Script, str]:

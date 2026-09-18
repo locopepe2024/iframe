@@ -31,6 +31,8 @@ import pytest
 
 from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.identity import UserContext
+from src.apps.studio_access import reset_studio_user, set_studio_user
 
 
 @pytest.fixture
@@ -70,6 +72,73 @@ def _script_with_tasks(*tasks) -> Script:
         updated_at=time.time(),
         video_tasks=list(tasks),
     )
+
+
+def _identity(profile: str) -> UserContext:
+    return UserContext(
+        user_id=profile,
+        owner_profile_id=profile,
+        display_name=profile,
+        access_token="",
+    )
+
+
+def test_persisted_video_task_status_survives_empty_asset_task_registry(pipeline):
+    task = _video_task(status="completed", task_id="video-complete")
+    task.owner_user_id = "owner-a"
+    task.owner_profile_id = "owner-a"
+    task.video_url = "users/owner-a/studio/video/result.mp4"
+    project = _script_with_tasks(task)
+    project.owner_user_id = "owner-a"
+    project.owner_profile_id = "owner-a"
+    pipeline.scripts = {project.id: project}
+    pipeline.asset_generation_tasks = {}
+    pipeline.video_generation_tasks = {}
+    token = set_studio_user(_identity("owner-a"))
+    try:
+        status = pipeline.get_video_task_status(task.id)
+    finally:
+        reset_studio_user(token)
+
+    assert status == {
+        "task_id": task.id,
+        "status": "completed",
+        "error": None,
+        "video_url": task.video_url,
+        "result_url": task.video_url,
+        "script_id": project.id,
+        "frame_id": None,
+    }
+
+
+def test_persisted_video_task_status_is_owner_scoped(pipeline):
+    task = _video_task(status="completed", task_id="private-video")
+    task.owner_user_id = "owner-a"
+    task.owner_profile_id = "owner-a"
+    project = _script_with_tasks(task)
+    project.owner_user_id = "owner-a"
+    project.owner_profile_id = "owner-a"
+    pipeline.scripts = {project.id: project}
+    token = set_studio_user(_identity("owner-b"))
+    try:
+        assert pipeline.get_video_task_status(task.id) is None
+    finally:
+        reset_studio_user(token)
+
+
+def test_task_status_endpoint_falls_back_to_persisted_video_task(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {
+        "task_id": "video-complete",
+        "status": "completed",
+        "video_url": "users/owner-a/studio/video/result.mp4",
+    }
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: None)
+    monkeypatch.setattr(api.pipeline, "get_video_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+
+    assert api.get_task_status("video-complete") == status
 
 
 # ---------------------------------------------------------------------------
