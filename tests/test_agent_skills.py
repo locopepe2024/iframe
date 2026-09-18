@@ -26,6 +26,14 @@ def test_catalog_is_self_contained_and_attributed():
         assert '[ref:' not in p['instructions']
 
 
+def test_h3_skill_keeps_ethnicity_skin_tone_and_skin_condition_independent():
+    instructions = next(p['instructions'] for p in skills.catalog() if p['id'] == 'minimax-h3-director')
+    assert '国籍和族裔是身份信息，不是固定的五官模板' in instructions
+    assert '单数人物定义只建立一个人物身份' in instructions
+    assert '它本身不等于活动性痤疮，也不等于大面积重度凹坑' in instructions
+    assert 'No skin smoothing, beauty filter, airbrushing, skin lightening, or skin darkening.' in instructions
+
+
 def test_install_update_toggle_uninstall_owner_isolation(ctx, monkeypatch):
     p = skills.catalog()[0]
     other = UserContext('other', 'other-profile', 'other', 'token')
