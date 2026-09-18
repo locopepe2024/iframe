@@ -2,6 +2,7 @@ import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
+import { analyzeDirectorProfile, refineDirectorProfile, type DirectorProfileDraft } from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -780,6 +781,19 @@ export const api = {
             custom_styles: customStyles,
             ai_recommendations: aiRecommendations
         });
+        return res.data;
+    },
+
+    analyzeDirectorProfile: (scriptId: string) => analyzeDirectorProfile(API_URL, scriptId),
+
+    refineDirectorProfile: (
+        scriptId: string,
+        draft: DirectorProfileDraft,
+        instructions: string[],
+    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions),
+
+    applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
         return res.data;
     },
 

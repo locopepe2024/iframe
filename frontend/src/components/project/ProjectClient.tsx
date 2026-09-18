@@ -34,7 +34,7 @@ const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"
 // Both legacy and unified projects now share the 6-step shape.
 const LEGACY_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
-    { id: "art_direction", label: "2. Art Direction", icon: Palette },
+    { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "assets", label: "3. Assets", icon: Users },
     { id: "storyboard", label: "4. Storyboard", icon: Layout },
     { id: "motion", label: "5. Motion", icon: Video },
@@ -49,7 +49,7 @@ const LEGACY_STEPS = [
 // for unified projects (ConsistencyVault stays only for legacy workflow).
 const UNIFIED_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
-    { id: "art_direction", label: "2. Art Direction", icon: Palette },
+    { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "cast", label: "3. Cast", icon: Users },
     { id: "storyboard_r2v", label: "4. Storyboard", icon: Clapperboard },
     { id: "assembly", label: "5. Assembly", icon: Film },

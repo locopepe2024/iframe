@@ -189,6 +189,27 @@ export interface ArtDirection {
     style_config: StyleConfig;
     custom_styles: StyleConfig[];
     ai_recommendations: StyleConfig[];
+    director_profile?: DirectorProfile;
+}
+
+export interface DirectorProfile {
+    setting: Record<string, unknown>;
+    timeline: Record<string, unknown>[];
+    relationships: Record<string, unknown>[];
+    key_events: Record<string, unknown>[];
+    emotional_arc: string;
+    pacing: string;
+    visual_language: string;
+    performance_direction: string;
+    dialogue_direction: string;
+    sound_direction: string;
+    continuity_constraints: string[];
+    prohibitions: string[];
+    unresolved_questions: string[];
+    sample_plan: Record<string, unknown>[];
+    revision: number;
+    content_hash: string;
+    confirmed_at: number;
 }
 
 export type ModelSettings = FrontendModelSettings;
@@ -248,6 +269,7 @@ export interface Series {
     scenes: Scene[];
     props: Prop[];
     art_direction?: ArtDirection;
+    director_review_required?: boolean;
     prompt_config?: PromptConfig;
     model_settings?: ModelSettings;
     workflow_mode?: "r2v" | "i2v_legacy";
