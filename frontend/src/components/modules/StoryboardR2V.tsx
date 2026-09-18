@@ -1396,13 +1396,12 @@ export default function StoryboardR2V() {
         }
     }, [drawerState.targetShotIndex, shots, updatePrompt]);
 
-    const toggleReferenceVariant = useCallback((
+    const toggleReferenceVariantForShot = useCallback((
+        shotIndex: number,
         assetId: string,
         variantId: string,
         primaryVariantId?: string,
     ) => {
-        const shotIndex = drawerState.targetShotIndex;
-        if (shotIndex === null || shotIndex === undefined) return;
         const shot = shots[shotIndex];
         if (!shot) return;
         const currentMap = shot.referenceVariantIds ?? {};
@@ -1426,7 +1425,13 @@ export default function StoryboardR2V() {
         }
         setShots(prev => prev.map((item, index) => index === shotIndex ? nextShot : item));
         persistWorkbench(shot.id, { workbench_reference_variant_ids: nextMap });
-    }, [drawerState.targetShotIndex, shots, videoConfig.r2vModel, resolveShotReferences, persistWorkbench, t]);
+    }, [shots, videoConfig.r2vModel, resolveShotReferences, persistWorkbench, t]);
+
+    const toggleReferenceVariant = useCallback((assetId: string, variantId: string, primaryVariantId?: string) => {
+        const shotIndex = drawerState.targetShotIndex;
+        if (shotIndex === null || shotIndex === undefined) return;
+        toggleReferenceVariantForShot(shotIndex, assetId, variantId, primaryVariantId);
+    }, [drawerState.targetShotIndex, toggleReferenceVariantForShot]);
 
     // Toolbar model display: surface the model the project's workflow
     // mode actually uses, not the I2V parent. R2V projects were
@@ -2004,6 +2009,9 @@ export default function StoryboardR2V() {
                                 const tag = `[${type}:${name}]`;
                                 updatePrompt(index, shots[index].prompt + " " + tag);
                             }}
+                            onToggleReferenceVariant={(assetId, variantId, primaryVariantId) =>
+                                toggleReferenceVariantForShot(index, assetId, variantId, primaryVariantId)
+                            }
                             onCancelVideo={
                                 shot.videoTaskId && currentProject
                                     ? async () => {

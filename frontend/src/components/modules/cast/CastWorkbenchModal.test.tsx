@@ -7,7 +7,7 @@ import messages from '../../../../messages/en.json';
 import CastWorkbenchModal from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), uploadAsset: vi.fn(), selectAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -41,4 +41,15 @@ it('allows retrying the same file after upload fails', async () => {
  fireEvent.change(input, { target: { files: [file] } });
  await waitFor(() => expect(api.uploadAsset).toHaveBeenCalledTimes(2));
  expect(useProjectStore.getState().currentProject?.characters).toEqual([character]);
+});
+it('confirms and deletes a canonical reference revision', async () => {
+ const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
+ useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ vi.mocked(api.deleteAssetVariant).mockResolvedValue({ ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] });
+ show();
+ const deleteButtons = screen.getAllByRole('button', { name: 'Delete reference image' });
+ fireEvent.click(deleteButtons[1]);
+ await waitFor(() => expect(api.deleteAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'two'));
+ await waitFor(() => expect(screen.queryByText('Test two')).toBeNull());
 });

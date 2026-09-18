@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
@@ -218,6 +218,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
+    const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     // Effective t2i model — drives the "design_sheet" template gating: that
     // template only works with gpt-image-2, so it stays locked unless the
@@ -430,6 +431,24 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             );
             updateProject(currentProject.id, updated);
         } catch { /* silent — non-critical */ }
+    };
+
+    const handleDeleteVariant = async (variantId: string) => {
+        if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
+        setDeletingVariantId(variantId);
+        try {
+            const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
+            updateProject(currentProject.id, updated);
+            toast.success(t("toastDeleted"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("toastDeleteErr"), { body: String(detail) });
+        } finally {
+            setDeletingVariantId(null);
+        }
     };
 
     const filteredVariants = galleryFilter === "favorited"
@@ -900,6 +919,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 {/* Favorite star */}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleToggleFavorite(v.id, !!v.is_favorited); }}
+                                                    aria-label={v.is_favorited ? t("unfavoriteVariant") : t("favoriteVariant")}
                                                     className={`absolute top-1.5 left-1.5 p-1 rounded-full transition-all ${
                                                         v.is_favorited
                                                             ? "bg-amber-500/30 text-amber-300"
@@ -907,6 +927,16 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                     }`}
                                                 >
                                                     <Star size={12} className={v.is_favorited ? "fill-amber-300" : ""} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={deletingVariantId !== null}
+                                                    onClick={(e) => { e.stopPropagation(); void handleDeleteVariant(v.id); }}
+                                                    aria-label={t("deleteVariant")}
+                                                    title={t("deleteVariant")}
+                                                    className="absolute bottom-1.5 right-1.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-red-500/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                >
+                                                    {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
                                                 {/* Selected badge */}
                                                 {isSelected && (

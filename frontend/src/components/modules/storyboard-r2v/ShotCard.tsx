@@ -134,6 +134,7 @@ interface ShotCardProps {
     onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
     onOpenDrawer: () => void;
     onInsertAsset: (type: string, name: string) => void;
+    onToggleReferenceVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     /** Duration editor config derived from model catalog */
     durationEditorConfig?: { min: number; max: number; step: number };
     /** Optional: Cancel CTA shown inside the pending-state affordance
@@ -189,6 +190,7 @@ export default function ShotCard({
     onSetTabMode,
     onOpenDrawer,
     onInsertAsset: _onInsertAsset,
+    onToggleReferenceVariant,
     durationEditorConfig,
     onCancelVideo,
     expanded,
@@ -885,7 +887,9 @@ export default function ShotCard({
                             characters={characters}
                             scenes={scenes}
                             props={props}
+                            selectedVariantIds={shot.referenceVariantIds}
                             onInsertAsset={handleInsertAssetFromChip}
+                            onToggleVariant={onToggleReferenceVariant}
                         />
                     </div>
                 </div>
