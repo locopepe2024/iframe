@@ -24,7 +24,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Literal
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -91,7 +91,7 @@ from ..studio_access import (
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
-from ..playground.api import router as playground_router
+from ..playground.api import _storage_for as playground_storage_for, router as playground_router
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
 app.include_router(identity_router)
@@ -1071,6 +1071,9 @@ class CreateLibraryAssetRequest(BaseModel):
     description: Optional[str] = ""
     persona: Optional[str] = ""        # characters only — grouping label
     image_url: Optional[str] = None    # optional pre-uploaded master image
+    image_origin: Optional[Literal["upload", "workbench"]] = None
+    source_generation_id: Optional[str] = None
+    source_output_id: Optional[str] = None
     voice_id: Optional[str] = None     # characters only — TTS voice binding
 
 
@@ -1099,6 +1102,22 @@ class ForkFromLibraryRequest(BaseModel):
     library_asset_id: str    # id of the source asset in the global library
 
 
+def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext) -> Dict[str, Any]:
+    payload = request.model_dump(exclude={"asset_type", "source_generation_id", "source_output_id"})
+    if request.image_origin != "workbench":
+        return payload
+    if not request.source_generation_id or not request.source_output_id:
+        raise ValueError("Workbench material provenance is required")
+    generation = playground_storage_for(user).get_generation(request.source_generation_id)
+    if generation is None:
+        raise ValueError("Workbench generation not found")
+    output = next((item for item in generation.outputs if item.id == request.source_output_id), None)
+    if output is None or output.media_type != "image":
+        raise ValueError("Workbench image output not found")
+    payload["image_url"] = output.media_path
+    return payload
+
+
 @app.get("/library/assets")
 def get_library_assets():
     """List all assets in the global shared pool."""
@@ -1111,10 +1130,13 @@ def get_library_assets():
 
 
 @app.post("/library/assets")
-def create_library_asset(request: CreateLibraryAssetRequest):
+def create_library_asset(
+    request: CreateLibraryAssetRequest,
+    user: UserContext = Depends(require_studio_user),
+):
     """Create a new asset in the global shared pool."""
     try:
-        payload = request.model_dump(exclude={"asset_type"})
+        payload = _library_asset_payload(request, user)
         asset = pipeline.create_library_asset(request.asset_type, payload)
         return signed_response(asset.model_dump())
     except ValueError as e:

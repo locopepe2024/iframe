@@ -1793,7 +1793,8 @@
       "yesterday": "昨天"
     },
     "card": {
-      "saveToLibrary": "保存到资产库",
+      "saveToLibrary": "保存素材",
+      "importAsAsset": "导入为资产",
       "saved": "已保存",
       "featured": "精选",
       "useAsReference": "用作参考图",
@@ -1913,10 +1914,10 @@
     },
     "detail": {
       "saving": "处理中...",
-      "savedCancel": "已收藏（点击取消）",
-      "saveToLibrary": "收藏到资产库",
+      "savedCancel": "素材已保存",
+      "saveToLibrary": "保存素材",
       "parameters": "参数",
-      "markHint": "收藏：存入资产库，可跨项目复用 · 精选：标记本批最好的一张"
+      "markHint": "保存素材：归档当前文件 · 导入为资产：创建角色、场景或道具 · 精选：标记本批最好的一张"
     },
     "gallery": {
       "viewDetail": "点击查看详情"

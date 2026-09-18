@@ -134,8 +134,11 @@ class PlaygroundService:
         self.storage.update_generation(gen)
 
     def save_to_library(self, generation_id: str, output_id: str, category: str = "general") -> bool:
-        """Copy a generated output to ``output/assets/{category}/`` and flag
-        :pyattr:`PlaygroundOutput.saved_to_library` = True."""
+        """Archive a generated output under ``output/assets/{category}/``.
+
+        This legacy endpoint stores a material file and marks the output. It
+        does not create a semantic Character, Scene, or Prop asset.
+        """
         gen = self.storage.get_generation(generation_id)
         if gen is None:
             logger.warning("save_to_library: generation %s not found", generation_id)
@@ -166,7 +169,7 @@ class PlaygroundService:
 
         dest_path = os.path.join(dest_dir, os.path.basename(src_path))
         shutil.copy2(src_path, dest_path)
-        logger.info("Saved output %s to library: %s", output_id, dest_path)
+        logger.info("Archived output %s as material: %s", output_id, dest_path)
 
         target_output.saved_to_library = True
         self.storage.update_generation(gen)

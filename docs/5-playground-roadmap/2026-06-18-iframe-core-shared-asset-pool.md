@@ -64,6 +64,11 @@
 复用 `import_assets_from_series`(`pipeline.py:4340`,deepcopy+新 uuid)与 `reconcile_apply`(`api.py:1243`)的提升模式,目标改为全局库。**活引用语义下**:提升后原项目可改为引用全局那一份(或保留本地副本——见 §11-Q3)。
 
 ### 7.3 Playground 录入(管道已铺半截)
+
+> 2026-09-18 更新：本节的“保存即创建资产”方案已被
+> `docs/specs/2026-09-18-material-to-asset-import-v1.md` 替代。Playground
+> 保存仅归档素材；用户通过单独的“导入为资产”动作创建角色、场景或道具。
+
 现状 `save_to_library` `service.py:99-136` **只把文件拷到 `output/assets/{category}/` 并置 `saved_to_library=True`,不建任何资产记录** → 产物不进任何库、不可被引用,是半成品桩。
 - 升级:`save_to_library` 改为**在全局库建一条真正的资产记录**(`category` → 资产类型 character/scene/prop),指向已拷贝的图片。
 - 已就位:端点 `POST /playground/history/{gen}/outputs/{out}/save-to-library`(`api.py:81-103`)、`SaveToLibraryRequest{category}`(`models.py:61`)、`PlaygroundOutput.saved_to_library`(`models.py:20`)。

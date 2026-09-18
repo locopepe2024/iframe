@@ -1,7 +1,93 @@
+import threading
+from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
+from src.apps.identity import UserContext
 from src.apps.comic_gen.models import Script, Character, Scene, Prop, AssetUnit, ImageVariant
 from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+
+def test_workbench_import_resolves_owned_output_instead_of_preview_url(monkeypatch):
+    from src.apps.comic_gen import api
+
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+    generation = SimpleNamespace(outputs=[SimpleNamespace(
+        id='output',
+        media_type='image',
+        media_path='output/users/profile/playground/result.png',
+    )])
+    storage = Mock(get_generation=Mock(return_value=generation))
+    monkeypatch.setattr(api, 'playground_storage_for', Mock(return_value=storage))
+
+    payload = api._library_asset_payload(api.CreateLibraryAssetRequest(
+        asset_type='character',
+        name='Host',
+        image_url='/playground/media/generation/output?signature=expired',
+        image_origin='workbench',
+        source_generation_id='generation',
+        source_output_id='output',
+    ), user)
+
+    assert payload['image_url'] == 'output/users/profile/playground/result.png'
+    storage.get_generation.assert_called_once_with('generation')
+
+
+def test_workbench_import_rejects_generation_outside_owned_storage(monkeypatch):
+    from src.apps.comic_gen import api
+
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+    monkeypatch.setattr(api, 'playground_storage_for', Mock(return_value=Mock(get_generation=Mock(return_value=None))))
+    with pytest.raises(ValueError, match='generation not found'):
+        api._library_asset_payload(api.CreateLibraryAssetRequest(
+            asset_type='character',
+            name='Host',
+            image_origin='workbench',
+            source_generation_id='foreign-generation',
+            source_output_id='output',
+        ), user)
+
+
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+@pytest.mark.parametrize('origin,is_uploaded,upload_type', [
+    ('workbench', False, None),
+    ('upload', True, 'image'),
+])
+def test_image_material_creates_selected_library_variant(kind, origin, is_uploaded, upload_type):
+    from src.apps.comic_gen.models import GlobalAssetLibrary
+    p = ComicGenPipeline.__new__(ComicGenPipeline)
+    p.library_store = GlobalAssetLibrary()
+    p._save_lock = threading.RLock()
+    p._save_library_data_unlocked = Mock()
+    p._requested_owner_user_id = Mock(return_value='user')
+    p._requested_owner_profile_id = Mock(return_value='profile')
+
+    asset = p.create_library_asset(kind, {
+        'name': 'Imported material',
+        'image_url': 'output/playground/images/result.png',
+        'image_origin': origin,
+    })
+
+    unit = asset.reference_sheet if kind == 'character' else asset.image_asset
+    variants = unit.image_variants if kind == 'character' else unit.variants
+    selected = unit.selected_image_id if kind == 'character' else unit.selected_id
+    assert len(variants) == 1
+    assert selected == variants[0].id
+    assert variants[0].source_origin == origin
+    assert variants[0].is_uploaded_source is is_uploaded
+    assert variants[0].upload_type == upload_type
+    assert asset.owner_profile_id == 'profile'
+
+
+def test_library_asset_rejects_unknown_material_origin():
+    from src.apps.comic_gen.models import GlobalAssetLibrary
+    p = ComicGenPipeline.__new__(ComicGenPipeline)
+    p.library_store = GlobalAssetLibrary()
+    p._save_lock = threading.RLock()
+    p._save_library_data_unlocked = Mock()
+    p._requested_owner_user_id = Mock(return_value='user')
+    p._requested_owner_profile_id = Mock(return_value='profile')
+    with pytest.raises(ValueError, match='origin'):
+        p.create_library_asset('character', {'name': 'Bad', 'image_url': 'x.png', 'image_origin': 'unknown'})
 
 
 def pipeline(kind):

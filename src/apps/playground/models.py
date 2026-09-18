@@ -18,7 +18,7 @@ class PlaygroundOutput(BaseModel):
     media_path: str = Field(..., description="Generated file path relative to output/")
     media_type: str = Field(..., description="Output media type: image or video")
     thumbnail_path: Optional[str] = Field(None, description="Thumbnail file path relative to output/")
-    saved_to_library: bool = Field(False, description="Whether this output has been saved to the project library")
+    saved_to_library: bool = Field(False, description="Legacy flag: whether this output file has been archived as material")
 
 
 class PlaygroundDraft(BaseModel):

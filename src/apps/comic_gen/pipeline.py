@@ -1205,7 +1205,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             url=image_url,
             prompt_used=description or target_asset.description,
             is_uploaded_source=True,
-            upload_type=upload_type
+            upload_type=upload_type,
+            source_origin="upload",
         )
         
         # Update description if provided
@@ -1252,7 +1253,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 url=image_url,
                 prompt_used=description or target_asset.description,
                 is_uploaded_source=True,
-                upload_type=upload_type
+                upload_type=upload_type,
+                source_origin="upload",
             )
             
             if upload_type == "full_body":
@@ -2322,6 +2324,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             prompt_used="Extracted last frame from video",
             is_uploaded_source=True,
             upload_type="image",
+            source_origin="upload",
         )
 
         # Initialize rendered_image_asset if needed
@@ -2365,6 +2368,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             prompt_used="User uploaded image",
             is_uploaded_source=True,
             upload_type="image",
+            source_origin="upload",
         )
 
         if not frame.rendered_image_asset:
@@ -4058,9 +4062,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         project-independent global pool. Tolerates a partial payload (used
         by the Playground录入 flow, which calls this directly rather than
         through a request model). Recognized payload keys: name,
-        description, image_url, persona (characters), voice_id
+        description, image_url, image_origin, persona (characters), voice_id
         (characters)."""
-        from .models import Character, Scene, Prop, AssetUnit, ImageVariant
+        from .models import Character, Scene, Prop, AssetUnit, ImageAsset, ImageVariant
         with self._save_lock:
             payload = dict(payload or {})
             owner_user_id = self._requested_owner_user_id()
@@ -4068,12 +4072,23 @@ class ComicGenPipeline(StudioOwnerMixin):
             name = payload.get("name") or "未命名"
             description = payload.get("description") or ""
             image_url = payload.get("image_url")
+            image_origin = payload.get("image_origin")
+            if image_origin not in (None, "upload", "workbench"):
+                raise ValueError("Invalid image origin")
+            initial_variant = None
+            if image_url:
+                initial_variant = ImageVariant(
+                    id=f"img_{uuid.uuid4().hex[:12]}",
+                    url=image_url,
+                    is_uploaded_source=image_origin == "upload",
+                    upload_type="image" if image_origin == "upload" else None,
+                    source_origin=image_origin,
+                )
             if asset_type == "character":
                 ref_sheet = AssetUnit()
-                if image_url:
-                    variant = ImageVariant(id=f"img_{uuid.uuid4().hex[:12]}", url=image_url)
-                    ref_sheet.image_variants.append(variant)
-                    ref_sheet.selected_image_id = variant.id
+                if initial_variant:
+                    ref_sheet.image_variants.append(initial_variant)
+                    ref_sheet.selected_image_id = initial_variant.id
                 asset = Character(
                     id=f"char_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4085,6 +4100,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_sheet=ref_sheet,
                 )
             elif asset_type == "scene":
+                image_asset = ImageAsset()
+                if initial_variant:
+                    image_asset.variants.append(initial_variant)
+                    image_asset.selected_id = initial_variant.id
                 asset = Scene(
                     id=f"scene_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4092,8 +4111,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                     name=name,
                     description=description,
                     image_url=image_url,
+                    image_asset=image_asset,
                 )
             elif asset_type == "prop":
+                image_asset = ImageAsset()
+                if initial_variant:
+                    image_asset.variants.append(initial_variant)
+                    image_asset.selected_id = initial_variant.id
                 asset = Prop(
                     id=f"prop_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4101,6 +4125,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     name=name,
                     description=description,
                     image_url=image_url,
+                    image_asset=image_asset,
                 )
             else:
                 raise ValueError(f"Invalid asset type: {asset_type}")
