@@ -33,6 +33,45 @@ def test_provider_timeout_is_not_reported_as_bad_credentials(setup, monkeypatch)
         agent.send(sid, agent.MessageCreate(content='draft'), setup)
 
 
+def test_chat_timeout_and_busy_lease_cover_slow_upstream(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_AGENT_CHAT_TIMEOUT_SECONDS', '600')
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={
+        'api_key': 'test', 'base_url': 'https://example.test/v1',
+    })))
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen', 'capabilities': ['chat']}])
+    observed = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            observed['timeout'] = kwargs['timeout']
+            self.chat = Mock(completions=Mock(create=Mock(return_value=Mock(
+                model_dump=Mock(return_value={'choices': [{'message': {'content': 'ok'}}]}),
+            ))))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    import openai
+    monkeypatch.setattr(openai, 'OpenAI', Client)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    original_complete = agent.complete
+
+    def inspect_lease(ctx, model, history):
+        with agent.database() as db:
+            row, _ = agent.read_session(db, setup.owner_profile_id, sid)
+        observed['lease_remaining'] = row['busy'] - agent.time.time()
+        return original_complete(ctx, model, history)
+
+    monkeypatch.setattr(agent, 'complete', inspect_lease)
+    agent.send(sid, agent.MessageCreate(content='slow request'), setup)
+
+    assert observed['timeout'] == 600
+    assert observed['lease_remaining'] > 650
+
+
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     monkeypatch.setenv('LUMENX_AGENT_DB', str(tmp_path / 'agent.sqlite3'))
