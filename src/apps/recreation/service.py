@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import time
 import warnings
+from fractions import Fraction
 
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
@@ -15,6 +16,8 @@ from fastapi import HTTPException
 from ..identity import UserContext
 from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
+from .mentions import compile_mentions
+from .prompt_contract import compile_h3, guidance_snapshot
 
 LEASE_SECONDS = 600
 
@@ -222,7 +225,7 @@ class RecreationService:
             shutil.rmtree(folder)
             raise
 
-    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction):
+    def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction, description=None, instruction_refs=None):
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record["timeline"]:
@@ -236,8 +239,81 @@ class RecreationService:
             if len(instruction) > 4000:
                 raise HTTPException(422, "Instruction exceeds 4000 characters")
             shot.update(reference_media_id=reference_media_id, replacement_media_id=replacement_media_id, instruction=instruction)
+            if description is not None:
+                if len(description) > 6000:
+                    raise HTTPException(422, "Description exceeds 6000 characters")
+                shot["description"] = description
+            refs = instruction_refs or []
+            allowed = {reference_media_id, replacement_media_id} - {None}
+            if any(not isinstance(ref, dict) or not ref.get("media_id") or not str(ref.get("token", "")).startswith("@{") or ref["media_id"] not in allowed for ref in refs):
+                raise HTTPException(422, "Invalid material reference")
+            shot["instruction_refs"] = refs
             self._save(db, record)
         return record
+
+    def generation_plan(self, project_id, revision, model="uniart/minimax-h3-vip", audio_policy="silent", soundscape="", generation_durations=None):
+        # Until its native reference contract is verified, Seedance cannot pass H3 preflight.
+        if model != "uniart/minimax-h3-vip":
+            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+        if audio_policy not in ("silent", "generated", "preserve_source"):
+            raise HTTPException(422, "Unsupported audio policy")
+        if audio_policy == "generated" and not soundscape.strip():
+            raise HTTPException(422, "Generated audio requires explicit sound requirements")
+        guidance = guidance_snapshot()
+        generation_durations = generation_durations or {}
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
+                raise HTTPException(409, "Confirm the current timeline before preparing a plan")
+            if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
+                raise HTTPException(409, "Source fingerprint changed")
+            shots, blockers = [], []
+            for index, shot in enumerate(record["timeline"]["shots"], 1):
+                description = shot.get("description", "").strip()
+                instruction = shot.get("instruction", "").strip()
+                missing = []
+                generation_duration = generation_durations.get(shot["id"])
+                if type(generation_duration) is not int or not 4 <= generation_duration <= 15:
+                    missing.append("generation_duration_required")
+                if audio_policy == "preserve_source":
+                    missing.append("source_audio_assembly_pending")
+                if not description:
+                    missing.append("description_required")
+                if not shot.get("reference_media_id"):
+                    missing.append("reference_required")
+                if shot.get("replacement_media_id") and not instruction:
+                    missing.append("replacement_instruction_required")
+                images = []
+                for role in ("reference", "replacement"):
+                    media_id = shot.get(role + "_media_id")
+                    if media_id:
+                        item = self._image(db, media_id)
+                        images.append({"media_id": media_id, "sha256": item["sha256"], "role": role,
+                                       "label": f"<Picture {len(images) + 1}>"})
+                description, bad_description = compile_mentions(description, images)
+                instruction, bad_instruction = compile_mentions(instruction, images)
+                if bad_description or bad_instruction:
+                    missing.append("media_labels_reserved")
+                duration = (shot["end_pts"] - shot["start_pts"]) * Fraction(record["analysis"]["time_base"])
+                if type(generation_duration) is int and generation_duration < duration:
+                    missing.append("generation_duration_too_short")
+                prompt = None
+                if not missing:
+                    prompt, errors = compile_h3(description, instruction, replacement=bool(shot.get("replacement_media_id")),
+                                                duration=generation_duration, audio_policy=audio_policy, soundscape=soundscape)
+                    if errors:
+                        missing.append("native_prompt_invalid")
+                        prompt = None
+                if missing:
+                    blockers.append({"shot_id": shot["id"], "shot_number": index, "reasons": missing})
+                shots.append({"shot_id": shot["id"], "shot_number": index, "start_pts": shot["start_pts"],
+                              "end_pts": shot["end_pts"], "target_duration": str(duration), "generation_duration": generation_duration,
+                              "generate_audio": audio_policy == "generated", "images": images, "prompt": prompt})
+            return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
+                    "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_labels", "guidance": guidance,
+                    "time_base": record["analysis"]["time_base"], "audio_policy": audio_policy, "ready": not blockers,
+                    "submission_enabled": False,
+                    "blockers": blockers, "shots": shots}
 
     def reindex(self, project_id):
         with self.db() as db:

@@ -458,6 +458,7 @@ class StoryboardFrame(BaseModel):
         1,
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
+    video_model: Optional[str] = Field(None, description="Per-shot video model override")
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"

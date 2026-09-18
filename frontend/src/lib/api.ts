@@ -405,6 +405,7 @@ export const api = {
             t2i_image_urls?: string[];
             t2i_selected_index?: number;
             workbench_generate_count?: number;
+            video_model?: string;
         },
     ) => {
         const res = await axios.patch(

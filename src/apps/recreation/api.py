@@ -12,6 +12,12 @@ router = APIRouter(prefix="/recreation", tags=["recreation"])
 class AnalyzeRequest(BaseModel):
     revision: int = Field(ge=0)
 
+class GenerationPlanRequest(AnalyzeRequest):
+    model: str = Field(default="uniart/minimax-h3-vip", min_length=1, max_length=120)
+    audio_policy: str = "silent"
+    soundscape: str = Field(default="", max_length=2000)
+    generation_durations: dict[str, int] = Field(default_factory=dict)
+
 
 class ConfirmRequest(AnalyzeRequest):
     analysis_id: str
@@ -93,6 +99,8 @@ class ShotReferencesRequest(AnalyzeRequest):
     reference_media_id: str | None = Field(default=None, min_length=1, max_length=64)
     replacement_media_id: str | None = Field(default=None, min_length=1, max_length=64)
     instruction: str = Field(default="", max_length=4000)
+    description: str | None = Field(default=None, max_length=6000)
+    instruction_refs: list[dict] = Field(default_factory=list, max_length=4)
 
 
 @router.get("/media/{media_id}")
@@ -114,6 +122,15 @@ def bind_shot(project_id: str, shot_id: str, request: ShotReferencesRequest,
               user: UserContext = Depends(require_studio_user)):
     try:
         return public(RecreationService(user).bind_shot(project_id, shot_id, request.revision, request.analysis_id,
-                      request.reference_media_id, request.replacement_media_id, request.instruction), user)
+                      request.reference_media_id, request.replacement_media_id, request.instruction, request.description, request.instruction_refs), user)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/generation-plan")
+def generation_plan(project_id: str, request: GenerationPlanRequest, user: UserContext = Depends(require_studio_user)):
+    try:
+        return RecreationService(user).generation_plan(project_id, request.revision, request.model,
+                   request.audio_policy, request.soundscape, request.generation_durations)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

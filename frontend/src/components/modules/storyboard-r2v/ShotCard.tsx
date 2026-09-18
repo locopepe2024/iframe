@@ -38,6 +38,8 @@ export interface ShotNode {
     id: string;
     prompt: string;
     tabMode: "t2i_i2v" | "direct_r2v";
+    /** Optional per-shot video model override. */
+    videoModel?: string;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy
@@ -748,7 +750,6 @@ export default function ShotCard({
                             r2v_polish from PromptConfig). Routes to
                             the right API by tabMode. */}
                         <PolishPanel
-                            videoModel={videoModel}
                             generateAudio={generateAudio}
                             targetDuration={targetDuration}
                             prompt={shot.prompt}

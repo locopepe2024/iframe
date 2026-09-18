@@ -5,7 +5,9 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Pencil, Save, Search, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
-import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, seconds } from "@/lib/recreation";
+import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
+
+import MaterialInstruction from "./MaterialInstruction";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 const url = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
@@ -55,6 +57,18 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const t = useTranslations("shotReferences");
   const [shotId, setShotId] = useState(project.timeline?.shots[0]?.id);
   const shot = project.timeline?.shots.find(s => s.id === shotId);
+  const [plan, setPlan] = useState<RecreationPlan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planError, setPlanError] = useState(false);
+  const [audioPolicy, setAudioPolicy] = useState("silent");
+  const [soundscape, setSoundscape] = useState("");
+  const [durations, setDurations] = useState<Record<string, number>>({});
+  const revision = useRef(project.revision);
+  const planKey = JSON.stringify([project.revision, audioPolicy, soundscape, durations]);
+  const activePlan = useRef(planKey);
+  activePlan.current = planKey;
+  revision.current = project.revision;
+  useEffect(() => { setPlan(null); setPlanError(false); }, [planKey]);
   return <section className="border-t border-border py-5 space-y-4">
     <h3 className="font-semibold">{t("title")}</h3>
     {disabled && <p role="status">{t("confirmFirst")}</p>}
@@ -62,12 +76,35 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
       {project.timeline?.shots.map((s, i) => <option key={s.id} value={s.id}>{t("shot")} {i + 1} · {seconds(project.analysis!, s.start_pts).toFixed(6)} - {seconds(project.analysis!, s.end_pts).toFixed(6)} s</option>)}
     </select>
     {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} onSaved={onSaved} />}
+    <label className="block text-sm">{t("audioPolicy")}<select className="glass-input block" value={audioPolicy} onChange={e => setAudioPolicy(e.target.value)}>
+      <option value="silent">{t("silent")}</option><option value="generated">{t("generatedAudio")}</option><option value="preserve_source">{t("preserveAudio")}</option>
+    </select></label>
+    {audioPolicy === "generated" && <label className="block text-sm">{t("soundRequirements")}<textarea className="glass-input block w-full" maxLength={2000} value={soundscape} onChange={e => setSoundscape(e.target.value)} /></label>}
+    <div className="flex flex-wrap gap-3">{project.timeline?.shots.map((s, i) => <label key={s.id} className="text-sm">{t("shot")} {i + 1} · {t("generationSeconds")}
+      <input type="number" min={4} max={15} step={1} className="glass-input block w-24" value={durations[s.id!] ?? ""} onChange={e => setDurations(all => ({ ...all, [s.id!]: Number(e.target.value) }))} />
+    </label>)}</div>
+    <button className="glass-button" disabled={disabled || planBusy} onClick={async () => {
+      const current = planKey; setPlanBusy(true); setPlanError(false);
+      try { const result = await recreationApi.generationPlan(project, "uniart/minimax-h3-vip", { audio_policy: audioPolicy, soundscape, generation_durations: durations }); if (activePlan.current === current) setPlan(result); }
+      catch { if (activePlan.current === current) setPlanError(true); } finally { setPlanBusy(false); }
+    }}>{t("checkPlan")}</button>
+    {planError && <p role="alert">{t("failed")}</p>}
+    {plan && !disabled && <div className="space-y-3">
+      <p role="status">{t(plan.ready ? "planReady" : "planBlocked")}</p>
+      {plan.blockers.map(block => <p key={block.shot_id}>{t("shot")} {block.shot_number}: {block.reasons.map(reason => t(reason)).join(" / ")}</p>)}
+      {plan.shots.map(item => <details key={item.shot_id} className="border-t border-border py-2">
+        <summary>{t("shot")} {item.shot_number} · {item.target_duration} s</summary>
+        {item.images.map((image, i) => <p key={`${image.media_id}:${i}`} className="text-xs break-all">{image.label} · {image.media_id}</p>)}
+        {item.prompt && <pre className="whitespace-pre-wrap break-words text-sm mt-2">{item.prompt}</pre>}
+      </details>)}
+    </div>}
   </section>;
 }
 
 function ReferenceForm({ project, shot, disabled, onSaved }: { project: RecreationProject; shot: RecreationShot; disabled: boolean; onSaved: (project: RecreationProject) => void }) {
   const t = useTranslations("shotReferences");
   const [selected, setSelected] = useState<Partial<Record<Role, RecreationMedia>>>({});
+  const [description, setDescription] = useState(shot.description || "");
   const [instruction, setInstruction] = useState(shot.instruction || "");
   const [picker, setPicker] = useState<Role | null>(null);
   const [editor, setEditor] = useState(false);
@@ -115,11 +152,13 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
         </div>
       </div>)}</div>
       {picker && <Picker onClose={() => setPicker(null)} onSelect={item => { choose(picker, item); setPicker(null); }} />}
-      <label className="block text-sm">{t("instruction")}<textarea className="glass-input block w-full mt-2" rows={3} maxLength={4000} value={instruction} onChange={e => { setInstruction(e.target.value); setSaved(false); }} /></label>
+      <label className="block text-sm">{t("description")}<textarea className="glass-input block w-full mt-2" rows={4} maxLength={6000} value={description} onChange={e => { setDescription(e.target.value); setSaved(false); }} /></label>
+      <MaterialInstruction value={instruction} onChange={text => { setInstruction(text); setSaved(false); }} materials={(["reference", "replacement"] as Role[]).flatMap(role => selected[role] ? [{ role, media: selected[role]! }] : [])} />
       <button type="button" className="glass-button flex items-center gap-2" onClick={async () => {
         setBusy(true); setFailed(false); setSaved(false);
         try {
-          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction });
+          const instruction_refs = Array.from(instruction.matchAll(/@\{([a-f0-9]{32})\}/g)).map(match => ({ media_id: match[1], token: match[0] }));
+          const result = await recreationApi.bindShot(project, shot.id!, { reference_media_id: selected.reference?.media_id || null, replacement_media_id: selected.replacement?.media_id || null, instruction, description, instruction_refs });
           if (alive.current) { onSaved(result); setSaved(true); }
         } catch { if (alive.current) setFailed(true); } finally { if (alive.current) setBusy(false); }
       }}><Save size={16} />{t("save")}</button>

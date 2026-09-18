@@ -17,7 +17,7 @@ export interface RecreationProject {
 
 export interface RecreationShot {
   id?: string; start_pts: number; end_pts: number;
-  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string;
+  reference_media_id?: string | null; replacement_media_id?: string | null; instruction?: string; description?: string; instruction_refs?: { media_id: string; token: string }[];
 }
 
 export function seconds(analysis: SourceAnalysis, pts: number): number {
@@ -49,14 +49,21 @@ export interface RecreationMedia {
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 
+export interface RecreationPlan {
+  revision: number; ready: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
+  blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
+  shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
+    images: { media_id: string; label: string }[] }[];
+}
 export const recreationApi = {
+  generationPlan: (project: RecreationProject, model = "uniart/minimax-h3-vip", options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number> } = { audio_policy: "silent", soundscape: "", generation_durations: {} }): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model, ...options }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
   uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
     const data = new FormData(); data.append("file", file); data.append("kind", kind);
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction">): Promise<RecreationProject> =>
+  bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description" | "instruction_refs">): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
       revision: project.revision, analysis_id: project.analysis_id, ...binding,
     }).then(r => r.data),

@@ -240,6 +240,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         t2i_image_urls: Optional[List[str]] = None,
         t2i_selected_index: Optional[int] = None,
         workbench_generate_count: Optional[int] = None,
+        video_model: Optional[str] = None,
     ) -> Optional["StoryboardFrame"]:
         """Persist Storyboard R2V workbench state onto a frame.
 
@@ -293,6 +294,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame.workbench_generate_count = max(
                     1, min(int(workbench_generate_count), self._MAX_GENERATE_COUNT)
                 )
+            if video_model is not None:
+                frame.video_model = video_model.strip() or None
             frame.updated_at = time.time()
             try:
                 self._save_data()

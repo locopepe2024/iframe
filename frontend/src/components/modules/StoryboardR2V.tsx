@@ -1372,10 +1372,6 @@ export default function StoryboardR2V() {
     // through wan2.6-r2v / wan2.7-r2v — confusing and the source of
     // the "but I selected R2V" support thread.
     const isR2VWorkflow = (currentProject?.workflow_mode ?? "r2v") === "r2v";
-    const currentModelName = isR2VWorkflow
-        ? (VIDEO_R2V_MODELS.find(m => m.id === videoConfig.r2vModel)?.name ?? videoConfig.r2vModel)
-        : (VIDEO_I2V_MODELS.find(m => m.id === videoConfig.model)?.name ?? videoConfig.model);
-
     // ---- Project-level task derivations (drive Queue + Candidates) ----
     // We derive these via useMemo so per-render allocation is cheap and
     // children can rely on referentially-stable arrays (set-membership
@@ -1498,7 +1494,7 @@ export default function StoryboardR2V() {
     //    and uses across all shots in a project.
     const paramsStateForShot = useCallback((shot: ShotNode): ParamsState => {
         const isR2v = shot.tabMode === "direct_r2v";
-        const modelId = isR2v ? videoConfig.r2vModel : videoConfig.model;
+        const modelId = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
         return {
             model: modelId,
             duration: shot.duration ?? videoConfig.duration,
@@ -1532,6 +1528,8 @@ export default function StoryboardR2V() {
             persistWorkbench(shot.id, { workbench_generate_count: next.count });
         }
         setShotCounts(prev => ({ ...prev, [shot.id]: next.count }));
+        setShots(prev => prev.map(item => item.id === shot.id ? { ...item, videoModel: next.model } : item));
+        persistWorkbench(shot.id, { video_model: next.model });
         // Sync duration back to structured field (single source of truth)
         if (next.duration !== (shot.duration ?? videoConfig.duration)) {
             const idx = shots.findIndex(s => s.id === shot.id);
@@ -1769,7 +1767,22 @@ export default function StoryboardR2V() {
                         {currentProject?.art_direction?.style_config?.name ? (
                             <StepPill label={t("artStyleLabel")} value={currentProject.art_direction.style_config.name} />
                         ) : null}
-                        <StepPill label={t("currentModel")} value={currentModelName} />
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
+                            <span className="text-text-muted">{t("currentModel")}</span>
+                            <select
+                                aria-label={t("currentModel")}
+                                value={isR2VWorkflow ? videoConfig.r2vModel : videoConfig.model}
+                                onChange={(event) => {
+                                    const value = event.target.value;
+                                    setVideoConfig(prev => isR2VWorkflow ? { ...prev, r2vModel: value } : { ...prev, model: value });
+                                }}
+                                className="max-w-[13rem] truncate bg-transparent text-primary outline-none"
+                            >
+                                {(isR2VWorkflow ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS).map(model => (
+                                    <option key={model.id} value={model.id}>{model.name}</option>
+                                ))}
+                            </select>
+                        </span>
                     </>
                 )}
                 trailing={(
@@ -1895,7 +1908,6 @@ export default function StoryboardR2V() {
                     >
                         <ShotCard
                             referenceImageUrls={isR2vImageBased(paramsState.model) ? parseAssetTags(shot.prompt) : []}
-                            videoModel={paramsStateForShot(shot).model}
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}
@@ -1914,6 +1926,10 @@ export default function StoryboardR2V() {
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
+                            referenceImageUrls={isR2vImageBased(paramsState.model) ? parseAssetTags(shot.prompt) : []}
+                            videoModel={paramsState.model}
+                            generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
+                            targetDuration={paramsState.duration}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
                             onInsertAsset={(type, name) => {
                                 // Direct chip insert (same as chip bar logic, delegated to chip bar)
