@@ -72,6 +72,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
     sending.current = true; setBusy(true); setError('');
+    usePlaygroundStore.getState().setPrompt('');
     try {
       const { session } = await agentRequest<{ session: ChatSession }>('/sessions', 'POST', {
         model, playground_session_id: sessionId,
@@ -82,9 +83,15 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       });
       if (active.current === sessionId) {
         setMessages(m => [...m.filter(x => x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
-        if (usePlaygroundStore.getState().prompt === snapshot.prompt) usePlaygroundStore.getState().setPrompt('');
       }
-    } catch (e) { if (active.current === sessionId) { const message = e instanceof Error ? e.message : '发送失败'; setError(message); if (message === '当前会话正在回复') setRemoteBusy(true); } }
+    } catch (e) {
+      if (active.current === sessionId) {
+        const message = e instanceof Error ? e.message : '发送失败';
+        setError(message);
+        if (message === '当前会话正在回复') setRemoteBusy(true);
+        if (!usePlaygroundStore.getState().prompt) usePlaygroundStore.getState().setPrompt(snapshot.prompt);
+      }
+    }
     finally { sending.current = false; setBusy(false); }
   }
   return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage };
