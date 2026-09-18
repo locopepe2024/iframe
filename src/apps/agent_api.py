@@ -25,6 +25,15 @@ router.include_router(skills_router)
 logger = logging.getLogger(__name__)
 
 
+def chat_timeout_seconds():
+    """Keep the client wait above UniArt's observed multi-route retry window."""
+    try:
+        value = float(os.getenv("IFRAME_AGENT_CHAT_TIMEOUT_SECONDS", "600"))
+    except ValueError:
+        value = 600
+    return min(max(value, 60), 3600)
+
+
 @contextmanager
 def database():
     path = os.getenv("LUMENX_AGENT_DB", "output/agent.sqlite3")
@@ -234,7 +243,12 @@ def complete(ctx, model, history):
     if payload_bytes > 900 * 1024:
         raise HTTPException(422, f"本次对话含历史和素材约 {payload_bytes / 1024:.0f} KB，超过当前网关请求预算 900 KB；不是素材数量上限。请减少音频或文本内容，或新建会话；内容未截断")
     from openai import OpenAI
-    with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=120, max_retries=0) as client:
+    with OpenAI(
+        api_key=config["api_key"],
+        base_url=config["base_url"],
+        timeout=chat_timeout_seconds(),
+        max_retries=0,
+    ) as client:
         reply = client.chat.completions.create(model=model, messages=history)
     answer = None
     raw = getattr(reply, "model_dump", lambda: reply)()
@@ -271,7 +285,7 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     if sid.startswith("playground-"):
         require_playground(ctx, sid.removeprefix("playground-"))
     owner = ctx.owner_profile_id
-    lease = time.time() + 180
+    lease = time.time() + chat_timeout_seconds() + 60
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
         row, session = read_session(db, owner, sid)
