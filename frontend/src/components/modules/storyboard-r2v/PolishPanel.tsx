@@ -48,6 +48,7 @@ interface PolishErrorState {
 interface PolishPanelProps {
     generateAudio?: boolean;
     targetDuration?: number;
+    dialogue?: { speaker: string; line: string } | null;
     videoModel?: string;
     prompt: string;
     tabMode: "t2i_i2v" | "direct_r2v";
@@ -96,6 +97,7 @@ export default function PolishPanel({
     videoModel = "",
     generateAudio,
     targetDuration,
+    dialogue,
     tabMode,
     scriptId,
     slots = [],
@@ -125,8 +127,8 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined);
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");
@@ -150,7 +152,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration]);
+    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);

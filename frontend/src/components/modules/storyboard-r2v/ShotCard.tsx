@@ -752,6 +752,7 @@ export default function ShotCard({
                         <PolishPanel
                             generateAudio={generateAudio}
                             targetDuration={targetDuration}
+                            dialogue={shot.dialogueStructured}
                             videoModel={videoModel}
                             prompt={shot.prompt}
                             tabMode={shot.tabMode}

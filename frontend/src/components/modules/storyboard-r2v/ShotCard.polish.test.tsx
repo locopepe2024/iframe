@@ -32,6 +32,10 @@ const shot: ShotNode = {
     id: "shot-1",
     prompt: "女主播举起产品并看向镜头",
     tabMode: "t2i_i2v",
+    dialogueStructured: {
+        speaker: "女主播",
+        line: "今天这款穿心莲分散片，我们决定给大家随机立减！",
+    },
 };
 
 beforeEach(() => {
@@ -72,4 +76,8 @@ it("sends the selected shot video model when polishing", async () => {
 
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][6]).toBe("uniart/minimax-h3-vip");
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][9]).toEqual({
+        speaker: "女主播",
+        line: "今天这款穿心莲分散片，我们决定给大家随机立减！",
+    });
 });

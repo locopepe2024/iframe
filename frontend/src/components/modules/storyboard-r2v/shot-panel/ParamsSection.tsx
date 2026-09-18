@@ -149,7 +149,8 @@ export default function ParamsSection({
             cfgScale: np.cfgScale?.default ?? params.cfgScale,
             mode: np.mode?.default ?? params.mode,
             movementAmplitude: np.movementAmplitude?.default ?? params.movementAmplitude,
-            audio: np.audio ? (params.audio ?? false) : undefined,
+            // Catalog audio metadata does not override the user's request.
+            audio: params.audio ?? false,
             sound: typeof np.sound === "boolean" ? np.sound : params.sound,
             viduAudio: typeof np.viduAudio === "boolean" ? np.viduAudio : params.viduAudio,
             // Watermark: new model exposes the capability → reset to off (false);

@@ -780,6 +780,7 @@ export const api = {
         targetVideoModel: string = "",
         generateAudio?: boolean,
         targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -791,6 +792,8 @@ export const api = {
             target_video_model: targetVideoModel,
             generate_audio: generateAudio,
             target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },
@@ -805,6 +808,7 @@ export const api = {
         targetVideoModel: string = "",
         generateAudio?: boolean,
         targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -817,6 +821,8 @@ export const api = {
             target_video_model: targetVideoModel,
             generate_audio: generateAudio,
             target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },

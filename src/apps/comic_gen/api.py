@@ -4001,6 +4001,8 @@ class PolishVideoPromptRequest(BaseModel):
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
     target_video_model: str = ""
+    dialogue_speaker: str = Field("", max_length=200)
+    dialogue_line: str = Field("", max_length=2000)
 
 
 def _polish_error_response(err) -> Dict[str, Any]:
@@ -4030,7 +4032,7 @@ def _target_model_guidance(model_id: str) -> str:
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None) -> str:
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="") -> str:
     guidance = _target_model_guidance(model_id)
     if not guidance:
         return custom or default
@@ -4039,6 +4041,9 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
         constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
     elif generate_audio is True:
         constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
+        if dialogue_line.strip():
+            speaker = dialogue_speaker.strip() or "Speaker"
+            constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
     return guidance + "\n" + custom + constraints + """
@@ -4062,7 +4067,7 @@ cannot establish exact cut times. Missing images must not be described as seen.
 """
 
 
-def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool) -> None:
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="") -> None:
     """Reject responses that ignore the selected provider's prompt contract."""
     if "h3" not in (model_id or "").lower():
         return
@@ -4085,6 +4090,17 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             reason="model_contract_mismatch",
             message_zh="润色模型未返回 MiniMax H3 所需的结构化提示词，请重试。本次结果未应用。",
             message_en="The polish model did not return the structured MiniMax H3 prompt. Retry; this result was not applied.",
+        )
+    exact_dialogue = dialogue_line.strip()
+    if generate_audio is True and exact_dialogue and any(
+        exact_dialogue not in result.get(key, "") or "<d>" not in result.get(key, "")
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果遗漏或改写了镜头对白，请重试。本次结果未应用。",
+            message_en="The polished prompt omitted or rewrote the shot dialogue. Retry; this result was not applied.",
         )
 
 
@@ -4109,7 +4125,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4121,7 +4137,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -4151,6 +4167,8 @@ class PolishR2VPromptRequest(BaseModel):
     image_urls: List[str] = Field(default_factory=list, max_length=9)
     polish_model: str = ""
     target_video_model: str = ""
+    dialogue_speaker: str = Field("", max_length=200)
+    dialogue_line: str = Field("", max_length=2000)
 
 
 @app.post("/video/polish_r2v_prompt")
@@ -4161,7 +4179,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
@@ -4174,7 +4192,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

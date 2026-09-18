@@ -14,7 +14,7 @@ import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
 import { getR2vRouteModelId, isR2vImageBased, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
 import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
-import { buildAssembledPrompt } from "./storyboard-r2v/buildAssembledPrompt";
+import { buildAssembledPrompt, buildGenerationPrompt } from "./storyboard-r2v/buildAssembledPrompt";
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
 import { toast } from "@/store/toastStore";
@@ -881,8 +881,6 @@ export default function StoryboardR2V() {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
 
-        const promptText = buildAssembledPrompt(shot, true);
-
         setShots(prev => prev.map((s, i) =>
             i === index ? { ...s, videoStatus: "pending" } : s
         ));
@@ -902,6 +900,8 @@ export default function StoryboardR2V() {
                     ? explicitR2v
                     : getR2vRouteModelId(videoConfig.model);
                 const imageBased = isR2vImageBased(routeModelId);
+                const generateAudio = storyboardGeneratedAudio(routeModelId, videoConfig.audio);
+                const promptText = buildGenerationPrompt(shot, generateAudio, routeModelId);
 
                 const tasks = await api.createVideoTask(
                     currentProject.id,
@@ -910,7 +910,7 @@ export default function StoryboardR2V() {
                     videoConfig.duration,
                     undefined, // seed
                     videoConfig.resolution,
-                    storyboardGeneratedAudio(routeModelId, videoConfig.audio), // generateAudio
+                    generateAudio,
                     "", // audioUrl
                     videoConfig.promptExtend,
                     videoConfig.negativePrompt,
@@ -976,6 +976,8 @@ export default function StoryboardR2V() {
                     return;
                 }
 
+                const generateAudio = storyboardGeneratedAudio(videoConfig.model, videoConfig.audio);
+                const promptText = buildGenerationPrompt(shot, generateAudio, videoConfig.model);
                 const tasks = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
@@ -983,7 +985,7 @@ export default function StoryboardR2V() {
                     videoConfig.duration,
                     undefined, // seed
                     videoConfig.resolution,
-                    storyboardGeneratedAudio(videoConfig.model, videoConfig.audio), // generateAudio
+                    generateAudio,
                     "", // audioUrl
                     videoConfig.promptExtend,
                     videoConfig.negativePrompt,
@@ -1035,12 +1037,13 @@ export default function StoryboardR2V() {
     ) => {
         const shot = shots[index];
         if (!currentProject || !shot?.prompt.trim()) return;
-        const promptText = buildAssembledPrompt(shot, true);
         const tabMode = shot.tabMode;
         const effectiveCount = Math.max(1, Math.min(6, count || 1));
         const requestedModelId = params?.model ?? (tabMode === "direct_r2v"
             ? videoConfig.r2vModel
             : videoConfig.model);
+        const generateAudio = storyboardGeneratedAudio(requestedModelId, params?.audio ?? videoConfig.audio);
+        const promptText = buildGenerationPrompt(shot, generateAudio, requestedModelId);
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
             .find(model => model.id === requestedModelId)?.duration;
@@ -1138,7 +1141,7 @@ export default function StoryboardR2V() {
                         generationDuration,
                         params?.seed,
                         params?.resolution ?? videoConfig.resolution,
-                        storyboardGeneratedAudio(routeModelId, params?.audio ?? videoConfig.audio),
+                        generateAudio,
                         "",
                         params?.promptExtend ?? videoConfig.promptExtend,
                         params?.negativePrompt ?? videoConfig.negativePrompt,
@@ -1173,7 +1176,7 @@ export default function StoryboardR2V() {
                     generationDuration,
                     params?.seed,
                     params?.resolution ?? videoConfig.resolution,
-                    storyboardGeneratedAudio(i2vModelId, params?.audio ?? videoConfig.audio),
+                    generateAudio,
                     "",
                     params?.promptExtend ?? videoConfig.promptExtend,
                     params?.negativePrompt ?? videoConfig.negativePrompt,

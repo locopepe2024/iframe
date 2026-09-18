@@ -92,6 +92,57 @@ def test_seedance_polish_does_not_require_h3_fields(monkeypatch):
     assert response == result
 
 
+def test_h3_audio_polish_rejects_result_that_drops_explicit_dialogue(monkeypatch):
+    structured = '\n'.join([
+        'integrated_multimodal_description: 主播举起药盒。',
+        'overall_soundscape: 环境声；未提供明确台词，因此不生成对白。',
+        'non_diegetic_music: N/A',
+    ])
+    processor = Mock()
+    processor.polish_video_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    with pytest.raises(api.HTTPException) as exc_info:
+        api.polish_video_prompt(api.PolishVideoPromptRequest(
+            draft_prompt='主播举起药盒',
+            target_video_model='uniart/minimax-h3-vip',
+            generate_audio=True,
+            dialogue_speaker='女主播',
+            dialogue_line='今天这款穿心莲分散片，我们决定给大家随机立减！',
+        ))
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail['reason'] == 'model_contract_mismatch'
+
+
+def test_h3_audio_polish_passes_exact_dialogue_to_skill_and_accepts_it(monkeypatch):
+    line = '今天这款穿心莲分散片，我们决定给大家随机立减！'
+    structured = '\n'.join([
+        f'integrated_multimodal_description: 女主播 says: <d>[Mandarin] {line}</d>',
+        f'overall_soundscape: 女主播清晰说出：{line}',
+        'non_diegetic_music: N/A',
+    ])
+    processor = Mock()
+    processor.polish_video_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    result = api.polish_video_prompt(api.PolishVideoPromptRequest(
+        draft_prompt='主播举起药盒',
+        target_video_model='uniart/minimax-h3-vip',
+        generate_audio=True,
+        dialogue_speaker='女主播',
+        dialogue_line=line,
+    ))
+
+    system_prompt = processor.polish_video_prompt.call_args.args[2]
+    assert f'女主播: {line}' in system_prompt
+    assert result['prompt_en'].count(line) == 2
+
+
 @pytest.mark.parametrize('r2v', [False, True])
 def test_selected_images_reach_polish_model_in_order(r2v):
     from src.apps.comic_gen.llm import ScriptProcessor
