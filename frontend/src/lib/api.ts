@@ -1,6 +1,7 @@
 import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -1599,16 +1600,10 @@ export const api = {
     },
 
     // File Import
-    importFilePreview: async (file: File, suggestedEpisodes: number = 3) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await axios.post(`${API_URL}/series/import/preview?suggested_episodes=${suggestedEpisodes}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 300000,
-        });
-        return response.data;
+    importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
+        return runImportPreview<SeriesImportPreview>(API_URL, file, suggestedEpisodes);
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },

@@ -75,3 +75,21 @@ class ExtractionJobs:
             if not row:
                 raise HTTPException(404, 'Analysis task not found')
             return self.public(row)
+
+    def forget_result(self, owner, project, key, value):
+        """Remove completed jobs whose JSON result contains an exact key/value."""
+        with closing(self.connect()) as db, db:
+            rows = db.execute(
+                "SELECT id, result FROM jobs WHERE owner=? AND project=? AND status='completed'",
+                (owner, project),
+            ).fetchall()
+            matches = []
+            for row in rows:
+                try:
+                    result = json.loads(row['result']) if row['result'] else {}
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(result, dict) and result.get(key) == value:
+                    matches.append((row['id'],))
+            if matches:
+                db.executemany("DELETE FROM jobs WHERE id=?", matches)

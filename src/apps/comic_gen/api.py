@@ -54,7 +54,7 @@ from .models import (
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils.uniart_catalog import normalize_uniart_catalog
-from ...utils import setup_logging
+from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -1309,13 +1309,57 @@ def fork_asset_from_library(script_id: str, request: ForkFromLibraryRequest):
 # File Import & Episode Splitting
 # ============================================================
 
-@app.post("/series/import/preview")
+def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
+    if not re.fullmatch(r"[a-f0-9]{32}", import_id or ""):
+        raise ValueError("Import preview not found")
+    owner_key = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()
+    root = Path(get_user_data_dir()) / "imports" / owner_key
+    root.mkdir(parents=True, exist_ok=True)
+    return root / f"{import_id}.txt"
+
+
+def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
+    target = _import_text_path(owner_profile_id, import_id)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    os.replace(temporary, target)
+
+
+def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
+    path = _import_text_path(owner_profile_id, import_id)
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
+    path = _import_text_path(owner_profile_id, import_id)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _run_import_preview(owner_profile_id: str, filename: str, text: str,
+                        suggested_episodes: int) -> Dict[str, Any]:
+    episodes = pipeline.import_file_and_split(text, suggested_episodes)
+    import_id = uuid.uuid4().hex
+    _store_import_text(owner_profile_id, import_id, text)
+    return {
+        "filename": os.path.basename(filename or "import.txt"),
+        "text_length": len(text),
+        "suggested_episodes": suggested_episodes,
+        "episodes": episodes,
+        "import_id": import_id,
+    }
+
+@app.post("/series/import/preview", status_code=202)
 async def import_file_preview(
     file: UploadFile = File(...),
     suggested_episodes: int = 3,
     user: UserContext = Depends(require_studio_user),
 ):
-    """Upload a txt/md file and get LLM episode split preview."""
+    """Upload text once and start or resume a durable episode-split job."""
     if suggested_episodes < 1 or suggested_episodes > 50:
         raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
     try:
@@ -1334,26 +1378,37 @@ async def import_file_preview(
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
-        loop = asyncio.get_event_loop()
-        episodes = await loop.run_in_executor(
-            None,
-            partial(pipeline.import_file_and_split, text, suggested_episodes)
+        llm = pipeline.script_processor.llm
+        filename = file.filename or "import.txt"
+        fingerprint = hashlib.sha256(json.dumps([
+            hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            suggested_episodes,
+            llm.provider,
+            llm._get_default_model(),
+        ], ensure_ascii=False).encode()).hexdigest()
+        return extraction_jobs.start(
+            user.owner_profile_id,
+            "series-import",
+            "series-import:" + fingerprint,
+            lambda: _run_import_preview(
+                user.owner_profile_id, filename, text, suggested_episodes
+            ),
         )
-        # Store text in pipeline cache, return import_id instead of full text
-        import_id = str(uuid.uuid4())
-        pipeline._import_cache[import_id] = (user.owner_profile_id, text)
-        return {
-            "filename": file.filename,
-            "text_length": len(text),
-            "suggested_episodes": suggested_episodes,
-            "episodes": episodes,
-            "import_id": import_id,
-        }
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("File import preview failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/series/import/preview-jobs/{job_id}")
+def import_file_preview_status(
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, "series-import", job_id)
 
 
 class ConfirmImportRequest(BaseModel):
@@ -1371,15 +1426,17 @@ async def import_file_confirm(
 ):
     """Confirm the episode split and create Series + Episodes."""
     try:
-        # Prefer import_id from cache, fallback to request.text
+        # Prefer persistent owner-scoped source, then legacy memory cache,
+        # and finally direct text for compatibility with older clients.
         text = None
         if request.import_id:
-            cached = pipeline._import_cache.pop(request.import_id, None)
+            text = _load_import_text(user.owner_profile_id, request.import_id)
+            cached = pipeline._import_cache.get(request.import_id)
             if cached:
                 cached_owner, cached_text = cached
                 if cached_owner != user.owner_profile_id:
                     raise ValueError("Import preview not found")
-                text = cached_text
+                text = text or cached_text
         if not text:
             text = request.text
         if not text:
@@ -1397,6 +1454,12 @@ async def import_file_confirm(
                 user.owner_profile_id,
             )
         )
+        if request.import_id:
+            _delete_import_text(user.owner_profile_id, request.import_id)
+            pipeline._import_cache.pop(request.import_id, None)
+            extraction_jobs.forget_result(
+                user.owner_profile_id, "series-import", "import_id", request.import_id
+            )
         return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
