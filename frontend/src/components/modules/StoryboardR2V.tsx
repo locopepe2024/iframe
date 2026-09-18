@@ -1927,8 +1927,6 @@ export default function StoryboardR2V() {
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
                             videoModel={paramsState.model}
-                            generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
-                            targetDuration={paramsState.duration}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
                             onInsertAsset={(type, name) => {
                                 // Direct chip insert (same as chip bar logic, delegated to chip bar)
