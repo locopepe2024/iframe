@@ -37,6 +37,7 @@ import os
 import shutil
 import uuid
 import logging
+import re
 import traceback
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError
@@ -4056,6 +4057,32 @@ cannot establish exact cut times. Missing images must not be described as seen.
 """
 
 
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool) -> None:
+    """Reject responses that ignore the selected provider's prompt contract."""
+    if "h3" not in (model_id or "").lower():
+        return
+    fields = (
+        ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
+        if reference_mode
+        else ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
+    )
+    invalid_languages = []
+    for key in ("prompt_cn", "prompt_en"):
+        text = result.get(key, "")
+        if not isinstance(text, str) or any(
+            re.search(rf"(?im)^\s*{re.escape(field)}\s*[:：]", text) is None
+            for field in fields
+        ):
+            invalid_languages.append(key)
+    if invalid_languages:
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色模型未返回 MiniMax H3 所需的结构化提示词，请重试。本次结果未应用。",
+            message_en="The polish model did not return the structured MiniMax H3 prompt. Retry; this result was not applied.",
+        )
+
+
 @app.post("/video/polish_prompt")
 def polish_video_prompt(request: PolishVideoPromptRequest):
     """Polishes a video generation prompt using LLM. Returns bilingual prompts.
@@ -4071,7 +4098,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     成功：200 + {prompt_cn, prompt_en}
     失败：502 + {reason, message_zh, message_en, prompt_cn?, prompt_en?}
       其中 reason ∈ {is_configured_false, api_error, json_parse_error,
-                     missing_keys, model_echo}。
+                     missing_keys, model_contract_mismatch, model_echo}。
       model_echo 是 warning 性质（带原文双语），其余是 hard error。
     """
     from .llm import PolishError
@@ -4089,6 +4116,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -4141,6 +4169,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

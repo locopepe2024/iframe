@@ -14,7 +14,12 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
 
 def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     processor = Mock()
-    processor.polish_video_prompt.return_value = {'prompt_cn': '中文', 'prompt_en': 'English'}
+    structured = '\n'.join([
+        'integrated_multimodal_description: value',
+        'overall_soundscape: N/A',
+        'non_diegetic_music: N/A',
+    ])
+    processor.polish_video_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
     monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
@@ -24,6 +29,67 @@ def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     assert not prompt.startswith(DEFAULT_VIDEO_POLISH_PROMPT)
     assert "integrated_multimodal_description" in prompt
     assert 'MiniMax H3' in prompt
+
+
+@pytest.mark.parametrize('r2v', [False, True])
+def test_h3_polish_rejects_plain_prompt_response(monkeypatch, r2v):
+    processor = Mock()
+    processor.polish_video_prompt.return_value = {
+        'prompt_cn': '场景设定：直播间。角色动作：主播举起药盒。镜头运动：缓慢推进。',
+        'prompt_en': 'A presenter raises the product while the camera slowly pushes in.',
+    }
+    processor.polish_r2v_prompt.return_value = processor.polish_video_prompt.return_value
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+    request = dict(draft_prompt='主播举起药盒', target_video_model='uniart/minimax-h3-vip')
+
+    with pytest.raises(api.HTTPException) as exc_info:
+        if r2v:
+            api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+        else:
+            api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail['reason'] == 'model_contract_mismatch'
+
+
+@pytest.mark.parametrize('r2v,fields', [
+    (False, ('integrated_multimodal_description', 'overall_soundscape', 'non_diegetic_music')),
+    (True, ('subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'overall_soundscape', 'non_diegetic_music')),
+])
+def test_h3_polish_accepts_required_structure(monkeypatch, r2v, fields):
+    structured = '\n'.join(f'{field}: value' for field in fields)
+    processor = Mock()
+    processor.polish_video_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    processor.polish_r2v_prompt.return_value = processor.polish_video_prompt.return_value
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+    request = dict(draft_prompt='主播举起药盒', target_video_model='uniart/minimax-h3-vip')
+
+    if r2v:
+        result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+    else:
+        result = api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+
+    assert result == {'prompt_cn': structured, 'prompt_en': structured}
+
+
+def test_seedance_polish_does_not_require_h3_fields(monkeypatch):
+    processor = Mock()
+    result = {'prompt_cn': '场景与动作描述', 'prompt_en': 'Scene and action description'}
+    processor.polish_video_prompt.return_value = result
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    response = api.polish_video_prompt(api.PolishVideoPromptRequest(
+        draft_prompt='主播举起药盒',
+        target_video_model='uniart/seedance-2.5-vip',
+    ))
+
+    assert response == result
 
 
 @pytest.mark.parametrize('r2v', [False, True])
