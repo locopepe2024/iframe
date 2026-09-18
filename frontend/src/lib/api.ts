@@ -1302,7 +1302,7 @@ export const api = {
      *  assetType 为单数（"character"|"scene"|"prop"）。data 可含 name/description/persona/image_url/voice_id。 */
     createLibraryAsset: async (
         assetType: string,
-        data: { name: string; description?: string; persona?: string; image_url?: string; voice_id?: string },
+        data: { name: string; description?: string; persona?: string; image_url?: string; image_origin?: "upload" | "workbench"; source_generation_id?: string; source_output_id?: string; voice_id?: string },
     ) => {
         const res = await axios.post(`${API_URL}/library/assets`, { asset_type: assetType, ...data });
         return res.data;

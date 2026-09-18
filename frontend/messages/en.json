@@ -1793,7 +1793,8 @@
       "yesterday": "Yesterday"
     },
     "card": {
-      "saveToLibrary": "Save to library",
+      "saveToLibrary": "Save material",
+      "importAsAsset": "Import as asset",
       "saved": "Saved",
       "featured": "Featured",
       "useAsReference": "Use as reference",
@@ -1913,10 +1914,10 @@
     },
     "detail": {
       "saving": "Saving…",
-      "savedCancel": "Saved (click to remove)",
-      "saveToLibrary": "Save to library",
+      "savedCancel": "Material saved",
+      "saveToLibrary": "Save material",
       "parameters": "Parameters",
-      "markHint": "Save: archive to your asset library (reusable across projects) · Featured: mark the best of this batch"
+      "markHint": "Save material: archive this file · Import as asset: create a character, scene, or prop · Featured: mark the best of this batch"
     },
     "gallery": {
       "viewDetail": "Click to view details"

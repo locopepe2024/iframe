@@ -134,6 +134,7 @@ class AssetGenerator:
                             url=rel_path,
                             created_at=time.time(),
                             prompt_used=effective_prompt,
+                            source_origin="generation",
                         )
                         character.reference_sheet.image_variants.append(variant)
 
@@ -266,7 +267,8 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_fullbody_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt
+                            prompt_used=generation_prompt,
+                            source_origin="generation",
                         )
                         character.full_body_asset.variants.insert(0, variant) # Prepend new variants
                         
@@ -412,7 +414,8 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_sheet_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt
+                            prompt_used=generation_prompt,
+                            source_origin="generation",
                         )
                         character.three_view_asset.variants.insert(0, variant)
                         
@@ -490,7 +493,8 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_avatar_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt
+                            prompt_used=generation_prompt,
+                            source_origin="generation",
                         )
                         character.headshot_asset.variants.insert(0, variant)
                         
@@ -583,7 +587,8 @@ class AssetGenerator:
                     id=variant_id,
                     url=rel_path,
                     created_at=time.time(),
-                    prompt_used=prompt
+                    prompt_used=prompt,
+                    source_origin="generation",
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
@@ -646,7 +651,8 @@ class AssetGenerator:
                     id=variant_id,
                     url=rel_path,
                     created_at=time.time(),
-                    prompt_used=prompt
+                    prompt_used=prompt,
+                    source_origin="generation",
                 )
                 prop.image_asset.variants.insert(0, variant)
                 

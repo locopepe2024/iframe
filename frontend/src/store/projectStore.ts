@@ -20,6 +20,7 @@ export interface ImageVariant {
     url: string;
     created_at: number;
     prompt_used?: string;
+    source_origin?: "upload" | "workbench" | "generation";
 }
 
 export interface ImageAsset {
