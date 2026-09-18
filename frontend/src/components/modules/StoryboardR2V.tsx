@@ -1926,7 +1926,6 @@ export default function StoryboardR2V() {
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
-                            referenceImageUrls={isR2vImageBased(paramsState.model) ? parseAssetTags(shot.prompt) : []}
                             videoModel={paramsState.model}
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
