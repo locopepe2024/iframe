@@ -1,7 +1,6 @@
-import { VIDEO_I2V_MODELS, VIDEO_R2V_MODELS } from '@/lib/modelCatalog';
-
-/** Never carry an enabled flag into a model that cannot control audio. */
+/** The request owns this optional parameter. Runtime catalog entries may omit
+ * audio capability metadata even when the UniArt route accepts the flag. */
 export function storyboardGeneratedAudio(modelId: string, enabled?: boolean): boolean {
-    const model = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS].find(model => model.id === modelId);
-    return model?.params.audio === true && enabled === true;
+    void modelId;
+    return enabled === true;
 }

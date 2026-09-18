@@ -1038,6 +1038,25 @@ export default function StoryboardR2V() {
         const promptText = buildAssembledPrompt(shot, true);
         const tabMode = shot.tabMode;
         const effectiveCount = Math.max(1, Math.min(6, count || 1));
+        const requestedModelId = params?.model ?? (tabMode === "direct_r2v"
+            ? videoConfig.r2vModel
+            : videoConfig.model);
+        const requestedDuration = params?.duration ?? videoConfig.duration;
+        const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
+            .find(model => model.id === requestedModelId)?.duration;
+        // Storyboard timing may contain sub-four-second shots, while UniArt
+        // Seedance/H3 only accept provider durations beginning at four seconds.
+        // Preserve the authored shot timing and normalize only the generation
+        // request so a valid storyboard does not become a rejected task.
+        const generationDuration = durationConfig?.type === "slider"
+            ? Math.max(durationConfig.min, Math.min(durationConfig.max, requestedDuration))
+            : durationConfig?.type === "fixed"
+                ? durationConfig.value
+                : durationConfig?.type === "buttons"
+                    ? (durationConfig.options.includes(requestedDuration)
+                        ? requestedDuration
+                        : durationConfig.default)
+                    : requestedDuration;
 
         // Pre-flight: R2V tab needs reference inputs. Without them
         // the backend rejects with 400 anyway, but historically the
@@ -1116,7 +1135,7 @@ export default function StoryboardR2V() {
                         currentProject.id,
                         "",
                         promptText,
-                        params?.duration ?? videoConfig.duration,
+                        generationDuration,
                         params?.seed,
                         params?.resolution ?? videoConfig.resolution,
                         storyboardGeneratedAudio(routeModelId, params?.audio ?? videoConfig.audio),
@@ -1151,7 +1170,7 @@ export default function StoryboardR2V() {
                     currentProject.id,
                     imageUrl,
                     promptText,
-                    params?.duration ?? videoConfig.duration,
+                    generationDuration,
                     params?.seed,
                     params?.resolution ?? videoConfig.resolution,
                     storyboardGeneratedAudio(i2vModelId, params?.audio ?? videoConfig.audio),

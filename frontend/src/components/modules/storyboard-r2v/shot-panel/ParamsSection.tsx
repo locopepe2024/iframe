@@ -443,7 +443,8 @@ export default function ParamsSection({
                     </div>
                 ) : null}
 
-                {modelParams.audio && (
+                {/* supports_generate_audio is optional provider metadata. */}
+                {modelParams.audio !== false && (
                     <ParamRow label={t("generatedAudio")}>
                         <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
                             checked={params.audio === true}

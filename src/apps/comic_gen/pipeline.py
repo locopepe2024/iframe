@@ -3346,9 +3346,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_images.insert(0, task.image_url)
                 from .reference_prompt import bind_storyboard_prompt
                 submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, len(reference_images))
+                # Storyboard cuts can be shorter than the provider's output
+                # window. Normalize at the submission boundary as protection
+                # for mobile clients or cached frontends that predate the UI
+                # validation. The authored shot duration remains unchanged.
+                max_duration = 15 if "minimax-h3" in model_name_lower else 30
+                provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
                     prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
-                    duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
+                    duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model,
                     mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],

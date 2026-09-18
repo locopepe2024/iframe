@@ -16,6 +16,6 @@ it.each(['supported', 'reference'])('serializes audio on and off for %s', async 
         expect(axios.post).toHaveBeenLastCalledWith(expect.stringContaining('/video_tasks'), expect.objectContaining({ generate_audio: enabled }));
     }
 });
-it.each(['silent', 'missing'])('blocks inherited enabled audio for %s', (model) => {
-    expect(storyboardGeneratedAudio(model, true)).toBe(false);
+it.each(['silent', 'missing'])('keeps explicit audio when capability metadata is absent for %s', (model) => {
+    expect(storyboardGeneratedAudio(model, true)).toBe(true);
 });

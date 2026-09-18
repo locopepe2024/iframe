@@ -79,6 +79,19 @@ def test_studio_sends_image_and_source_video_with_explicit_mode(studio):
     assert current.status == "completed"
 
 
+@pytest.mark.parametrize("model,duration,expected", [
+    ("uniart/seedance-2.5-vip", 3, 4),
+    ("uniart/minimax-h3-vip", 3, 4),
+    ("uniart/minimax-h3-vip", 20, 15),
+])
+def test_storyboard_duration_is_normalized_at_uniart_submission(studio, model, duration, expected):
+    pipeline, script = studio
+    current = task(script, model=model, duration=duration)
+    pipeline.process_video_task(script.id, current.id)
+    assert uniart._post.call_args.args[2]["duration"] == expected
+    assert current.duration == duration
+
+
 def owned_file(owner, name="product.jpg"):
     path = Path(studio_owner_dir(owner)) / name
     path.parent.mkdir(parents=True, exist_ok=True)

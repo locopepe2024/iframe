@@ -245,7 +245,9 @@ export default function VideoConfigModal({ isOpen, onClose, config, onConfigChan
                                 />
                             </motion.section>
 
-                            {modelParams.audio && (
+                            {/* Audio support metadata is optional in the
+                                runtime catalog, so absence does not hide it. */}
+                            {modelParams.audio !== false && (
                                 <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
                                     {t("generatedAudio")}
                                     <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
