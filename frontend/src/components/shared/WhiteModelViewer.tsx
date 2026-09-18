@@ -7,7 +7,9 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import * as THREE from "three";
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-export const WHITE_MODEL_SOURCE = "/models/makehuman/base.obj";
+// Keep this relative: the default production export is mounted under
+// `/static`, while Tauri and development serve the same files at `/`.
+export const WHITE_MODEL_SOURCE = "models/makehuman/base.obj";
 
 export interface WhiteModelViewerLabels {
   reset: string;
