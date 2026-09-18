@@ -777,6 +777,8 @@ export const api = {
         imageUrls: string[] = [],
         polishModel: string = "",
         targetVideoModel: string = "",
+        generateAudio?: boolean,
+        targetDuration?: number,
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -786,6 +788,8 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            generate_audio: generateAudio,
+            target_duration: targetDuration,
         });
         return res.data;
     },
@@ -798,6 +802,8 @@ export const api = {
         imageUrls: string[] = [],
         polishModel: string = "",
         targetVideoModel: string = "",
+        generateAudio?: boolean,
+        targetDuration?: number,
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -808,6 +814,8 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            generate_audio: generateAudio,
+            target_duration: targetDuration,
         });
         return res.data;
     },

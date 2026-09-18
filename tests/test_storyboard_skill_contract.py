@@ -48,3 +48,15 @@ def test_unreadable_reference_does_not_silently_become_text_only():
     with pytest.raises(PolishError):
         processor.polish_video_prompt('original', image_urls=['/files/nonexistent-reference.png'])
     processor.llm.chat.assert_not_called()
+
+
+def test_h3_submission_maps_editor_tokens_to_submitted_picture_order():
+    from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
+    prompt = '[character2:产品] replaced by [character1:主播], @2'
+    assert bind_storyboard_prompt(prompt, 'uniart/minimax-h3-vip', 2) == '<Picture 2> 产品 replaced by <Picture 1> 主播, <Picture 2>'
+
+
+def test_h3_submission_rejects_mixed_unresolved_syntax():
+    from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
+    with pytest.raises(ValueError):
+        bind_storyboard_prompt('use @product and [Picture 1]', 'uniart/minimax-h3-vip', 1)

@@ -12,12 +12,12 @@ import type { ShotNode } from "./ShotCard";
  *
  * Final = textarea visual narrative + 运镜 + 景别/机位 + 转场
  */
-export function buildAssembledPrompt(shot: ShotNode): string {
+export function buildAssembledPrompt(shot: ShotNode, preserveReferences = false): string {
     let base = (shot.prompt || "").trim();
 
     // Strip existing reference tags from the display — they're handled
     // separately as reference_image URLs in the API call
-    base = base.replace(/\[character\d+:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
+    if (!preserveReferences) base = base.replace(/\[character\d+:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
 
     const suffixes: string[] = [];
 

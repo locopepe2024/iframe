@@ -881,7 +881,7 @@ export default function StoryboardR2V() {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
 
-        const promptText = buildAssembledPrompt(shot);
+        const promptText = buildAssembledPrompt(shot, true);
 
         setShots(prev => prev.map((s, i) =>
             i === index ? { ...s, videoStatus: "pending" } : s
@@ -1035,7 +1035,7 @@ export default function StoryboardR2V() {
     ) => {
         const shot = shots[index];
         if (!currentProject || !shot?.prompt.trim()) return;
-        const promptText = buildAssembledPrompt(shot);
+        const promptText = buildAssembledPrompt(shot, true);
         const tabMode = shot.tabMode;
         const effectiveCount = Math.max(1, Math.min(6, count || 1));
 
@@ -1896,6 +1896,8 @@ export default function StoryboardR2V() {
                         <ShotCard
                             referenceImageUrls={isR2vImageBased(paramsState.model) ? parseAssetTags(shot.prompt) : []}
                             videoModel={paramsStateForShot(shot).model}
+                            generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
+                            targetDuration={paramsState.duration}
                             shot={shot}
                             index={index}
                             totalShots={shots.length}

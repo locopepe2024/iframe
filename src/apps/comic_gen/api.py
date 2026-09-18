@@ -3955,6 +3955,8 @@ def _get_polish_model_for_project(script_id: str) -> str:
 
 
 class PolishVideoPromptRequest(BaseModel):
+    generate_audio: Optional[bool] = None
+    target_duration: Optional[float] = Field(default=None, gt=0)
     draft_prompt: str
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
@@ -3996,11 +3998,18 @@ def _target_model_guidance(model_id: str) -> str:
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str) -> str:
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None) -> str:
     guidance = _target_model_guidance(model_id)
     if not guidance:
         return custom or default
-    return guidance + "\n" + custom + """
+    constraints = ""
+    if generate_audio is False:
+        constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
+    elif generate_audio is True:
+        constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
+    if target_duration is not None:
+        constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+    return guidance + "\n" + custom + constraints + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string contains
 all fields required by the selected model skill and generation mode (H3 base:
@@ -4042,7 +4051,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4071,6 +4080,8 @@ class RefSlot(BaseModel):
 
 
 class PolishR2VPromptRequest(BaseModel):
+    generate_audio: Optional[bool] = None
+    target_duration: Optional[float] = Field(default=None, gt=0)
     draft_prompt: str
     slots: List[RefSlot]
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
@@ -4091,7 +4102,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]

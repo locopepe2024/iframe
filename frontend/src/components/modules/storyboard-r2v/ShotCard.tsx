@@ -107,6 +107,8 @@ export interface ShotNode {
 export const T2I_HISTORY_LIMIT = 10;
 
 interface ShotCardProps {
+    generateAudio?: boolean;
+    targetDuration?: number;
     referenceImageUrls?: string[];
     videoModel?: string;
     shot: ShotNode;
@@ -160,6 +162,8 @@ interface ShotCardProps {
 }
 
 export default function ShotCard({
+    generateAudio,
+    targetDuration,
     referenceImageUrls = [],
     videoModel,
     shot,
@@ -745,6 +749,8 @@ export default function ShotCard({
                             the right API by tabMode. */}
                         <PolishPanel
                             videoModel={videoModel}
+                            generateAudio={generateAudio}
+                            targetDuration={targetDuration}
                             prompt={shot.prompt}
                             tabMode={shot.tabMode}
                             scriptId={currentProjectId ?? ""}

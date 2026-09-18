@@ -3341,8 +3341,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 # Asset motion references use image_url as their sole visual input.
                 if task.generation_mode == "r2v" and task.image_url and task.image_url not in reference_images:
                     reference_images.insert(0, task.image_url)
+                from .reference_prompt import bind_storyboard_prompt
+                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, len(reference_images))
                 video_path, _ = uniart_model.generate(
-                    prompt=task.prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
                     duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model,
                     mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
