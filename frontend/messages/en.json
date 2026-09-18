@@ -490,7 +490,16 @@
     "evidence": "Load adjacent frames",
     "contactSheet": "Contact sheet",
     "unsaved": "Unconfirmed changes",
-    "oversized": "Source exceeds 256 MiB"
+    "oversized": "Source exceeds 256 MiB",
+    "whiteModel": "3D white-model reference",
+    "whiteModelDescription": "Use the rotatable, zoomable neutral human model to check subject placement, camera angle, and composition. It is a visual reference for this recreation only; it is not added to the asset library or generation request automatically.",
+    "whiteModelReset": "Reset view",
+    "whiteModelWireframe": "Show wireframe",
+    "whiteModelSolid": "Show solid",
+    "whiteModelLoading": "Loading white model…",
+    "whiteModelUnavailable": "WebGL is unavailable in this browser, so the white model cannot be shown.",
+    "whiteModelFailed": "The white model could not be loaded. Try again later.",
+    "whiteModelSource": "Model source:"
   },
   "workspace": {
     "title": "My Workspace",
