@@ -1,5 +1,5 @@
 import axios from "axios";
-import { extractScriptPreview } from "./scriptExtraction";
+import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -274,14 +274,25 @@ export const api = {
         return res.data;
     },
 
-    reparseProject: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
+    reparseProject: async (
+        scriptId: string,
+        text: string,
+        draft?: { characters: any[]; scenes: any[]; props: any[] },
+    ) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, ...(draft ? { draft } : {}) });
         return { ...res.data, originalText: res.data.original_text };
     },
 
     extractPreview: async (scriptId: string, text: string) => {
         return extractScriptPreview(API_URL, scriptId, text);
     },
+
+    refineExtraction: async (
+        scriptId: string,
+        text: string,
+        draft: { characters: any[]; scenes: any[]; props: any[] },
+        instructions: string[],
+    ) => refineScriptPreview(API_URL, scriptId, text, draft, instructions),
 
     /** Persist `original_text` without LLM reparse. Used for textarea
      *  blur-saves so navigation/reload doesn't drop in-progress drafts. */

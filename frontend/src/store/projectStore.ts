@@ -300,6 +300,8 @@ interface ProjectStore {
     // Entity extraction confirmation (persists across step switches)
     pendingExtraction: { characters: any[]; scenes: any[]; props: any[] } | null;
     pendingExtractionScript: string | null;
+    pendingExtractionFeedback: string[];
+    refineExtraction: (instruction: string) => Promise<void>;
     confirmExtraction: () => Promise<void>;
     discardExtraction: () => void;
 
@@ -422,12 +424,45 @@ export const useProjectStore = create<ProjectStore>()(
             // Entity extraction confirmation
             pendingExtraction: null,
             pendingExtractionScript: null,
-            confirmExtraction: async () => {
-                const { currentProject, pendingExtractionScript } = get();
-                if (!currentProject?.id || !pendingExtractionScript) return;
+            pendingExtractionFeedback: [],
+            refineExtraction: async (instruction: string) => {
+                const { currentProject, pendingExtraction, pendingExtractionScript, pendingExtractionFeedback } = get();
+                const trimmed = instruction.trim();
+                if (!currentProject?.id || !pendingExtraction || !pendingExtractionScript || !trimmed) return;
+                const projectId = currentProject.id;
+                const instructions = [...pendingExtractionFeedback, trimmed];
                 set({ isAnalyzing: true });
                 try {
-                    const project = await api.reparseProject(currentProject.id, pendingExtractionScript);
+                    const preview = await api.refineExtraction(
+                        projectId,
+                        pendingExtractionScript,
+                        pendingExtraction,
+                        instructions,
+                    );
+                    if (get().currentProject?.id !== projectId) {
+                        set({ isAnalyzing: false });
+                        return;
+                    }
+                    set({
+                        pendingExtraction: preview,
+                        pendingExtractionFeedback: instructions,
+                        isAnalyzing: false,
+                    });
+                } catch (error) {
+                    set({ isAnalyzing: false });
+                    throw error;
+                }
+            },
+            confirmExtraction: async () => {
+                const { currentProject, pendingExtraction, pendingExtractionScript } = get();
+                if (!currentProject?.id || !pendingExtraction || !pendingExtractionScript) return;
+                set({ isAnalyzing: true });
+                try {
+                    const project = await api.reparseProject(
+                        currentProject.id,
+                        pendingExtractionScript,
+                        pendingExtraction,
+                    );
                     set((state) => ({
                         projects: state.projects.map((p) =>
                             p.id === project.id ? { ...project, updatedAt: new Date().toISOString() } : p
@@ -435,6 +470,7 @@ export const useProjectStore = create<ProjectStore>()(
                         currentProject: { ...project, updatedAt: new Date().toISOString() },
                         pendingExtraction: null,
                         pendingExtractionScript: null,
+                        pendingExtractionFeedback: [],
                         isAnalyzing: false,
                     }));
                 } catch (error) {
@@ -444,7 +480,7 @@ export const useProjectStore = create<ProjectStore>()(
                 }
             },
             discardExtraction: () => {
-                set({ pendingExtraction: null, pendingExtractionScript: null });
+                set({ pendingExtraction: null, pendingExtractionScript: null, pendingExtractionFeedback: [] });
             },
 
             // Sync projects from backend

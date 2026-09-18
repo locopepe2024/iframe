@@ -534,6 +534,7 @@ async def create_project(
 
 class ReparseProjectRequest(BaseModel):
     text: str
+    draft: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
 class ExtractionRefineRequest(BaseModel):
@@ -571,7 +572,7 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,  # Use default executor
-            partial(pipeline.reparse_project, script_id, request.text)
+            partial(pipeline.reparse_project, script_id, request.text, request.draft)
         )
         return signed_response(result)
     except ValueError as e:

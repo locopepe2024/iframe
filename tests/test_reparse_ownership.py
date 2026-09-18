@@ -56,6 +56,37 @@ class ReparseOwnershipTest(unittest.TestCase):
                 self.assertEqual(persisted["owner_user_id"], "user-a")
                 self.assertEqual(pipeline.script_processor.parse_novel.call_count, 0 if cached else 1)
 
+    def test_explicit_reviewed_draft_applies_without_cache_or_model_call(self):
+        with tempfile.TemporaryDirectory() as root:
+            pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+            original = Script(id="project", title="Project", original_text="old",
+                              created_at=1, updated_at=1,
+                              owner_user_id="user-a", owner_profile_id="profile-a")
+            refined = Script(id="draft", title="Project", original_text="new",
+                             created_at=2, updated_at=2,
+                             characters=[Character(id="temporary", name="主播", description="马来女性")])
+            pipeline.scripts = {original.id: original}
+            pipeline._save_lock = threading.Lock()
+            pipeline.series_store = {}
+            pipeline.data_file = str(Path(root) / "projects.json")
+            pipeline.script_processor = Mock()
+            pipeline.script_processor._create_script_from_data.return_value = refined
+            pipeline._extraction_cache = {}
+            draft = {
+                "characters": [{"name": "主播", "description": "马来女性"}],
+                "scenes": [],
+                "props": [],
+            }
+
+            result = pipeline.reparse_project(original.id, "new", draft)
+
+            pipeline.script_processor._create_script_from_data.assert_called_once_with(
+                "Project", "new", draft
+            )
+            pipeline.script_processor.parse_novel.assert_not_called()
+            self.assertEqual(result.characters[0].name, "主播")
+            self.assertEqual(result.owner_profile_id, "profile-a")
+
 
 if __name__ == "__main__":
     unittest.main()

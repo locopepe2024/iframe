@@ -287,6 +287,9 @@ function EntityExtractionConfirm() {
     const currentProject = useProjectStore((s) => s.currentProject);
     const confirmExtraction = useProjectStore((s) => s.confirmExtraction);
     const discardExtraction = useProjectStore((s) => s.discardExtraction);
+    const refineExtraction = useProjectStore((s) => s.refineExtraction);
+    const extractionFeedback = useProjectStore((s) => s.pendingExtractionFeedback);
+    const isAnalyzing = useProjectStore((s) => s.isAnalyzing);
 
     const handleConfirm = async () => {
         try {
@@ -317,6 +320,9 @@ function EntityExtractionConfirm() {
             }}
             onConfirm={handleConfirm}
             onDiscard={handleDiscard}
+            onRefine={refineExtraction}
+            feedback={extractionFeedback}
+            isRefining={isAnalyzing}
         />
     );
 }

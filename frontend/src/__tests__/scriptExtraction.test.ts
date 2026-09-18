@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import axios from 'axios';
-import { extractScriptPreview } from '../lib/scriptExtraction';
+import { extractScriptPreview, refineScriptPreview } from '../lib/scriptExtraction';
 vi.mock('axios', () => ({ default: { post: vi.fn(), get: vi.fn(), isAxiosError: (e: any) => e?.isAxiosError === true } }));
 const result = { characters: [], scenes: [], props: [] };
 beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); });
@@ -23,4 +23,21 @@ it('reports failed jobs without rerunning the provider', async () => {
   vi.mocked(axios.post).mockResolvedValue({ data: { id: 'job', status: 'failed', error: 'Analysis interrupted' } });
   await expect(extractScriptPreview('/api', 'project', 'text')).rejects.toThrow('Analysis interrupted');
   expect(axios.get).not.toHaveBeenCalled();
+});
+it('submits refinement context and polls the canonical job endpoint', async () => {
+  vi.mocked(axios.post).mockResolvedValue({ data: { id: 'refine-job', status: 'running' } });
+  vi.mocked(axios.get).mockResolvedValue({ data: { id: 'refine-job', status: 'completed', result } });
+  const draft = { characters: [{ name: 'Host' }], scenes: [], props: [] };
+  const pending = refineScriptPreview('/api', 'project', 'text', draft, ['Exclude extras']);
+  await vi.runAllTimersAsync();
+  expect(await pending).toEqual(result);
+  expect(axios.post).toHaveBeenCalledWith(
+    '/api/projects/project/extraction-jobs/refine',
+    { text: 'text', draft, instructions: ['Exclude extras'] },
+    { timeout: 15000 },
+  );
+  expect(axios.get).toHaveBeenCalledWith(
+    '/api/projects/project/extraction-jobs/refine-job',
+    { timeout: 15000 },
+  );
 });

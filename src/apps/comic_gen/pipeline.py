@@ -521,15 +521,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._extraction_cache[script_id] = (time.time(), new_script)
         return new_script
 
-    def reparse_project(self, script_id: str, text: str) -> Script:
+    def reparse_project(self, script_id: str, text: str,
+                        draft: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Script:
         """Re-parse the text for an existing project, replacing all entities."""
         existing_script = self.scripts.get(script_id)
         if not existing_script:
             raise ValueError("Script not found")
 
-        # Use cached extraction if available (from extract_preview)
+        # Applying an explicit draft must persist exactly what the user reviewed,
+        # even when the short-lived preview cache has expired.
         cached = self._extraction_cache.pop(script_id, None)
-        if cached and (time.time() - cached[0]) < 300 and cached[1].original_text == text:
+        if draft is not None:
+            normalized = {key: list(draft.get(key, [])) for key in ("characters", "scenes", "props")}
+            new_script = self.script_processor._create_script_from_data(
+                existing_script.title, text, normalized
+            )
+        elif cached and (time.time() - cached[0]) < 300 and cached[1].original_text == text:
             new_script = cached[1]
         else:
             custom_extraction = getattr(getattr(existing_script, "prompt_config", None), "entity_extraction", "")
