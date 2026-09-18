@@ -13,8 +13,8 @@ Use this workflow when working in this repository and the user asks to publish w
 - Push to the `github` remote only. Ignore `origin` for publishing.
 - Run sensitive-data checks before any push.
 - Commit messages must follow Conventional Commits.
-- Use `Mike4Ellis <1007062267@qq.com>` as the git commit author for GitHub mirror submissions in this repo.
-- Open GitHub PRs with the `Star-Lotus` GitHub account. If `Mike4Ellis` lacks `createPullRequest` permission, switch `gh` to `Star-Lotus` before running `gh pr create`.
+- Use `Owen <owen.fang1977@gmail.com>` as the git commit author for iFrame GitHub mirror submissions in this repo.
+- Open GitHub PRs with the `Star-Lotus` GitHub account; switch `gh` to `Star-Lotus` before running `gh pr create` when another account is active.
 
 Repository-specific constraints:
 
@@ -130,7 +130,7 @@ git log -1 --format='%an <%ae>'
 
 Expected author for GitHub-bound commits in this repo:
 
-- `Mike4Ellis <1007062267@qq.com>`
+- `Owen <owen.fang1977@gmail.com>`
 
 Common prefixes:
 
