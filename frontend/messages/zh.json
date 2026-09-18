@@ -259,6 +259,28 @@
     "toastDeleteErr": "删除参考图失败",
     "favoriteVariant": "收藏参考图",
     "unfavoriteVariant": "取消收藏参考图",
+    "viewRole": "角度",
+    "viewDistance": "景别",
+    "viewRoleFor": "{name} 的参考角度",
+    "viewDistanceFor": "{name} 的参考景别",
+    "toastMetadataErr": "更新参考图标签失败",
+    "viewRoleOptions": {
+      "front": "正面",
+      "left": "左侧",
+      "right": "右侧",
+      "back": "背面",
+      "three_quarter_left": "左前 45°",
+      "three_quarter_right": "右前 45°",
+      "top": "顶部",
+      "bottom": "底部",
+      "detail": "细节"
+    },
+    "viewDistanceOptions": {
+      "full": "远景 / 全貌",
+      "medium": "中景",
+      "close": "近景",
+      "macro": "特写"
+    },
     "templateSelectLabel": "构图模板",
     "tplSimpleLabel": "简洁三视图",
     "tplSimpleDesc": "大头特写 + 全身三视图",

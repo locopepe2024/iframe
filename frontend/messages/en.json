@@ -259,6 +259,28 @@
     "toastDeleteErr": "Failed to delete reference image",
     "favoriteVariant": "Favorite reference image",
     "unfavoriteVariant": "Remove reference image from favorites",
+    "viewRole": "Angle",
+    "viewDistance": "Framing",
+    "viewRoleFor": "View angle for {name}",
+    "viewDistanceFor": "Framing distance for {name}",
+    "toastMetadataErr": "Failed to update reference labels",
+    "viewRoleOptions": {
+      "front": "Front",
+      "left": "Left",
+      "right": "Right",
+      "back": "Back",
+      "three_quarter_left": "3/4 left",
+      "three_quarter_right": "3/4 right",
+      "top": "Top",
+      "bottom": "Bottom",
+      "detail": "Detail"
+    },
+    "viewDistanceOptions": {
+      "full": "Wide / full",
+      "medium": "Medium",
+      "close": "Close",
+      "macro": "Macro"
+    },
     "templateSelectLabel": "Composition Template",
     "tplSimpleLabel": "Simple Three-View",
     "tplSimpleDesc": "Head close-up + full-body tri-view",

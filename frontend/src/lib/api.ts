@@ -647,6 +647,24 @@ export const api = {
         return res.data;
     },
 
+    updateAssetVariantMetadata: async (
+        scriptId: string,
+        assetId: string,
+        assetType: string,
+        variantId: string,
+        referenceViewRole?: string,
+        referenceDistance?: string,
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/metadata`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId,
+            reference_view_role: referenceViewRole || null,
+            reference_distance: referenceDistance || null,
+        });
+        return res.data;
+    },
+
     favoriteAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, isFavorited: boolean, generationType?: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/favorite`, {
             asset_id: assetId,
