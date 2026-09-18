@@ -23,12 +23,14 @@ def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+    monkeypatch.setattr(api, '_get_director_prompt_context', lambda *a: 'Director profile revision: 3; keep Chinese setting')
     api.polish_video_prompt(api.PolishVideoPromptRequest(draft_prompt='replace character', target_video_model='uniart/minimax-h3-vip'))
     from src.apps.comic_gen.llm import DEFAULT_VIDEO_POLISH_PROMPT
     prompt = processor.polish_video_prompt.call_args.args[2]
     assert not prompt.startswith(DEFAULT_VIDEO_POLISH_PROMPT)
     assert "integrated_multimodal_description" in prompt
     assert 'MiniMax H3' in prompt
+    assert 'Director profile revision: 3' in prompt
 
 
 @pytest.mark.parametrize('r2v', [False, True])

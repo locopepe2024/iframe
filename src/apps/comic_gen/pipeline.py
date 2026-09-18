@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
+import hashlib
 import json
 import os
 import re
@@ -8,7 +9,7 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ArtDirection, GlobalAssetLibrary
+from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ArtDirection, DirectorProfile, GlobalAssetLibrary
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -663,6 +664,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 effective_positive_prompt = f"{script.style_preset} style"
                 if script.style_prompt:
                     effective_positive_prompt += f", {script.style_prompt}"
+
+            director_context = self.director_prompt_context(script)
+            if director_context:
+                effective_positive_prompt = ". ".join(filter(None, [
+                    effective_positive_prompt, director_context,
+                ]))
         
         if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
@@ -705,6 +712,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
                 
             target_asset.status = GenerationStatus.COMPLETED
+            director_profile = self.effective_director_profile(script)
+            if director_profile:
+                target_asset.director_profile_revision = director_profile.revision
+                target_asset.director_profile_hash = director_profile.content_hash
+                target_asset.director_review_required = False
         except Exception as e:
             target_asset.status = GenerationStatus.FAILED
             raise e
@@ -1364,15 +1376,86 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
+        effective_before_save = self.effective_art_direction(script)
         # Create Art Direction object
         art_direction = ArtDirection(
             selected_style_id=selected_style_id,
             style_config=style_config,
             custom_styles=custom_styles or [],
-            ai_recommendations=ai_recommendations or []
+            ai_recommendations=ai_recommendations or [],
+            director_profile=effective_before_save.director_profile if effective_before_save else None,
         )
         
         script.art_direction = art_direction
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def effective_art_direction(self, script: Script) -> Optional[ArtDirection]:
+        resolved = script.art_direction
+        if not resolved and script.series_id:
+            series = self.series_store.get(script.series_id)
+            resolved = series.art_direction if series else None
+        return ArtDirection(**resolved) if isinstance(resolved, dict) else resolved
+
+    def effective_director_profile(self, script: Script) -> Optional[DirectorProfile]:
+        art_direction = self.effective_art_direction(script)
+        return art_direction.director_profile if art_direction else None
+
+    def director_prompt_context(self, script: Script) -> str:
+        profile = self.effective_director_profile(script)
+        if not profile:
+            return ""
+        payload = profile.model_dump(exclude={"confirmed_at"})
+        return (
+            f"Director profile revision: {profile.revision}. Treat this as confirmed narrative "
+            "context. Do not turn unresolved questions into facts. "
+            + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+
+    def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
+        script, entities, _ = self.storyboard_analysis_context(script_id)
+        art_direction = self.effective_art_direction(script)
+        style = art_direction.style_config if art_direction else {}
+        return script, entities, style
+
+    def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
+        script, entities, style = self.director_analysis_context(script_id)
+        return self.script_processor.analyze_director_profile(script.original_text, entities, style)
+
+    def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
+                                instructions: List[str]) -> Dict[str, Any]:
+        script, entities, style = self.director_analysis_context(script_id)
+        return self.script_processor.refine_director_profile(
+            script.original_text, entities, style, draft, instructions
+        )
+
+    def apply_director_profile(self, script_id: str, draft: Dict[str, Any]) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        clean = DirectorProfile(**draft).model_dump(exclude={"revision", "content_hash", "confirmed_at"})
+        content_hash = hashlib.sha256(json.dumps(
+            clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        current = self.effective_director_profile(script)
+        revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
+        confirmed = DirectorProfile(
+            **clean, revision=revision, content_hash=content_hash, confirmed_at=time.time()
+        )
+        if script.art_direction:
+            script.art_direction.director_profile = confirmed
+        else:
+            inherited = self.effective_art_direction(script)
+            script.art_direction = inherited.model_copy(deep=True) if inherited else ArtDirection(
+                selected_style_id="director-profile", style_config={}
+            )
+            script.art_direction.director_profile = confirmed
+        changed = not current or current.content_hash != content_hash
+        if changed:
+            script.director_review_required = True
+            for item in [*script.characters, *script.scenes, *script.props, *script.frames]:
+                item.director_review_required = True
         script.updated_at = time.time()
         self._save_data()
         return script
@@ -1396,9 +1479,11 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
-        _, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        director_profile = self.effective_director_profile(script)
         frames = self.script_processor.analyze_to_storyboard(
-            text, entities_json, custom_extraction_prompt=prompt
+            text, entities_json, custom_extraction_prompt=prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
         )
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
@@ -1408,9 +1493,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     draft: List[Dict[str, Any]],
                                     instructions: List[str]) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
-        _, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        director_profile = self.effective_director_profile(script)
         frames = self.script_processor.refine_storyboard_analysis(
-            text, entities_json, draft, instructions, custom_extraction_prompt=prompt
+            text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -1433,8 +1520,10 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # An explicit reviewed draft is applied exactly as shown and never
         # triggers a second analysis call.
+        director_profile = self.effective_director_profile(script)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
-            text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt
+            text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
         )
 
         if not raw_frames:
@@ -1492,6 +1581,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 dialogue=frame_data.get("dialogue"),
                 speaker=frame_data.get("speaker"),
                 duration=frame_data.get("duration"),
+                director_profile_revision=director_profile.revision if director_profile else None,
+                director_profile_hash=director_profile.content_hash if director_profile else None,
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)
@@ -1702,6 +1793,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .llm import DEFAULT_STORYBOARD_POLISH_PROMPT
         if custom_prompt == DEFAULT_STORYBOARD_POLISH_PROMPT:
             custom_prompt = ""
+        director_context = self.director_prompt_context(script)
+        if director_context:
+            custom_prompt = "\n\n".join(filter(None, [
+                custom_prompt, "CONFIRMED DIRECTOR PROFILE:\n" + director_context,
+            ]))
 
         # Call LLM to refine prompt
         result = self.script_processor.polish_storyboard_prompt(raw_prompt, assets, feedback, custom_prompt)

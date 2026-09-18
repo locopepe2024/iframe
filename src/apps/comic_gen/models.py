@@ -328,6 +328,9 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
@@ -348,6 +351,9 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
@@ -369,11 +375,17 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
     owner_profile_id: Optional[str] = Field(None, description="Authenticated profile owner")
+    director_review_required: bool = Field(False, description="Frame predates the confirmed director profile")
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
@@ -530,12 +542,34 @@ class ModelSettings(BaseModel):
     storyboard_aspect_ratio: str = Field("16:9", description="Aspect ratio for Storyboard (9:16, 16:9, 1:1)")
 
 
+class DirectorProfile(BaseModel):
+    """Confirmed narrative direction carried into downstream generation."""
+    setting: Dict[str, Any] = Field(default_factory=dict)
+    timeline: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    key_events: List[Dict[str, Any]] = Field(default_factory=list)
+    emotional_arc: str = ""
+    pacing: str = ""
+    visual_language: str = ""
+    performance_direction: str = ""
+    dialogue_direction: str = ""
+    sound_direction: str = ""
+    continuity_constraints: List[str] = Field(default_factory=list)
+    prohibitions: List[str] = Field(default_factory=list)
+    unresolved_questions: List[str] = Field(default_factory=list)
+    sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
+    revision: int = Field(1, ge=1)
+    content_hash: str = ""
+    confirmed_at: float = 0.0
+
+
 class ArtDirection(BaseModel):
     """Art Direction configuration for global visual style"""
     selected_style_id: str = Field(..., description="ID of the selected style")
     style_config: Dict[str, Any] = Field(..., description="Complete style configuration")
     custom_styles: List[Dict[str, Any]] = Field(default_factory=list, description="User-created custom styles")
     ai_recommendations: List[Dict[str, Any]] = Field(default_factory=list, description="AI recommended styles")
+    director_profile: Optional[DirectorProfile] = Field(None, description="Confirmed narrative and directorial constraints")
 
 class PromptConfig(BaseModel):
     """Custom system prompts for polish/refine stages. Empty string = use system default."""
@@ -568,6 +602,7 @@ class Script(BaseModel):
     
     # Art Direction configuration (new approach)
     art_direction: Optional[ArtDirection] = Field(None, description="Global visual style configuration")
+    director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage
     model_settings: ModelSettings = Field(default_factory=ModelSettings, description="Model selection for T2I/I2I/I2V")

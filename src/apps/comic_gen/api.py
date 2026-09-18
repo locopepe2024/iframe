@@ -43,6 +43,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError
 from .models import (
     ArtDirection,
+    DirectorProfile,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -2415,7 +2416,9 @@ class StoryboardAnalysisApplyRequest(BaseModel):
 
 def _storyboard_analysis_fingerprint(script_id: str, text: str,
                                      draft=None, instructions=None) -> str:
-    _, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    resolve_director = getattr(pipeline, "effective_director_profile", None)
+    director_profile = resolve_director(script) if resolve_director else None
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         text,
@@ -2423,6 +2426,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         draft,
         instructions,
         prompt,
+        director_profile.model_dump() if director_profile else None,
         llm.provider,
         llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
@@ -4056,6 +4060,77 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
+class DirectorProfileRefineRequest(BaseModel):
+    draft: Dict[str, Any]
+    instructions: List[str] = Field(min_length=1, max_length=12)
+
+
+class DirectorProfileApplyRequest(BaseModel):
+    draft: Dict[str, Any]
+
+
+def _director_profile_fingerprint(script_id: str, draft=None, instructions=None) -> str:
+    script, entities, style = pipeline.director_analysis_context(script_id)
+    llm = pipeline.script_processor.llm
+    return hashlib.sha256(json.dumps([
+        script.original_text, entities, style, draft, instructions,
+        llm.provider, llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
+def start_director_profile_analysis(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    fingerprint = _director_profile_fingerprint(script_id)
+    return extraction_jobs.start(
+        user.owner_profile_id, script_id, "director:" + fingerprint,
+        lambda: {"profile": pipeline.preview_director_profile(script_id)},
+    )
+
+
+@app.post("/projects/{script_id}/director-profile-jobs/refine", status_code=202)
+def start_director_profile_refinement(
+    script_id: str,
+    request: DirectorProfileRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    DirectorProfile(**request.draft)
+    fingerprint = _director_profile_fingerprint(script_id, request.draft, instructions)
+    return extraction_jobs.start(
+        user.owner_profile_id, script_id, "director:" + fingerprint,
+        lambda: {"profile": pipeline.refine_director_profile(
+            script_id, request.draft, instructions
+        )},
+    )
+
+
+@app.get("/projects/{script_id}/director-profile-jobs/{job_id}")
+def director_profile_status(
+    script_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
+
+
+@app.post("/projects/{script_id}/director-profile/apply", response_model=Script)
+def apply_director_profile(
+    script_id: str,
+    request: DirectorProfileApplyRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        return signed_response(pipeline.apply_director_profile(script_id, request.draft))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @app.post("/projects/{script_id}/art_direction/analyze")
 async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest):
     """Analyze script content and recommend visual styles using LLM"""
@@ -4194,6 +4269,13 @@ def _get_custom_prompt(script_id: str, field: str) -> str:
     if effective == defaults.get(field, ""):
         return ""
     return effective
+
+
+def _get_director_prompt_context(script_id: str) -> str:
+    if not script_id:
+        return ""
+    script = pipeline.get_script(script_id)
+    return pipeline.director_prompt_context(script) if script else ""
 
 
 def _get_polish_model_for_project(script_id: str) -> str:
@@ -4358,7 +4440,11 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "video_polish"), DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
+        custom = _get_custom_prompt(request.script_id, "video_polish")
+        director = _get_director_prompt_context(request.script_id)
+        if director:
+            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -4412,7 +4498,11 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, _get_custom_prompt(request.script_id, "r2v_polish"), DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
+        custom = _get_custom_prompt(request.script_id, "r2v_polish")
+        director = _get_director_prompt_context(request.script_id)
+        if director:
+            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]

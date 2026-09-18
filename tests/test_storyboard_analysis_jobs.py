@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.apps.comic_gen.extraction_jobs import ExtractionJobs
-from src.apps.comic_gen.models import Character, Scene, Script
+from src.apps.comic_gen.models import ArtDirection, Character, DirectorProfile, Scene, Script
 from src.apps.identity import UserContext
 
 
@@ -90,6 +90,10 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
         owner_profile_id="owner",
         characters=[Character(id="host", name="主播", description="")],
         scenes=[Scene(id="studio", name="直播间", description="")],
+        art_direction=ArtDirection(
+            selected_style_id="film", style_config={},
+            director_profile=DirectorProfile(revision=4, content_hash="director-4", confirmed_at=1),
+        ),
     )
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
@@ -114,6 +118,8 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
     assert len(result.frames) == 1
     assert result.frames[0].action_description == "主播举起产品"
     assert result.frames[0].character_ids == ["host"]
+    assert result.frames[0].director_profile_revision == 4
+    assert result.frames[0].director_profile_hash == "director-4"
     pipeline._save_data.assert_called_once()
 
 
