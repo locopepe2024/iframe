@@ -1,6 +1,6 @@
 # Storyboard Product Multi-Reference V1
 
-Status: extended implementation in progress.
+Status: extended implementation verified on 2026-09-18.
 
 ## Observed
 
@@ -95,3 +95,9 @@ Passing request-capture tests proves ordering, persistence, and prompt mapping.
 It does not prove visual text fidelity. That requires controlled H3 A/B renders
 using the same prompt and seed/config once the provider exposes deterministic
 seed support.
+
+## Verification
+
+- 113 related backend tests passed.
+- 12 focused Storyboard/Cast UI tests passed.
+- Frontend typecheck and production build passed.
