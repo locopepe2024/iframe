@@ -1,5 +1,6 @@
 """Owner-scoped source registration and durable, revision-checked analysis jobs."""
 from contextlib import contextmanager
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -16,10 +17,11 @@ from fastapi import HTTPException
 from ..identity import UserContext
 from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
-from .mentions import compile_mentions
+from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 
 LEASE_SECONDS = 600
+KEYFRAME_LEASE_SECONDS = 3600
 
 
 class RecreationService:
@@ -36,7 +38,9 @@ class RecreationService:
         try:
             connection.execute("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS media_records (media_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, kind TEXT NOT NULL, display_name TEXT NOT NULL, storage_path TEXT NOT NULL, sha256 TEXT NOT NULL, metadata TEXT NOT NULL, created_at REAL NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS keyframe_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE INDEX IF NOT EXISTS media_owner_project ON media_records(owner, project_id, created_at, media_id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS keyframe_owner_project ON keyframe_tasks(owner, project_id)")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
@@ -224,6 +228,184 @@ class RecreationService:
         except BaseException:
             shutil.rmtree(folder)
             raise
+
+    @staticmethod
+    def _keyframe_prompt(instruction):
+        return (
+            "Use case: precise-object-edit. Image 1 is the edit target from the source video. "
+            "Image 2 is the replacement product identity reference. The additional constraint below "
+            "identifies the exact existing object in Image 1 to replace. Replace only that object with "
+            "the complete product package shown in Image 2. If the target object is not unambiguous, "
+            "do not alter unrelated content. "
+            "Preserve every person, face, hand, body pose, action, background object, composition, "
+            "crop, camera angle, depth of field and lighting from Image 1. Match the new package's "
+            "perspective, scale, position, environmental light, contact shadow and hand occlusion. "
+            "Preserve the package design, colors, logo and printed appearance from Image 2; do not "
+            "invent, translate or redesign packaging text. Do not add objects, remove objects, change "
+            "the scene or alter the people. Produce one photorealistic corrected video keyframe. "
+            f"Additional constraint: {instruction.strip()}"
+        )
+
+    def _task(self, db, task_id):
+        row = db.execute("SELECT data FROM keyframe_tasks WHERE task_id=? AND owner=?",
+                         (task_id, self.user.owner_profile_id)).fetchone()
+        if not row:
+            raise HTTPException(404, "Keyframe task not found")
+        return json.loads(row[0])
+
+    def _public_task(self, db, task):
+        result = {key: value for key, value in task.items() if key != "prompt"}
+        result["output_media"] = self._media(db, task["output_media_id"]) if task.get("output_media_id") else None
+        return result
+
+    def create_keyframe_task(self, project_id, shot_id, revision, analysis_id, reference_media_id,
+                             replacement_media_id, instruction, accept_cost):
+        if not accept_cost:
+            raise HTTPException(422, "Paid image generation requires explicit cost acceptance")
+        if len(instruction) > 2000:
+            raise HTTPException(422, "Keyframe instruction exceeds 2000 characters")
+        if not TOKEN.sub("", instruction).strip():
+            raise HTTPException(422, "Describe the exact object to replace before generating a corrected keyframe")
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record.get("timeline"):
+                raise HTTPException(409, "Timeline changed; refresh before generating a corrected keyframe")
+            if not any(shot["id"] == shot_id for shot in record["timeline"]["shots"]):
+                raise HTTPException(404, "Shot not found")
+            reference = self._image(db, reference_media_id)
+            replacement = self._image(db, replacement_media_id)
+            if reference["kind"] not in ("sample_frame", "evidence_frame", "reference_image"):
+                raise HTTPException(422, "Keyframe edit target must be a source frame or corrected reference")
+            if reference["project_id"] != project_id and reference["kind"] != "reference_image":
+                raise HTTPException(422, "Source frame belongs to another recreation project")
+            if replacement["kind"] != "replacement_image":
+                raise HTTPException(422, "Replacement product must use the replacement image role")
+            compiled_instruction, bad_instruction = compile_mentions(instruction, [
+                {"media_id": reference_media_id, "label": "Image 1"},
+                {"media_id": replacement_media_id, "label": "Image 2"},
+            ])
+            if bad_instruction:
+                raise HTTPException(422, "Keyframe instruction contains an unresolved material reference")
+            active_rows = db.execute(
+                "SELECT task_id, data FROM keyframe_tasks WHERE owner=? AND project_id=? "
+                "AND json_extract(data, '$.shot_id')=? AND json_extract(data, '$.revision')=? "
+                "AND json_extract(data, '$.status') IN ('pending','processing')",
+                (self.user.owner_profile_id, project_id, shot_id, revision),
+            ).fetchall()
+            active = False
+            for active_id, payload in active_rows:
+                previous = json.loads(payload)
+                if time.time() - previous["updated_at"] > KEYFRAME_LEASE_SECONDS:
+                    previous.update(status="failed", error="Keyframe generation was interrupted; retry available", updated_at=time.time())
+                    db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(previous), active_id, self.user.owner_profile_id))
+                else:
+                    active = True
+            if active:
+                raise HTTPException(409, "A corrected keyframe task is already active for this shot")
+            prompt = self._keyframe_prompt(compiled_instruction)
+            now = time.time()
+            task = {
+                "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
+                "revision": revision, "analysis_id": analysis_id, "status": "pending",
+                "model": "uniart/gpt-image-2", "reference_media_id": reference_media_id,
+                "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
+                "replacement_sha256": replacement["sha256"], "prompt": prompt,
+                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                "output_media_id": None, "error": None, "created_at": now, "updated_at": now,
+            }
+            db.execute("INSERT INTO keyframe_tasks VALUES (?, ?, ?, ?)",
+                       (task["task_id"], self.user.owner_profile_id, project_id, json.dumps(task)))
+            return self._public_task(db, task)
+
+    def keyframe_task(self, task_id):
+        with self.db() as db:
+            task = self._task(db, task_id)
+            if task["status"] in ("pending", "processing") and time.time() - task["updated_at"] > KEYFRAME_LEASE_SECONDS:
+                task.update(status="failed", error="Keyframe generation was interrupted; retry available", updated_at=time.time())
+                db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_task(db, task)
+
+    def process_keyframe_task(self, task_id, provider_config=None):
+        folder = None
+        try:
+            with self.db() as db:
+                task = self._task(db, task_id)
+                if task["status"] != "pending":
+                    return
+                task.update(status="processing", updated_at=time.time())
+                db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(task), task_id, self.user.owner_profile_id))
+                reference = self._image(db, task["reference_media_id"])
+                replacement = self._image(db, task["replacement_media_id"])
+                if reference["sha256"] != task["reference_sha256"] or replacement["sha256"] != task["replacement_sha256"]:
+                    raise ValueError("Keyframe input fingerprint changed")
+                reference_path = self._path(reference["storage_path"])
+                replacement_path = self._path(replacement["storage_path"])
+                width = int(reference["metadata"].get("width") or 16)
+                height = int(reference["metadata"].get("height") or 9)
+            from ...models.uniart import UniArtImageModel
+            from ..studio_access import runtime_uniart_for_owner
+            config = provider_config if provider_config is not None else runtime_uniart_for_owner(
+                self.user.user_id, self.user.owner_profile_id)
+            media_id = uuid4().hex
+            folder = self.root / task["project_id"] / "images" / media_id
+            folder.mkdir(parents=True)
+            output = folder / "image.png"
+            ratios = ((1, 1, "1:1"), (4, 3, "4:3"), (3, 4, "3:4"), (16, 9, "16:9"), (9, 16, "9:16"))
+            ratio = min(ratios, key=lambda item: abs(width / height - item[0] / item[1]))[2]
+            UniArtImageModel(config).generate(
+                task["prompt"], str(output), model_name=task["model"], size="2k", quality="high",
+                aspect_ratio=ratio, ref_image_paths=[str(reference_path), str(replacement_path)],
+            )
+            with Image.open(output) as image:
+                output_format = image.format
+                image.verify()
+            extension = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}.get(output_format)
+            if not extension:
+                raise ValueError("Generated keyframe must be PNG, JPEG or WebP")
+            corrected_output = output.with_name(f"image.{extension}")
+            if corrected_output != output:
+                output.rename(corrected_output)
+                output = corrected_output
+            with Image.open(output) as image:
+                image.load()
+                out_width, out_height = image.width, image.height
+            item = {
+                "media_id": media_id, "project_id": task["project_id"], "kind": "reference_image",
+                "display_name": f"Corrected keyframe · {task['shot_id'][:8]}",
+                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "sha256": fingerprint(output),
+                "metadata": {"width": out_width, "height": out_height, "bytes": output.stat().st_size,
+                             "mime": Image.MIME[output_format], "parent_media_id": task["reference_media_id"],
+                             "replacement_media_id": task["replacement_media_id"], "keyframe_task_id": task_id,
+                             "model": task["model"], "prompt_sha256": task["prompt_sha256"]},
+                "created_at": time.time(),
+            }
+            with self.db() as db:
+                current = self._task(db, task_id)
+                if current["status"] != "processing":
+                    raise ValueError("Keyframe task state changed")
+                db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (media_id, self.user.owner_profile_id, task["project_id"], item["kind"],
+                            item["display_name"], item["storage_path"], item["sha256"],
+                            json.dumps(item["metadata"]), item["created_at"]))
+                current.update(status="completed", output_media_id=media_id, error=None, updated_at=time.time())
+                db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(current), task_id, self.user.owner_profile_id))
+        except Exception as exc:
+            if folder:
+                shutil.rmtree(folder, ignore_errors=True)
+            with self.db() as db:
+                try:
+                    task = self._task(db, task_id)
+                except HTTPException:
+                    return
+                if task["status"] != "completed":
+                    task.update(status="failed", error=str(exc)[:1000], updated_at=time.time())
+                    db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(task), task_id, self.user.owner_profile_id))
 
     def bind_shot(self, project_id, shot_id, revision, analysis_id, reference_media_id, replacement_media_id, instruction, description=None, instruction_refs=None):
         with self.db() as db:

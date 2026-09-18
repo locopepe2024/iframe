@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import ShotReferences from './ShotReferences';
 import { recreationApi, RecreationProject, RecreationMedia } from '@/lib/recreation';
 
-vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn() } }));
+vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn() } }));
 vi.mock('next/dynamic', () => ({ default: () => ({ onSave }: { onSave: (file: File) => Promise<void> }) => <button onClick={() => void onSave(new File(['edited'], 'edited.png', { type: 'image/png' }))}>export edit</button> }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 const image: RecreationMedia = { media_id: 'image', project_id: 'p', kind: 'evidence_frame', display_name: 'Evidence', storage_path: '/image.png', sha256: 'hash', created_at: 1, metadata: {} };
@@ -54,6 +54,26 @@ it('exports reference edits as a new child media record before explicit binding'
   fireEvent.click(screen.getByRole('button', { name: 'export edit' }));
   await screen.findByText('Edited');
   expect(recreationApi.uploadImage).toHaveBeenCalledWith('p', expect.any(File), 'reference_image', 'image');
+  expect(recreationApi.bindShot).not.toHaveBeenCalled();
+});
+
+it('runs a paid keyframe task and selects its output without binding it', async () => {
+  const replacement = { ...image, media_id: 'product', kind: 'replacement_image' as const, display_name: 'Product' };
+  const corrected = { ...image, media_id: 'corrected', kind: 'reference_image' as const, display_name: 'Corrected' };
+  vi.mocked(recreationApi.createKeyframeTask).mockResolvedValue({ task_id: 'task', status: 'pending', output_media: null, error: null });
+  vi.mocked(recreationApi.keyframeTask).mockResolvedValue({ task_id: 'task', status: 'completed', output_media: corrected, error: null });
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'save' })).toBeEnabled());
+  fireEvent.click(screen.getAllByRole('button', { name: 'choose' })[0]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Evidence' }));
+  vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [replacement], next_cursor: null });
+  fireEvent.click(screen.getAllByRole('button', { name: 'choose' })[1]);
+  fireEvent.change(screen.getByRole('combobox', { name: 'kind' }), { target: { value: 'replacement_image' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Product' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'instruction' }), { target: { value: 'Keep hand occlusion' } });
+  fireEvent.click(screen.getByRole('button', { name: 'generateCorrected' }));
+  expect(await screen.findByText('Corrected')).toBeInTheDocument();
+  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion');
   expect(recreationApi.bindShot).not.toHaveBeenCalled();
 });
 

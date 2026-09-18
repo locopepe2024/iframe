@@ -343,6 +343,17 @@ def test_reference_api_upload_signing_binding_and_owner_isolation(service, video
     assert response.status_code == 201
     media = response.json()
     assert "?" in media["storage_path"]
+    source = service.search_media(project_id=p["id"], kind="sample_frame")["items"][0]
+    monkeypatch.setattr(RecreationService, "process_keyframe_task", lambda self, task_id: None)
+    task_response = client.post(
+        f'/recreation/projects/{p["id"]}/shots/{p["timeline"]["shots"][0]["id"]}/keyframe-tasks',
+        json={"revision": p["revision"], "analysis_id": p["analysis_id"],
+              "reference_media_id": source["media_id"], "replacement_media_id": media["media_id"],
+              "instruction": "Replace the red box", "accept_cost": True},
+    )
+    assert task_response.status_code == 202
+    assert "prompt" not in task_response.json()
+    assert client.get(f'/recreation/keyframe-tasks/{task_response.json()["task_id"]}').status_code == 200
     endpoint = f'/recreation/projects/{p["id"]}/shots/{p["timeline"]["shots"][0]["id"]}/references'
     payload = {"revision": p["revision"], "analysis_id": p["analysis_id"], "replacement_media_id": media["media_id"]}
     assert client.put(endpoint, json=payload).status_code == 200
@@ -350,6 +361,7 @@ def test_reference_api_upload_signing_binding_and_owner_isolation(service, video
     assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 200
     app.dependency_overrides[require_studio_user] = lambda: UserContext("foreign", "foreign", "Foreign", "")
     assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 404
+    assert client.get(f'/recreation/keyframe-tasks/{task_response.json()["task_id"]}').status_code == 404
     assert client.put(endpoint, json=payload).status_code == 404
 
 
@@ -388,3 +400,84 @@ def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, v
     with pytest.raises(HTTPException) as exc:
         service.generation_plan(p['id'], p['revision'])
     assert exc.value.status_code == 409
+
+
+def test_keyframe_task_generates_indexed_reference_without_binding(service, video, monkeypatch):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+
+    task = service.create_keyframe_task(
+        p['id'], shot['id'], p['revision'], p['analysis_id'],
+        source['media_id'], product['media_id'],
+        f'Replace the red box with @{{{product["media_id"]}}}; keep the hand in front.', True,
+    )
+    assert task['status'] == 'pending'
+    assert task['prompt_sha256'] and 'prompt' not in task
+
+    def generate(_self, prompt, output_path, **kwargs):
+        assert kwargs['model_name'] == 'uniart/gpt-image-2'
+        assert kwargs['ref_image_paths'] == [
+            str((Path('output') / source['storage_path']).resolve()),
+            str((Path('output') / product['storage_path']).resolve()),
+        ]
+        assert 'Image 1' in prompt and 'Image 2' in prompt and product['media_id'] not in prompt
+        from PIL import Image
+        Image.new('RGB', (96, 64), 'green').save(output_path, 'PNG')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtImageModel.generate', generate)
+    service.process_keyframe_task(task['task_id'], {'api_key': 'never-persisted'})
+    done = service.keyframe_task(task['task_id'])
+    assert done['status'] == 'completed', done
+    output = done['output_media']
+    assert output['kind'] == 'reference_image'
+    assert output['metadata']['parent_media_id'] == source['media_id']
+    assert output['metadata']['replacement_media_id'] == product['media_id']
+    assert service.get(p['id'])['timeline']['shots'][0].get('reference_media_id') is None
+
+
+def test_keyframe_task_rejects_cost_stale_and_duplicate(service, video):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+    args = (p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'], 'Replace the red box')
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(*args, False)
+    assert exc.value.status_code == 422
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'], f'@{{{product["media_id"]}}}', True)
+    assert exc.value.status_code == 422
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(p['id'], shot['id'], p['revision'], p['analysis_id'], product['media_id'], product['media_id'], 'Replace the red box', True)
+    assert exc.value.status_code == 422
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(p['id'], shot['id'], p['revision'] - 1, p['analysis_id'], source['media_id'], product['media_id'], 'Replace the red box', True)
+    assert exc.value.status_code == 409
+    first = service.create_keyframe_task(*args, True)
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(*args, True)
+    assert exc.value.status_code == 409
+    stranger = RecreationService(UserContext('other', 'other', 'Other', ''))
+    with pytest.raises(HTTPException) as exc:
+        stranger.keyframe_task(first['task_id'])
+    assert exc.value.status_code == 404
+
+
+def test_keyframe_failure_creates_no_media(service, video, monkeypatch):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+    task = service.create_keyframe_task(p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'], 'Replace the red box', True)
+    monkeypatch.setattr('src.models.uniart.UniArtImageModel.generate', Mock(side_effect=RuntimeError('provider failed')))
+    service.process_keyframe_task(task['task_id'], {})
+    failed = service.keyframe_task(task['task_id'])
+    assert failed['status'] == 'failed' and failed['error'] == 'provider failed'
+    assert failed['output_media'] is None
+    assert service.search_media(project_id=p['id'], kind='reference_image')['items'] == []

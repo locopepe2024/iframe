@@ -48,6 +48,10 @@ export interface RecreationMedia {
   metadata: { parent_media_id?: string; analysis_id?: string; pts?: number | null; time_base?: string; role?: string };
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
+export interface RecreationKeyframeTask {
+  task_id: string; status: "pending" | "processing" | "completed" | "failed";
+  output_media: RecreationMedia | null; error: string | null;
+}
 
 export interface RecreationPlan {
   revision: number; ready: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
@@ -63,6 +67,13 @@ export const recreationApi = {
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
+  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string): Promise<RecreationKeyframeTask> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/keyframe-tasks`, {
+      revision: project.revision, analysis_id: project.analysis_id, reference_media_id: referenceMediaId,
+      replacement_media_id: replacementMediaId, instruction, accept_cost: true,
+    }).then(r => r.data),
+  keyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
+    axios.get(`${API_URL}/recreation/keyframe-tasks/${taskId}`).then(r => r.data),
   bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description" | "instruction_refs">): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
       revision: project.revision, analysis_id: project.analysis_id, ...binding,
