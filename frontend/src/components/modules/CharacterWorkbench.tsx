@@ -3,14 +3,34 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Lock, Unlock, ChevronRight, Maximize2, Video } from "lucide-react";
-import { api, API_URL } from "@/lib/api";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video } from "lucide-react";
+import dynamic from "next/dynamic";
+import { api } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { toast } from "@/store/toastStore";
+
+const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
+
+type CharacterEditUploadType = "full_body" | "three_views" | "head_shot";
+
+interface CharacterEditTarget {
+    source: string;
+    title: string;
+    uploadType: CharacterEditUploadType;
+}
+
+function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
+    const variants = Array.isArray(unit?.variants) ? unit.variants : [];
+    const selectedId = unit?.selected_id || unit?.selected_image_id;
+    return variants.find((variant: any) => variant?.id === selectedId)?.url
+        || fallback
+        || variants.at(-1)?.url;
+}
 
 
 interface CharacterWorkbenchProps {
@@ -28,9 +48,32 @@ interface CharacterWorkbenchProps {
 
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
+    const ti = useTranslations("imageEditor");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
+    const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
+
+    const openImageEditor = (imageUrl: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
+        const source = getAssetUrl(imageUrl);
+        if (!source) return;
+        setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
+    };
+
+    const saveEditedImage = async (file: File) => {
+        if (!currentProject || !editTarget) throw new Error("Project is no longer available");
+        const updatedProject = await api.uploadAsset(
+            currentProject.id,
+            "character",
+            asset.id,
+            file,
+            editTarget.uploadType,
+            asset.description,
+        );
+        updateProject(currentProject.id, updatedProject);
+        toast.success(ti("saved"));
+        setEditTarget(null);
+    };
 
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
@@ -321,6 +364,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.full_body_asset}
                         currentImageUrl={asset.full_body_image_url}
+                        editImageUrl={selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url), tc("masterAsset"), "full_body")}
                         onSelect={(id: string) => handleSelectVariant("full_body", id)}
                         onDelete={(id: string) => handleDeleteVariant("full_body", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("full_body", id, isFav)}
@@ -368,6 +413,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
+                        editImageUrl={selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url), tc("threeViews"), "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
@@ -395,6 +442,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
+                        editImageUrl={selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url), tc("avatar"), "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
@@ -510,11 +559,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
             </motion.div>
+            {editTarget && (
+                <ImageEditor
+                    source={editTarget.source}
+                    title={editTarget.title}
+                    onClose={() => setEditTarget(null)}
+                    onSave={saveEditedImage}
+                />
+            )}
         </div>
     );
 }
 
-function WorkbenchPanel({
+export function WorkbenchPanel({
     title,
     isActive,
     onClick,
@@ -522,6 +579,8 @@ function WorkbenchPanel({
     // Variant Props
     asset,
     currentImageUrl,
+    editImageUrl,
+    onEditImage,
     onSelect,
     onDelete,
     onFavorite,
@@ -562,6 +621,7 @@ function WorkbenchPanel({
     reverseReferenceUrl = null
 }: any) {
     const tc = useTranslations("character");
+    const ti = useTranslations("imageEditor");
 
     return (
         <div
@@ -574,6 +634,19 @@ function WorkbenchPanel({
                     <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
+
+                    {onEditImage && editImageUrl && mode === 'static' && (
+                        <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); onEditImage(); }}
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                            title={ti("title")}
+                            aria-label={`${ti("title")}: ${title}`}
+                        >
+                            <Pencil size={16} />
+                            <span className="hidden text-xs sm:inline">{ti("title")}</span>
+                        </button>
+                    )}
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
