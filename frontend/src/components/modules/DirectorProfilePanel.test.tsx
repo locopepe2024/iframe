@@ -6,6 +6,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import messages from "../../../messages/en.json";
 import { api } from "@/lib/api";
 import { useProjectStore } from "@/store/projectStore";
+import { toast } from "@/store/toastStore";
 import DirectorProfilePanel from "./DirectorProfilePanel";
 
 const profile = {
@@ -50,4 +51,28 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm direction" }));
     await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile));
+});
+
+it("surfaces the server detail when director revision fails", async () => {
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue(profile);
+    vi.spyOn(api, "refineDirectorProfile").mockRejectedValue({
+        response: { data: { detail: "Invalid director profile draft: setting must be an object" } },
+    });
+    const toastError = vi.spyOn(toast, "error");
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    await waitFor(() => expect(screen.getByLabelText("Director profile draft")).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(
+        "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
+    ), { target: { value: "Keep the story grounded" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revise" }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(
+        "Invalid director profile draft: setting must be an object",
+    ));
 });

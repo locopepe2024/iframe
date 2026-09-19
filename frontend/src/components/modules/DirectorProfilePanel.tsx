@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useProjectStore, type DirectorProfile } from "@/store/projectStore";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
+import { extractErrorDetail } from "@/lib/utils";
 
 const editableProfile = (profile?: DirectorProfile) => {
     if (!profile) return "";
@@ -43,7 +44,7 @@ export default function DirectorProfilePanel() {
             setDraftText(JSON.stringify(profile, null, 2));
             setHistory([]);
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : t("directorAnalyzeFailed"));
+            toast.error(extractErrorDetail(error, t("directorAnalyzeFailed")));
         } finally {
             setBusy(null);
         }
@@ -59,7 +60,7 @@ export default function DirectorProfilePanel() {
             setHistory(nextHistory);
             setInstruction("");
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : t("directorRefineFailed"));
+            toast.error(extractErrorDetail(error, t("directorRefineFailed")));
         } finally {
             setBusy(null);
         }
@@ -73,7 +74,7 @@ export default function DirectorProfilePanel() {
             updateProject(currentProject.id, updated);
             toast.success(t("directorApplied"), { projectId: currentProject.id, projectTitle: currentProject.title });
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : t("directorApplyFailed"));
+            toast.error(extractErrorDetail(error, t("directorApplyFailed")));
         } finally {
             setBusy(null);
         }

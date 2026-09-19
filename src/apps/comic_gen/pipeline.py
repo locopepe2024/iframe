@@ -9,7 +9,20 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ArtDirection, DirectorProfile, GlobalAssetLibrary
+from .models import (
+    Script,
+    GenerationStatus,
+    VideoTask,
+    Character,
+    Scene,
+    StoryboardFrame,
+    Series,
+    PromptConfig,
+    ArtDirection,
+    DirectorProfile,
+    GlobalAssetLibrary,
+    normalize_director_profile_draft,
+)
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -1421,20 +1434,31 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
-        return self.script_processor.analyze_director_profile(script.original_text, entities, style)
+        draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
+        normalized = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized)
+        return normalized
 
     def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
-        return self.script_processor.refine_director_profile(
-            script.original_text, entities, style, draft, instructions
+        normalized_draft = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized_draft)
+        revised = self.script_processor.refine_director_profile(
+            script.original_text, entities, style, normalized_draft, instructions
         )
+        normalized_result = normalize_director_profile_draft(revised)
+        DirectorProfile(**normalized_result)
+        return normalized_result
 
     def apply_director_profile(self, script_id: str, draft: Dict[str, Any]) -> Script:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-        clean = DirectorProfile(**draft).model_dump(exclude={"revision", "content_hash", "confirmed_at"})
+        normalized = normalize_director_profile_draft(draft)
+        clean = DirectorProfile(**normalized).model_dump(
+            exclude={"revision", "content_hash", "confirmed_at"}
+        )
         content_hash = hashlib.sha256(json.dumps(
             clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
