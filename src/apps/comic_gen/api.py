@@ -2257,8 +2257,12 @@ def sync_descriptions(script_id: str):
     Note: This only syncs descriptions; generated images/videos are preserved.
     """
     try:
-        updated_script = pipeline.sync_descriptions_from_script_entities(script_id)
-        return signed_response(updated_script)
+        pipeline.sync_descriptions_from_script_entities(script_id)
+        # Project reads add series/global assets as a presentation layer. The
+        # sync response must use that same merged view; returning the raw
+        # episode Script would make the frontend replace shared assets with
+        # empty local arrays.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
