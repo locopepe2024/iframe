@@ -335,6 +335,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     const preferredModel = modelPreferences[mode];
     set({
       mode,
+      ...(mode === 't2i' ? { inputMedia: [], mediaNames: {} } : {}),
       ...(preferredModel !== undefined ? { modelId: preferredModel } : {}),
     });
   },
@@ -445,24 +446,24 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   setActiveSession: (activeSessionId) => set({ activeSessionId, parentGenerationId: null }),
 
   applySessionDraft: (draft) => set({
-    mediaNames: draft.media_names || {},
+    mediaNames: draft.mode === 't2i' ? {} : (draft.media_names || {}),
     mode: draft.mode,
     modelId: draft.model_id,
     prompt: draft.prompt,
     negativePrompt: draft.negative_prompt || '',
-    inputMedia: draft.input_media || [],
+    inputMedia: draft.mode === 't2i' ? [] : (draft.input_media || []),
     parameters: draft.parameters || {},
     batchSize: draft.batch_size || 1,
     parentGenerationId: draft.parent_generation_id || null,
   }),
 
   restoreGeneration: (generation) => set({
-    mediaNames: generation.media_names || {},
+    mediaNames: generation.mode === 't2i' ? {} : (generation.media_names || {}),
     mode: generation.mode,
     modelId: generation.model_id,
     prompt: generation.prompt,
     negativePrompt: generation.negative_prompt || '',
-    inputMedia: generation.input_media || [],
+    inputMedia: generation.mode === 't2i' ? [] : (generation.input_media || []),
     parameters: generation.parameters || {},
     batchSize: generation.batch_size || 1,
     parentGenerationId: generation.id,
@@ -492,6 +493,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }
     if (template.default_mode != null) {
       patch.mode = template.default_mode;
+      if (template.default_mode === 't2i') {
+        patch.inputMedia = [];
+        patch.mediaNames = {};
+      }
     }
     if (template.default_model_id != null) {
       patch.modelId = template.default_model_id;
