@@ -84,7 +84,7 @@ def test_cross_owner_cannot_read_start_or_confirm(service, video):
         assert exc.value.status_code == 404
 
 
-def test_duplicate_start_and_expired_attempt_cannot_publish(service, video, monkeypatch):
+def test_duplicate_start_and_explicit_cancel_cannot_publish(service, video, monkeypatch):
     record = register(service, video)
     first = service.start(record["id"], 0)
     with pytest.raises(HTTPException):
@@ -93,14 +93,30 @@ def test_duplicate_start_and_expired_attempt_cannot_publish(service, video, monk
         state = service._get(db, record["id"])
         state["started_at"] = time.time() - 601
         service._save(db, state)
-    failed = service.get(record["id"])
-    assert failed["status"] == "failed"
-    second = service.start(record["id"], failed["revision"])
+    still_running = service.get(record["id"])
+    assert still_running["status"] == "queued"
+    cancelled = service.cancel_analysis(record["id"], still_running["revision"], first["analysis_id"])
+    assert cancelled["status"] == "cancelled"
+    second = service.start(record["id"], cancelled["revision"])
     runner = Mock()
     monkeypatch.setattr("src.apps.recreation.service.analyze", runner)
     service.process(record["id"], first["analysis_id"])
     runner.assert_not_called()
     assert service.get(record["id"])["analysis_id"] == second["analysis_id"]
+
+
+def test_cancel_analysis_is_owner_and_revision_scoped(service, video):
+    record = register(service, video)
+    queued = service.start(record["id"], record["revision"])
+    stranger = RecreationService(UserContext("other", "other-profile", "Other", ""))
+    with pytest.raises(HTTPException) as exc:
+        stranger.cancel_analysis(record["id"], queued["revision"], queued["analysis_id"])
+    assert exc.value.status_code == 404
+    with pytest.raises(HTTPException) as exc:
+        service.cancel_analysis(record["id"], queued["revision"] - 1, queued["analysis_id"])
+    assert exc.value.status_code == 409
+    cancelled = service.cancel_analysis(record["id"], queued["revision"], queued["analysis_id"])
+    assert cancelled["status"] == "cancelled"
 
 
 def test_corruption_and_explicit_retry(service):
@@ -377,14 +393,14 @@ def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, v
     p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'], 'Replace yellow box only', 'Medium shot; hand lifts box; static camera.')
     plan = service.generation_plan(p['id'], p['revision'], generation_durations={shot['id']: 5})
     assert plan['ready']
-    assert plan['submission_enabled'] is False
+    assert plan['submission_enabled'] is True
     assert plan['guidance']['sha256']
     with pytest.raises(HTTPException) as unsupported:
         service.generation_plan(p['id'], p['revision'], model='uniart/seedance-2.5-vip')
     assert unsupported.value.status_code == 422
     preserved = service.generation_plan(p['id'], p['revision'], audio_policy='preserve_source', generation_durations={shot['id']: 5})
     assert not preserved['ready']
-    assert 'source_audio_assembly_pending' in preserved['blockers'][0]['reasons']
+    assert 'source_audio_unavailable' in preserved['blockers'][0]['reasons']
     row = plan['shots'][0]
     assert [i['media_id'] for i in row['images']] == [ref['media_id'], product['media_id']]
     assert [i['label'] for i in row['images']] == ['<Picture 1>', '<Picture 2>']
@@ -439,6 +455,165 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert service.get(p['id'])['timeline']['shots'][0].get('reference_media_id') is None
 
 
+def test_generation_submission_persists_provider_task_and_indexes_video(service, video, monkeypatch):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    ref = service.upload_image(p['id'], image_stream(), 'frame.png', 'reference_image')
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+    p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], product['media_id'],
+                          'Replace the package only', 'Medium shot, product remains stable.')
+    submitted = service.submit_generation(p['id'], p['revision'], generation_durations={shot['id']: 5}, accept_cost=True)
+    assert len(submitted['tasks']) == 1
+    task_id = submitted['tasks'][0]['task_id']
+
+    def generate(_self, prompt, output_path, **kwargs):
+        assert '<Picture 1>' in prompt and '<Picture 2>' in prompt
+        assert kwargs['model'] == 'uniart/minimax-h3-vip'
+        assert kwargs['mode'] == 'reference2video'
+        assert kwargs['duration'] == 5
+        assert kwargs['generate_audio'] is False
+        assert len(kwargs['ref_image_urls']) == 2
+        kwargs['on_task_submitted']('provider-task-1')
+        Path(output_path).write_bytes(b'fake-mp4')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    service.process_generation_task(task_id, {'api_key': 'never-persisted'})
+    done = service.generation_task(task_id)
+    assert done['status'] == 'completed', done
+    assert done['provider_task_id'] == 'provider-task-1'
+    assert done['output_media']['kind'] == 'generated_video'
+    assert service.search_media(project_id=p['id'], kind='generated_video')['items']
+
+
+def test_generation_cancel_prevents_late_result_and_is_owner_scoped(service, video, monkeypatch):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    ref = service.upload_image(p['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = p['timeline']['shots'][0]
+    p = service.bind_shot(p['id'], shot['id'], p['revision'], p['analysis_id'], ref['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(p['id'], p['revision'], generation_durations={shot['id']: 5}, accept_cost=True)
+    task_id = submitted['tasks'][0]['task_id']
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        kwargs['on_task_submitted']('provider-task-cancelled')
+        service.cancel_generation_task(task_id)
+        Path(output_path).write_bytes(b'late-result')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    service.process_generation_task(task_id, {'api_key': 'never-persisted'})
+    assert service.generation_task(task_id)['status'] == 'cancelled', service.generation_task(task_id)
+    assert service.search_media(project_id=p['id'], kind='generated_video')['items'] == []
+    stranger = RecreationService(UserContext('other', 'other', 'Other', ''))
+    with pytest.raises(HTTPException) as exc:
+        stranger.generation_task(task_id)
+    assert exc.value.status_code == 404
+
+
+def _ready_generation(service, video, monkeypatch, *, audio_policy="silent", clip_seconds=5):
+    project = completed(service, video)
+    project = service.confirm(project["id"], project["revision"], project["analysis_id"], [])
+    reference = service.upload_image(project["id"], image_stream(), "frame.png", "reference_image")
+    shot = project["timeline"]["shots"][0]
+    project = service.bind_shot(project["id"], shot["id"], project["revision"], project["analysis_id"],
+                                reference["media_id"], None, "", "Static shot.")
+    submitted = service.submit_generation(
+        project["id"], project["revision"], audio_policy=audio_policy,
+        soundscape="Generated audio only" if audio_policy == "generated" else "",
+        generation_durations={shot["id"]: 5}, accept_cost=True,
+    )
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        command = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                   f"color=green:s=96x64:r=24:d={clip_seconds}"]
+        if kwargs["generate_audio"]:
+            command += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={clip_seconds}",
+                        "-shortest", "-c:a", "aac"]
+        command += ["-c:v", "libx264", "-pix_fmt", "yuv420p", output_path]
+        subprocess.run(command, check=True, timeout=30)
+        kwargs["on_task_submitted"]("provider-assembly-test")
+        return output_path, 0.1
+
+    monkeypatch.setattr("src.models.uniart.UniArtVideoModel.generate", generate)
+    service.process_generation_task(submitted["tasks"][0]["task_id"], {"api_key": "never-persisted"})
+    return project, submitted, service.generation_task(submitted["tasks"][0]["task_id"])
+
+
+def test_assembly_crops_completed_shot_and_indexes_final_video(service, video, monkeypatch):
+    project, submitted, generation = _ready_generation(service, video, monkeypatch, clip_seconds=5)
+    assembly = service.submit_assembly(project["id"], project["revision"], submitted["generation_id"])
+    assert assembly["status"] == "pending"
+    service.process_assembly_task(assembly["task_id"])
+    done = service.assembly_task(assembly["task_id"])
+    assert done["status"] == "completed", done
+    final = done["output_media"]
+    assert final["kind"] == "final_video"
+    assert final["metadata"]["audio_policy"] == "silent"
+    assert final["metadata"]["audio_streams"] == 0
+    probe = service._probe_assembly_media(Path("output") / final["storage_path"])
+    target = Fraction(project["timeline"]["shots"][0]["end_pts"] - project["timeline"]["shots"][0]["start_pts"]) * Fraction(project["analysis"]["time_base"])
+    assert abs(probe["duration"] - float(target)) < 0.08
+    assert service.search_media(project_id=project["id"], kind="final_video")["items"]
+
+
+def test_assembly_rejects_short_generated_clip_without_stretching(service, video, monkeypatch):
+    project, submitted, _generation = _ready_generation(service, video, monkeypatch, clip_seconds=0.5)
+    assembly = service.submit_assembly(project["id"], project["revision"], submitted["generation_id"])
+    service.process_assembly_task(assembly["task_id"])
+    failed = service.assembly_task(assembly["task_id"])
+    assert failed["status"] == "failed"
+    assert "shorter than the required" in failed["error"]
+    assert failed["output_media"] is None
+
+
+@pytest.fixture
+def video_with_audio(tmp_path):
+    path = tmp_path / "input-audio.mp4"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=96x64:r=24:d=2",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-shortest",
+        "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", str(path),
+    ], check=True, timeout=30)
+    return path
+
+
+def test_assembly_preserves_source_audio_by_timeline_intervals(service, video_with_audio, monkeypatch):
+    project, submitted, _generation = _ready_generation(service, video_with_audio, monkeypatch,
+                                                        audio_policy="preserve_source", clip_seconds=5)
+    assembly = service.submit_assembly(project["id"], project["revision"], submitted["generation_id"])
+    service.process_assembly_task(assembly["task_id"])
+    done = service.assembly_task(assembly["task_id"])
+    assert done["status"] == "completed", done
+    assert done["output_media"]["metadata"]["audio_policy"] == "preserve_source"
+    assert done["output_media"]["metadata"]["audio_streams"] == 1
+
+
+def test_assembly_keeps_generated_audio_when_policy_is_generated(service, video, monkeypatch):
+    project, submitted, _generation = _ready_generation(service, video, monkeypatch,
+                                                        audio_policy="generated", clip_seconds=5)
+    assembly = service.submit_assembly(project["id"], project["revision"], submitted["generation_id"])
+    service.process_assembly_task(assembly["task_id"])
+    done = service.assembly_task(assembly["task_id"])
+    assert done["status"] == "completed", done
+    assert done["output_media"]["metadata"]["audio_policy"] == "generated"
+    assert done["output_media"]["metadata"]["audio_streams"] == 1
+
+
+def test_assembly_cancel_is_owner_scoped_and_prevents_publication(service, video, monkeypatch):
+    project, submitted, _generation = _ready_generation(service, video, monkeypatch)
+    assembly = service.submit_assembly(project["id"], project["revision"], submitted["generation_id"])
+    stranger = RecreationService(UserContext("other", "other", "Other", ""))
+    with pytest.raises(HTTPException) as exc:
+        stranger.cancel_assembly_task(assembly["task_id"])
+    assert exc.value.status_code == 404
+    cancelled = service.cancel_assembly_task(assembly["task_id"])
+    assert cancelled["status"] == "cancelled"
+    service.process_assembly_task(assembly["task_id"])
+    assert service.assembly_task(assembly["task_id"])["output_media"] is None
+
+
 def test_keyframe_task_rejects_cost_stale_and_duplicate(service, video):
     p = completed(service, video)
     p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
@@ -465,6 +640,13 @@ def test_keyframe_task_rejects_cost_stale_and_duplicate(service, video):
     stranger = RecreationService(UserContext('other', 'other', 'Other', ''))
     with pytest.raises(HTTPException) as exc:
         stranger.keyframe_task(first['task_id'])
+    assert exc.value.status_code == 404
+    cancelled = service.cancel_keyframe_task(first['task_id'])
+    assert cancelled['status'] == 'cancelled'
+    assert service.keyframe_task(first['task_id'])['status'] == 'cancelled'
+    replacement = service.create_keyframe_task(*args, True)
+    with pytest.raises(HTTPException) as exc:
+        stranger.cancel_keyframe_task(replacement['task_id'])
     assert exc.value.status_code == 404
 
 

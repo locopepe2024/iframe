@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Pencil, Save, Search, Sparkles, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
-import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
+import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
 
 import MaterialInstruction from "./MaterialInstruction";
 
@@ -63,12 +63,44 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const [audioPolicy, setAudioPolicy] = useState("silent");
   const [soundscape, setSoundscape] = useState("");
   const [durations, setDurations] = useState<Record<string, number>>({});
+  const [generationId, setGenerationId] = useState<string | null>(null);
+  const [generationTasks, setGenerationTasks] = useState<RecreationGenerationTask[]>([]);
+  const [generationBusy, setGenerationBusy] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+  const [costAccepted, setCostAccepted] = useState(false);
+  const [assemblyTask, setAssemblyTask] = useState<RecreationAssemblyTask | null>(null);
+  const [assemblyBusy, setAssemblyBusy] = useState(false);
+  const [assemblyError, setAssemblyError] = useState("");
   const revision = useRef(project.revision);
   const planKey = JSON.stringify([project.revision, audioPolicy, soundscape, durations]);
   const activePlan = useRef(planKey);
   activePlan.current = planKey;
   revision.current = project.revision;
-  useEffect(() => { setPlan(null); setPlanError(false); }, [planKey]);
+  useEffect(() => { setPlan(null); setPlanError(false); setCostAccepted(false); setGenerationId(null); setGenerationTasks([]); setGenerationError(""); setAssemblyTask(null); setAssemblyError(""); }, [planKey]);
+  useEffect(() => {
+    if (!generationId) return;
+    let active = true;
+    const poll = () => recreationApi.generationTasks(project.id, generationId).then(tasks => {
+      if (active) setGenerationTasks(tasks);
+    }).catch(error => {
+      if (active) setGenerationError(error instanceof Error ? error.message : t("generationFailed"));
+    });
+    void poll();
+    const timer = window.setInterval(poll, 2500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [generationId, project.id, t]);
+  useEffect(() => {
+    if (!assemblyTask?.task_id || assemblyTask.status === "completed" || assemblyTask.status === "failed" || assemblyTask.status === "cancelled") return;
+    let active = true;
+    const poll = () => recreationApi.assemblyTask(assemblyTask.task_id).then(task => {
+      if (active) setAssemblyTask(task);
+    }).catch(error => {
+      if (active) setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed"));
+    });
+    void poll();
+    const timer = window.setInterval(poll, 2500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [assemblyTask?.task_id, assemblyTask?.status, t]);
   return <section className="border-t border-border py-5 space-y-4">
     <h3 className="font-semibold">{t("title")}</h3>
     {disabled && <p role="status">{t("confirmFirst")}</p>}
@@ -97,6 +129,28 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
         {item.images.map((image, i) => <p key={`${image.media_id}:${i}`} className="text-xs break-all">{image.label} · {image.media_id}</p>)}
         {item.prompt && <pre className="whitespace-pre-wrap break-words text-sm mt-2">{item.prompt}</pre>}
       </details>)}
+      {plan.ready && <div className="border-t border-border pt-3 space-y-2">
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={costAccepted} onChange={e => setCostAccepted(e.target.checked)} />{t("acceptCost")}</label>
+        <button className="glass-button" disabled={!costAccepted || generationBusy} onClick={async () => {
+          setGenerationBusy(true); setGenerationError("");
+          try {
+            const result = await recreationApi.submitGeneration(project, "uniart/minimax-h3-vip", { audio_policy: audioPolicy, soundscape, generation_durations: durations, accept_cost: costAccepted });
+            setGenerationId(result.generation_id); setGenerationTasks(result.tasks);
+          } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); }
+          finally { setGenerationBusy(false); }
+        }}>{generationBusy ? t("submittingGeneration") : t("submitGeneration")}</button>
+        {generationError && <p role="alert" className="text-sm text-red-500 break-words">{generationError}</p>}
+        {generationTasks.length > 0 && <ul className="space-y-1 text-sm">{generationTasks.map(task => <li key={task.task_id} className="flex items-center gap-2"><span>{t("shot")} {task.shot_number}</span><span>{t(`generationStatus.${task.status}`)}</span>{(task.status === "pending" || task.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { const cancelled = await recreationApi.cancelGenerationTask(task.task_id); setGenerationTasks(all => all.map(item => item.task_id === cancelled.task_id ? cancelled : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("cancelGeneration")}</button>}{task.status === "failed" && <button type="button" className="glass-button" disabled={!costAccepted} onClick={async () => { try { const retried = await recreationApi.retryGenerationTask(task.task_id, costAccepted); setGenerationTasks(all => all.map(item => item.task_id === retried.task_id ? retried : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("retryGeneration")}</button>}</li>)}</ul>}
+        {generationTasks.length > 0 && generationTasks.every(task => task.status === "completed") && !assemblyTask && <button type="button" className="glass-button" disabled={assemblyBusy} onClick={async () => {
+          if (!generationId) return;
+          setAssemblyBusy(true); setAssemblyError("");
+          try { setAssemblyTask(await recreationApi.submitAssembly(project, generationId)); }
+          catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); }
+          finally { setAssemblyBusy(false); }
+        }}>{assemblyBusy ? t("assembling") : t("assembleVideo")}</button>}
+        {assemblyError && <p role="alert" className="text-sm text-red-500 break-words">{assemblyError}</p>}
+        {assemblyTask && <div className="space-y-2 text-sm"><p role="status">{t(`assemblyStatus.${assemblyTask.status}`)}</p>{(assemblyTask.status === "pending" || assemblyTask.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { setAssemblyTask(await recreationApi.cancelAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("cancelAssembly")}</button>}{assemblyTask.status === "failed" && <button type="button" className="glass-button" onClick={async () => { try { setAssemblyTask(await recreationApi.retryAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("retryAssembly")}</button>}{assemblyTask.error && <p role="alert" className="text-red-500 break-words">{assemblyTask.error}</p>}{assemblyTask.output_media && <video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" />}</div>}
+      </div>}
     </div>}
   </section>;
 }
@@ -114,6 +168,7 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
   const [retry, setRetry] = useState(0);
   const [saved, setSaved] = useState(false);
   const [keyframeBusy, setKeyframeBusy] = useState(false);
+  const [keyframeTaskId, setKeyframeTaskId] = useState<string | null>(null);
   const [keyframeError, setKeyframeError] = useState("");
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -141,6 +196,7 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
       let task = await recreationApi.createKeyframeTask(
         project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction,
       );
+      if (alive.current) setKeyframeTaskId(task.task_id);
       while (alive.current && (task.status === "pending" || task.status === "processing")) {
         task = await recreationApi.keyframeTask(task.task_id);
         if (task.status === "pending" || task.status === "processing") {
@@ -153,7 +209,18 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
     } catch (error) {
       if (alive.current) setKeyframeError(error instanceof Error ? error.message : t("keyframeFailed"));
     } finally {
-      if (alive.current) setKeyframeBusy(false);
+      if (alive.current) { setKeyframeBusy(false); setKeyframeTaskId(null); }
+    }
+  }
+  async function cancelCorrected() {
+    if (!keyframeTaskId) return;
+    try {
+      await recreationApi.cancelKeyframeTask(keyframeTaskId);
+      if (alive.current) setKeyframeError(t("keyframeCancelled"));
+    } catch (error) {
+      if (alive.current) setKeyframeError(error instanceof Error ? error.message : t("keyframeFailed"));
+    } finally {
+      if (alive.current) { setKeyframeBusy(false); setKeyframeTaskId(null); }
     }
   }
   return <div className="space-y-4">
@@ -178,6 +245,7 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
       {selected.reference && selected.replacement && <button type="button" className="glass-button flex items-center gap-2" disabled={keyframeBusy || !instruction.replace(/@\{[a-f0-9]{32}\}/g, "").trim()} aria-label={t("generateCorrected")} onClick={generateCorrected}>
         <Sparkles size={16} />{keyframeBusy ? t("generatingCorrected") : t("generateCorrected")}
       </button>}
+      {keyframeBusy && keyframeTaskId && <button type="button" className="glass-button" onClick={() => void cancelCorrected()}>{t("cancelGeneration")}</button>}
       {keyframeError && <p role="alert" className="text-sm text-red-500 break-words">{keyframeError}</p>}
       {picker && <Picker onClose={() => setPicker(null)} onSelect={item => { choose(picker, item); setPicker(null); }} />}
       <label className="block text-sm">{t("description")}<textarea className="glass-input block w-full mt-2" rows={4} maxLength={6000} value={description} onChange={e => { setDescription(e.target.value); setSaved(false); }} /></label>
