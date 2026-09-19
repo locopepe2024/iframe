@@ -61,3 +61,30 @@ it('labels a child reference by angle and framing without creating another asset
  fireEvent.change(screen.getAllByRole('combobox', { name: 'View angle for Test' })[0], { target: { value: 'front' } });
  await waitFor(() => expect(api.updateAssetVariantMetadata).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'front', undefined));
 });
+
+it('keeps provider prompts out of the default customer view', async () => {
+ const stylePrompt = 'premium Chinese e-commerce product advertisement, controlled highlights';
+ const styledProject = {
+  ...project,
+  art_direction: {
+   style_config: {
+    id: 'ecommerce_product_ad',
+    name: 'E-commerce Product Advertisement',
+    positive_prompt: stylePrompt,
+    negative_prompt: 'cartoon, anime',
+   },
+  },
+ };
+ useProjectStore.setState({ currentProject: styledProject, projects: [styledProject] });
+ vi.mocked(api.getStylePresets).mockResolvedValue([{ id: 'ecommerce_product_ad', name: 'E-commerce Product Advertisement', name_zh: '电商产品广告', subtitle_zh: '产品主视觉' }] as any);
+ show();
+
+ const promptEditor = screen.getByRole('textbox');
+ expect((promptEditor as HTMLTextAreaElement).value).toContain('构图：');
+ expect((promptEditor as HTMLTextAreaElement).value).not.toContain('Composition:');
+ expect(screen.queryByText(stylePrompt)).toBeNull();
+ expect(screen.getByTestId('cast-generation-summary')).toHaveTextContent('E-commerce Product Advertisement');
+
+ fireEvent.click(screen.getByRole('button', { name: 'Advanced: view model prompts' }));
+ expect(screen.getByText(stylePrompt)).toBeTruthy();
+});

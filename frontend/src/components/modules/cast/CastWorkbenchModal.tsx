@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
@@ -103,7 +103,7 @@ type CharacterTemplate = "simple" | "detailed" | "design_sheet";
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
     descKey: string;
-    compositionEn: string;
+    composition: string;
     negativeAppend: string;
     comingSoon?: boolean;
     exampleImage?: string;
@@ -111,21 +111,21 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     simple: {
         labelKey: "tplSimpleLabel",
         descKey: "tplSimpleDesc",
-        compositionEn: "Composition: character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left half: large head close-up portrait (shoulders up, sharp facial details, front-facing, detailed skin texture). Right half: three equally-sized full-body standing poses arranged side by side (front view, side view, back view), head-to-toe fully visible, relaxed neutral pose. Consistent soft studio lighting across all views, no harsh shadows, even illumination.",
+        composition: "构图：单张统一的角色参考图，无边框或分隔框，浅灰色中性背景。左半部分为头部近景肖像（肩部以上，正面朝向，面部细节清晰）；右半部分为三个等大的全身站立姿势，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然。所有视图使用统一的柔和摄影棚光线，避免硬阴影，光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
         exampleImage: "/assets/templates/simple-triview.png",
     },
     detailed: {
         labelKey: "tplDetailedLabel",
         descKey: "tplDetailedDesc",
-        compositionEn: "Composition: detailed character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left section: three full-body standing views side by side (front / side / back), head-to-toe visible, neutral relaxed pose. Upper right: large face close-up portrait (shoulders up, detailed skin texture, sharp eyes, pores visible). Lower right: three smaller head shots showing different angles (front, three-quarter, profile). Consistent soft studio lighting, no harsh shadows, even illumination across all panels.",
+        composition: "构图：单张统一的详细角色参考图，无边框或分隔框，浅灰色中性背景。左侧为三个并排的全身站立视图，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然；右上为头部近景肖像（肩部以上，面部细节清晰）；右下为三个较小的头部角度特写，展示正面、四分之三侧面和侧面。所有视图使用统一的柔和摄影棚光线，避免硬阴影，整体光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
     design_sheet: {
         labelKey: "tplDesignSheetLabel",
         descKey: "tplDesignSheetDesc",
-        compositionEn: "Composition: professional character design sheet, single unified image with dark cyberpunk-themed background (deep blue-black with subtle neon circuit patterns). Layout divided into labeled panels with thin border frames: - Top left: large dramatic character portrait (bust shot, three-quarter angle, moody rim lighting, glowing blue cybernetic eye) - Center: three full-body standing views (front / side / back) with labels \"正面\" \"侧面\" \"背面\" - Top right: 4 expression close-ups in a row (neutral, smirking, intense focus, combat rage), labeled \"表情特写\" - Bottom left: 3-4 detail close-up panels showing cybernetic eye mechanism, neck circuit tattoo, armor texture, weapon holster, labeled \"细节特写\" - Bottom right: character info panel with dark translucent background containing text fields (name, age, traits, abilities). Cinematic lighting, high detail, concept art quality, game character sheet aesthetic.",
+        composition: "构图：专业角色设定图，单张统一画面，深蓝黑色赛博朋克主题背景，带有低调的霓虹电路纹理。画面分为带细边框的标注区域：左上为大幅角色肖像（半身、四分之三角度、情绪化轮廓光）；中间为正面、侧面和背面三个全身站立视图；右上为四个表情特写；左下为眼部、颈部纹身、服装材质和装备等细节特写；右下为包含姓名、年龄、特征和能力的角色信息区。电影感光线，高细节，概念设计质量。",
         negativeAppend: "watermark, UI overlay, signature, low quality, distorted anatomy, multiple separate images",
         comingSoon: true,
         exampleImage: "/assets/templates/design-sheet.png",
@@ -139,12 +139,12 @@ function buildTemplate(kind: CastKind, entity: any, template?: CharacterTemplate
 
     if (kind === "character") {
         const tpl = CHARACTER_TEMPLATES[template || "simple"];
-        return `${charDesc}\n\n${tpl.compositionEn}`;
+        return `${charDesc}\n\n${tpl.composition}`;
     }
     if (kind === "scene") {
-        return `${name}${desc ? "：" + desc : ""}\n\nComposition: wide establishing shot of the environment on neutral gray background, single unified image, no figures in foreground. Emphasize atmosphere, architecture and terrain structure. Lighting and color palette match the scene mood. Soft volumetric lighting, depth of field.`;
+        return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的环境广角定调镜头，单张统一画面，前景不出现人物。突出氛围、建筑和地形结构，光线与色调贴合场景情绪，使用柔和的体积光和适度景深。`;
     }
-    return `${name}${desc ? "：" + desc : ""}\n\nComposition: product photography style on neutral gray background, single unified image, seamless layout without borders. Main view: object centered at slight angle. Secondary views: detail close-ups of material and texture. Clean even studio lighting, subtle shadow beneath object.`;
+    return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的产品摄影风格，单张统一画面，无边框或分隔框。主体以轻微侧角居中展示，并辅以材质和纹理的细节特写。使用干净均匀的摄影棚光线，在主体下方保留轻微自然阴影。`;
 }
 
 function getTemplateNegative(kind: CastKind, template?: CharacterTemplate): string {
@@ -186,6 +186,7 @@ function readSelectedId(entity: any, kind: CastKind): string | null {
 
 export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: CastWorkbenchModalProps) {
     const t = useTranslations("castWorkbench");
+    const locale = useLocale();
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const allProjects = useProjectStore((state) => state.projects);
@@ -217,7 +218,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [modelOverride, setModelOverride] = useState<string | null>(null);
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
-    const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
+    const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
@@ -257,6 +258,15 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const styleConfig = resolvedArtDirection?.style_config;
     const styleName = styleConfig?.name || "";
     const styleNegative = styleConfig?.negative_prompt || "";
+    const matchedStyle = styleConfig?.id
+        ? presets.find((preset: any) => preset.id === styleConfig.id)
+        : undefined;
+    const styleDisplayName = locale.startsWith("zh")
+        ? matchedStyle?.name_zh || (styleConfig?.is_custom || !styleConfig?.id ? styleName : t("styleConfigured"))
+        : styleName || matchedStyle?.name || "";
+    const styleDescription = locale.startsWith("zh")
+        ? matchedStyle?.subtitle_zh || matchedStyle?.description || ""
+        : matchedStyle?.description || "";
     // Resolve positive_prompt with preset fallback (series data often omits it)
     let stylePositive = styleConfig?.positive_prompt || "";
     if (!stylePositive && styleConfig?.id && presets.length > 0) {
@@ -476,6 +486,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const filteredVariants = galleryFilter === "favorited"
         ? variants.filter(v => v.is_favorited)
         : variants;
+    const compositionSummary = kind === "character"
+        ? t(CHARACTER_TEMPLATES[selectedTemplate].descKey)
+        : t(kind === "scene" ? "promptHintScene" : "promptHintProp");
 
     // Per-kind accent — Tailwind JIT can't resolve dynamic `bg-${name}-500/15`,
     // so we ship full class strings per kind keyed off a static record.
@@ -588,7 +601,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <p className="flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                         <Palette size={10} /> {t("styleAppliedFrom")}
                                     </p>
-                                    {styleName && (
+                                    {styleDisplayName && (
                                         <button
                                             onClick={() => setApplyStyle(!applyStyle)}
                                             className={`relative w-7 h-4 rounded-full transition-colors ${applyStyle ? "bg-primary/60" : "bg-elevated"}`}
@@ -597,45 +610,72 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </button>
                                     )}
                                 </div>
-                                <p className="mt-1 text-[0.75rem] text-foreground">{styleName || t("styleNotSet")}</p>
-                                {!applyStyle && styleName && (
+                                <p className="mt-1 text-[0.75rem] text-foreground">{styleDisplayName || t("styleNotSet")}</p>
+                                {styleDescription && styleDisplayName && (
+                                    <p className="mt-0.5 text-[0.625rem] leading-relaxed text-text-secondary">
+                                        {styleDescription}
+                                    </p>
+                                )}
+                                {!applyStyle && styleDisplayName && (
                                     <p className="text-[0.625rem] text-amber-300/70 mt-0.5">{t("styleDisabledHint")}</p>
                                 )}
 
-                                {/* Positive prompt */}
-                                {applyStyle && stylePositive && (
-                                    <div className="mt-2.5 rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
-                                            {stylePositive}
-                                        </p>
-                                        {stylePositive.length > 80 && (
-                                            <button
-                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
-                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
-                                            >
-                                                {positiveExpanded ? t("collapse") : t("expand")}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
+                                {/* Provider-facing prompts stay available for advanced users, but are
+                                    hidden from the default customer view so the same description is not
+                                    displayed a second time in English. */}
+                                {applyStyle && (stylePositive || styleNegative) && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-expanded={modelPromptExpanded}
+                                            onClick={() => setModelPromptExpanded(!modelPromptExpanded)}
+                                            className="mt-2.5 inline-flex items-center gap-1 text-[0.625rem] text-text-muted hover:text-text-secondary transition-colors"
+                                        >
+                                            <span>{modelPromptExpanded ? t("hideModelPrompts") : t("showModelPrompts")}</span>
+                                            <span aria-hidden="true">{modelPromptExpanded ? "−" : "+"}</span>
+                                        </button>
+                                        {modelPromptExpanded && (
+                                            <div className="mt-1.5 space-y-2">
+                                                {/* Positive prompt */}
+                                                {stylePositive && (
+                                                    <div className="rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
+                                                            {stylePositive}
+                                                        </p>
+                                                        {stylePositive.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
+                                                            >
+                                                                {positiveExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                                {/* Negative prompt */}
-                                {applyStyle && styleNegative && (
-                                    <div className="mt-2 rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
-                                            {styleNegative}
-                                        </p>
-                                        {styleNegative.length > 80 && (
-                                            <button
-                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
-                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
-                                            >
-                                                {negativeExpanded ? t("collapse") : t("expand")}
-                                            </button>
+                                                {/* Negative prompt */}
+                                                {styleNegative && (
+                                                    <div className="rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
+                                                            {styleNegative}
+                                                        </p>
+                                                        {styleNegative.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
+                                                            >
+                                                                {negativeExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
                             </div>
 
@@ -787,28 +827,29 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 ))}
                             </div>
 
-                            {/* Final prompt preview — collapsible, scrollable */}
-                            {applyStyle && stylePositive && (
-                                <div className="mt-3 rounded-md bg-black/20 border border-glass-border">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFinalPreviewExpanded(!finalPreviewExpanded)}
-                                        className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-hover-bg transition-colors rounded-t-md"
-                                    >
-                                        <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">{t("finalPromptPreview")}</p>
-                                        <span className="text-[0.625rem] text-text-muted">{finalPreviewExpanded ? t("collapse") : t("expand")}</span>
-                                    </button>
-                                    {finalPreviewExpanded && (
-                                        <div className="px-3.5 pb-3 max-h-[200px] overflow-y-auto overscroll-contain">
-                                            <p className="text-[0.75rem] leading-relaxed">
-                                                <span className="text-foreground">{prompt.trim()}</span>
-                                                {prompt.trim() && <span className="text-text-muted">{", "}</span>}
-                                                <span className="text-primary/60">{stylePositive}</span>
-                                            </p>
-                                        </div>
+                            {/* Customer-facing summary: keep it short and readable. The full
+                                provider prompt remains in the editable field above and the
+                                style details are available only through the advanced disclosure. */}
+                            <div
+                                data-testid="cast-generation-summary"
+                                className="mt-3 rounded-md border border-glass-border bg-black/20 px-3.5 py-2.5"
+                            >
+                                <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
+                                    {t("customerSummaryTitle")}
+                                </p>
+                                <div className="mt-1.5 space-y-1 text-[0.75rem] leading-relaxed">
+                                    <p>
+                                        <span className="text-text-muted">{t("customerSummaryComposition")}：</span>
+                                        <span className="text-text-secondary">{compositionSummary}</span>
+                                    </p>
+                                    {applyStyle && styleDisplayName && (
+                                        <p>
+                                            <span className="text-text-muted">{t("customerSummaryStyle")}：</span>
+                                            <span className="text-primary/80">{styleDisplayName}</span>
+                                        </p>
                                     )}
                                 </div>
-                            )}
+                            </div>
 
                             {/* Generation config — unified section */}
                             <div className="mt-5 pt-4 border-t border-glass-border space-y-4">
