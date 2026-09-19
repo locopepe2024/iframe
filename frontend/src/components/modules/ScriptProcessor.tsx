@@ -131,6 +131,7 @@ export default function ScriptProcessor() {
             useProjectStore.setState({
                 pendingExtraction: preview,
                 pendingExtractionScript: script,
+                pendingExtractionFeedback: [],
                 isAnalyzing: false,
             });
         } catch (error: any) {

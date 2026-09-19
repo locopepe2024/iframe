@@ -51,6 +51,20 @@ def test_h3_missing_references_rejected_before_task_creation(studio):
     assert not script.video_tasks
 
 
+def test_h3_rejects_more_than_nine_reference_images(studio):
+    pipeline, script = studio
+    with pytest.raises(ValueError, match="at most 9"):
+        pipeline.create_video_task(
+            script.id,
+            "",
+            "product turntable",
+            model="uniart/minimax-h3-vip",
+            generation_mode="r2v",
+            reference_image_urls=[f"https://cdn.example/{index}.jpg" for index in range(10)],
+        )
+    assert not script.video_tasks
+
+
 def task(script, **overrides):
     values = dict(id="take", project_id=script.id, image_url="", prompt="replace product",
                   model="uniart/minimax-h3-vip", generation_mode="r2v", duration=6,
@@ -77,6 +91,26 @@ def test_studio_sends_image_and_source_video_with_explicit_mode(studio):
     assert current.provider_task_id == "provider-task"
     assert current.provider_name == "uniart"
     assert current.status == "completed"
+
+
+def test_h3_seed_reaches_gateway_request(studio):
+    pipeline, script = studio
+    current = task(script, seed=24680)
+    pipeline.process_video_task(script.id, current.id)
+    assert uniart._post.call_args.args[2]["seed"] == 24680
+
+
+@pytest.mark.parametrize("model,duration,expected", [
+    ("uniart/seedance-2.5-vip", 3, 4),
+    ("uniart/minimax-h3-vip", 3, 4),
+    ("uniart/minimax-h3-vip", 20, 15),
+])
+def test_storyboard_duration_is_normalized_at_uniart_submission(studio, model, duration, expected):
+    pipeline, script = studio
+    current = task(script, model=model, duration=duration)
+    pipeline.process_video_task(script.id, current.id)
+    assert uniart._post.call_args.args[2]["duration"] == expected
+    assert current.duration == duration
 
 
 def owned_file(owner, name="product.jpg"):

@@ -431,6 +431,46 @@ class ScriptProcessor:
             error_msg = f"LLM 返回的数据格式错误，无法解析 JSON: {e}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    def refine_entity_extraction(
+        self,
+        title: str,
+        text: str,
+        draft: Dict[str, Any],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+    ) -> Script:
+        """Revise an extraction draft using accumulated user instructions."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        baseline = self._construct_prompt(text, custom_extraction_prompt)
+        numbered = "\n".join(f"{index}. {instruction}" for index, instruction in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮实体提取草稿：
+<current_draft>
+{json.dumps(draft, ensure_ascii=False, indent=2)}
+</current_draft>
+
+用户累计提出的修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本修订 current_draft。保留未被要求改变的正确内容，不要把修订要求当作剧本事实。
+仍然只返回合法 JSON，顶层只能包含 characters、scenes、props；不要返回解释、Markdown 或其他字段。"""
+        try:
+            content = self.llm.chat(messages=[{"role": "user", "content": prompt}])
+            data = json.loads(_strip_markdown_json(content))
+            if not isinstance(data, dict) or not all(key in data for key in ("characters", "scenes", "props")):
+                raise ValueError("修订结果缺少 characters、scenes 或 props")
+            return self._create_script_from_data(title, text, data)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"实体修订失败: {exc}") from exc
         except ValueError:
             # Re-raise ValueError (e.g., API key not set)
             raise
@@ -929,7 +969,71 @@ class ScriptProcessor:
             }
         ]
     
-    def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "") -> List[Dict[str, Any]]:
+    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a reviewable director draft without mutating project data."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
+
+原始剧本：
+<script>{text}</script>
+
+已确认实体（名称和关系不得擅自替换）：
+<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
+
+用户选择的视觉风格：
+<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
+
+视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
+剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
+梳理人物关系变化、因果链、关键事件的叙事功能与权重、情绪弧线、节奏、连续性和禁用项。
+不得发明对白、剧情、文化符号或人物动机。
+
+只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
+emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
+sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan。
+setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。"""
+        content = self.llm.chat(
+            messages=[{"role": "system", "content": prompt},
+                      {"role": "user", "content": "生成完整导演设定草稿。"}],
+            response_format={"type": "json_object"},
+        ).strip()
+        result = json.loads(_strip_markdown_json(content))
+        if not isinstance(result, dict):
+            raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        return result
+
+    def refine_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                style_config: Dict[str, Any], draft: Dict[str, Any],
+                                instructions: List[str]) -> Dict[str, Any]:
+        """Revise a director draft while preserving source-grounded facts."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
+视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
+
+<script>{text}</script>
+<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
+<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
+<current_director_profile>{json.dumps(draft, ensure_ascii=False, indent=2)}</current_director_profile>
+<revision_instructions>{numbered}</revision_instructions>
+
+后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
+保留未要求改变的正确内容。只返回与 current_director_profile 同结构的完整 JSON，不要解释。"""
+        content = self.llm.chat(
+            messages=[{"role": "system", "content": prompt},
+                      {"role": "user", "content": "返回修订后的完整导演设定。"}],
+            response_format={"type": "json_object"},
+        ).strip()
+        result = json.loads(_strip_markdown_json(content))
+        if not isinstance(result, dict):
+            raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        return result
+
+    def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
+                              director_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -961,6 +1065,15 @@ class ScriptProcessor:
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        if director_profile:
+            system_prompt += """
+
+以下是用户在第二步明确确认的导演设定。它约束镜头选择、表演、节奏、声音和连续性；
+不得把 unresolved_questions 补写成事实，也不得违反 prohibitions：
+<confirmed_director_profile>
+%s
+</confirmed_director_profile>
+""" % json.dumps(director_profile, ensure_ascii=False, indent=2)
 
         try:
             content = self.llm.chat(
@@ -1014,6 +1127,56 @@ class ScriptProcessor:
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse storyboard analysis JSON: {e}")
             return None
+
+    def refine_storyboard_analysis(
+        self,
+        text: str,
+        entities_json: Dict[str, Any],
+        draft: List[Dict[str, Any]],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+        director_profile: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Revise a storyboard draft using the source and accumulated direction."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        entities_str = json.dumps(entities_json, ensure_ascii=False, indent=2)
+        template = (
+            custom_extraction_prompt.strip()
+            if custom_extraction_prompt and custom_extraction_prompt.strip()
+            else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+        )
+        baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        if director_profile:
+            baseline += "\n\n<confirmed_director_profile>\n" + json.dumps(
+                director_profile, ensure_ascii=False, indent=2
+            ) + "\n</confirmed_director_profile>"
+        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮分镜草稿：
+<current_storyboard>
+{json.dumps({"frames": draft}, ensure_ascii=False, indent=2)}
+</current_storyboard>
+
+用户累计提出的导演修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本和实体表修订 current_storyboard。保留未被要求改变的正确镜头，
+不要把修订要求当作剧本事实。只返回合法 JSON，顶层只能包含 frames；不要返回解释或 Markdown。"""
+        content = self.llm.chat(
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "请返回修订后的完整分镜列表。"},
+            ],
+            response_format={"type": "json_object"},
+        ).strip()
+        frames = self._parse_storyboard_json(content)
+        if frames is None:
+            raise RuntimeError("AI 模型输出的分镜修订 JSON 格式不合规，请重试。")
+        return frames
 
     def _mock_storyboard_frames(self, text: str) -> List[Dict[str, Any]]:
         """Returns mock storyboard frames for testing when API is unavailable."""

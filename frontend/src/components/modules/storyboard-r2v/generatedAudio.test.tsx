@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { storyboardGeneratedAudio } from './generatedAudio';
+import { storyboardAudioChoice, storyboardGeneratedAudio } from './generatedAudio';
 import { api } from '@/lib/api';
 import axios from 'axios';
 
@@ -16,6 +16,12 @@ it.each(['supported', 'reference'])('serializes audio on and off for %s', async 
         expect(axios.post).toHaveBeenLastCalledWith(expect.stringContaining('/video_tasks'), expect.objectContaining({ generate_audio: enabled }));
     }
 });
-it.each(['silent', 'missing'])('blocks inherited enabled audio for %s', (model) => {
-    expect(storyboardGeneratedAudio(model, true)).toBe(false);
+it.each(['silent', 'missing'])('keeps explicit audio when capability metadata is absent for %s', (model) => {
+    expect(storyboardGeneratedAudio(model, true)).toBe(true);
+});
+
+it('lets the per-shot audio switch override both shared defaults', () => {
+    expect(storyboardAudioChoice(true, false)).toBe(true);
+    expect(storyboardAudioChoice(false, true)).toBe(false);
+    expect(storyboardAudioChoice(undefined, true)).toBe(true);
 });

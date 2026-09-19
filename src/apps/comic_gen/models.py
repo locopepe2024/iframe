@@ -135,6 +135,16 @@ class ImageVariant(BaseModel):
     source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
     source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
     source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
+    reference_view_role: Optional[str] = Field(
+        None,
+        description="Optional product view role such as front, right, three_quarter_right, or detail",
+    )
+    reference_distance: Optional[str] = Field(
+        None,
+        description="Optional framing distance: macro, close, medium, or full",
+    )
+    camera_yaw: Optional[float] = Field(None, description="Optional camera yaw in degrees")
+    camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
 
 # Maximum variants to keep per asset (excluding favorited ones)
 MAX_VARIANTS_PER_ASSET = 10
@@ -318,6 +328,9 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
@@ -338,6 +351,9 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
@@ -359,11 +375,17 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
     owner_profile_id: Optional[str] = Field(None, description="Authenticated profile owner")
+    director_review_required: bool = Field(False, description="Frame predates the confirmed director profile")
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
@@ -462,6 +484,14 @@ class StoryboardFrame(BaseModel):
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
     video_model: Optional[str] = Field(None, description="Per-shot video model override")
+    workbench_generate_audio: Optional[bool] = Field(
+        None,
+        description="Per-shot generated-audio choice; None inherits the current project/UI default",
+    )
+    workbench_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Explicit per-shot image variant selections keyed by semantic asset ID",
+    )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"
@@ -503,7 +533,7 @@ class ModelSettings(BaseModel):
     image_model: str = Field(_DEFAULT_MODEL_SETTINGS.image_model, description="Image generation model (T2I+I2I unified)")
     i2v_model: str = Field(_DEFAULT_MODEL_SETTINGS.i2v_model, description="Image-to-Video model for Motion")
     r2v_model: str = Field(
-        "wan2.7-r2v",
+        _DEFAULT_MODEL_SETTINGS.r2v_model,
         description="Reference-to-Video default for the project. Used by Storyboard's R2V tab as the initial picker value; per-storyboard override still wins.",
     )
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
@@ -512,12 +542,34 @@ class ModelSettings(BaseModel):
     storyboard_aspect_ratio: str = Field("16:9", description="Aspect ratio for Storyboard (9:16, 16:9, 1:1)")
 
 
+class DirectorProfile(BaseModel):
+    """Confirmed narrative direction carried into downstream generation."""
+    setting: Dict[str, Any] = Field(default_factory=dict)
+    timeline: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    key_events: List[Dict[str, Any]] = Field(default_factory=list)
+    emotional_arc: str = ""
+    pacing: str = ""
+    visual_language: str = ""
+    performance_direction: str = ""
+    dialogue_direction: str = ""
+    sound_direction: str = ""
+    continuity_constraints: List[str] = Field(default_factory=list)
+    prohibitions: List[str] = Field(default_factory=list)
+    unresolved_questions: List[str] = Field(default_factory=list)
+    sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
+    revision: int = Field(1, ge=1)
+    content_hash: str = ""
+    confirmed_at: float = 0.0
+
+
 class ArtDirection(BaseModel):
     """Art Direction configuration for global visual style"""
     selected_style_id: str = Field(..., description="ID of the selected style")
     style_config: Dict[str, Any] = Field(..., description="Complete style configuration")
     custom_styles: List[Dict[str, Any]] = Field(default_factory=list, description="User-created custom styles")
     ai_recommendations: List[Dict[str, Any]] = Field(default_factory=list, description="AI recommended styles")
+    director_profile: Optional[DirectorProfile] = Field(None, description="Confirmed narrative and directorial constraints")
 
 class PromptConfig(BaseModel):
     """Custom system prompts for polish/refine stages. Empty string = use system default."""
@@ -550,6 +602,7 @@ class Script(BaseModel):
     
     # Art Direction configuration (new approach)
     art_direction: Optional[ArtDirection] = Field(None, description="Global visual style configuration")
+    director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage
     model_settings: ModelSettings = Field(default_factory=ModelSettings, description="Model selection for T2I/I2I/I2V")

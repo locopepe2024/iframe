@@ -245,15 +245,15 @@ export default function VideoConfigModal({ isOpen, onClose, config, onConfigChan
                                 />
                             </motion.section>
 
-                            {modelParams.audio && (
-                                <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                            {/* Audio is an optional request field. Catalog
+                                metadata must never remove this control. */}
+                            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
                                     {t("generatedAudio")}
                                     <input type="checkbox" role="switch" aria-label={t("generatedAudio")}
                                         checked={draft.audio === true}
                                         onChange={(e) => updateDraft("audio", e.target.checked)}
                                         className="h-5 w-5 accent-primary" />
-                                </label>
-                            )}
+                            </label>
                             {/* Duration */}
                             <motion.section
                                 custom={1}

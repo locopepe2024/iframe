@@ -90,3 +90,64 @@ def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monke
         finally:
             api.app.dependency_overrides.pop(require_studio_user, None)
             gate.set()
+
+
+def test_refinement_job_forwards_current_draft_and_accumulated_instructions(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import Script, Character
+    from src.apps.identity import UserContext
+
+    user = UserContext('owner', 'owner', '', '')
+    source = Script(id='project', title='Test', original_text='source text', owner_profile_id='owner', created_at=1, updated_at=1)
+    refined = Script(id='draft', title='Test', original_text='source text', created_at=1, updated_at=1,
+                     characters=[Character(id='actor', name='主播', description='25岁马来女性')])
+    captured = {}
+    processor = SimpleNamespace(
+        llm=SimpleNamespace(provider='openai', _get_default_model=lambda: 'test'),
+        refine_entity_extraction=lambda title, text, draft, instructions, prompt: (
+            captured.update(title=title, text=text, draft=draft, instructions=instructions, prompt=prompt) or refined
+        ),
+    )
+    pipeline = SimpleNamespace(scripts={source.id: source}, _extraction_cache={}, script_processor=processor)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / 'refine-jobs.db', executor=executor)
+        monkeypatch.setattr(api, 'pipeline', pipeline)
+        monkeypatch.setattr(api, 'extraction_jobs', jobs)
+        request = api.ExtractionRefineRequest(
+            text='source text',
+            draft={'characters': [{'name': '女主播'}], 'scenes': [], 'props': []},
+            instructions=['不要提取路人', '把女主播补充为马来女性'],
+        )
+
+        job = api.start_extraction_refinement('project', request, user)
+        done = wait_done(jobs, job)
+        response = api.extraction_response(done, 'project')
+
+    assert captured['draft']['characters'][0]['name'] == '女主播'
+    assert captured['instructions'] == ['不要提取路人', '把女主播补充为马来女性']
+    assert response['result']['characters'][0]['name'] == '主播'
+    assert pipeline.scripts['project'].characters == []
+    assert pipeline._extraction_cache['project'][1].characters[0].name == '主播'
+
+
+def test_refinement_prompt_contains_source_draft_and_all_user_constraints():
+    from unittest.mock import Mock
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = '{"characters": [], "scenes": [], "props": []}'
+
+    result = processor.refine_entity_extraction(
+        'Test',
+        '原始剧本',
+        {'characters': [{'name': '路人'}], 'scenes': [], 'props': []},
+        ['删除路人', '增加产品别名穿心莲'],
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert '原始剧本' in prompt
+    assert '"name": "路人"' in prompt
+    assert '1. 删除路人' in prompt and '2. 增加产品别名穿心莲' in prompt
+    assert result.characters == []

@@ -1,5 +1,8 @@
 import axios from "axios";
-import { extractScriptPreview } from "./scriptExtraction";
+import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
+import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
+import { analyzeDirectorProfile, refineDirectorProfile, type DirectorProfileDraft } from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -274,14 +277,25 @@ export const api = {
         return res.data;
     },
 
-    reparseProject: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
+    reparseProject: async (
+        scriptId: string,
+        text: string,
+        draft?: { characters: any[]; scenes: any[]; props: any[] },
+    ) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, ...(draft ? { draft } : {}) });
         return { ...res.data, originalText: res.data.original_text };
     },
 
     extractPreview: async (scriptId: string, text: string) => {
         return extractScriptPreview(API_URL, scriptId, text);
     },
+
+    refineExtraction: async (
+        scriptId: string,
+        text: string,
+        draft: { characters: any[]; scenes: any[]; props: any[] },
+        instructions: string[],
+    ) => refineScriptPreview(API_URL, scriptId, text, draft, instructions),
 
     /** Persist `original_text` without LLM reparse. Used for textarea
      *  blur-saves so navigation/reload doesn't drop in-progress drafts. */
@@ -406,6 +420,8 @@ export const api = {
             t2i_selected_index?: number;
             workbench_generate_count?: number;
             video_model?: string;
+            workbench_generate_audio?: boolean;
+            workbench_reference_variant_ids?: Record<string, string[]>;
         },
     ) => {
         const res = await axios.patch(
@@ -645,6 +661,24 @@ export const api = {
         return res.data;
     },
 
+    updateAssetVariantMetadata: async (
+        scriptId: string,
+        assetId: string,
+        assetType: string,
+        variantId: string,
+        referenceViewRole?: string,
+        referenceDistance?: string,
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/metadata`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId,
+            reference_view_role: referenceViewRole || null,
+            reference_distance: referenceDistance || null,
+        });
+        return res.data;
+    },
+
     favoriteAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, isFavorited: boolean, generationType?: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/favorite`, {
             asset_id: assetId,
@@ -750,6 +784,19 @@ export const api = {
         return res.data;
     },
 
+    analyzeDirectorProfile: (scriptId: string) => analyzeDirectorProfile(API_URL, scriptId),
+
+    refineDirectorProfile: (
+        scriptId: string,
+        draft: DirectorProfileDraft,
+        instructions: string[],
+    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions),
+
+    applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
+        return res.data;
+    },
+
     getStylePresets: async () => {
         const res = await axios.get(`${API_URL}/art_direction/presets`);
         return res.data;
@@ -780,6 +827,7 @@ export const api = {
         targetVideoModel: string = "",
         generateAudio?: boolean,
         targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -791,6 +839,8 @@ export const api = {
             target_video_model: targetVideoModel,
             generate_audio: generateAudio,
             target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },
@@ -805,6 +855,7 @@ export const api = {
         targetVideoModel: string = "",
         generateAudio?: boolean,
         targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -817,6 +868,8 @@ export const api = {
             target_video_model: targetVideoModel,
             generate_audio: generateAudio,
             target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },
@@ -892,6 +945,21 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
             text: text
         });
+        return res.data;
+    },
+
+    analyzeStoryboardPreview: async (scriptId: string, text: string) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text),
+
+    refineStoryboardPreview: async (
+        scriptId: string,
+        text: string,
+        draft: StoryboardDraftFrame[],
+        instructions: string[],
+    ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
+
+    applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
         return res.data;
     },
 
@@ -1546,16 +1614,10 @@ export const api = {
     },
 
     // File Import
-    importFilePreview: async (file: File, suggestedEpisodes: number = 3) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await axios.post(`${API_URL}/series/import/preview?suggested_episodes=${suggestedEpisodes}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 300000,
-        });
-        return response.data;
+    importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
+        return runImportPreview<SeriesImportPreview>(API_URL, file, suggestedEpisodes);
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },

@@ -5,10 +5,15 @@ from media_signing_config import media_signing_env
 def run(args):
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
 
-repo = pathlib.Path('/srv/iframe/repo')
+repo = next(
+    (candidate for candidate in (pathlib.Path('/srv/iframe/repo'), pathlib.Path('/srv/lumenx/repo')) if candidate.is_dir()),
+    None,
+)
+if repo is None:
+    raise RuntimeError('iFrame server repository not found')
 rev = run(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
 assert not run(['git', '-C', str(repo), 'status', '--porcelain']), 'Dirty repository'
-root = pathlib.Path('/srv/iframe/releases') / rev
+root = repo.parent / 'releases' / rev
 root.mkdir(parents=True, exist_ok=True)
 source = root / 'source'
 source.mkdir(exist_ok=True)
@@ -19,10 +24,23 @@ image = 'iframe-backend:git-' + rev[:12]
 with (root / 'build.log').open('w') as log:
     subprocess.run(['docker', 'build', '--label', 'org.opencontainers.image.revision='+rev, '-t', image, '-f', str(source/'Dockerfile.backend'), str(source)], stdout=log, stderr=subprocess.STDOUT, check=True)
 run(['docker', 'run', '--rm', image, 'python', '-c', 'from src.apps.comic_gen.api import app; assert "/agent/sessions/{sid}/messages/{mid}" in app.openapi()["paths"]'])
-old = json.loads(run(['docker', 'inspect', 'iframe-backend']))[0]
-backup = 'iframe-backend-before-' + rev[:12]
+def existing_container(*names):
+    for name in names:
+        try:
+            run(['docker', 'inspect', name])
+            return name
+        except subprocess.CalledProcessError:
+            continue
+    raise RuntimeError('Expected iFrame container not found: ' + ', '.join(names))
+
+
+backend_container = existing_container('iframe-backend', 'lumenx-backend')
+frontend_container = existing_container('iframe-frontend', 'lumenx-frontend')
+old = json.loads(run(['docker', 'inspect', backend_container]))[0]
+network_name = next(iter(old['NetworkSettings']['Networks']))
+backup = backend_container + '-before-' + rev[:12]
 # Docker inspection contains credentials. Keep it in memory; never persist it.
-args = ['docker','create','--name','iframe-backend','--network','iframe-net','--network-alias','backend','--restart','unless-stopped']
+args = ['docker','create','--name',backend_container,'--network',network_name,'--network-alias','backend','--restart','unless-stopped']
 fd, envfile = tempfile.mkstemp(prefix='iframe-env-', dir=root)
 with os.fdopen(fd, 'w') as f:
     f.write('\n'.join(media_signing_env(old['Config']['Env'], repo.parent / 'secrets/media-signing.key')) + '\n')
@@ -39,10 +57,10 @@ nginx_path = repo / 'docker/nginx.conf'
 nginx_original = nginx_path.read_text()
 # Git replaces the file inode; a single-file Docker bind can retain the old one.
 # Read inside the container (docker cp can observe the host-side mount instead).
-if run(['docker', 'exec', 'iframe-frontend', 'cat', '/etc/nginx/conf.d/default.conf']) != nginx_original.strip():
-    run(['docker', 'restart', 'iframe-frontend'])
-    assert run(['docker', 'exec', 'iframe-frontend', 'cat', '/etc/nginx/conf.d/default.conf']) == nginx_original.strip(), 'Stale nginx bind mount'
-run(['docker', 'exec', 'iframe-frontend', 'nginx', '-t'])
+if run(['docker', 'exec', frontend_container, 'cat', '/etc/nginx/conf.d/default.conf']) != nginx_original.strip():
+    run(['docker', 'restart', frontend_container])
+    assert run(['docker', 'exec', frontend_container, 'cat', '/etc/nginx/conf.d/default.conf']) == nginx_original.strip(), 'Stale nginx bind mount'
+run(['docker', 'exec', frontend_container, 'nginx', '-t'])
 maintenance = '''
     # Drain existing Chat requests; refuse new submissions during deployment.
     location ^~ /projects/ {
@@ -64,11 +82,11 @@ maintenance_applied = False
 try:
     nginx_path.write_text(nginx_original.replace('    listen 80;', '    listen 80;' + maintenance, 1))
     maintenance_applied = True
-    run(['docker', 'exec', 'iframe-frontend', 'nginx', '-t'])
-    run(['docker', 'exec', 'iframe-frontend', 'nginx', '-s', 'reload'])
+    run(['docker', 'exec', frontend_container, 'nginx', '-t'])
+    run(['docker', 'exec', frontend_container, 'nginx', '-s', 'reload'])
     time.sleep(2)
     for attempt in range(24):
-        active = int(run(['docker', 'exec', 'iframe-backend', 'python', '-c',
+        active = int(run(['docker', 'exec', backend_container, 'python', '-c',
             'import sqlite3,os,time; db=sqlite3.connect(os.getenv("LUMENX_AGENT_DB","output/agent.sqlite3")); chat=db.execute("SELECT count(*) FROM sessions WHERE busy>?",(time.time(),)).fetchone()[0]; jobs=sqlite3.connect("output/extraction-jobs.sqlite3") if os.path.exists("output/extraction-jobs.sqlite3") else None; active=jobs.execute("SELECT count(*) FROM jobs WHERE status=? AND created>?",("running",time.time()-1800)).fetchone()[0] if jobs else 0; print(chat+active)']))
         if not active:
             break
@@ -76,11 +94,11 @@ try:
         time.sleep(10)
     else:
         raise RuntimeError('Active Chat/analysis requests did not drain; deployment aborted')
-    run(['docker', 'stop', '--time', '210', 'iframe-backend'])
-    run(['docker', 'rename', 'iframe-backend', backup])
+    run(['docker', 'stop', '--time', '210', backend_container])
+    run(['docker', 'rename', backend_container, backup])
     renamed = True
     run(args)
-    run(['docker', 'start', 'iframe-backend'])
+    run(['docker', 'start', backend_container])
     for attempt in range(30):
         try:
             with urllib.request.urlopen('http://127.0.0.1:17177/openapi.json',timeout=2) as r:
@@ -89,24 +107,24 @@ try:
         except Exception:
             if attempt == 29: raise
             time.sleep(1)
-    run(['docker','exec','iframe-frontend','nginx','-t'])
-    run(['docker','exec','iframe-frontend','nginx','-s','reload'])
+    run(['docker','exec',frontend_container,'nginx','-t'])
+    run(['docker','exec',frontend_container,'nginx','-s','reload'])
     with urllib.request.urlopen('http://127.0.0.1:3000/openapi.json', timeout=5) as r:
         assert '/agent/sessions/{sid}/messages/{mid}' in json.load(r)['paths']
-    record = {'revision': rev, 'image': run(['docker','inspect','iframe-backend','--format','{{.Image}}']), 'rollback_container': backup}
+    record = {'revision': rev, 'image': run(['docker','inspect',backend_container,'--format','{{.Image}}']), 'rollback_container': backup}
     (root/'deployment.json').write_text(json.dumps(record, indent=2)+'\n')
     print(json.dumps(record))
 except Exception as e:
     if renamed:
-        subprocess.run(['docker','rm','-f','iframe-backend'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        run(['docker','rename',backup,'iframe-backend'])
-    run(['docker','start','iframe-backend'])
-    run(['docker','exec','iframe-frontend','nginx','-s','reload'])
+        subprocess.run(['docker','rm','-f',backend_container],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        run(['docker','rename',backup,backend_container])
+    run(['docker','start',backend_container])
+    run(['docker','exec',frontend_container,'nginx','-s','reload'])
     print('Deployment rolled back:', type(e).__name__)
     sys.exit(1)
 finally:
     if maintenance_applied:
         nginx_path.write_text(nginx_original)
-        run(['docker', 'exec', 'iframe-frontend', 'nginx', '-t'])
-        run(['docker', 'exec', 'iframe-frontend', 'nginx', '-s', 'reload'])
+        run(['docker', 'exec', frontend_container, 'nginx', '-t'])
+        run(['docker', 'exec', frontend_container, 'nginx', '-s', 'reload'])
     os.unlink(envfile)

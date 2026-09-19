@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 from src.apps.identity import UserContext
-from src.apps.comic_gen.models import Script, Character, Scene, Prop, AssetUnit, ImageVariant
+from src.apps.comic_gen.models import Script, Character, Scene, Prop, StoryboardFrame, AssetUnit, ImageVariant
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
@@ -122,6 +122,103 @@ def test_uploaded_reference_is_visible_selected_and_keeps_previous_variants(kind
     p.select_asset_variant('project','asset',kind,variants[0].id, 'reference_sheet' if kind=='character' else None)
     assert entity.image_url == 'first.png'
     assert entity.owner_profile_id == 'owner'
+
+
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+def test_delete_reference_variant_promotes_primary_and_cleans_shot_selections(kind):
+    p, entity = pipeline(kind)
+    upload_type = 'reference_sheet' if kind == 'character' else 'image'
+    p.add_uploaded_asset_variant('project', kind, entity.id, upload_type, 'first.png')
+    p.add_uploaded_asset_variant('project', kind, entity.id, upload_type, 'second.png')
+    unit = entity.reference_sheet if kind == 'character' else entity.image_asset
+    variants = unit.image_variants if kind == 'character' else unit.variants
+    first_id, selected_id = variants[0].id, variants[1].id
+    frame = StoryboardFrame(
+        id='frame',
+        shot_number=1,
+        scene_id='scene',
+        description='test',
+        workbench_reference_variant_ids={entity.id: [first_id, selected_id], 'other': ['keep']},
+    )
+    p.scripts['project'].frames = [frame]
+    p._save_data.reset_mock()
+
+    p.delete_asset_variant('project', entity.id, kind, selected_id)
+
+    remaining = unit.image_variants if kind == 'character' else unit.variants
+    primary = unit.selected_image_id if kind == 'character' else unit.selected_id
+    assert [variant.id for variant in remaining] == [first_id]
+    assert primary == first_id
+    assert entity.image_url == 'first.png'
+    assert frame.workbench_reference_variant_ids == {entity.id: [first_id], 'other': ['keep']}
+    p._save_data.assert_called_once()
+
+
+def test_delete_final_reference_removes_asset_selection_key():
+    p, entity = pipeline('prop')
+    p.add_uploaded_asset_variant('project', 'prop', entity.id, 'image', 'only.png')
+    variant_id = entity.image_asset.variants[0].id
+    frame = StoryboardFrame(
+        id='frame', shot_number=1, scene_id='scene', description='test',
+        workbench_reference_variant_ids={entity.id: [variant_id]},
+    )
+    p.scripts['project'].frames = [frame]
+
+    p.delete_asset_variant('project', entity.id, 'prop', variant_id)
+
+    assert entity.image_asset.variants == []
+    assert entity.image_asset.selected_id is None
+    assert entity.image_url is None
+    assert frame.workbench_reference_variant_ids == {}
+
+
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+def test_update_reference_variant_view_metadata(kind):
+    p, entity = pipeline(kind)
+    upload_type = 'reference_sheet' if kind == 'character' else 'image'
+    p.add_uploaded_asset_variant('project', kind, entity.id, upload_type, 'view.png')
+    unit = entity.reference_sheet if kind == 'character' else entity.image_asset
+    variant = (unit.image_variants if kind == 'character' else unit.variants)[0]
+    p._save_data.reset_mock()
+
+    p.update_asset_variant_metadata(
+        'project', entity.id, kind, variant.id,
+        reference_view_role='three_quarter_right',
+        reference_distance='close',
+    )
+
+    assert variant.reference_view_role == 'three_quarter_right'
+    assert variant.reference_distance == 'close'
+    p._save_data.assert_called_once()
+
+
+@pytest.mark.parametrize('source', ['series', 'global'])
+def test_delete_shared_reference_persists_owner_and_project_cleanup(source):
+    from src.apps.comic_gen.models import Series, GlobalAssetLibrary
+    p, entity = pipeline('prop')
+    p.scripts['project'].props = []
+    p.library_store = GlobalAssetLibrary()
+    p._save_series_data = Mock()
+    p._save_library_data = Mock()
+    if source == 'series':
+        p.scripts['project'].series_id = 'series'
+        p.series_store = {'series': Series(id='series', title='Series', created_at=1, updated_at=1,
+            owner_user_id='owner', owner_profile_id='owner', props=[entity])}
+    else:
+        p.library_store.props = [entity]
+    p.add_uploaded_asset_variant('project', 'prop', entity.id, 'image', 'shared.png')
+    variant_id = entity.image_asset.variants[0].id
+    p.scripts['project'].frames = [StoryboardFrame(
+        id='frame', shot_number=1, scene_id='scene', description='test',
+        workbench_reference_variant_ids={entity.id: [variant_id]},
+    )]
+    p._save_data.reset_mock()
+    (p._save_series_data if source == 'series' else p._save_library_data).reset_mock()
+
+    p.delete_asset_variant('project', entity.id, 'prop', variant_id)
+
+    (p._save_series_data if source == 'series' else p._save_library_data).assert_called_once()
+    p._save_data.assert_called_once()
 
 @pytest.mark.parametrize('source', ['series', 'global'])
 @pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])

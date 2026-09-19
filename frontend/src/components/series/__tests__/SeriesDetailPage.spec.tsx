@@ -1,5 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../../messages/zh.json';
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -32,6 +34,7 @@ vi.mock('lucide-react', () => ({
     Settings: (props: any) => <span data-testid="icon-settings" {...props} />,
     FileText: (props: any) => <span data-testid="icon-file-text" {...props} />,
     Download: (props: any) => <span data-testid="icon-download" {...props} />,
+    Palette: (props: any) => <span data-testid="icon-palette" {...props} />,
     MessageSquareCode: (props: any) => <span data-testid="icon-message-square-code" {...props} />,
     ChevronLeft: (props: any) => <span data-testid="icon-chevron-left" {...props} />,
     ChevronRight: (props: any) => <span data-testid="icon-chevron-right" {...props} />,
@@ -93,7 +96,11 @@ const mockEpisodes = [
 // ── Helpers ──
 
 function renderPage(seriesId = 'series-1') {
-    return render(<SeriesDetailPage seriesId={seriesId} />);
+    return render(
+        <NextIntlClientProvider locale="zh" messages={messages}>
+            <SeriesDetailPage seriesId={seriesId} />
+        </NextIntlClientProvider>
+    );
 }
 
 // ── Tests ──
@@ -383,7 +390,7 @@ describe('SeriesDetailPage', () => {
             fireEvent.click(screen.getByText('确定'));
 
             await waitFor(() => {
-                expect(mockCreateEpisodeForSeries).toHaveBeenCalledWith('series-1', '新集数', 3);
+                expect(mockCreateEpisodeForSeries).toHaveBeenCalledWith('series-1', '新集数', 3, 'i2v_legacy');
             });
         });
 

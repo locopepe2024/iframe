@@ -31,6 +31,9 @@ import pytest
 
 from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.identity import UserContext
+from src.apps.studio_access import reset_studio_user, set_studio_user
+from src.utils.model_catalog import get_default_model_settings
 
 
 @pytest.fixture
@@ -70,6 +73,73 @@ def _script_with_tasks(*tasks) -> Script:
         updated_at=time.time(),
         video_tasks=list(tasks),
     )
+
+
+def _identity(profile: str) -> UserContext:
+    return UserContext(
+        user_id=profile,
+        owner_profile_id=profile,
+        display_name=profile,
+        access_token="",
+    )
+
+
+def test_persisted_video_task_status_survives_empty_asset_task_registry(pipeline):
+    task = _video_task(status="completed", task_id="video-complete")
+    task.owner_user_id = "owner-a"
+    task.owner_profile_id = "owner-a"
+    task.video_url = "users/owner-a/studio/video/result.mp4"
+    project = _script_with_tasks(task)
+    project.owner_user_id = "owner-a"
+    project.owner_profile_id = "owner-a"
+    pipeline.scripts = {project.id: project}
+    pipeline.asset_generation_tasks = {}
+    pipeline.video_generation_tasks = {}
+    token = set_studio_user(_identity("owner-a"))
+    try:
+        status = pipeline.get_video_task_status(task.id)
+    finally:
+        reset_studio_user(token)
+
+    assert status == {
+        "task_id": task.id,
+        "status": "completed",
+        "error": None,
+        "video_url": task.video_url,
+        "result_url": task.video_url,
+        "script_id": project.id,
+        "frame_id": None,
+    }
+
+
+def test_persisted_video_task_status_is_owner_scoped(pipeline):
+    task = _video_task(status="completed", task_id="private-video")
+    task.owner_user_id = "owner-a"
+    task.owner_profile_id = "owner-a"
+    project = _script_with_tasks(task)
+    project.owner_user_id = "owner-a"
+    project.owner_profile_id = "owner-a"
+    pipeline.scripts = {project.id: project}
+    token = set_studio_user(_identity("owner-b"))
+    try:
+        assert pipeline.get_video_task_status(task.id) is None
+    finally:
+        reset_studio_user(token)
+
+
+def test_task_status_endpoint_falls_back_to_persisted_video_task(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {
+        "task_id": "video-complete",
+        "status": "completed",
+        "video_url": "users/owner-a/studio/video/result.mp4",
+    }
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: None)
+    monkeypatch.setattr(api.pipeline, "get_video_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+
+    assert api.get_task_status("video-complete") == status
 
 
 # ---------------------------------------------------------------------------
@@ -262,8 +332,9 @@ def test_model_settings_persists_r2v_model(pipeline):
     )
     pipeline.scripts = {"p1": script}
 
-    # Default value is wan2.7-r2v per ModelSettings field default.
-    assert script.model_settings.r2v_model == "wan2.7-r2v"
+    # The project default follows the active model catalog.  This keeps the
+    # persistence contract stable when the provider default changes.
+    assert script.model_settings.r2v_model == get_default_model_settings().r2v_model
 
     # Update through the pipeline path the API endpoint uses.
     with patch.object(pipeline, "_save_data"):
@@ -320,6 +391,8 @@ def test_storyboard_frame_workbench_fields_default_empty():
     assert frame.t2i_image_urls == []
     assert frame.t2i_selected_index == 0
     assert frame.workbench_generate_count == 1
+    assert frame.workbench_generate_audio is None
+    assert frame.workbench_reference_variant_ids == {}
 
 
 def test_storyboard_frame_workbench_fields_round_trip():
@@ -331,12 +404,43 @@ def test_storyboard_frame_workbench_fields_round_trip():
         t2i_image_urls=["http://a", "http://b", "http://c"],
         t2i_selected_index=2,
         workbench_generate_count=4,
+        workbench_generate_audio=False,
+        workbench_reference_variant_ids={"product": ["front", "right", "front"]},
     )
     revived = StoryboardFrame.model_validate(frame.model_dump())
     assert revived.workbench_tab_mode == "t2i_i2v"
     assert revived.t2i_image_urls == ["http://a", "http://b", "http://c"]
     assert revived.t2i_selected_index == 2
     assert revived.workbench_generate_count == 4
+    assert revived.workbench_generate_audio is False
+    assert revived.workbench_reference_variant_ids == {"product": ["front", "right", "front"]}
+
+
+def test_update_frame_workbench_persists_explicit_audio_false(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1", workbench_generate_audio=True)
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench(
+            "p1", "f1", workbench_generate_audio=False,
+        )
+    assert updated is not None
+    assert updated.workbench_generate_audio is False
+
+
+def test_update_frame_workbench_sanitizes_reference_variant_ids(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1")
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench(
+            "p1", "f1",
+            workbench_reference_variant_ids={
+                "product": ["front", "right", "front", ""],
+                "": ["ignored"],
+                "empty": [],
+            },
+        )
+    assert updated is not None
+    assert updated.workbench_reference_variant_ids == {"product": ["front", "right"]}
 
 
 def test_video_task_workbench_tab_default_none():

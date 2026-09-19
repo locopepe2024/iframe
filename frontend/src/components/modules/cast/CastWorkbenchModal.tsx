@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
@@ -94,6 +94,8 @@ interface ImageVariant {
     id: string;
     url: string;
     is_favorited?: boolean;
+    reference_view_role?: string;
+    reference_distance?: string;
 }
 
 type CharacterTemplate = "simple" | "detailed" | "design_sheet";
@@ -163,13 +165,13 @@ function readVariants(entity: any, kind: CastKind): ImageVariant[] {
     if (kind === "character") {
         const sheet = entity?.reference_sheet?.image_variants ?? [];
         if (sheet.length > 0) {
-            return sheet.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+            return sheet.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
         }
         const legacy = entity?.full_body_asset?.variants ?? [];
-        return legacy.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+        return legacy.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
     }
     const arr = entity?.image_asset?.variants ?? [];
-    return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+    return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
 }
 
 function readSelectedId(entity: any, kind: CastKind): string | null {
@@ -218,6 +220,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
+    const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     // Effective t2i model — drives the "design_sheet" template gating: that
     // template only works with gpt-image-2, so it stays locked unless the
@@ -430,6 +433,44 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             );
             updateProject(currentProject.id, updated);
         } catch { /* silent — non-critical */ }
+    };
+
+    const handleDeleteVariant = async (variantId: string) => {
+        if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
+        setDeletingVariantId(variantId);
+        try {
+            const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
+            updateProject(currentProject.id, updated);
+            toast.success(t("toastDeleted"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("toastDeleteErr"), { body: String(detail) });
+        } finally {
+            setDeletingVariantId(null);
+        }
+    };
+
+    const handleUpdateViewMetadata = async (
+        variant: ImageVariant,
+        patch: Partial<Pick<ImageVariant, "reference_view_role" | "reference_distance">>,
+    ) => {
+        try {
+            const updated = await api.updateAssetVariantMetadata(
+                currentProject.id,
+                entity.id,
+                kind,
+                variant.id,
+                patch.reference_view_role ?? variant.reference_view_role,
+                patch.reference_distance ?? variant.reference_distance,
+            );
+            updateProject(currentProject.id, updated);
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("toastMetadataErr"), { body: String(detail) });
+        }
     };
 
     const filteredVariants = galleryFilter === "favorited"
@@ -900,6 +941,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 {/* Favorite star */}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleToggleFavorite(v.id, !!v.is_favorited); }}
+                                                    aria-label={v.is_favorited ? t("unfavoriteVariant") : t("favoriteVariant")}
                                                     className={`absolute top-1.5 left-1.5 p-1 rounded-full transition-all ${
                                                         v.is_favorited
                                                             ? "bg-amber-500/30 text-amber-300"
@@ -907,6 +949,16 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                     }`}
                                                 >
                                                     <Star size={12} className={v.is_favorited ? "fill-amber-300" : ""} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={deletingVariantId !== null}
+                                                    onClick={(e) => { e.stopPropagation(); void handleDeleteVariant(v.id); }}
+                                                    aria-label={t("deleteVariant")}
+                                                    title={t("deleteVariant")}
+                                                    className="absolute bottom-[68px] right-1.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-red-500/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                >
+                                                    {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
                                                 {/* Selected badge */}
                                                 {isSelected && (
@@ -918,13 +970,37 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 {!isSelected && (
                                                     <div
                                                         onClick={() => handleSelectVariant(v.id)}
-                                                        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pt-6 pb-1.5"
+                                                        className="absolute inset-x-0 bottom-[60px] bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pt-6 pb-1.5"
                                                     >
                                                         <p className="w-full text-center text-[0.625rem] uppercase tracking-[0.16em] text-foreground font-mono">
                                                             {t("clickToSelect")}
                                                         </p>
                                                     </div>
                                                 )}
+                                                <div className="grid grid-cols-2 gap-1.5 border-t border-glass-border bg-surface-inset p-1.5" onClick={(event) => event.stopPropagation()}>
+                                                    <select
+                                                        aria-label={t("viewRoleFor", { name: entity.name })}
+                                                        value={v.reference_view_role ?? ""}
+                                                        onChange={(event) => void handleUpdateViewMetadata(v, { reference_view_role: event.target.value })}
+                                                        className="min-w-0 rounded border border-glass-border bg-surface px-1.5 py-1 text-[0.6875rem] text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                                                    >
+                                                        <option value="">{t("viewRole")}</option>
+                                                        {(["front", "left", "right", "back", "three_quarter_left", "three_quarter_right", "top", "bottom", "detail"] as const).map((value) => (
+                                                            <option key={value} value={value}>{t(`viewRoleOptions.${value}`)}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        aria-label={t("viewDistanceFor", { name: entity.name })}
+                                                        value={v.reference_distance ?? ""}
+                                                        onChange={(event) => void handleUpdateViewMetadata(v, { reference_distance: event.target.value })}
+                                                        className="min-w-0 rounded border border-glass-border bg-surface px-1.5 py-1 text-[0.6875rem] text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                                                    >
+                                                        <option value="">{t("viewDistance")}</option>
+                                                        {(["full", "medium", "close", "macro"] as const).map((value) => (
+                                                            <option key={value} value={value}>{t(`viewDistanceOptions.${value}`)}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
                                         );
                                     })}

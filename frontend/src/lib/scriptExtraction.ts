@@ -12,11 +12,28 @@ const transient = (error: unknown) => axios.isAxiosError(error) &&
 
 /** Retry short transport failures, never resubmit model execution while polling. */
 export async function extractScriptPreview(baseUrl: string, projectId: string, text: string) {
-  const endpoint = `${baseUrl}/projects/${projectId}/extraction-jobs`;
+  return runExtractionJob(baseUrl, projectId, `${baseUrl}/projects/${projectId}/extraction-jobs`, { text });
+}
+
+export async function refineScriptPreview(
+  baseUrl: string,
+  projectId: string,
+  text: string,
+  draft: { characters: any[]; scenes: any[]; props: any[] },
+  instructions: string[],
+) {
+  return runExtractionJob(baseUrl, projectId, `${baseUrl}/projects/${projectId}/extraction-jobs/refine`, {
+    text,
+    draft,
+    instructions,
+  });
+}
+
+async function runExtractionJob(baseUrl: string, projectId: string, endpoint: string, payload: unknown) {
   let submitted: ExtractionJob | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      submitted = (await axios.post<ExtractionJob>(endpoint, { text }, { timeout: 15000 })).data;
+      submitted = (await axios.post<ExtractionJob>(endpoint, payload, { timeout: 15000 })).data;
       break;
     } catch (error) {
       if (attempt === 2 || !transient(error)) throw error;
@@ -29,7 +46,7 @@ export async function extractScriptPreview(baseUrl: string, projectId: string, t
   while (job.status === 'running') {
     await pause(2000);
     try {
-      const next: ExtractionJob = (await axios.get<ExtractionJob>(`${endpoint}/${job.id}`, { timeout: 15000 })).data;
+      const next: ExtractionJob = (await axios.get<ExtractionJob>(`${baseUrl}/projects/${projectId}/extraction-jobs/${job.id}`, { timeout: 15000 })).data;
       if (!next || next.id !== job.id) throw new Error('Invalid analysis task response');
       job = next;
       failures = 0;

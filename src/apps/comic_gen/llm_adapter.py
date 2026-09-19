@@ -27,17 +27,60 @@ class LLMAdapter:
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
         self._client = None
+        self._client_config_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
+
+    def _runtime_credentials(self) -> tuple[str | None, str | None]:
+        """Resolve credentials for the current request context.
+
+        Studio requests are owner-scoped.  Their UniArt credential must win
+        over the process environment, otherwise a stale shared token can be
+        used after login (and two users can accidentally share one client).
+        Desktop/background calls without an authenticated Studio context keep
+        the environment fallback for compatibility.
+        """
+        if self.provider == "openai":
+            from ..studio_access import current_studio_user, runtime_uniart_for_owner
+
+            user = current_studio_user()
+            if user:
+                try:
+                    configured = runtime_uniart_for_owner(
+                        user.user_id, user.owner_profile_id
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "UniArt API key is not configured for the current user"
+                    ) from exc
+                api_key = (configured.get("api_key") or "").strip()
+                base_url = (configured.get("base_url") or "").strip().rstrip("/")
+                if not api_key:
+                    raise RuntimeError(
+                        "UniArt API key is not configured for the current user"
+                    )
+                return api_key, base_url or "https://uniart.fun/v1"
+            return (
+                os.getenv("OPENAI_API_KEY"),
+                os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
+            )
+        return os.getenv("DASHSCOPE_API_KEY"), None
 
     @property
     def is_configured(self) -> bool:
-        if self.provider == "openai":
-            return bool(os.getenv("OPENAI_API_KEY"))
-        return bool(os.getenv("DASHSCOPE_API_KEY"))
+        try:
+            return bool(self._runtime_credentials()[0])
+        except RuntimeError:
+            return False
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
-        if self._client is None:
+        api_key, configured_base_url = self._runtime_credentials()
+        if self.provider == "openai":
+            base_url = configured_base_url or "https://api.openai.com/v1"
+        else:
+            base_url = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
+        config_key = (self.provider, api_key, base_url)
+        if self._client is None or self._client_config_key != config_key:
             try:
                 from openai import OpenAI
             except ImportError:
@@ -45,17 +88,8 @@ class LLMAdapter:
                     "openai package not installed. Run: pip install openai>=1.0.0"
                 )
 
-            if self.provider == "openai":
-                self._client = OpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-                )
-            else:
-                # DashScope uses OpenAI-compatible endpoint
-                self._client = OpenAI(
-                    api_key=os.getenv("DASHSCOPE_API_KEY"),
-                    base_url=f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1",
-                )
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
+            self._client_config_key = config_key
         return self._client
 
     # DashScope qwen 系列：首选 qwen3.7-plus（最新），不可用时回退到 qwen3.6-plus，
