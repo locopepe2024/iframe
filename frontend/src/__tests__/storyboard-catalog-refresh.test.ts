@@ -39,4 +39,6 @@ it('removes stale UniArt SKUs from an older local snapshot', async () => {
 
     expect(catalog.IMAGE_MODELS.some(m => m.id === 'uniart/gpt-image-2.5-flare')).toBe(false);
     expect(catalog.IMAGE_MODELS.some(m => m.id === 'uniart/gpt-image-2.5-flare-discount')).toBe(true);
+    expect(catalog.resolveModelId('t2i', 'uniart/gpt-image-2.5-flare', 'project_settings'))
+        .toBe('uniart/gpt-image-2.5-flare-discount');
 });

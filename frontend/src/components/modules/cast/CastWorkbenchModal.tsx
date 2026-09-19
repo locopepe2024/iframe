@@ -24,6 +24,7 @@ import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, T
 import { useLocale, useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
+import { resolveModelId } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -223,10 +224,17 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
-    // Effective t2i model — drives the "design_sheet" template gating: that
-    // template only works with gpt-image-2, so it stays locked unless the
-    // user has selected gpt-image-2 (override or project default).
-    const selectedModelId = modelOverride || currentProject?.model_settings?.t2i_model || "wan2.1-t2i";
+    // Resolve the selected model against the current live catalog before both
+    // rendering and submitting. A project can retain a SKU that was removed
+    // upstream (for example `gpt-image-2.5-flare`); using that raw value here
+    // would bypass the refreshed selector and submit the retired SKU anyway.
+    // Keep the legacy local fallback only when the project has no model setting
+    // at all, so older projects still behave as they did before the catalog
+    // became runtime-authoritative.
+    const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
+    const selectedModelId = requestedModelId
+        ? resolveModelId("t2i", requestedModelId, "project_settings")
+        : "wan2.1-t2i";
     const isGptImage2 = selectedModelId === "gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
@@ -364,7 +372,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 applyStyle,
                 [applyStyle ? styleNegative : "", getTemplateNegative(kind, selectedTemplate)].filter(Boolean).join(", "),
                 effectiveBatchSize,
-                modelOverride || currentProject.model_settings?.t2i_model,
+                selectedModelId,
                 aspectRatioOverride || undefined,
             );
 
@@ -910,8 +918,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </label>
                                     <GroupedModelGrid
                                         models={IMAGE_MODELS}
-                                        selectedId={modelOverride || currentProject.model_settings?.t2i_model || "wan2.1-t2i"}
-                                        onSelect={(id) => setModelOverride(id === (currentProject.model_settings?.t2i_model || "wan2.1-t2i") ? null : id)}
+                                        selectedId={selectedModelId}
+                                        onSelect={(id) => setModelOverride(id === selectedModelId ? null : id)}
                                     />
                                 </div>
                             </div>
