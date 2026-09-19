@@ -80,7 +80,21 @@ class AssetGenerator:
             return self._mulerouter_image_model
         return self.model
 
-    def generate_character(self, character: Character, generation_type: str = "all", prompt: str = "", positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, i2i_model_name: str = None, size: str = None) -> Character:
+    def generate_character(
+        self,
+        character: Character,
+        generation_type: str = "all",
+        prompt: str = "",
+        positive_prompt: str = None,
+        negative_prompt: str = "",
+        batch_size: int = 1,
+        model_name: str = None,
+        i2i_model_name: str = None,
+        size: str = None,
+        *,
+        reference_image_url: str = None,
+        use_reference_image: bool = True,
+    ) -> Character:
         """
         Generates character assets based on generation_type.
         Types: 'full_body', 'three_view', 'headshot', 'all'
@@ -97,9 +111,17 @@ class AssetGenerator:
         try:
             # Snapshot the selected input before appending generated candidates.
             if generation_type == "reference_sheet":
-                reference = character.image_url
-                unit = character.reference_sheet
-                if unit and unit.selected_image_id:
+                # An uploaded/selected asset is canonical output state, not an
+                # implicit provider input.  The API task path passes
+                # ``use_reference_image=False`` unless the caller explicitly
+                # supplies ``reference_image_url``.  Keep the lower-level
+                # default enabled for existing internal callers that already
+                # use this generator as an image-edit operation.
+                reference = reference_image_url
+                unit = character.reference_sheet if use_reference_image and not reference_image_url else None
+                if reference is None and use_reference_image:
+                    reference = character.image_url
+                if reference_image_url is None and unit and unit.selected_image_id:
                     selected = next((v for v in unit.image_variants if v.id == unit.selected_image_id), None)
                     if not selected or not selected.url:
                         raise ValueError("Selected reference image is missing; select it again")

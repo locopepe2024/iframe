@@ -379,3 +379,21 @@ def test_cast_reference_generation_sends_valid_uniart_portrait_contract(tmp_path
     assert len(captured)==1
     assert len(entity.reference_sheet.image_variants)==1
     assert entity.status.value=='completed'
+
+
+def test_async_cast_generation_does_not_promote_uploaded_asset_to_reference_input(monkeypatch):
+    p, entity = pipeline('character')
+    p.add_uploaded_asset_variant('project', 'character', entity.id, 'reference_sheet', 'uploaded.png')
+    p.asset_generation_tasks = {}
+    p.asset_generator = Mock()
+    monkeypatch.setattr('src.apps.comic_gen.pipeline.runtime_uniart_for_owner', lambda *args: {})
+
+    _, task_id = p.create_asset_generation_task(
+        'project', entity.id, 'character',
+        generation_type='reference_sheet', model_name='uniart/gpt-image-2.5-flare-discount',
+    )
+    p.process_asset_generation_task(task_id)
+
+    call = p.asset_generator.generate_character.call_args
+    assert call.kwargs['reference_image_url'] is None
+    assert call.kwargs['use_reference_image'] is False

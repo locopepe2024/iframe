@@ -680,7 +680,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
@@ -775,6 +775,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     target_asset, 
                     generation_type=generation_type, 
                     prompt=prompt, 
+                    reference_image_url=reference_image_url,
+                    use_reference_image=use_reference_image,
                     positive_prompt=effective_positive_prompt, # Used as style suffix if prompt is auto-generated
                     negative_prompt=effective_negative_prompt,
                     batch_size=batch_size,
@@ -844,6 +846,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "batch_size": batch_size,
                 "model_name": model_name,
                 "aspect_ratio": aspect_ratio,
+                # Cast generation must not silently turn an already-uploaded
+                # asset into provider input.  ``reference_image_url`` is the
+                # explicit opt-in for an image-edit request; legacy internal
+                # callers that invoke generate_asset directly keep their
+                # reference behavior through its default.
+                "use_reference_image": bool(reference_image_url),
             }
         }
         
@@ -887,6 +895,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params["batch_size"],
                     params["model_name"],
                     params.get("aspect_ratio"),
+                    params.get("use_reference_image", False),
                 )
             task["status"] = "completed"
             task["progress"] = 100

@@ -35,6 +35,35 @@ def test_missing_selected_reference_does_not_silently_generate_text_only(tmp_pat
     generator._get_model_for.assert_not_called()
 
 
+def test_unselected_uploaded_reference_is_not_sent_when_generation_opts_out(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_dir = "output/assets"
+    model = Mock()
+    generator._get_model_for = Mock(return_value=model)
+    monkeypatch.setattr("src.apps.comic_gen.assets.time.sleep", lambda _: None)
+    character = Character(
+        id="c",
+        name="Test",
+        description="Test",
+        image_url="uploaded.png",
+        reference_sheet=AssetUnit(
+            image_variants=[ImageVariant(id="chosen", url="uploaded.png")],
+            selected_image_id="chosen",
+        ),
+    )
+
+    generator.generate_character(
+        character,
+        generation_type="reference_sheet",
+        model_name="uniart/gpt-image-2.5-flare-discount",
+        use_reference_image=False,
+    )
+
+    assert model.generate.call_count == 1
+    assert "ref_image_path" not in model.generate.call_args.kwargs
+
+
 @pytest.mark.parametrize('prefix', ['comic_gen', 'lumenx'])
 @pytest.mark.parametrize('signed', [True, False])
 def test_stored_reference_reaches_real_uniart_edit_adapter(tmp_path, monkeypatch, prefix, signed):
