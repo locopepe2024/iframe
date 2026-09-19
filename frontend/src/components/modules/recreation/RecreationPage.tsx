@@ -7,6 +7,7 @@ import axios from "axios";
 import { API_URL } from "@/lib/api";
 import { CutEvidence, importCuts, recreationApi, RecreationProject, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
+import WhiteModelReference from "./WhiteModelReference";
 
 const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
@@ -119,6 +120,7 @@ export default function RecreationPage() {
           </div>
           <video ref={video} src={media(project.source_url)} controls preload="metadata"
             className="w-full max-h-[420px] aspect-video bg-black object-contain" />
+          <WhiteModelReference />
           {project.error && <p role="alert" className="text-red-400 text-sm py-3 break-words">{project.error}</p>}
           {analysis && <>
             <p className="text-xs text-text-muted py-3">{analysis.width} × {analysis.height} · {analysis.duration_seconds.toFixed(6)} s · {t("audioTracks", { count: analysis.audio_streams })}</p>

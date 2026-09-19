@@ -15,3 +15,42 @@ Validation: focused backend and API tests, reference-panel UI tests, existing re
 Local validation: 17 backend tests passed, 1 skipped; 13 UI tests passed; frontend typecheck and production build passed. The editor export integration is mocked in the new UI test; actual editing and signed-image delivery in the deployed browser still require acceptance. The neutral editor itself is reused unchanged. No H3 request or deployment performed.
 
 Uploads register a reusable image immediately; assigning it to a shot requires a separate save. Unsaved form changes are local to the selected shot and are discarded on navigation. There is no image deletion endpoint in this slice. Repeated upload retries may register separate media records; byte deduplication is not claimed.
+
+## AI corrected keyframe slice
+
+Observed: the manual editor can save an immutable child image, but it cannot infer a product's
+perspective, lighting or hand occlusion. Binding an unedited evidence frame to H3 also preserves
+the old package as part of the visual reference. The existing UniArt image adapter supports an
+ordered multi-image edit request and owner-specific runtime credentials.
+
+This slice adds an owner-scoped, paid keyframe task. The edit target is image 1 and the replacement
+product is image 2. The fixed prompt permits only the package replacement and explicitly preserves
+people, faces, hands, action, background, framing, camera angle and lighting. User instructions may
+narrow that edit but do not replace the fixed invariants. A completed result is registered as a new
+`reference_image` with immutable links to both inputs and the task; it is selected in the form but is
+not bound to the shot until the user explicitly saves the assignment.
+
+Contract:
+
+- `POST /recreation/projects/{project_id}/shots/{shot_id}/keyframe-tasks` requires the current
+  `revision`, `analysis_id`, an image edit target, a `replacement_image`, and `accept_cost=true`.
+- `GET /recreation/keyframe-tasks/{task_id}` returns only the authenticated owner's task and signs
+  a completed output projection.
+- A second active task for the same shot and project revision is rejected. Failed tasks may be
+  retried explicitly; interrupted work is never submitted again automatically because that could
+  create a second charge.
+- Provider credentials are resolved for the owner at execution time and are never stored in the
+  task. The task stores model ID, prompt digest, source/replacement fingerprints, status, error and
+  output media ID.
+- `uniart/gpt-image-2` is the first verified editing route. This slice does not claim that the image
+  is visually correct; the user must inspect it before saving the shot binding.
+
+Success criteria: role and ownership validation fail closed; source mutation stops generation;
+success creates one indexed child reference; provider failure remains visible and creates no media;
+the UI identifies the action as paid, polls durable task state, selects the result, and keeps the
+existing explicit-save boundary.
+
+Local validation: 83 focused backend tests passed and 1 authorized sample test was skipped; 12
+recreation frontend tests passed; TypeScript checking and the production frontend build passed.
+Provider behavior remains mocked in this validation, so visual fidelity and real billing are not
+claimed until the reviewed change is deployed and a user starts the explicitly paid action.

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { Pencil, Save, Search, Upload, X } from "lucide-react";
+import { Pencil, Save, Search, Sparkles, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { recreationApi, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
 
@@ -113,6 +113,8 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
   const [loaded, setLoaded] = useState(false);
   const [retry, setRetry] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [keyframeBusy, setKeyframeBusy] = useState(false);
+  const [keyframeError, setKeyframeError] = useState("");
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -131,6 +133,28 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
     if (file.size > 25 * 1024 * 1024) throw new Error("Image exceeds 25 MiB");
     const item = await recreationApi.uploadImage(project.id, file, role === "reference" ? "reference_image" : "replacement_image", parentId);
     if (alive.current) choose(role, item);
+  }
+  async function generateCorrected() {
+    if (!selected.reference || !selected.replacement || !shot.id) return;
+    setKeyframeBusy(true); setKeyframeError(""); setSaved(false);
+    try {
+      let task = await recreationApi.createKeyframeTask(
+        project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction,
+      );
+      while (alive.current && (task.status === "pending" || task.status === "processing")) {
+        task = await recreationApi.keyframeTask(task.task_id);
+        if (task.status === "pending" || task.status === "processing") {
+          await new Promise(resolve => window.setTimeout(resolve, 2000));
+        }
+      }
+      if (!alive.current) return;
+      if (task.status !== "completed" || !task.output_media) throw new Error(task.error || t("keyframeFailed"));
+      choose("reference", task.output_media);
+    } catch (error) {
+      if (alive.current) setKeyframeError(error instanceof Error ? error.message : t("keyframeFailed"));
+    } finally {
+      if (alive.current) setKeyframeBusy(false);
+    }
   }
   return <div className="space-y-4">
     {failed && <div role="alert">{t("failed")}{!loaded && <button className="glass-button" onClick={() => setRetry(n => n + 1)}>{t("retry")}</button>}</div>}
@@ -151,6 +175,10 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
           {role === "reference" && selected.reference && <button type="button" className="glass-button" title={t("edit")} aria-label={t("edit")} onClick={() => setEditor(true)}><Pencil size={16} /></button>}
         </div>
       </div>)}</div>
+      {selected.reference && selected.replacement && <button type="button" className="glass-button flex items-center gap-2" disabled={keyframeBusy || !instruction.replace(/@\{[a-f0-9]{32}\}/g, "").trim()} aria-label={t("generateCorrected")} onClick={generateCorrected}>
+        <Sparkles size={16} />{keyframeBusy ? t("generatingCorrected") : t("generateCorrected")}
+      </button>}
+      {keyframeError && <p role="alert" className="text-sm text-red-500 break-words">{keyframeError}</p>}
       {picker && <Picker onClose={() => setPicker(null)} onSelect={item => { choose(picker, item); setPicker(null); }} />}
       <label className="block text-sm">{t("description")}<textarea className="glass-input block w-full mt-2" rows={4} maxLength={6000} value={description} onChange={e => { setDescription(e.target.value); setSaved(false); }} /></label>
       <MaterialInstruction value={instruction} onChange={text => { setInstruction(text); setSaved(false); }} materials={(["reference", "replacement"] as Role[]).flatMap(role => selected[role] ? [{ role, media: selected[role]! }] : [])} />

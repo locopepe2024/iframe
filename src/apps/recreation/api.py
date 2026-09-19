@@ -103,6 +103,14 @@ class ShotReferencesRequest(AnalyzeRequest):
     instruction_refs: list[dict] = Field(default_factory=list, max_length=4)
 
 
+class KeyframeTaskRequest(AnalyzeRequest):
+    analysis_id: str
+    reference_media_id: str = Field(min_length=1, max_length=64)
+    replacement_media_id: str = Field(min_length=1, max_length=64)
+    instruction: str = Field(default="", max_length=2000)
+    accept_cost: bool = False
+
+
 @router.get("/media/{media_id}")
 def get_media(media_id: str, user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).media(media_id), user)
@@ -125,6 +133,27 @@ def bind_shot(project_id: str, shot_id: str, request: ShotReferencesRequest,
                       request.reference_media_id, request.replacement_media_id, request.instruction, request.description, request.instruction_refs), user)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/shots/{shot_id}/keyframe-tasks", status_code=202)
+def create_keyframe_task(project_id: str, shot_id: str, request: KeyframeTaskRequest,
+                         background: BackgroundTasks, user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    try:
+        task = service.create_keyframe_task(
+            project_id, shot_id, request.revision, request.analysis_id,
+            request.reference_media_id, request.replacement_media_id,
+            request.instruction, request.accept_cost,
+        )
+        background.add_task(service.process_keyframe_task, task["task_id"])
+        return public(task, user)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/keyframe-tasks/{task_id}")
+def keyframe_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).keyframe_task(task_id), user)
 
 
 @router.post("/projects/{project_id}/generation-plan")

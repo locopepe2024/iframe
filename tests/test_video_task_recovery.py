@@ -33,6 +33,7 @@ from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.identity import UserContext
 from src.apps.studio_access import reset_studio_user, set_studio_user
+from src.utils.model_catalog import get_default_model_settings
 
 
 @pytest.fixture
@@ -331,8 +332,9 @@ def test_model_settings_persists_r2v_model(pipeline):
     )
     pipeline.scripts = {"p1": script}
 
-    # Default value is wan2.7-r2v per ModelSettings field default.
-    assert script.model_settings.r2v_model == "wan2.7-r2v"
+    # The project default follows the active model catalog.  This keeps the
+    # persistence contract stable when the provider default changes.
+    assert script.model_settings.r2v_model == get_default_model_settings().r2v_model
 
     # Update through the pipeline path the API endpoint uses.
     with patch.object(pipeline, "_save_data"):

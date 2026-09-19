@@ -34,33 +34,29 @@ afterEach(() => {
 
 describe('model catalog selectors', () => {
     it('derives visible model selectors from catalog defaults', () => {
-        // Defaults follow the catalog upgrade to wan2.7 (Phase 2, 2026-Q1).
+        // Defaults are owned by the active UniArt catalog.
         // The unified `image_model` surface replaces the per-mode t2i/i2i
         // settings at the consumer layer.
         expect(DEFAULT_MODEL_SETTINGS).toMatchObject({
-            t2i_model: 'wan2.7-image-pro',
-            i2i_model: 'wan2.7-image-pro',
-            i2v_model: 'happyhorse-1.1-i2v',
-            image_model: 'wan2.7-image-pro',
+            t2i_model: 'uniart/gpt-image-2',
+            i2i_model: 'uniart/gpt-image-2',
+            i2v_model: 'uniart/seedance-2.5-vip',
+            image_model: 'uniart/gpt-image-2',
         });
 
         // The 't2i' and 'i2i' selection_group surfaces moved to 'image'
         // in Phase 2. The resolver now falls through to visible image-group
-        // models so user picks (e.g. Wan 2.7 Image Pro) persist through
+        // models so user picks persist through
         // resolveModelId() instead of silently reverting to the default.
         expect(GLOBAL_T2I_MODELS.map((model) => model.id)).toEqual(GLOBAL_IMAGE_MODELS.map((m) => m.id));
         expect(GLOBAL_I2I_MODELS.map((model) => model.id)).toEqual(GLOBAL_IMAGE_MODELS.map((m) => m.id));
 
         // Ordered DESC by ui.order; ties broken by display_name asc.
         expect(GLOBAL_I2V_MODELS.map((model) => model.id)).toEqual([
-            'happyhorse-1.1-i2v',
-            'kling-v3-i2v',
-            'pixverse/pixverse-v6-video',
-            'seedance-2.0-i2v',
-            'pixverse-c1-i2v',
-            'wan2.7-i2v',
-            'viduq3-pro-i2v',
-            'viduq3-turbo-i2v',
+            'uniart/seedance-2.5-special',
+            'uniart/seedance-2.0-vip',
+            'uniart/minimax-h3-vip',
+            'uniart/seedance-2.5-vip',
         ]);
     });
 
@@ -82,9 +78,9 @@ describe('model catalog fallbacks', () => {
                 'global_settings'
             )
         ).toMatchObject({
-            t2i_model: 'wan2.7-image-pro',
-            i2i_model: 'wan2.7-image-pro',
-            i2v_model: 'happyhorse-1.1-i2v',
+            t2i_model: 'uniart/gpt-image-2',
+            i2i_model: 'uniart/gpt-image-2',
+            i2v_model: 'uniart/seedance-2.5-vip',
         });
     });
 
@@ -139,7 +135,7 @@ describe('model catalog fallbacks', () => {
         // After 524f3a1 deprecated the wan2.6 series, 'wan2.6-i2v' is hidden
         // (visible_in: []), so the canonical → legacy normalization is filtered
         // out by the visibility check and the resolver falls back to the current
-        // i2v default (happyhorse-1.1-i2v). The raw normalization contract is
+        // i2v default (UniArt Seedance). The raw normalization contract is
         // covered directly by the Phase 2 canonical helpers below.
         expect(
             resolveCompatModelSettings(
@@ -148,12 +144,11 @@ describe('model catalog fallbacks', () => {
                 },
                 'global_settings'
             ).i2v_model
-        ).toBe('happyhorse-1.1-i2v');
+        ).toBe('uniart/seedance-2.5-vip');
 
         // An r2v canonical id normalizes to the matching legacy id
         // (wan2.6-r2v), which is hidden in the i2v surface — so the
-        // resolver falls back to the current i2v default (happyhorse-1.1-i2v
-        // since the 2026-05-26 catalog meta switch). Previously this
+        // resolver falls back to the current i2v default (UniArt Seedance). Previously this
         // assertion expected the resolver to remap r2v into the parent
         // i2v legacy id; that behavior was dropped when r2v ids gained
         // explicit modality suffixes.
@@ -164,29 +159,29 @@ describe('model catalog fallbacks', () => {
                 },
                 'global_settings'
             ).i2v_model
-        ).toBe('happyhorse-1.1-i2v');
+        ).toBe('uniart/seedance-2.5-vip');
 
         expect(compatI2vModels.map((model) => model.id)).not.toContain('wan2.6-i2v');
         expect(compatI2vModels.some((model) => model.id === 'wan/wan2.6-video#i2v')).toBe(false);
         // R2V selection/route ids follow the catalog meta default
-        // (defaults.model_settings.r2v_model = happyhorse-1.1-r2v) via
+        // (defaults.model_settings.r2v_model = uniart/seedance-2.5-vip) via
         // getFallbackVisibleModelId, not raw ui.order. Several R2V models
-        // share order=80, so anchoring to the explicit meta default keeps the
-        // default route deterministic. Selection and route are unified
+        // anchoring to the explicit meta default keeps the default route
+        // deterministic. Selection and route are unified
         // (R2V_ROUTE_MODEL_ID = R2V_SELECTION_MODEL_ID).
-        expect(compatR2vSelectionModelId).toBe('happyhorse-1.1-r2v');
-        expect(compatR2vRouteModelId).toBe('happyhorse-1.1-r2v');
+        expect(compatR2vSelectionModelId).toBe('uniart/seedance-2.5-vip');
+        expect(compatR2vRouteModelId).toBe('uniart/seedance-2.5-vip');
     });
 });
 
 describe('model catalog runtime helpers', () => {
     it('derives the current R2V selection and route ids from catalog data', () => {
         // Selection and route both resolve to the catalog meta default R2V
-        // model (defaults.model_settings.r2v_model = happyhorse-1.1-r2v) via
+        // model (defaults.model_settings.r2v_model = uniart/seedance-2.5-vip) via
         // getFallbackVisibleModelId — deterministic regardless of the order=80
-        // tie among visible R2V models (happyhorse/kling/seedance/wan2.7).
-        expect(R2V_SELECTION_MODEL_ID).toBe('happyhorse-1.1-r2v');
-        expect(R2V_ROUTE_MODEL_ID).toBe('happyhorse-1.1-r2v');
+        // tie among visible R2V models.
+        expect(R2V_SELECTION_MODEL_ID).toBe('uniart/seedance-2.5-vip');
+        expect(R2V_ROUTE_MODEL_ID).toBe('uniart/seedance-2.5-vip');
     });
 
     it('reads per-model reference image limits from catalog metadata', () => {
@@ -194,11 +189,12 @@ describe('model catalog runtime helpers', () => {
         // for the 'i2i' surface — when the literal id isn't visible in
         // that surface (post-Phase 2 the wan2.6 ids moved to the
         // 'image' selection_group), the resolver falls back to the
-        // current default (wan2.7-image, which advertises 9 refs).
+        // current default (UniArt GPT Image 2, which has no explicit input
+        // limit in the catalog and therefore uses the helper fallback).
         // The behavior is correct given how callers (PropertiesPanel)
         // use the project's i2i_model setting.
-        expect(getMaxReferenceImages('wan2.6-image')).toBe(9);
-        expect(getMaxReferenceImages('wan2.5-i2i-preview')).toBe(9);
+        expect(getMaxReferenceImages('wan2.6-image')).toBe(3);
+        expect(getMaxReferenceImages('wan2.5-i2i-preview')).toBe(3);
     });
 });
 

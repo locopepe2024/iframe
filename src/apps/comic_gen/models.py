@@ -533,7 +533,7 @@ class ModelSettings(BaseModel):
     image_model: str = Field(_DEFAULT_MODEL_SETTINGS.image_model, description="Image generation model (T2I+I2I unified)")
     i2v_model: str = Field(_DEFAULT_MODEL_SETTINGS.i2v_model, description="Image-to-Video model for Motion")
     r2v_model: str = Field(
-        "wan2.7-r2v",
+        _DEFAULT_MODEL_SETTINGS.r2v_model,
         description="Reference-to-Video default for the project. Used by Storyboard's R2V tab as the initial picker value; per-storyboard override still wins.",
     )
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
