@@ -48,3 +48,30 @@ it("submits the exact visible profile and accumulated revision history", async (
         { timeout: 15000 },
     );
 });
+
+it("uses a returned profile even when the worker status is still running", async () => {
+    vi.mocked(axios.post).mockResolvedValue({
+        data: { id: "director-job", status: "running", result: { profile } },
+    });
+
+    await expect(analyzeDirectorProfile("/api", "film")).resolves.toEqual(profile);
+    expect(axios.get).not.toHaveBeenCalled();
+});
+
+it("continues polling queued worker states until a profile is returned", async () => {
+    vi.mocked(axios.post).mockResolvedValue({
+        data: { id: "director-job", status: "queued", result: null },
+    });
+    vi.mocked(axios.get).mockResolvedValue({
+        data: { id: "director-job", status: "completed", result: { profile } },
+    });
+
+    const pending = analyzeDirectorProfile("/api", "film");
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toEqual(profile);
+    expect(axios.get).toHaveBeenCalledWith(
+        "/api/projects/film/director-profile-jobs/director-job",
+        { timeout: 15000 },
+    );
+});

@@ -4,6 +4,13 @@ import time
 from typing import Dict, Any, List
 from urllib.parse import quote
 from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET
+from .character_prompts import (
+    DEFAULT_CHARACTER_STYLE_SUFFIX,
+    append_style_suffix,
+    build_character_image_prompt,
+    build_reference_sheet_prompt,
+    chinese_reverse_reference_instruction,
+)
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
@@ -82,7 +89,7 @@ class AssetGenerator:
         output_dir = self._output_dir_for(character)
         
         # Default style suffix if not provided (None means use default, "" means no style)
-        style_suffix = positive_prompt if positive_prompt is not None else "cinematic lighting, movie still, 8k, highly detailed, realistic"
+        style_suffix = positive_prompt if positive_prompt is not None else DEFAULT_CHARACTER_STYLE_SUFFIX
         
         # Default size if not provided
         effective_size = size or "576*1024"  # Default to portrait for characters
@@ -100,9 +107,9 @@ class AssetGenerator:
                 reference_args = {}
                 if reference:
                     reference_args["ref_image_path"] = reference if reference.startswith(("https://", "http://")) or is_object_key(reference) or os.path.isfile(reference) else os.path.join("output", reference)
-                effective_prompt = prompt if prompt else f"Character reference sheet for {character.name}. {character.description}. Multiple views: front, side, back. Clean background, studio lighting."
+                effective_prompt = prompt if prompt else build_reference_sheet_prompt(character.name, character.description)
                 if positive_prompt and positive_prompt not in effective_prompt:
-                    effective_prompt = f"{effective_prompt}, {positive_prompt}"
+                    effective_prompt = append_style_suffix(effective_prompt, positive_prompt)
 
                 effective_size = size or "1024*1024"
 
@@ -176,7 +183,7 @@ class AssetGenerator:
                 if not prompt:
                     # Default prompt - no style included, emphasize clean background
                     # If there's a reference image (reverse generation), emphasize consistency
-                    base_prompt = f"Full body character design of {character.name}, concept art. {character.description}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece."
+                    base_prompt = build_character_image_prompt("full_body", character.name, character.description)
                 else:
                     base_prompt = prompt
                 
@@ -184,7 +191,7 @@ class AssetGenerator:
                 character.full_body_prompt = base_prompt
                 
                 # Generate the image with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
+                generation_prompt = append_style_suffix(base_prompt, style_suffix)
                 
                 # Check for base character reference (for variants)
                 ref_image_path = None
@@ -248,7 +255,7 @@ class AssetGenerator:
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)
-                            reverse_enhancement = "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. "
+                            reverse_enhancement = chinese_reverse_reference_instruction()
                             if reverse_enhancement.strip() not in effective_generation_prompt:
                                 effective_generation_prompt = f"{reverse_enhancement}{generation_prompt}"
                                 logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
@@ -382,7 +389,9 @@ class AssetGenerator:
             if generation_type in ["all", "three_view"]:
                 if not prompt or generation_type == "all":
                     # Add reference consistency emphasis
-                    base_prompt = f"Character Reference Sheet for {character.name}. {character.description}. Three-view character design: Front view, Side view, and Back view. STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality."
+                    base_prompt = build_character_image_prompt(
+                        "three_view", character.name, character.description, preserve_reference=True
+                    )
                 else:
                     base_prompt = prompt
                 
@@ -390,7 +399,7 @@ class AssetGenerator:
                 character.three_view_prompt = base_prompt
                 
                 # Generate with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
+                generation_prompt = append_style_suffix(base_prompt, style_suffix)
                 
                 sheet_negative = negative_prompt + ", background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs"
 
@@ -463,7 +472,9 @@ class AssetGenerator:
             if generation_type in ["all", "headshot"]:
                 if not prompt or generation_type == "all":
                     # Add reference consistency emphasis
-                    base_prompt = f"Close-up portrait of the SAME character {character.name}. {character.description}. STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece."
+                    base_prompt = build_character_image_prompt(
+                        "headshot", character.name, character.description, preserve_reference=True
+                    )
                 else:
                     base_prompt = prompt
                 
@@ -471,7 +482,7 @@ class AssetGenerator:
                 character.headshot_prompt = base_prompt
                 
                 # Generate with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
+                generation_prompt = append_style_suffix(base_prompt, style_suffix)
 
                 successful_generations = 0
                 last_error = ""
