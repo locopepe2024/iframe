@@ -79,8 +79,16 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
     if (detail && typeof detail === "object" && typeof detail.reason === "string") {
         return {
             reason: detail.reason as PolishErrorReason,
-            messageZh: detail.message_zh || "",
-            messageEn: detail.message_en || "",
+            // The backend includes a provider-safe diagnostic here (for
+            // example an expired/invalid API key). Keep it visible instead of
+            // replacing every structured failure with the generic network
+            // message below.
+            messageZh: typeof detail.message_zh === "string" && detail.message_zh.trim()
+                ? detail.message_zh
+                : t("polishErrorApi"),
+            messageEn: typeof detail.message_en === "string" && detail.message_en.trim()
+                ? detail.message_en
+                : "Model call failed. Please retry or check your network.",
             prompt_cn: detail.prompt_cn,
             prompt_en: detail.prompt_en,
         };
@@ -247,7 +255,7 @@ export default function PolishPanel({
             {isHardError && error ? (
                 <div className="space-y-2">
                     <p className="font-sans text-body-sm leading-relaxed text-status-failed-fg">
-                        {t(reasonToI18nKey(error.reason) as any)}
+                        {error.messageZh || t(reasonToI18nKey(error.reason) as any)}
                     </p>
                     <div className="flex items-center gap-1">
                         <button
