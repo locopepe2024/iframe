@@ -13,6 +13,13 @@ import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
 import { toast } from "@/store/toastStore";
+import {
+    buildCharacterImagePrompt,
+    buildCharacterMotionPrompt,
+    buildCharacterVideoPrompt,
+    DEFAULT_CHARACTER_NEGATIVE_PROMPT,
+    hasCharacterReferenceConstraint,
+} from "@/lib/characterPrompts";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
@@ -104,20 +111,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         if (existingPrompt) return existingPrompt;
 
-        const baseDesc = asset.description || "";
-        const name = asset.name || "Character";
-
         if (type === "full_body") {
-            const prefix = hasNonFullBodyUpload ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. " : "";
-            return `${prefix}Full body character design of ${name}, concept art. ${baseDesc}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`;
+            return buildCharacterImagePrompt("full_body", asset.name, asset.description, hasNonFullBodyUpload);
         }
         if (type === "three_view") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. " : "";
-            return `${prefix}Character Reference Sheet for ${name}. ${baseDesc}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality.`;
+            return buildCharacterImagePrompt("three_view", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
         }
         if (type === "headshot") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. " : "";
-            return `${prefix}Close-up portrait of the SAME character ${name}. ${baseDesc}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`;
+            return buildCharacterImagePrompt("headshot", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
         }
         return "";
     };
@@ -130,7 +131,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // New State for Style Control
     const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
-    const [negativePrompt, setNegativePrompt] = useState("low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, jpeg artifacts, signature, watermark, blurry");
+    const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
 
@@ -191,20 +192,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             if (assetType === 'full_body') {
                 setFullBodyAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
+                const currentDefault = buildCharacterMotionPrompt('full_body', asset.description, false);
                 const oldDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right to show costume details. No walking away.\nHead to toe shot, stable camera, flat lighting.`;
 
                 if (fullBodyMotionPrompt === currentDefault || fullBodyMotionPrompt === oldDefault || !fullBodyMotionPrompt) {
-                    setFullBodyMotionPrompt(`Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`);
+                    setFullBodyMotionPrompt(buildCharacterMotionPrompt('full_body', asset.description, true));
                 }
             } else {
                 setHeadshotAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
+                const currentDefault = buildCharacterMotionPrompt('headshot', asset.description, false);
                 const oldDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
 
                 if (headshotMotionPrompt === currentDefault || headshotMotionPrompt === oldDefault || !headshotMotionPrompt) {
-                    setHeadshotMotionPrompt(`High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`);
+                    setHeadshotMotionPrompt(buildCharacterMotionPrompt('headshot', asset.description, true));
                 }
             }
         } catch (error: any) {
@@ -217,30 +218,22 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // PRD Motion Prompt Templates
     const getMotionDefault = (type: 'full_body' | 'headshot', hasAudio: boolean) => {
-        if (type === 'full_body') {
-            return hasAudio
-                ? `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`
-                : `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
-        } else {
-            return hasAudio
-                ? `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`
-                : `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
-        }
+        return buildCharacterMotionPrompt(type, asset.description, hasAudio);
     };
 
     // Initialize prompts if empty (first time load)
     useEffect(() => {
         if (!fullBodyPrompt) {
-            setFullBodyPrompt(`Full body character design of ${asset.name}, concept art. ${asset.description}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`);
+            setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
         if (!threeViewPrompt) {
-            setThreeViewPrompt(`Character Reference Sheet for ${asset.name}. ${asset.description}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background.`);
+            setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
         if (!headshotPrompt) {
-            setHeadshotPrompt(`Close-up portrait of the SAME character ${asset.name}. ${asset.description}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`);
+            setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
         if (!videoPrompt) {
-            setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
+            setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
         }
 
         if (!fullBodyMotionPrompt) {
@@ -265,17 +258,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Update local state when asset updates (e.g. after generation)
     useEffect(() => {
         if (asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
-        else if (hasNonFullBodyUpload && !fullBodyPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasNonFullBodyUpload && !hasCharacterReferenceConstraint(fullBodyPrompt)) {
             setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
 
         if (asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
-        else if (hasAnyUpload && !threeViewPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasCharacterReferenceConstraint(threeViewPrompt)) {
             setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
 
         if (asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
-        else if (hasAnyUpload && !headshotPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasCharacterReferenceConstraint(headshotPrompt)) {
             setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
 

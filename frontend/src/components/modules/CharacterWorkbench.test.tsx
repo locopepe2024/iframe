@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { WorkbenchPanel } from "./CharacterWorkbench";
+import {
+    buildCharacterImagePrompt,
+    buildCharacterMotionPrompt,
+    buildCharacterVideoPrompt,
+    DEFAULT_CHARACTER_NEGATIVE_PROMPT,
+} from "@/lib/characterPrompts";
 
 vi.mock("next-intl", () => ({
     useTranslations: () => (key: string) => key,
@@ -46,4 +52,24 @@ it("does not offer editing when a panel has no selected image", () => {
     render(<WorkbenchPanel {...baseProps} editImageUrl={undefined} onEditImage={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
+});
+
+it("builds Chinese character defaults without duplicate punctuation", () => {
+    const prompt = buildCharacterImagePrompt(
+        "full_body",
+        "周涵（大学时期）",
+        "黑色短发，五官端正，身材高挑匀称，外形阳光帅气，具有年轻大学生的清爽气质。",
+    );
+
+    expect(prompt).toContain("全身角色设计：周涵（大学时期）");
+    expect(prompt).not.toMatch(/Full body|concept art|Standing pose|Clean white background/);
+    expect(prompt).not.toMatch(/。\./);
+});
+
+it("keeps motion, video, and negative defaults in Chinese", () => {
+    expect(buildCharacterMotionPrompt("full_body", "黑色短发", false)).toContain("全身角色参考视频");
+    expect(buildCharacterMotionPrompt("headshot", "黑色短发", true)).toContain("口型与音频同步");
+    expect(buildCharacterVideoPrompt("周涵（大学时期）", "黑色短发")).toContain("电影感镜头");
+    expect(DEFAULT_CHARACTER_NEGATIVE_PROMPT).toContain("低质量");
+    expect(DEFAULT_CHARACTER_NEGATIVE_PROMPT).not.toContain("low quality");
 });
