@@ -497,7 +497,9 @@
     "library": "资产库",
     "editor": "剧本编辑器",
     "playground": "创作台",
+    "director3d": "3D 导演台",
     "settings": "设置",
+    "more": "更多",
     "workspaceAria": "iFrame Studio · 工作区",
     "mainNavAria": "主导航"
   },
