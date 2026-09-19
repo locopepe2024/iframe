@@ -3,8 +3,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.apps.identity import UserContext, _extract_bearer
+from src.apps.comic_gen import api
 from src.apps.comic_gen.models import Character, GlobalAssetLibrary, Script, Series
 from src.apps.playground.storage import PlaygroundStorage
 from src.apps.studio_access import (
@@ -53,6 +55,41 @@ def test_missing_studio_context_is_rejected():
     with pytest.raises(Exception) as exc_info:
         require_studio_user()
     assert getattr(exc_info.value, "status_code", None) == 401
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "method_name"),
+    [
+        ("/video/polish_prompt", {"draft_prompt": "镜头推进"}, "polish_video_prompt"),
+        ("/video/polish_r2v_prompt", {"draft_prompt": "镜头推进", "slots": []}, "polish_r2v_prompt"),
+    ],
+)
+def test_prompt_polish_routes_set_studio_identity(monkeypatch, path, payload, method_name):
+    """Owner-scoped UniArt credentials must be visible to prompt polishing."""
+    owner = identity("user-a", "profile-a")
+    monkeypatch.setattr(api, "_resolve_request_context", lambda *_args: (owner, False))
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *_args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *_args: "")
+    monkeypatch.setattr(api, "_get_polish_model_for_project", lambda *_args: "")
+
+    class Processor:
+        def __getattribute__(self, name):
+            if name == method_name:
+                from src.apps.studio_access import current_studio_user
+
+                assert current_studio_user() == owner
+            return object.__getattribute__(self, name)
+
+        def polish_video_prompt(self, *_args, **_kwargs):
+            return {"prompt_cn": "润色结果", "prompt_en": "polished result"}
+
+        def polish_r2v_prompt(self, *_args, **_kwargs):
+            return {"prompt_cn": "润色结果", "prompt_en": "polished result"}
+
+    monkeypatch.setattr(api, "ScriptProcessor", Processor)
+    with TestClient(api.app) as client:
+        response = client.post(path, json=payload)
+    assert response.status_code == 200
 
 
 def test_playground_sessions_are_profile_scoped(tmp_path: Path):

@@ -181,6 +181,11 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")
+        # Prompt polishing resolves the model credentials and optional
+        # episode/series prompt context from the current Studio owner.  Keep
+        # these body-based endpoints inside the same request context even
+        # though the project id is not part of the URL.
+        or path in {"/video/polish_prompt", "/video/polish_r2v_prompt"}
     )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
