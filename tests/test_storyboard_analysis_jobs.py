@@ -123,6 +123,45 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
     pipeline._save_data.assert_called_once()
 
 
+def test_storyboard_prefers_exact_temporal_character_variant():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    base = Character(id="zhou-base", name="周涵", description="基础设计")
+    college = Character(id="zhou-college", name="周涵（大学时期）", description="大学时期设计")
+    scene = Scene(id="campus", name="大学校园", description="校园")
+    script = Script(
+        id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+        characters=[base, college], scenes=[scene], frames=[],
+    )
+    pipeline.scripts = {script.id: script}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script,
+        {"characters": [{"id": base.id, "name": base.name}, {"id": college.id, "name": college.name}]},
+        "prompt",
+    )
+    pipeline.resolve_episode_assets = lambda current: {
+        "characters": [base, college], "scenes": [scene], "props": [],
+    }
+    pipeline.stamp_owned_children = Mock()
+    pipeline._save_data = Mock()
+    pipeline.script_processor = Mock()
+
+    result = pipeline.analyze_text_to_frames(
+        "project",
+        "大学时期的周涵走进校园。",
+        draft=[{
+            "scene_ref_name": "大学校园",
+            "character_ref_names": ["周涵（大学时期）"],
+            "prop_ref_names": [],
+            "action_summary": "周涵走进校园",
+            "duration": 5,
+        }],
+    )
+
+    assert result.frames[0].character_ids == [college.id]
+
+
 def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history():
     from src.apps.comic_gen.llm import ScriptProcessor
 

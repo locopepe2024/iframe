@@ -1549,11 +1549,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             character_ids = []
             for char_name in char_ref_names:
                 cn = char_name.strip().lower()
-                for char in all_characters:
-                    cname = char.name.strip().lower()
-                    if cname == cn or cn in cname or cname in cn:
-                        character_ids.append(char.id)
-                        break
+                # Prefer an exact temporal/identity variant match.  A base
+                # name such as "周涵" is contained in "周涵（大学时期）";
+                # checking contains in list order first would silently bind a
+                # university shot to the base character's design.
+                matched = next(
+                    (char for char in all_characters if char.name.strip().lower() == cn),
+                    None,
+                )
+                if not matched:
+                    matched = next(
+                        (
+                            char
+                            for char in all_characters
+                            if cn in char.name.strip().lower()
+                            or char.name.strip().lower() in cn
+                        ),
+                        None,
+                    )
+                if matched:
+                    character_ids.append(matched.id)
 
             # Resolve prop IDs by names (case-insensitive, bidirectional contains)
             prop_ref_names = frame_data.get("prop_ref_names", [])
