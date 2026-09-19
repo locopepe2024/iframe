@@ -112,6 +112,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self.library_store: GlobalAssetLibrary = self._load_library_data()
         self._migrate_legacy_studio_owners()
         self._repair_series_bindings()
+        self._migrate_uploaded_asset_statuses()
 
         # Extraction preview cache: {project_id: (timestamp, Script)}
         self._extraction_cache: Dict[str, tuple] = {}
@@ -474,6 +475,68 @@ class ComicGenPipeline(StudioOwnerMixin):
                     logger.info(f"Repaired series binding: episode {ep_id} → series {series_id}")
         if repaired:
             self._save_data()
+
+    @staticmethod
+    def _asset_has_uploaded_image(asset: Any) -> bool:
+        """Return whether an asset already has a usable uploaded image.
+
+        The canonical character reference lives in ``reference_sheet`` while
+        older records may still use one of the legacy image containers.  The
+        helper intentionally checks the explicit upload provenance flag so a
+        partially generated asset is not mistaken for a completed upload.
+        """
+        if asset is None:
+            return False
+        containers = (
+            [
+                getattr(asset, "reference_sheet", None),
+                getattr(asset, "full_body_asset", None),
+                getattr(asset, "three_view_asset", None),
+                getattr(asset, "headshot_asset", None),
+            ]
+            if hasattr(asset, "reference_sheet")
+            else [getattr(asset, "image_asset", None)]
+        )
+        for container in containers:
+            if container is None:
+                continue
+            variants = getattr(container, "image_variants", None)
+            if variants is None:
+                variants = getattr(container, "variants", None)
+            if any(
+                getattr(variant, "is_uploaded_source", False)
+                and bool(getattr(variant, "url", None))
+                for variant in (variants or [])
+            ):
+                return True
+        return False
+
+    def _migrate_uploaded_asset_statuses(self) -> None:
+        """Mark upload-only assets ready when older records still say pending.
+
+        Uploads predating the status fix already contain a selected reference
+        image but remain ``pending`` because no generation task ran.  Repair
+        only that safe, explicit state at startup; failed/processing
+        generations remain untouched.
+        """
+        def repair_assets(resources: Any) -> bool:
+            changed = False
+            containers = resources.values() if isinstance(resources, dict) else [resources]
+            for resource in containers:
+                for collection_name in ("characters", "scenes", "props"):
+                    for asset in getattr(resource, collection_name, []) or []:
+                        status = getattr(asset, "status", None)
+                        if status in (GenerationStatus.PENDING, GenerationStatus.PENDING.value) and self._asset_has_uploaded_image(asset):
+                            asset.status = GenerationStatus.COMPLETED
+                            changed = True
+            return changed
+
+        if repair_assets(self.scripts):
+            self._save_data()
+        if repair_assets(self.series_store):
+            self._save_series_data()
+        if repair_assets(self.library_store):
+            self._save_library_data()
 
     def create_project(
         self,
@@ -1365,6 +1428,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.image_url = image_url
             
             logger.info(f"Added uploaded variant {new_variant.id} to {asset_type} {asset_id}")
+
+        # An uploaded, selected reference is already a usable asset.  Keep the
+        # generation status in sync with the canonical image container so
+        # callers do not require a redundant AI generation before treating the
+        # upload as ready.  This applies equally to project, series, and global
+        # assets because `_find_asset_with_source` has already resolved the
+        # owning container above.
+        target_asset.status = GenerationStatus.COMPLETED
         
         self._save_after_asset_mutation(source)
         return script
