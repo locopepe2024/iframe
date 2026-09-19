@@ -143,6 +143,9 @@ export interface StoryboardFrame {
     image_asset?: ImageAsset;
     rendered_image_url?: string;
     rendered_image_asset?: ImageAsset;
+    style_prompt_override?: string | null;
+    lighting_override?: string | null;
+    negative_prompt_override?: string | null;
     status?: string;
     locked?: boolean;
     workbench_generate_audio?: boolean | null;

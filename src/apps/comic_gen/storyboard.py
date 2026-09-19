@@ -39,7 +39,19 @@ class StoryboardGenerator:
             
         return script
 
-    def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None, batch_size: int = 1, size: str = None, model_name: str = None) -> StoryboardFrame:
+    def generate_frame(
+        self,
+        frame: StoryboardFrame,
+        characters: List[Character],
+        scene: Scene,
+        ref_image_path: str = None,
+        ref_image_paths: List[str] = None,
+        prompt: str = None,
+        batch_size: int = 1,
+        size: str = None,
+        model_name: str = None,
+        negative_prompt: str = None,
+    ) -> StoryboardFrame:
         """Generates a storyboard frame image."""
         frame.status = GenerationStatus.PROCESSING
         
@@ -179,7 +191,14 @@ class StoryboardGenerator:
                 # Use I2I if reference images are available
                 # Pass collected asset paths to model
                 logger.info(f"[Storyboard] Calling model.generate with {len(asset_ref_paths)} reference images using model {model_name or 'default'}")
-                self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths, size=effective_size, model_name=model_name)
+                self.model.generate(
+                    prompt,
+                    output_path,
+                    ref_image_paths=asset_ref_paths,
+                    size=effective_size,
+                    model_name=model_name,
+                    negative_prompt=negative_prompt,
+                )
                 
                 # Store relative path for frontend serving
                 rel_path = os.path.relpath(output_path, "output")

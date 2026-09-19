@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
 from enum import Enum
+import json
 import time
 from pydantic import BaseModel, Field
 
@@ -423,6 +424,21 @@ class StoryboardFrame(BaseModel):
     assembled_prompt: Optional[str] = Field(None, description="由 visual_description + 结构化字段自动拼装的最终 prompt（只读）")
 
     # === Prompts ===
+    # Per-shot art-direction overrides.  Empty values inherit the project's
+    # global style configuration; populated values replace the corresponding
+    # global positive/negative prompt or add scene-specific lighting.
+    style_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头风格覆盖；为空时继承项目全局正向风格提示词",
+    )
+    lighting_override: Optional[str] = Field(
+        None,
+        description="本镜头光线覆盖；为空时使用全局风格的场景自适应光线",
+    )
+    negative_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头负向约束覆盖；为空时继承项目全局负向提示词",
+    )
     image_prompt: Optional[str] = Field(None, description="Optimized prompt for T2I/I2I (Legacy)")
     image_prompt_cn: Optional[str] = Field(None, description="Polished Chinese prompt for user confirmation")
     image_prompt_en: Optional[str] = Field(None, description="Polished English prompt for Wan model generation")
@@ -561,6 +577,93 @@ class DirectorProfile(BaseModel):
     revision: int = Field(1, ge=1)
     content_hash: str = ""
     confirmed_at: float = 0.0
+
+
+_DIRECTOR_TEXT_FIELDS = (
+    "emotional_arc",
+    "pacing",
+    "visual_language",
+    "performance_direction",
+    "dialogue_direction",
+    "sound_direction",
+)
+_DIRECTOR_OBJECT_LIST_FIELDS = (
+    "timeline",
+    "relationships",
+    "key_events",
+    "sample_plan",
+)
+_DIRECTOR_STRING_LIST_FIELDS = (
+    "continuity_constraints",
+    "prohibitions",
+    "unresolved_questions",
+)
+
+
+def _director_value_as_text(value: Any) -> str:
+    """Represent a JSON value as readable text without dropping structure."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        # Drafts normally come from JSON, but keep validation deterministic if
+        # an in-process caller passes a non-JSON value.
+        return str(value)
+
+
+def _normalize_director_object_list(value: Any) -> Any:
+    """Keep object-list shape while preserving scalar model output as data."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    normalized = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append(item)
+        else:
+            normalized.append({"value": _director_value_as_text(item)})
+    return normalized
+
+
+def _normalize_director_string_list(value: Any) -> Any:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    return [_director_value_as_text(item) for item in value]
+
+
+def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize an AI/user draft at the Director profile boundary.
+
+    The model prompt asks for six natural-language fields, but some model
+    responses express those fields as nested JSON objects or arrays.  Keeping
+    their JSON representation in the string fields makes the draft valid for
+    the existing schema without discarding details.  Incompatible top-level
+    shapes are intentionally left untouched so the caller can return a useful
+    validation error instead of silently accepting malformed input.
+    """
+    normalized = dict(draft)
+    for field in _DIRECTOR_TEXT_FIELDS:
+        if field in normalized:
+            normalized[field] = _director_value_as_text(normalized[field])
+
+    if "setting" in normalized and normalized["setting"] is None:
+        normalized["setting"] = {}
+
+    for field in _DIRECTOR_OBJECT_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+
+    for field in _DIRECTOR_STRING_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_string_list(normalized[field])
+
+    return normalized
 
 
 class ArtDirection(BaseModel):

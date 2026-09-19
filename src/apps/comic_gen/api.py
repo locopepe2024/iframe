@@ -23,7 +23,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Dict, List, Any, Tuple, Literal
 import asyncio
 import time
@@ -51,6 +51,7 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
@@ -3684,6 +3685,9 @@ class UpdateFrameRequest(BaseModel):
     shot_size: Optional[str] = None
     camera_movement_description: Optional[str] = None
     transition_hint: Optional[str] = None
+    style_prompt_override: Optional[str] = None
+    lighting_override: Optional[str] = None
+    negative_prompt_override: Optional[str] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
 def update_frame(script_id: str, request: UpdateFrameRequest):
@@ -3702,6 +3706,9 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             shot_size=request.shot_size,
             camera_movement_description=request.camera_movement_description,
             transition_hint=request.transition_hint,
+            style_prompt_override=request.style_prompt_override,
+            lighting_override=request.lighting_override,
+            negative_prompt_override=request.negative_prompt_override,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -3776,6 +3783,7 @@ class RenderFrameRequest(BaseModel):
     frame_id: str
     composition_data: Optional[Dict[str, Any]] = None
     prompt: str
+    negative_prompt: Optional[str] = None
     batch_size: int = 1
 
 
@@ -3790,7 +3798,8 @@ def render_frame(script_id: str, request: RenderFrameRequest):
             request.frame_id,
             request.composition_data,
             request.prompt,
-            request.batch_size
+            request.batch_size,
+            request.negative_prompt,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -4069,6 +4078,23 @@ class DirectorProfileApplyRequest(BaseModel):
     draft: Dict[str, Any]
 
 
+def _validated_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize and validate a visible Director draft before queueing work."""
+    try:
+        normalized = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized)
+    except ValidationError as exc:
+        details = []
+        for error in exc.errors():
+            location = ".".join(str(item) for item in error.get("loc", ()))
+            details.append(f"{location}: {error.get('msg', 'invalid value')}")
+        message = "; ".join(details) or "invalid profile shape"
+        raise HTTPException(422, f"Invalid director profile draft: {message}") from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"Invalid director profile draft: {exc}") from exc
+    return normalized
+
+
 def _director_profile_fingerprint(script_id: str, draft=None, instructions=None) -> str:
     script, entities, style = pipeline.director_analysis_context(script_id)
     llm = pipeline.script_processor.llm
@@ -4099,12 +4125,12 @@ def start_director_profile_refinement(
     instructions = [item.strip() for item in request.instructions if item.strip()]
     if not instructions or any(len(item) > 2000 for item in instructions):
         raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
-    DirectorProfile(**request.draft)
-    fingerprint = _director_profile_fingerprint(script_id, request.draft, instructions)
+    draft = _validated_director_profile_draft(request.draft)
+    fingerprint = _director_profile_fingerprint(script_id, draft, instructions)
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {"profile": pipeline.refine_director_profile(
-            script_id, request.draft, instructions
+            script_id, draft, instructions
         )},
     )
 
@@ -4125,8 +4151,9 @@ def apply_director_profile(
     user: UserContext = Depends(require_studio_user),
 ):
     del user
+    draft = _validated_director_profile_draft(request.draft)
     try:
-        return signed_response(pipeline.apply_director_profile(script_id, request.draft))
+        return signed_response(pipeline.apply_director_profile(script_id, draft))
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 

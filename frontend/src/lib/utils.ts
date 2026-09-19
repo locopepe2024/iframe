@@ -42,8 +42,18 @@ export function getAssetUrlWithTimestamp(path: string | null | undefined, timest
 }
 
 export function extractErrorDetail(error: any, fallback = "未知错误"): string {
-    return error?.response?.data?.detail
-        || error?.response?.data?.message
-        || error?.message
-        || fallback;
+    const detail = error?.response?.data?.detail || error?.response?.data?.message;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+        const messages = detail.map(item => {
+            if (typeof item === "string") return item;
+            if (item && typeof item.msg === "string") return item.msg;
+            try { return JSON.stringify(item); } catch { return String(item); }
+        }).filter(Boolean);
+        if (messages.length) return messages.join("; ");
+    }
+    if (detail !== undefined && detail !== null) {
+        try { return JSON.stringify(detail); } catch { return String(detail); }
+    }
+    return error?.message || fallback;
 }

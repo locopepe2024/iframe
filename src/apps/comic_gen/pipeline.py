@@ -9,7 +9,20 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ArtDirection, DirectorProfile, GlobalAssetLibrary
+from .models import (
+    Script,
+    GenerationStatus,
+    VideoTask,
+    Character,
+    Scene,
+    StoryboardFrame,
+    Series,
+    PromptConfig,
+    ArtDirection,
+    DirectorProfile,
+    GlobalAssetLibrary,
+    normalize_director_profile_draft,
+)
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -1421,20 +1434,31 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
-        return self.script_processor.analyze_director_profile(script.original_text, entities, style)
+        draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
+        normalized = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized)
+        return normalized
 
     def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
-        return self.script_processor.refine_director_profile(
-            script.original_text, entities, style, draft, instructions
+        normalized_draft = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized_draft)
+        revised = self.script_processor.refine_director_profile(
+            script.original_text, entities, style, normalized_draft, instructions
         )
+        normalized_result = normalize_director_profile_draft(revised)
+        DirectorProfile(**normalized_result)
+        return normalized_result
 
     def apply_director_profile(self, script_id: str, draft: Dict[str, Any]) -> Script:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-        clean = DirectorProfile(**draft).model_dump(exclude={"revision", "content_hash", "confirmed_at"})
+        normalized = normalize_director_profile_draft(draft)
+        clean = DirectorProfile(**normalized).model_dump(
+            exclude={"revision", "content_hash", "confirmed_at"}
+        )
         content_hash = hashlib.sha256(json.dumps(
             clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
@@ -1549,11 +1573,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             character_ids = []
             for char_name in char_ref_names:
                 cn = char_name.strip().lower()
-                for char in all_characters:
-                    cname = char.name.strip().lower()
-                    if cname == cn or cn in cname or cname in cn:
-                        character_ids.append(char.id)
-                        break
+                # Prefer an exact temporal/identity variant match.  A base
+                # name such as "周涵" is contained in "周涵（大学时期）";
+                # checking contains in list order first would silently bind a
+                # university shot to the base character's design.
+                matched = next(
+                    (char for char in all_characters if char.name.strip().lower() == cn),
+                    None,
+                )
+                if not matched:
+                    matched = next(
+                        (
+                            char
+                            for char in all_characters
+                            if cn in char.name.strip().lower()
+                            or char.name.strip().lower() in cn
+                        ),
+                        None,
+                    )
+                if matched:
+                    character_ids.append(matched.id)
 
             # Resolve prop IDs by names (case-insensitive, bidirectional contains)
             prop_ref_names = frame_data.get("prop_ref_names", [])
@@ -1877,6 +1916,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
         if kwargs.get('transition_hint') is not None:
             frame.transition_hint = kwargs['transition_hint']
+        if kwargs.get('style_prompt_override') is not None:
+            frame.style_prompt_override = kwargs['style_prompt_override']
+        if kwargs.get('lighting_override') is not None:
+            frame.lighting_override = kwargs['lighting_override']
+        if kwargs.get('negative_prompt_override') is not None:
+            frame.negative_prompt_override = kwargs['negative_prompt_override']
         
         self._save_data()
         return script
@@ -2130,7 +2175,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_storyboard_render(self, script_id: str, frame_id: str, composition_data: Optional[Dict[str, Any]], prompt: str, batch_size: int = 1) -> Script:
+    def generate_storyboard_render(
+        self,
+        script_id: str,
+        frame_id: str,
+        composition_data: Optional[Dict[str, Any]],
+        prompt: str,
+        batch_size: int = 1,
+        negative_prompt: Optional[str] = None,
+    ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
         if not script:
@@ -2214,6 +2267,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
                 prompt=final_prompt,
+                negative_prompt=negative_prompt,
                 batch_size=batch_size,
                 size=effective_size,
                 model_name=i2i_model

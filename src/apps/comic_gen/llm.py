@@ -52,6 +52,26 @@ class PolishError(Exception):
         super().__init__(f"[{reason}] {message_en}")
 
 
+_CHARACTER_VARIANT_RE = re.compile(
+    r"^\s*(?P<base>.+?)\s*[\(（](?P<variant>[^()（）]+)[\)）]\s*$"
+)
+
+
+def _character_variant_base_name(name: str) -> Optional[str]:
+    """Return the shared persona name from an explicitly labelled variant.
+
+    LLM output commonly uses either ASCII parentheses (``Name (young)``) or
+    full-width Chinese parentheses (``名字（大学时期）``).  Both forms are
+    presentation-compatible, so they must resolve to the same base character.
+    """
+    match = _CHARACTER_VARIANT_RE.match((name or "").strip())
+    if not match:
+        return None
+    base = match.group("base").strip()
+    variant = match.group("variant").strip()
+    return base if base and variant else None
+
+
 def _is_echo(result_en: str, draft_en: str, threshold: float = 0.95) -> bool:
     """判断 LLM 输出是否与原文几乎相同（模型未做修改）。
     threshold 0.95 经验值：低于会误伤"做了轻微改动"的合理结果；
@@ -243,18 +263,21 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
 重要：
 - 所有描述性内容（名称、描述）必须使用中文（简体中文）。
 - 只提取角色（characters）、场景（scenes）和道具（props）。
+- 角色的 description 同时记录稳定的视觉特征和稳定的性格信息，使用“外观：”与“性格：”分隔。
+- 肤色、肤质、体型和性格只能依据原文明确描述，或由多处一致的行为、对白和叙述直接支持；未提及时省略，不要根据姓名、国籍、身份或单一情绪自行推断。
+- 同一人物在时间、年龄、身份、服装或外形发生显著变化时，必须为每个视觉状态建立独立角色条目；名称使用“主名（阶段/身份）”，例如“周涵（大学时期）”“周涵（职场时期）”。这些条目仍属于同一人物，但可以分别生成和绑定不同的角色设计。
 
 严格按以下结构输出合法 JSON：
 {
     "characters": [
         {
             "id": "char_001",
-            "name": "角色名（如 '叶墨'、'叶墨 (古装)'）",
-            "description": "外观描述（发型、眼睛、体型、显著特征）。不要包含具体的面部表情（如 悲伤、愤怒）或临时动作（如 奔跑、哭泣）。聚焦于长期固定的外形特征。",
+            "name": "角色名（如 '叶墨'、'叶墨（古装）'、'周涵（大学时期）'）",
+            "description": "角色档案，格式建议为‘外观：肤色/肤质、脸型、发型、眼睛、体型、显著特征；性格：稳定性格关键词’。不要包含具体的面部表情（如 悲伤、愤怒）、单场景情绪、临时动作或姿势。未被文本说明的内容省略。",
             "age": "年龄估计（如 '25'）",
             "gender": "性别",
-            "clothing": "默认服装描述。若某角色服装有显著变化（如 从便装换成婚纱），为每个服装变体单独创建一个角色条目，并取一个有区分度的名字（如 '名字 (服装)'）。",
-            "visual_weight": 5  // 1-5 重要度
+            "clothing": "该时间/身份变体的默认服装描述。若角色在不同时间、年龄、身份或服装下会有显著视觉变化，为每个变体单独创建角色条目，并保持相同主名加括号标签（如 '周涵（大学时期）'、'周涵（职场时期）'）。",
+            "visual_weight": 5
         }
     ],
     "scenes": [
@@ -324,6 +347,7 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 1. **视觉节拍拆解**: 一行包含多个动作时，拆为多帧。每帧仅含一个主要动作。
 2. **角色可见性**: character_ref_names 只列画面中可见的角色。
 3. **实体约束**: 场景名、角色名、道具名严格匹配已提取实体。
+   同一人物存在多个时间/身份/服装变体时，必须使用完整变体名（例如“周涵（大学时期）”），不要简化为基础名“周涵”；这样每个分镜才能绑定正确的角色设计。
 4. **语言**: 简体中文。
 5. **景别枚举**: 必须从以下选项中选择: 大特写 | 特写 | 近景 | 中景 | 全景 | 远景 | 大远景
 6. **角度枚举**: 必须从以下选项中选择: 平视 | 俯视 | 仰视 | 鸟瞰 | 蚁视 | 过肩 | 荷兰角 | 主观视角
@@ -497,6 +521,7 @@ class ScriptProcessor:
                 id=char_uuid,
                 name=char_data.get("name", "Unknown"),
                 description=char_data.get("description", ""),
+                persona=char_data.get("persona", ""),
                 age=char_data.get("age"),
                 gender=char_data.get("gender"),
                 clothing=char_data.get("clothing"), # Might be merged into description in new prompt, but keeping for compatibility
@@ -506,12 +531,21 @@ class ScriptProcessor:
             characters.append(char)
             name_to_char[char.name] = char
             
-        # Pass 2: Link variants to base characters (Logic remains valid even with new prompt if naming convention holds)
+        # Pass 2: Link temporal / identity variants to their shared persona.
+        # Models use both ASCII and full-width parentheses in Chinese output,
+        # so normalize both forms before assigning the base-character link.
         for char in characters:
-            if "(" in char.name and ")" in char.name:
-                base_name = char.name.split("(")[0].strip()
-                if base_name in name_to_char and name_to_char[base_name].id != char.id:
-                    char.base_character_id = name_to_char[base_name].id
+            base_name = _character_variant_base_name(char.name)
+            if not base_name:
+                continue
+            base_character = name_to_char.get(base_name)
+            if not base_character or base_character.id == char.id:
+                continue
+            char.base_character_id = base_character.id
+            if not char.persona:
+                char.persona = base_name
+            if not base_character.persona:
+                base_character.persona = base_name
             
         scenes = []
         for scene_data in data.get("scenes", []):

@@ -5,7 +5,16 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from src.apps.comic_gen.models import ArtDirection, Character, DirectorProfile, Script, Series
+import pytest
+
+from src.apps.comic_gen.models import (
+    ArtDirection,
+    Character,
+    DirectorProfile,
+    Script,
+    Series,
+    normalize_director_profile_draft,
+)
 from src.apps.identity import UserContext
 
 
@@ -30,6 +39,20 @@ def profile_payload():
         "unresolved_questions": ["故事准确年代"],
         "sample_plan": [{"seconds": "0-8", "scene": "21", "purpose": "离校"}],
     }
+
+
+def structured_profile_payload():
+    """Shape observed from the director model before draft normalization."""
+    payload = profile_payload()
+    payload.update({
+        "emotional_arc": {"phase": "分开后", "feeling": "像熟悉的陌生人"},
+        "pacing": {"before": "舒缓", "after": "克制疏离"},
+        "visual_language": {"palette": "冷灰", "camera": "固定长镜头"},
+        "performance_direction": {"principle": "减少外放情绪"},
+        "dialogue_direction": {"principle": "保留停顿和未说出口的话"},
+        "sound_direction": {"foreground": "雨声", "silence": "电话接通前的静默"},
+    })
+    return payload
 
 
 def make_pipeline():
@@ -78,6 +101,33 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "距离→压力→沟通失效→关系消耗" in prompt
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
     assert result["setting"]["geography"] == "中国大学校园与北京"
+
+
+def test_director_preview_normalizes_structured_text_fields_without_losing_content():
+    pipeline, _ = make_pipeline()
+    pipeline.script_processor.analyze_director_profile.return_value = structured_profile_payload()
+
+    result = pipeline.preview_director_profile("film")
+
+    assert isinstance(result["emotional_arc"], str)
+    assert "熟悉的陌生人" in result["emotional_arc"]
+    assert "冷灰" in result["visual_language"]
+    DirectorProfile(**result)
+
+
+def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
+    pipeline, _ = make_pipeline()
+    pipeline.script_processor.refine_director_profile.return_value = structured_profile_payload()
+    draft = structured_profile_payload()
+
+    result = pipeline.refine_director_profile("film", draft, ["增加分开后的陌路人感觉"])
+
+    sent_draft = pipeline.script_processor.refine_director_profile.call_args.args[3]
+    assert isinstance(sent_draft["emotional_arc"], str)
+    assert "熟悉的陌生人" in sent_draft["emotional_arc"]
+    assert isinstance(result["sound_direction"], str)
+    assert "电话接通前的静默" in result["sound_direction"]
+    DirectorProfile(**result)
 
 
 def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_review():
@@ -224,3 +274,76 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
 
     assert revised["status"] == "completed"
     assert captured["instructions"] == ["保留中国背景", "强调未接来电"]
+
+
+def test_director_refinement_accepts_structured_text_fields_and_returns_normalized_result(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.extraction_jobs import ExtractionJobs
+
+    source = Script(id="film", title="Film", original_text="source", created_at=1, updated_at=1,
+                    owner_profile_id="owner")
+    pipeline = SimpleNamespace(
+        scripts={"film": source},
+        script_processor=SimpleNamespace(llm=SimpleNamespace(
+            provider="openai", _get_default_model=lambda: "test",
+        )),
+        director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
+        refine_director_profile=lambda project, draft, instructions: normalize_director_profile_draft(
+            structured_profile_payload()
+        ),
+    )
+    owner = UserContext("user", "owner", "", "")
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "director-jobs.sqlite3", executor=executor)
+        monkeypatch.setattr(api, "pipeline", pipeline)
+        monkeypatch.setattr(api, "extraction_jobs", jobs)
+        revision = api.start_director_profile_refinement(
+            "film",
+            api.DirectorProfileRefineRequest(
+                draft=structured_profile_payload(), instructions=["增加分开后的陌路人的感觉"],
+            ),
+            owner,
+        )
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            revised = jobs.get("owner", "film", revision["id"])
+            if revised["status"] != "running":
+                break
+            time.sleep(0.01)
+
+    assert revised["status"] == "completed"
+    assert isinstance(revised["result"]["profile"]["emotional_arc"], str)
+    assert "陌生人" in revised["result"]["profile"]["emotional_arc"]
+
+
+def test_director_refinement_rejects_invalid_draft_with_422(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.extraction_jobs import ExtractionJobs
+
+    source = Script(id="film", title="Film", original_text="source", created_at=1, updated_at=1,
+                    owner_profile_id="owner")
+    pipeline = SimpleNamespace(
+        scripts={"film": source},
+        script_processor=SimpleNamespace(llm=SimpleNamespace(
+            provider="openai", _get_default_model=lambda: "test",
+        )),
+        director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
+    )
+    owner = UserContext("user", "owner", "", "")
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "director-jobs.sqlite3", executor=executor)
+        monkeypatch.setattr(api, "pipeline", pipeline)
+        monkeypatch.setattr(api, "extraction_jobs", jobs)
+        with pytest.raises(HTTPException) as raised:
+            api.start_director_profile_refinement(
+                "film",
+                api.DirectorProfileRefineRequest(
+                    draft={**profile_payload(), "setting": "not an object"}, instructions=["保留内容"],
+                ),
+                owner,
+            )
+
+    assert raised.value.status_code == 422

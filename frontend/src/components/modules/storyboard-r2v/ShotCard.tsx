@@ -21,6 +21,8 @@ import {
     PinOff,
     Play,
     Star,
+    Palette,
+    Sun,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import AssetChipBar from "./AssetChipBar";
@@ -101,6 +103,9 @@ export interface ShotNode {
     shotSize?: string | null;
     cameraAngle?: string | null;
     transitionHint?: string | null;
+    stylePromptOverride?: string | null;
+    lightingOverride?: string | null;
+    negativePromptOverride?: string | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -125,6 +130,7 @@ interface ShotCardProps {
     props: any[];
     onUpdatePrompt: (prompt: string) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
+    globalStylePrompt?: string;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
     onDelete: () => void;
@@ -181,6 +187,7 @@ export default function ShotCard({
     props,
     onUpdatePrompt,
     onUpdateField,
+    globalStylePrompt = "",
     onGenerateT2I,
     onGenerateVideo,
     onDelete,
@@ -212,6 +219,9 @@ export default function ShotCard({
     // discards the modal's draft without touching parent state.
     const [expandOpen, setExpandOpen] = useState(false);
     const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
+    const [styleOpen, setStyleOpen] = useState(
+        Boolean(shot.stylePromptOverride || shot.lightingOverride || shot.negativePromptOverride),
+    );
     // currentProjectId — needed by PolishPanel to look up the
     // project's PromptConfig override server-side.
     const currentProjectId = useProjectStore((state) => state.currentProject?.id);
@@ -283,8 +293,9 @@ export default function ShotCard({
         return out;
     }, [shot.prompt, characters])();
 
-    const assembledPromptPreview = useMemo(() => buildAssembledPrompt(shot), [
+    const assembledPromptPreview = useMemo(() => buildAssembledPrompt(shot, false, globalStylePrompt), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
+        shot.stylePromptOverride, shot.lightingOverride, globalStylePrompt,
     ]);
 
     useEffect(() => {
@@ -828,6 +839,68 @@ export default function ShotCard({
                             />
                         </div>
 
+                        {/* Per-shot art direction. Progressive disclosure keeps
+                            the card calm while making the inheritance boundary
+                            explicit when a scene needs different lighting. */}
+                        <div className="mt-1 rounded-lg border border-glass-border bg-glass/20">
+                            <button
+                                type="button"
+                                onClick={() => setStyleOpen((open) => !open)}
+                                aria-expanded={styleOpen}
+                                className="flex min-h-9 w-full items-center gap-2 px-3 text-left text-[0.6875rem] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                            >
+                                <Palette size={13} className="text-primary/80" aria-hidden="true" />
+                                <span className="font-medium">{t("shotStyleSection")}</span>
+                                {(shot.stylePromptOverride || shot.lightingOverride || shot.negativePromptOverride) ? (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary" title="已覆盖全局设置" />
+                                ) : null}
+                                <span className="ml-auto text-text-muted">{styleOpen ? t("shotStyleCollapse") : t("shotStyleInherit")}</span>
+                            </button>
+                            {styleOpen ? (
+                                <div className="space-y-3 border-t border-border-subtle px-3 py-3">
+                                    <label className="block">
+                                        <span className="mb-1 flex items-center gap-1.5 text-[0.625rem] font-medium uppercase tracking-[0.08em] text-text-muted">
+                                            <Palette size={11} aria-hidden="true" /> {t("shotStyleOverride")}
+                                        </span>
+                                        <textarea
+                                            value={shot.stylePromptOverride ?? ""}
+                                            onChange={(event) => onUpdateField("stylePromptOverride", event.target.value)}
+                                            placeholder={globalStylePrompt || t("shotStylePlaceholder")}
+                                            rows={2}
+                                            className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 flex items-center gap-1.5 text-[0.625rem] font-medium uppercase tracking-[0.08em] text-text-muted">
+                                            <Sun size={11} aria-hidden="true" /> {t("shotLightingOverride")}
+                                        </span>
+                                        <textarea
+                                            value={shot.lightingOverride ?? ""}
+                                            onChange={(event) => onUpdateField("lightingOverride", event.target.value)}
+                                            placeholder={t("shotLightingPlaceholder")}
+                                            rows={2}
+                                            className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 block text-[0.625rem] font-medium uppercase tracking-[0.08em] text-text-muted">
+                                            {t("shotNegativeOverride")}
+                                        </span>
+                                        <textarea
+                                            value={shot.negativePromptOverride ?? ""}
+                                            onChange={(event) => onUpdateField("negativePromptOverride", event.target.value)}
+                                            placeholder={t("shotNegativePlaceholder")}
+                                            rows={2}
+                                            className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                        />
+                                    </label>
+                                    <p className="text-[0.625rem] leading-relaxed text-text-muted">
+                                        {t("shotStyleHelper")}
+                                    </p>
+                                </div>
+                            ) : null}
+                        </div>
+
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (
                             <div className="pl-3.5 border-l-2 border-accent/40">
@@ -841,7 +914,7 @@ export default function ShotCard({
                         )}
 
                         {/* Assembled prompt preview (read-only, collapsible) — uses buildAssembledPrompt for real-time computation */}
-                        {(shot.prompt || shot.shotSize || shot.cameraMovementStructured) && (
+                        {(shot.prompt || shot.shotSize || shot.cameraMovementStructured || shot.stylePromptOverride || shot.lightingOverride) && (
                             <div className="mt-1">
                                 <button
                                     type="button"
