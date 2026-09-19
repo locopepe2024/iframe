@@ -42,7 +42,7 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
         </NextIntlClientProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Analyze script" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
     await waitFor(() => expect(
         (screen.getByLabelText("Director profile draft") as HTMLTextAreaElement).value,
     ).toContain("Chinese university and Beijing"));
