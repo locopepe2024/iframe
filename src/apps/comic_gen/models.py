@@ -423,6 +423,21 @@ class StoryboardFrame(BaseModel):
     assembled_prompt: Optional[str] = Field(None, description="由 visual_description + 结构化字段自动拼装的最终 prompt（只读）")
 
     # === Prompts ===
+    # Per-shot art-direction overrides.  Empty values inherit the project's
+    # global style configuration; populated values replace the corresponding
+    # global positive/negative prompt or add scene-specific lighting.
+    style_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头风格覆盖；为空时继承项目全局正向风格提示词",
+    )
+    lighting_override: Optional[str] = Field(
+        None,
+        description="本镜头光线覆盖；为空时使用全局风格的场景自适应光线",
+    )
+    negative_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头负向约束覆盖；为空时继承项目全局负向提示词",
+    )
     image_prompt: Optional[str] = Field(None, description="Optimized prompt for T2I/I2I (Legacy)")
     image_prompt_cn: Optional[str] = Field(None, description="Polished Chinese prompt for user confirmation")
     image_prompt_en: Optional[str] = Field(None, description="Polished English prompt for Wan model generation")

@@ -3684,6 +3684,9 @@ class UpdateFrameRequest(BaseModel):
     shot_size: Optional[str] = None
     camera_movement_description: Optional[str] = None
     transition_hint: Optional[str] = None
+    style_prompt_override: Optional[str] = None
+    lighting_override: Optional[str] = None
+    negative_prompt_override: Optional[str] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
 def update_frame(script_id: str, request: UpdateFrameRequest):
@@ -3702,6 +3705,9 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             shot_size=request.shot_size,
             camera_movement_description=request.camera_movement_description,
             transition_hint=request.transition_hint,
+            style_prompt_override=request.style_prompt_override,
+            lighting_override=request.lighting_override,
+            negative_prompt_override=request.negative_prompt_override,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -3776,6 +3782,7 @@ class RenderFrameRequest(BaseModel):
     frame_id: str
     composition_data: Optional[Dict[str, Any]] = None
     prompt: str
+    negative_prompt: Optional[str] = None
     batch_size: int = 1
 
 
@@ -3790,7 +3797,8 @@ def render_frame(script_id: str, request: RenderFrameRequest):
             request.frame_id,
             request.composition_data,
             request.prompt,
-            request.batch_size
+            request.batch_size,
+            request.negative_prompt,
         )
         return signed_response(updated_script)
     except ValueError as e:

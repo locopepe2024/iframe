@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { api, API_URL } from "@/lib/api";
 import { VariantSelector } from "../common/VariantSelector";
 import { useProjectStore } from "@/store/projectStore";
+import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 
 interface StoryboardFrameEditorProps {
     frame: any;
@@ -25,12 +26,35 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     }, [currentProject?.frames, initialFrame.id, initialFrame]);
 
     const [prompt, setPrompt] = useState(frame.image_prompt || frame.action_description || "");
+    const [stylePromptOverride, setStylePromptOverride] = useState(frame.style_prompt_override || "");
+    const [lightingOverride, setLightingOverride] = useState(frame.lighting_override || "");
+    const [negativePromptOverride, setNegativePromptOverride] = useState(frame.negative_prompt_override || "");
     const [isGenerating, setIsGenerating] = useState(false);
 
     // Sync prompt when frame changes
     useEffect(() => {
         setPrompt(frame.image_prompt || frame.action_description || "");
-    }, [frame.id, frame.image_prompt, frame.action_description]);
+        setStylePromptOverride(frame.style_prompt_override || "");
+        setLightingOverride(frame.lighting_override || "");
+        setNegativePromptOverride(frame.negative_prompt_override || "");
+    }, [
+        frame.id,
+        frame.image_prompt,
+        frame.action_description,
+        frame.style_prompt_override,
+        frame.lighting_override,
+        frame.negative_prompt_override,
+    ]);
+
+    const saveFrameStyleField = async (field: "style_prompt_override" | "lighting_override" | "negative_prompt_override", value: string) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.updateFrame(currentProject.id, frame.id, { [field]: value });
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to save frame style override:", error);
+        }
+    };
 
     const handleGenerate = async (batchSize: number) => {
         if (!currentProject) return;
@@ -42,12 +66,19 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
             // The api.renderFrame expects compositionData.
             // If we don't pass it, pipeline uses existing.
 
+            const globalStylePrompt = currentProject.art_direction?.style_config?.positive_prompt || "";
+            const globalNegativePrompt = currentProject.art_direction?.style_config?.negative_prompt || "";
+            const effectivePrompt = [
+                resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride),
+                prompt,
+            ].filter(Boolean).join(" . ");
             const updatedProject = await api.renderFrame(
                 currentProject.id,
                 frame.id,
                 null, // Use existing composition data
-                prompt,
-                batchSize
+                effectivePrompt,
+                batchSize,
+                resolveNegativePrompt(globalNegativePrompt, "", negativePromptOverride),
             );
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
@@ -150,6 +181,42 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                             <p className="text-xs text-text-muted mt-2">
                                 {ts("promptHint")}
                             </p>
+                            <div className="mt-4 space-y-3 border-t border-border-subtle pt-4">
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-text-secondary">{ts("shotStyleOverride")}</label>
+                                    <textarea
+                                        value={stylePromptOverride}
+                                        onChange={(event) => setStylePromptOverride(event.target.value)}
+                                        onBlur={(event) => saveFrameStyleField("style_prompt_override", event.target.value)}
+                                        placeholder={currentProject?.art_direction?.style_config?.positive_prompt || ts("shotStylePlaceholder")}
+                                        rows={2}
+                                        className="w-full resize-y rounded-lg border border-glass-border bg-surface p-2.5 text-xs text-text-secondary focus:border-primary/50 focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-text-secondary">{ts("shotLightingOverride")}</label>
+                                    <textarea
+                                        value={lightingOverride}
+                                        onChange={(event) => setLightingOverride(event.target.value)}
+                                        onBlur={(event) => saveFrameStyleField("lighting_override", event.target.value)}
+                                        placeholder={ts("shotLightingPlaceholder")}
+                                        rows={2}
+                                        className="w-full resize-y rounded-lg border border-glass-border bg-surface p-2.5 text-xs text-text-secondary focus:border-primary/50 focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-text-secondary">{ts("shotNegativeOverride")}</label>
+                                    <textarea
+                                        value={negativePromptOverride}
+                                        onChange={(event) => setNegativePromptOverride(event.target.value)}
+                                        onBlur={(event) => saveFrameStyleField("negative_prompt_override", event.target.value)}
+                                        placeholder={ts("shotNegativePlaceholder")}
+                                        rows={2}
+                                        className="w-full resize-y rounded-lg border border-glass-border bg-surface p-2.5 text-xs text-text-secondary focus:border-primary/50 focus:outline-none"
+                                    />
+                                </div>
+                                <p className="text-[0.6875rem] leading-relaxed text-text-muted">{ts("shotStyleHelper")}</p>
+                            </div>
                         </div>
                     </div>
                 </div>

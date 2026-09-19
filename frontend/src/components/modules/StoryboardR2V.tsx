@@ -13,7 +13,10 @@ import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
 import { getR2vRouteModelId, isR2vImageBased, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
 import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
-import { buildAssembledPrompt, buildGenerationPrompt } from "./storyboard-r2v/buildAssembledPrompt";
+import {
+    buildGenerationPrompt,
+    resolveNegativePrompt,
+} from "./storyboard-r2v/buildAssembledPrompt";
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
 import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
@@ -745,6 +748,9 @@ export default function StoryboardR2V() {
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
+            if (field === "stylePromptOverride") return { ...s, stylePromptOverride: typeof value === "string" ? value : null };
+            if (field === "lightingOverride") return { ...s, lightingOverride: typeof value === "string" ? value : null };
+            if (field === "negativePromptOverride") return { ...s, negativePromptOverride: typeof value === "string" ? value : null };
             return s;
         }));
         // Debounce 3s persist to backend
@@ -760,6 +766,9 @@ export default function StoryboardR2V() {
         if (field === "cameraAngle") backendField.camera_angle = typeof value === "string" ? value : undefined;
         if (field === "cameraMovement") backendField.camera_movement_description = typeof value === "string" ? value : undefined;
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
+        if (field === "stylePromptOverride") backendField.style_prompt_override = typeof value === "string" ? value : undefined;
+        if (field === "lightingOverride") backendField.lighting_override = typeof value === "string" ? value : undefined;
+        if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
         const merged = { ...(existing?.fields ?? {}), ...backendField };
         const timer = window.setTimeout(() => {
             map.delete(shotId);
@@ -851,11 +860,6 @@ export default function StoryboardR2V() {
         return unresolved;
     }, [characters, scenes, props]);
 
-    // Strip tags from prompt for clean text
-    const cleanPrompt = (prompt: string): string => {
-        return prompt.replace(/\[character\d+:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
-    };
-
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
     const generateT2I = useCallback(async (index: number) => {
         const shot = shots[index];
@@ -866,12 +870,26 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const t2iPrompt = buildGenerationPrompt(
+                shot,
+                false,
+                videoConfig.model,
+                currentProject.art_direction?.style_config?.positive_prompt || "",
+            )
+                .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
             const result = await api.renderFrame(
                 currentProject.id,
                 shot.id,
                 {},  // compositionData (empty for now)
-                cleanPrompt(shot.prompt),
-                1    // batchSize
+                t2iPrompt,
+                1,   // batchSize
+                resolveNegativePrompt(
+                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    "",
+                    shot.negativePromptOverride,
+                ),
             );
 
             if (result?.task_id || result?.id) {
@@ -931,10 +949,20 @@ export default function StoryboardR2V() {
                     routeModelId,
                     storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
                 );
-                const basePromptText = buildGenerationPrompt(shot, generateAudio, routeModelId);
+                const basePromptText = buildGenerationPrompt(
+                    shot,
+                    generateAudio,
+                    routeModelId,
+                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                );
                 const promptText = routeModelId.toLowerCase().includes("minimax-h3")
                     ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
                     : basePromptText;
+                const negativePrompt = resolveNegativePrompt(
+                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    videoConfig.negativePrompt,
+                    shot.negativePromptOverride,
+                );
 
                 const tasks = await api.createVideoTask(
                     currentProject.id,
@@ -946,7 +974,7 @@ export default function StoryboardR2V() {
                     generateAudio,
                     "", // audioUrl
                     videoConfig.promptExtend,
-                    videoConfig.negativePrompt,
+                    negativePrompt,
                     1, // batchSize
                     routeModelId,  // use routed R2V model
                     shot.id, // frameId
@@ -1013,7 +1041,17 @@ export default function StoryboardR2V() {
                     videoConfig.model,
                     storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
                 );
-                const promptText = buildGenerationPrompt(shot, generateAudio, videoConfig.model);
+                const promptText = buildGenerationPrompt(
+                    shot,
+                    generateAudio,
+                    videoConfig.model,
+                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                );
+                const negativePrompt = resolveNegativePrompt(
+                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    videoConfig.negativePrompt,
+                    shot.negativePromptOverride,
+                );
                 const tasks = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
@@ -1024,7 +1062,7 @@ export default function StoryboardR2V() {
                     generateAudio,
                     "", // audioUrl
                     videoConfig.promptExtend,
-                    videoConfig.negativePrompt,
+                    negativePrompt,
                     1, // batchSize
                     videoConfig.model, // direct I2V model
                     shot.id, // frameId
@@ -1082,7 +1120,17 @@ export default function StoryboardR2V() {
             requestedModelId,
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
         );
-        const basePromptText = buildGenerationPrompt(shot, generateAudio, requestedModelId);
+        const basePromptText = buildGenerationPrompt(
+            shot,
+            generateAudio,
+            requestedModelId,
+            currentProject.art_direction?.style_config?.positive_prompt || "",
+        );
+        const effectiveNegativePrompt = resolveNegativePrompt(
+            currentProject.art_direction?.style_config?.negative_prompt || "",
+            params?.negativePrompt ?? videoConfig.negativePrompt,
+            shot.negativePromptOverride,
+        );
         const referenceSubmission = resolveShotReferences(shot);
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
@@ -1199,7 +1247,7 @@ export default function StoryboardR2V() {
                         generateAudio,
                         "",
                         params?.promptExtend ?? videoConfig.promptExtend,
-                        params?.negativePrompt ?? videoConfig.negativePrompt,
+                        effectiveNegativePrompt,
                         1,
                         routeModelId,
                         shot.id,
@@ -1234,7 +1282,7 @@ export default function StoryboardR2V() {
                     generateAudio,
                     "",
                     params?.promptExtend ?? videoConfig.promptExtend,
-                    params?.negativePrompt ?? videoConfig.negativePrompt,
+                    effectiveNegativePrompt,
                     1,
                     i2vModelId,
                     shot.id,
@@ -2034,6 +2082,7 @@ export default function StoryboardR2V() {
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}
+                            globalStylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             index={index}
                             totalShots={shots.length}
                             characters={characters}

@@ -1892,6 +1892,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
         if kwargs.get('transition_hint') is not None:
             frame.transition_hint = kwargs['transition_hint']
+        if kwargs.get('style_prompt_override') is not None:
+            frame.style_prompt_override = kwargs['style_prompt_override']
+        if kwargs.get('lighting_override') is not None:
+            frame.lighting_override = kwargs['lighting_override']
+        if kwargs.get('negative_prompt_override') is not None:
+            frame.negative_prompt_override = kwargs['negative_prompt_override']
         
         self._save_data()
         return script
@@ -2145,7 +2151,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_storyboard_render(self, script_id: str, frame_id: str, composition_data: Optional[Dict[str, Any]], prompt: str, batch_size: int = 1) -> Script:
+    def generate_storyboard_render(
+        self,
+        script_id: str,
+        frame_id: str,
+        composition_data: Optional[Dict[str, Any]],
+        prompt: str,
+        batch_size: int = 1,
+        negative_prompt: Optional[str] = None,
+    ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
         if not script:
@@ -2229,6 +2243,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
                 prompt=final_prompt,
+                negative_prompt=negative_prompt,
                 batch_size=batch_size,
                 size=effective_size,
                 model_name=i2i_model

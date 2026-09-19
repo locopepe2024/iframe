@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildGenerationPrompt } from "./buildAssembledPrompt";
+import { buildGenerationPrompt, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
 import type { ShotNode } from "./ShotCard";
 
 const shot: ShotNode = {
@@ -35,4 +35,22 @@ it("removes a stale no-dialogue conclusion before adding explicit dialogue", () 
     const result = buildGenerationPrompt(stale, true, "uniart/minimax-h3-vip");
     expect(result).not.toContain("未提供明确台词");
     expect(result).toContain(`<d>[Mandarin] ${shot.dialogueStructured!.line}</d>`);
+});
+
+it("uses a per-shot style override and scene lighting without the global daylight bias", () => {
+    const result = buildGenerationPrompt(
+        { ...shot, stylePromptOverride: "Japanese live-action film look, quiet night cinema", lightingOverride: "nighttime practical street lighting" },
+        false,
+        "wan2.7-i2v",
+        "Japanese live-action film look, soft naturalistic lighting adapted to the scene, overcast daylight when appropriate",
+    );
+    expect(result).toContain("quiet night cinema");
+    expect(result).toContain("nighttime practical street lighting");
+    expect(result).not.toContain("overcast daylight when appropriate");
+});
+
+it("lets a shot replace inherited negative constraints", () => {
+    expect(resolveNegativePrompt("global negative", "model negative", "bright daylight")).toBe("bright daylight");
+    expect(resolveNegativePrompt("global negative", "model negative")).toBe("global negative, model negative");
+    expect(resolveStylePrompt("global style", undefined, "night light")).toBe("global style, night light");
 });

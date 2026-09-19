@@ -44,7 +44,7 @@
       "description": "日剧/日本电影的自然主义胶片感，低饱和、自然光、留白和生活质感",
       "best_for": ["青春", "家庭", "校园", "旅行", "日常奇幻"],
       "avoid_for": ["过度戏剧化", "好莱坞大片感", "赛博朋克"],
-      "positive_prompt": "Japanese live-action film look, quiet naturalism, soft overcast daylight, muted color palette, gentle contrast, realistic everyday locations, subtle film grain, restrained composition, emotional stillness, lived-in details, seasonal atmosphere, understated cinematic framing",
+      "positive_prompt": "Japanese live-action film look, quiet naturalism, soft naturalistic lighting adapted to the scene, overcast daylight when appropriate, muted color palette, gentle contrast, realistic everyday locations, subtle film grain, restrained composition, emotional stillness, lived-in details, seasonal atmosphere, understated cinematic framing",
       "negative_prompt": "overly dramatic lighting, Hollywood blockbuster look, neon cyberpunk, high saturation, glossy commercial render, anime, cartoon, 3d, excessive bokeh, text, logo, watermark",
       "sample_prompt": "A young traveler stands at a small rural train station after rain, holding a brass compass, grey-blue sky, vending machine glow in the background, quiet emotional pause",
       "thumbnail": "/assets/styles/live_action__japanese_film_look__bookstore_cafe_couple__landscape.png"

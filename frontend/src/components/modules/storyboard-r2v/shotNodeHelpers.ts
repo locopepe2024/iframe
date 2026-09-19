@@ -225,6 +225,9 @@ export function frameToShotNode(
         shotSize: frame.shot_size ?? null,
         cameraAngle: frame.camera_angle ?? null,
         transitionHint: frame.transition_hint ?? null,
+        stylePromptOverride: frame.style_prompt_override ?? null,
+        lightingOverride: frame.lighting_override ?? null,
+        negativePromptOverride: frame.negative_prompt_override ?? null,
         isVideoPinned: Boolean(frame.is_video_pinned),
     });
 }
