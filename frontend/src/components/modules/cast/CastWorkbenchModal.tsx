@@ -692,7 +692,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                         </span>
                                                     )}
                                                     {isLocked && (
-                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">Soon</span>
+                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">{t("comingSoon")}</span>
                                                     )}
                                                 </button>
                                             );
@@ -744,18 +744,45 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
                                 {(kind === "character"
-                                    ? ["full body", "close-up", "three-view", "dynamic pose", "soft lighting", "studio lighting", "white background", "detailed face"]
+                                    ? [
+                                        { key: "fullBody", value: "full body" },
+                                        { key: "closeUp", value: "close-up" },
+                                        { key: "threeView", value: "three-view" },
+                                        { key: "dynamicPose", value: "dynamic pose" },
+                                        { key: "softLighting", value: "soft lighting" },
+                                        { key: "studioLighting", value: "studio lighting" },
+                                        { key: "whiteBackground", value: "white background" },
+                                        { key: "detailedFace", value: "detailed face" },
+                                    ]
                                     : kind === "scene"
-                                        ? ["wide angle", "establishing shot", "golden hour", "dramatic lighting", "aerial view", "depth of field", "atmospheric", "cinematic"]
-                                        : ["product shot", "white background", "multi-angle", "studio lighting", "macro detail", "floating", "transparent background", "clean"]
+                                        ? [
+                                            { key: "wideAngle", value: "wide angle" },
+                                            { key: "establishingShot", value: "establishing shot" },
+                                            { key: "goldenHour", value: "golden hour" },
+                                            { key: "dramaticLighting", value: "dramatic lighting" },
+                                            { key: "aerialView", value: "aerial view" },
+                                            { key: "depthOfField", value: "depth of field" },
+                                            { key: "atmospheric", value: "atmospheric" },
+                                            { key: "cinematic", value: "cinematic" },
+                                        ]
+                                        : [
+                                            { key: "productShot", value: "product shot" },
+                                            { key: "whiteBackground", value: "white background" },
+                                            { key: "multiAngle", value: "multi-angle" },
+                                            { key: "studioLighting", value: "studio lighting" },
+                                            { key: "macroDetail", value: "macro detail" },
+                                            { key: "floating", value: "floating" },
+                                            { key: "transparentBackground", value: "transparent background" },
+                                            { key: "clean", value: "clean" },
+                                        ]
                                 ).map((tag) => (
                                     <button
-                                        key={tag}
-                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag)}
+                                        key={tag.key}
+                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag.value)}
                                         disabled={generating}
                                         className="px-2.5 py-1 rounded border border-glass-border bg-glass text-[0.6875rem] text-text-muted hover:text-text-secondary hover:border-foreground/30 hover:bg-hover-bg transition-colors disabled:opacity-30"
                                     >
-                                        + {tag}
+                                        + {t(`quickTags.${tag.key}`)}
                                     </button>
                                 ))}
                             </div>
