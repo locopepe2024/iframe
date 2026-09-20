@@ -15,12 +15,16 @@ from src.apps.comic_gen.models import (
     DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS,
+    DIRECTOR_REFINE_CONTEXT_MAX_CHARS,
     _coerce_director_execution_summary_limit,
     DIRECTOR_SCENE_SUMMARIES_MAX_CHARS,
+    build_director_refinement_context,
     director_execution_payload,
+    merge_director_profile_patch,
     Script,
     Series,
     normalize_director_profile_draft,
+    normalize_director_profile_patch,
 )
 from src.apps.identity import UserContext
 
@@ -164,6 +168,121 @@ def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
     assert isinstance(result["sound_direction"], str)
     assert "电话接通前的静默" in result["sound_direction"]
     DirectorProfile(**result)
+
+
+def test_pipeline_merges_a_director_delta_into_the_visible_full_draft():
+    pipeline, _ = make_pipeline()
+    pipeline.script_processor.refine_director_profile.return_value = {
+        "pacing": "更克制，减少解释性剪辑",
+    }
+    draft = profile_payload()
+
+    result = pipeline.refine_director_profile("film", draft, ["减少解释性剪辑"])
+
+    assert result["pacing"] == "更克制，减少解释性剪辑"
+    assert result["visual_language"] == draft["visual_language"]
+    assert result["key_events"] == draft["key_events"]
+    assert result["execution_summary"]
+
+
+def test_director_refinement_patch_merges_without_synthesizing_omitted_fields():
+    base = normalize_director_profile_draft(profile_payload())
+
+    patch = normalize_director_profile_patch({
+        "pacing": {"after": "更克制"},
+        "extra_model_commentary": "不得进入 profile",
+    })
+    merged = merge_director_profile_patch(base, patch)
+
+    assert patch == {"pacing": '{"after": "更克制"}'}
+    assert merged["pacing"] == '{"after": "更克制"}'
+    assert merged["visual_language"] == base["visual_language"]
+    assert merged["execution_summary"] == base["execution_summary"]
+    assert "extra_model_commentary" not in merged
+
+
+def test_director_refinement_drops_a_full_profile_echo_before_merging():
+    base = normalize_director_profile_draft(profile_payload())
+    echoed = {**base, "pacing": "只改变节奏"}
+
+    merged = merge_director_profile_patch(base, echoed)
+
+    assert merged["pacing"] == "只改变节奏"
+    assert merged["visual_language"] == base["visual_language"]
+    assert merged["key_events"] == base["key_events"]
+
+
+def test_director_refinement_context_is_bounded_and_keeps_canonical_summary_layers():
+    import json
+
+    context = build_director_refinement_context({
+        **profile_payload(),
+        "execution_summary": "全局摘要" * 5000,
+        "timeline": [{"phase": "legacy", "change": "LEGACY-TAIL" * 5000} for _ in range(20)],
+        "sample_plan": [{"seconds": "0-60", "detail": "样片" * 5000} for _ in range(20)],
+        "scene_summaries": [{
+            "scene_ref": str(index),
+            "summary": "局部事件" * 100,
+            "state_in": "入场" * 100,
+            "state_out": "出场" * 100,
+        } for index in range(30)],
+    })
+    serialized = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+
+    assert len(serialized) <= DIRECTOR_REFINE_CONTEXT_MAX_CHARS
+    assert "execution_summary" in context
+    assert "scene_summaries" in context
+    assert ("LEGACY-TAIL" * 100) not in serialized
+
+
+def test_director_refinement_prompt_requests_delta_not_full_profile_echo():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = "{}"
+    oversized = {
+        **profile_payload(),
+        "timeline": [{"phase": "legacy", "change": "LEGACY-TAIL" * 5000} for _ in range(20)],
+    }
+
+    result = processor.refine_director_profile(
+        "场景21 周涵离校",
+        {"characters": [{"name": "沈夏"}]},
+        {"name": "日式真人爱情", "positive_prompt": "restrained"},
+        oversized,
+        ["只调整节奏"],
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert result == {}
+    assert "<current_director_profile_context>" in prompt
+    assert "<current_director_profile>" not in prompt
+    assert "只返回因本次 revision_instructions 发生变化的顶层字段" in prompt
+    assert "不要回显未变化的字段" in prompt
+    assert ("LEGACY-TAIL" * 100) not in prompt
+
+
+def test_director_refinement_bounds_legacy_accumulated_instruction_history():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = "{}"
+    old = "旧要求" * 1200
+    newest = "最新要求" * 1200
+
+    processor.refine_director_profile(
+        "场景21 周涵离校",
+        {"characters": []},
+        {"name": "现实主义"},
+        profile_payload(),
+        [old, newest],
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "最新要求" in prompt
+    assert "旧要求" not in prompt
 
 
 def test_legacy_profile_gets_bounded_execution_payload_without_full_profile_fields():

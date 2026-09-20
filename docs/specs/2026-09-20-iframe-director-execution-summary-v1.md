@@ -66,13 +66,25 @@ for a long script whose causality crosses scene boundaries.
    fall back to the global summary when no match exists. They must not invent a
    local state to fill a missing entry. User-confirmed editorial constraints
    remain active even when no matching local scene entry exists.
-7. The full profile remains available to the Director editor and refinement
-   request. Applying a profile persists the summary together with the full
-   profile and keeps the existing revision/hash/review semantics.
+7. The full profile remains available to the Director editor and apply/audit
+   path. Refinement receives the bounded editable snapshot described below.
+   Applying a profile persists the summary together with the full profile and
+   keeps the existing revision/hash/review semantics.
 8. The analysis/refinement prompt imposes a compact source budget: bounded
    timeline/relationship/event/sample-plan item counts and concise field
    values. This is an output-shaping measure; it does not replace the summary
    contract or silently truncate persisted user edits.
+9. Director refinement uses a delta contract to prevent response avalanche. The
+   model receives a bounded editable snapshot (maximum 16,000 characters), not
+   the arbitrary-size visible profile. It returns only changed top-level fields;
+   the service merges those fields into the full visible draft. If a model still
+   echoes unchanged fields, the merge drops them by structural equality before
+   the next draft is produced. A genuinely changed patch over 16,000 characters
+   is rejected instead of becoming the next unbounded draft.
+10. Revision history is not a second copy of the profile. The client sends the
+    current instruction after prior changes have been merged into the visible
+    draft. The backend also bounds legacy callers that submit accumulated
+    instructions to the newest 4,000 characters.
 
 ## Boundaries
 
@@ -81,6 +93,9 @@ for a long script whose causality crosses scene boundaries.
   requested in the existing Director response and has a deterministic legacy
   fallback. This keeps latency and waiting behavior bounded without hiding a
   failed summary call behind fallback prose.
+- This slice does not make the editable/audit profile itself summary-only. The
+  full profile is still returned to the UI after a successful refinement; only
+  the model's refinement input and response contract are delta-bounded.
 - This slice does not yet split storyboard generation into one LLM request per
   scene. Local memory is first made explicit and bounded; request partitioning
   requires a separate segmentation/latency decision.
@@ -101,6 +116,8 @@ for a long script whose causality crosses scene boundaries.
 5. Tests cover global/local bounds, legacy compatibility, scene matching
    contract text, downstream exclusion, and the scoped optional bookend
    narrative constraint.
+6. Tests cover bounded refinement input, delta merging, echoed-profile
+   suppression, and non-accumulating client revision instructions.
 
 ## Verification
 

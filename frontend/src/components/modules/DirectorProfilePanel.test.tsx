@@ -108,3 +108,36 @@ it("shows a visible status while director revision is running and after it compl
         "Director revision complete",
     ));
 });
+
+it("sends only the current revision instruction after prior changes are merged", async () => {
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue(profile);
+    const refine = vi.spyOn(api, "refineDirectorProfile").mockResolvedValue(profile);
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    await waitFor(() => expect(screen.getByLabelText("Director profile draft")).toBeInTheDocument());
+    const input = screen.getByPlaceholderText(
+        "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
+    );
+    fireEvent.change(input, { target: { value: "Keep the story in China" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revise" }));
+    await waitFor(() => expect(refine).toHaveBeenCalledWith(
+        "film",
+        profile,
+        ["Keep the story in China"],
+        expect.any(Function),
+    ));
+
+    fireEvent.change(input, { target: { value: "Condense to one minute" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revise" }));
+    await waitFor(() => expect(refine).toHaveBeenLastCalledWith(
+        "film",
+        profile,
+        ["Condense to one minute"],
+        expect.any(Function),
+    ));
+});

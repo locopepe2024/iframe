@@ -16,6 +16,7 @@ from .models import (
     StoryboardFrame,
     GenerationStatus,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+    build_director_refinement_context,
     director_execution_payload,
 )
 
@@ -42,6 +43,7 @@ def _prompt_json(value: Any) -> str:
 
 DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
 DIRECTOR_PROFILE_MAX_RETRIES = 0
+DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
 DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"
     "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
@@ -1099,32 +1101,51 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
     def refine_director_profile(self, text: str, entities_json: Dict[str, Any],
                                 style_config: Dict[str, Any], draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
-        """Revise a director draft while preserving source-grounded facts."""
+        """Return a source-grounded partial revision patch for a Director draft."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        # The visible draft already contains the effects of earlier revisions.
+        # Keep the newest instructions within a small budget for callers that
+        # still submit accumulated history (the UI now submits only one).
+        bounded_instructions = []
+        instruction_chars = 0
+        for item in reversed(instructions):
+            text_item = str(item).strip()
+            if not text_item:
+                continue
+            text_item = text_item[:DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS]
+            projected = instruction_chars + len(text_item) + (1 if bounded_instructions else 0)
+            if bounded_instructions and projected > DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS:
+                break
+            bounded_instructions.insert(0, text_item)
+            instruction_chars = projected
+        numbered = "\n".join(
+            f"{index}. {item}" for index, item in enumerate(bounded_instructions, 1)
+        )
         prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
 视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
 
 <script>{text}</script>
 <entities>{_prompt_json(entities_json)}</entities>
 <visual_style>{_prompt_json(style_config)}</visual_style>
-<current_director_profile>{_prompt_json(draft)}</current_director_profile>
+<current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
 用户明确提出的导演风格、剪辑结构、样片时长和取材范围属于执行约束：必须保留在
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
-保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
-current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
-{DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；scene_summaries 必须保留
-场景之间的 state_out → state_in
-因果衔接，并且只保留后续分镜和资产设计需要的事实与约束。
+保留未要求改变的正确内容，并同步刷新受影响的 execution_summary 或 scene_summaries。
+这是“变更补丁”协议：只返回因本次 revision_instructions 发生变化的顶层字段；没有变化时返回 {{}}。
+不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
+confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
+execution_summary 必须最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；
+scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，并且只保留后续分镜和
+资产设计需要的事实与约束。只返回 JSON 对象，不要解释。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
-                      {"role": "user", "content": "返回修订后的完整导演设定。"}],
+                      {"role": "user", "content": "只返回本次导演修订的 JSON 变更补丁。"}],
             response_format={"type": "json_object"},
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,

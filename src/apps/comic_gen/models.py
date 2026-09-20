@@ -15,6 +15,11 @@ DIRECTOR_EXECUTION_SUMMARY_ENV = "IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS"
 DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS = 7000
 DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS = 1000
 DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS = 16000
+# A refinement request still needs a small editable snapshot so manual changes
+# in the visible draft are not lost. It must not resend an unbounded legacy
+# profile, however; the model receives this snapshot and returns a delta.
+DIRECTOR_REFINE_CONTEXT_MAX_CHARS = 16000
+DIRECTOR_REFINE_PATCH_MAX_CHARS = 16000
 
 
 def _coerce_director_execution_summary_limit(raw_value: Optional[str]) -> int:
@@ -964,6 +969,177 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     normalized["execution_summary"] = build_director_execution_summary(normalized)
 
     return normalized
+
+
+_DIRECTOR_PROFILE_FIELDS = (
+    "setting",
+    "timeline",
+    "relationships",
+    "key_events",
+    "emotional_arc",
+    "pacing",
+    "visual_language",
+    "performance_direction",
+    "dialogue_direction",
+    "sound_direction",
+    "continuity_constraints",
+    "prohibitions",
+    "unresolved_questions",
+    "sample_plan",
+    "execution_summary",
+    "scene_summaries",
+)
+
+
+def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a partial Director revision without filling omitted fields.
+
+    Refinement responses are deltas.  In particular, do not call
+    ``build_director_execution_summary`` when ``execution_summary`` is absent:
+    doing so would turn an otherwise tiny patch into a synthesized copy of the
+    whole profile and reintroduce the response avalanche this contract avoids.
+    """
+    if not isinstance(patch, dict):
+        raise TypeError("Director refinement response must be a JSON object")
+
+    normalized: Dict[str, Any] = {
+        key: value for key, value in patch.items() if key in _DIRECTOR_PROFILE_FIELDS
+    }
+    for field in _DIRECTOR_TEXT_FIELDS:
+        if field in normalized:
+            normalized[field] = _director_value_as_text(normalized[field])
+
+    if "setting" in normalized and normalized["setting"] is None:
+        normalized["setting"] = {}
+    for field in _DIRECTOR_OBJECT_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+    if "scene_summaries" in normalized:
+        normalized["scene_summaries"] = _normalize_director_object_list(
+            normalized["scene_summaries"]
+        )
+    for field in _DIRECTOR_STRING_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_string_list(normalized[field])
+    if "execution_summary" in normalized:
+        normalized["execution_summary"] = _bounded_director_text(
+            normalized["execution_summary"], DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+        )
+    return normalized
+
+
+def merge_director_profile_patch(
+    base: Dict[str, Any], patch: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Apply a partial revision while dropping echoed unchanged fields.
+
+    A model that ignores the delta instruction may still echo the full profile.
+    Comparing fields before merging makes that failure mode idempotent: an
+    unchanged 20 KB timeline is not treated as a new revision and cannot grow
+    on every subsequent rethink. A genuinely changed patch is bounded so a
+    malformed response fails before it can become the next draft.
+    """
+    normalized_patch = normalize_director_profile_patch(patch)
+    changed: Dict[str, Any] = {}
+    for key, value in normalized_patch.items():
+        if key in base and base.get(key) == value:
+            continue
+        changed[key] = value
+    if len(json.dumps(changed, ensure_ascii=False, separators=(",", ":"))) > DIRECTOR_REFINE_PATCH_MAX_CHARS:
+        raise ValueError(
+            f"Director refinement patch exceeds {DIRECTOR_REFINE_PATCH_MAX_CHARS} characters"
+        )
+    merged = dict(base)
+    merged.update(changed)
+    return normalize_director_profile_draft(merged)
+
+
+def _compact_director_context_value(value: Any, limit: int) -> Any:
+    """Keep a JSON-shaped, bounded view of one editable profile field."""
+    if value in (None, "", [], {}):
+        return value
+    if isinstance(value, str):
+        return _bounded_director_text(value, limit)
+    if isinstance(value, dict):
+        compact: Dict[str, Any] = {}
+        for key, child in value.items():
+            compact[str(key)] = _compact_director_context_value(child, max(32, limit // 3))
+            if len(json.dumps(compact, ensure_ascii=False, separators=(",", ":"))) >= limit:
+                break
+        return compact
+    if isinstance(value, list):
+        compact_list: List[Any] = []
+        for child in value:
+            compact_list.append(_compact_director_context_value(child, max(48, limit // 3)))
+            if len(json.dumps(compact_list, ensure_ascii=False, separators=(",", ":"))) >= limit:
+                break
+        return compact_list
+    return _bounded_director_text(value, limit)
+
+
+def build_director_refinement_context(
+    profile: "DirectorProfile | Dict[str, Any]",
+) -> Dict[str, Any]:
+    """Build the bounded editable snapshot sent to a Director revision call.
+
+    The full draft remains on the client/server for editing and audit.  The
+    model sees the canonical execution layers plus short field snapshots, not
+    arbitrary legacy text.  This is an input bound; the delta response bound
+    is enforced separately by the refinement prompt and patch merge.
+    """
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
+    scene_summaries = build_director_scene_summaries(raw)
+    scene_serialized_length = len(
+        json.dumps(scene_summaries, ensure_ascii=False, separators=(",", ":"))
+    )
+    summary_limit = max(
+        512,
+        min(
+            DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+            DIRECTOR_REFINE_CONTEXT_MAX_CHARS - scene_serialized_length - 128,
+        ),
+    )
+    context: Dict[str, Any] = {
+        "execution_summary": _bounded_director_text(
+            build_director_execution_summary(raw), summary_limit
+        ),
+        "scene_summaries": scene_summaries,
+    }
+    field_limits = {
+        "setting": 700,
+        "timeline": 700,
+        "relationships": 900,
+        "key_events": 1000,
+        "emotional_arc": 220,
+        "pacing": 220,
+        "visual_language": 260,
+        "performance_direction": 220,
+        "dialogue_direction": 220,
+        "sound_direction": 220,
+        "continuity_constraints": 600,
+        "prohibitions": 600,
+        "unresolved_questions": 600,
+        "sample_plan": 900,
+    }
+    for field, limit in field_limits.items():
+        if field in raw and raw[field] not in (None, "", [], {}):
+            context[field] = _compact_director_context_value(raw[field], limit)
+
+    # Keep the JSON envelope bounded even if a future field is added without a
+    # per-field limit. Optional editable snapshots are removed first; the
+    # execution summary and scene memory remain the canonical minimum context.
+    optional_fields = [
+        "sample_plan", "timeline", "relationships", "key_events", "setting",
+        "continuity_constraints", "prohibitions", "unresolved_questions",
+        "sound_direction", "dialogue_direction", "performance_direction",
+        "visual_language", "pacing", "emotional_arc",
+    ]
+    while len(json.dumps(context, ensure_ascii=False, separators=(",", ":"))) > DIRECTOR_REFINE_CONTEXT_MAX_CHARS:
+        removed = next((field for field in optional_fields if field in context), None)
+        if removed is None:
+            break
+        context.pop(removed)
+    return context
 
 
 class ArtDirection(BaseModel):

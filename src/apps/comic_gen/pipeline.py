@@ -23,6 +23,7 @@ from .models import (
     director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    merge_director_profile_patch,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor
@@ -1773,10 +1774,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities, style = self.director_analysis_context(script_id)
         normalized_draft = normalize_director_profile_draft(draft)
         DirectorProfile(**normalized_draft)
-        revised = self.script_processor.refine_director_profile(
+        revised_patch = self.script_processor.refine_director_profile(
             script.original_text, entities, style, normalized_draft, instructions
         )
-        normalized_result = normalize_director_profile_draft(revised)
+        normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
         DirectorProfile(**normalized_result)
         return normalized_result
 

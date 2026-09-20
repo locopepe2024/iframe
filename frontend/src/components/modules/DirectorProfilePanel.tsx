@@ -79,12 +79,16 @@ export default function DirectorProfilePanel() {
         if (!currentProject || !instruction.trim()) return;
         setBusy("refine");
         setStatus({ kind: "running", action: "refine", jobStatus: "queued" });
-        const nextHistory = [...history, instruction.trim()];
+        const currentInstruction = instruction.trim();
+        const nextHistory = [...history, currentInstruction];
         try {
             const profile = await api.refineDirectorProfile(
                 currentProject.id,
                 parseDraft(),
-                nextHistory,
+                // Earlier changes are already merged into the visible draft;
+                // resending the full history would recreate the context
+                // avalanche on every rethink.
+                [currentInstruction],
                 jobStatus => setStatus({ kind: "running", action: "refine", jobStatus }),
             );
             setDraftText(JSON.stringify(profile, null, 2));
