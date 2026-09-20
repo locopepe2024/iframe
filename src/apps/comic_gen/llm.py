@@ -1065,6 +1065,7 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
+也要保留用户已经确认的导演/样片形式约束，但明确标记为“用户要求”，不要把它们改写成剧本事实；
 使用短句或项目符号，最多 20 条、最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符，
 不要重复完整 timeline 或 sample_plan。
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
@@ -1099,6 +1100,10 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
+用户明确提出的导演风格、剪辑结构、样片时长和取材范围属于执行约束：必须保留在
+execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
+例如“首尾框架式回忆/书挡式回忆插叙”只约束样片的开头锚点→主观回忆→尾部锚点结构，
+不应泛化成整部作品的回忆录或闪回风格；回忆只能取自原文，不得新增对白、事件或人物动机。
 保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；scene_summaries 必须保留
@@ -1161,7 +1166,10 @@ current_director_profile 同结构的完整 JSON，不要解释。execution_summ
 </confirmed_director_execution_summary>
 scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文或实体中的 scene_ref；
 如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
-使用 execution_summary 的全局约束，不得凭空补写本地状态。
+使用 execution_summary 的全局约束，不得凭空补写本地状态。execution_summary 中标记为
+“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效；例如首尾框架式回忆只应
+在样片中按开头锚点→主观回忆→尾部锚点组织镜头，不要把全片改成回忆录或闪回风格，且
+回忆内容必须能在原文中找到。
 """ % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
@@ -1243,7 +1251,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             baseline += (
                 "\n场景级 scene_summaries 是局部连续性记忆。修订镜头时优先按 scene_ref "
                 "匹配对应 summary，并保持 state_out → state_in 的因果衔接；缺少匹配项时只能 "
-                "沿用全局 execution_summary，不要猜测未记录的场景状态。"
+                "沿用全局 execution_summary，不要猜测未记录的场景状态。全局摘要中标记为“用户要求” "
+                "的导演风格、取材范围、剪辑结构和时长约束同样有效。"
             )
         numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
         prompt = f"""{baseline}

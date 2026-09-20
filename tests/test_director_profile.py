@@ -110,6 +110,9 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "execution_summary" in prompt
     assert str(DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS) in prompt
     assert "sample_plan 最多 4 项" in prompt
+    assert "导演风格、剪辑结构、样片时长和取材范围属于执行约束" in prompt
+    assert "首尾框架式回忆/书挡式回忆插叙" in prompt
+    assert "不应泛化成整部作品的回忆录或闪回风格" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"
@@ -222,7 +225,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     processor.llm.chat.return_value = json.dumps({"frames": [{"action_summary": "离校"}]})
     payload = {
         **profile_payload(),
-        "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电。",
+        "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电；用户要求：首尾框架式回忆，约60秒。",
         "scene_summaries": [{
             "scene_ref": "场景21",
             "summary": "周涵离校，关系进入分离阶段。",
@@ -244,6 +247,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert '"sample_plan"' not in prompt
     assert "场景21" in prompt
     assert "state_out" in prompt
+    assert "开头锚点→主观回忆→尾部锚点" in prompt
 
 
 def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_review():

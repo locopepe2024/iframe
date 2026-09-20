@@ -50,11 +50,15 @@ for a long script whose causality crosses scene boundaries.
    not as scene-specific evidence.
 5. The downstream envelope contains only `revision`, `content_hash`,
    `execution_summary`, and bounded `scene_summaries`. It must not contain
-   `timeline`, `sample_plan`, or the other full-profile fields.
+   `timeline`, `sample_plan`, or the other full-profile fields. User-confirmed
+   editorial requests (such as a bookended retrospective insert for a
+   one-minute sample) are preserved as execution constraints inside
+   `execution_summary`, not as new branching fields or a whole-film style.
 6. Storyboard prompts must match a source scene marker to `scene_ref` when one
    exists, use `state_out` → `state_in` as the preferred transition memory, and
    fall back to the global summary when no match exists. They must not invent a
-   local state to fill a missing entry.
+   local state to fill a missing entry. User-confirmed editorial constraints
+   remain active even when no matching local scene entry exists.
 7. The full profile remains available to the Director editor and refinement
    request. Applying a profile persists the summary together with the full
    profile and keeps the existing revision/hash/review semantics.
