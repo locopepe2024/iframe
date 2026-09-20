@@ -562,7 +562,9 @@
     "library": "Library",
     "editor": "Script Editor",
     "playground": "Playground",
+    "director3d": "3D Director",
     "settings": "Settings",
+    "more": "More",
     "workspaceAria": "iFrame Studio · Workspace",
     "mainNavAria": "Main navigation"
   },
