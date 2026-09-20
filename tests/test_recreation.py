@@ -434,7 +434,7 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert task['prompt_sha256'] and 'prompt' not in task
 
     def generate(_self, prompt, output_path, **kwargs):
-        assert kwargs['model_name'] == 'uniart/gpt-image-2'
+        assert kwargs['model_name'] == 'uniart/gpt-image-2.5'
         assert kwargs['ref_image_paths'] == [
             str((Path('output') / source['storage_path']).resolve()),
             str((Path('output') / product['storage_path']).resolve()),

@@ -316,7 +316,7 @@ class RecreationService:
             task = {
                 "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
                 "revision": revision, "analysis_id": analysis_id, "status": "pending",
-                "model": "uniart/gpt-image-2", "reference_media_id": reference_media_id,
+                "model": "uniart/gpt-image-2.5", "reference_media_id": reference_media_id,
                 "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
                 "replacement_sha256": replacement["sha256"], "prompt": prompt,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
