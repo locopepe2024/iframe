@@ -1080,6 +1080,7 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 也要保留用户已经确认的导演/样片形式约束，但明确标记为“用户要求”，不要把它们改写成剧本事实；
 使用短句或项目符号，最多 20 条、最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符，
 不要重复完整 timeline 或 sample_plan。
+{BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
 只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。"""

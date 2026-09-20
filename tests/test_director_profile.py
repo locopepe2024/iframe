@@ -120,6 +120,25 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert result["setting"]["geography"] == "中国大学校园与北京"
 
 
+def test_director_analysis_prompt_defines_bookend_as_optional_structure():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.analyze_director_profile(
+        "开头：公墓。中段：战争往事。结尾：回到公墓。",
+        {"characters": [{"name": "老兵"}]},
+        {"name": "现实主义", "positive_prompt": "restrained"},
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "Bookend Narrative Technique" in prompt
+    assert "不是默认的‘回忆录风格’" in prompt
+    assert "用户没有明确标注该结构时，不得自行套用" in prompt
+
+
 def test_director_preview_normalizes_structured_text_fields_without_losing_content():
     pipeline, _ = make_pipeline()
     pipeline.script_processor.analyze_director_profile.return_value = structured_profile_payload()
