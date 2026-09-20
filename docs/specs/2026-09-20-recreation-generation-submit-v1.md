@@ -2,14 +2,14 @@
 
 ## Observed
 
-- Recreation currently builds and validates per-shot H3 prompts, but `submission_enabled` is hard-coded false and no provider task is persisted.
+- Recreation builds and validates per-shot H3 prompts, exposes `submission_enabled=true` for the verified H3 route, and persists one durable task per shot before background submission.
 - The shared UniArt video adapter already accepts H3/Seedance model IDs, ordered image references, `generate_audio`, `seed`, and an `on_task_submitted` callback. Its production polling is unbounded and can resume from a saved provider task ID.
 - Recreation media records retain owner, path, SHA-256, and metadata, so a generation task can snapshot inputs before any paid request.
 
 ## Decision
 
 - Add owner-scoped durable `recreation_generation_tasks` records, one task per confirmed shot, grouped by a `generation_id`.
-- Submission requires `accept_cost=true`, a ready H3 plan, and the current project revision. The submitted prompt, model, duration, audio policy, ordered media IDs, and input fingerprints are immutable task snapshots.
+- Submission requires `accept_cost=true`, a ready H3 plan, and the current project revision. The submitted prompt, model, duration, audio policy, ordered media IDs, and input fingerprints are immutable task snapshots. The UI must obtain the cost acknowledgement explicitly for each paid action.
 - Background processing uses `UniArtVideoModel`; it saves the upstream task ID immediately through `on_task_submitted`, then stores the downloaded video as an indexed `generated_video` media record.
 - A user can cancel pending or processing tasks. Cancellation stops local publication; it cannot retract a provider request already accepted upstream.
 - This slice supports the verified H3 recreation contract only. Seedance remains rejected until its recreation prompt/reference contract is verified by code and tests.

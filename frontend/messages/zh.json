@@ -603,6 +603,8 @@
     "after": "切点首帧",
     "evidence": "加载相邻帧",
     "contactSheet": "联系表",
+    "download": "下载最终视频",
+    "keyframeAcceptCost": "我确认生成修正关键帧会产生费用",
     "unsaved": "修改待确认",
     "oversized": "原片不能超过 256 MiB",
     "whiteModel": "3D 白模参考",
