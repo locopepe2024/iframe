@@ -46,7 +46,9 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
     "每个值尽量控制在 120 字以内；六个方向文本字段各不超过 240 字；"
     "continuity_constraints、prohibitions、unresolved_questions 各最多 8 项、"
-    "每项不超过 120 字。"
+    "每项不超过 120 字；scene_summaries 最多 16 项，每项只能有 scene_ref、"
+    "summary、state_in、state_out 四个键；scene_ref 不超过 40 字，summary 不超过 64 字，"
+    "state_in/state_out 各不超过 48 字，总计不超过 3200 字。"
 )
 
 
@@ -1057,12 +1059,15 @@ class ScriptProcessor:
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
-execution_summary。
+execution_summary, scene_summaries。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
-使用短句或项目符号，最多 12 条、最多 3200 个字符，不要重复完整 timeline 或 sample_plan。"""
+使用短句或项目符号，最多 12 条、最多 3200 个字符，不要重复完整 timeline 或 sample_plan。
+scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
+scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
+只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
@@ -1092,9 +1097,10 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
-保留未要求改变的正确内容，并同步刷新 execution_summary。只返回与
+保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
-3200 个字符、最多 12 条短句，并且只保留后续分镜和资产设计需要的事实与约束。
+3200 个字符、最多 12 条短句；scene_summaries 必须保留场景之间的 state_out → state_in
+因果衔接，并且只保留后续分镜和资产设计需要的事实与约束。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
@@ -1150,6 +1156,9 @@ current_director_profile 同结构的完整 JSON，不要解释。execution_summ
 <confirmed_director_execution_summary>
 %s
 </confirmed_director_execution_summary>
+scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文或实体中的 scene_ref；
+如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
+使用 execution_summary 的全局约束，不得凭空补写本地状态。
 """ % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
@@ -1228,6 +1237,11 @@ current_director_profile 同结构的完整 JSON，不要解释。execution_summ
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
                 director_execution_payload(director_profile), ensure_ascii=False, indent=2
             ) + "\n</confirmed_director_execution_summary>"
+            baseline += (
+                "\n场景级 scene_summaries 是局部连续性记忆。修订镜头时优先按 scene_ref "
+                "匹配对应 summary，并保持 state_out → state_in 的因果衔接；缺少匹配项时只能 "
+                "沿用全局 execution_summary，不要猜测未记录的场景状态。"
+            )
         numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
         prompt = f"""{baseline}
 

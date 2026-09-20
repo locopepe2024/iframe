@@ -642,6 +642,13 @@ class DirectorProfile(BaseModel):
             "asset prompts. The full profile remains the audit/edit source."
         ),
     )
+    scene_summaries: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Compact scene-local continuity memory. Each entry should identify "
+            "a source scene marker and its local summary/state transition."
+        ),
+    )
     revision: int = Field(1, ge=1)
     content_hash: str = ""
     confirmed_at: float = 0.0
@@ -661,6 +668,7 @@ _DIRECTOR_OBJECT_LIST_FIELDS = (
     "key_events",
     "sample_plan",
 )
+_DIRECTOR_SCENE_SUMMARY_FIELDS = ("scene_summaries",)
 _DIRECTOR_STRING_LIST_FIELDS = (
     "continuity_constraints",
     "prohibitions",
@@ -683,6 +691,11 @@ def _director_value_as_text(value: Any) -> str:
 
 
 DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS = 3200
+DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS = 16
+DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 3200
+DIRECTOR_SCENE_REF_MAX_CHARS = 40
+DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS = 64
+DIRECTOR_SCENE_STATE_MAX_CHARS = 48
 
 
 def _bounded_director_text(value: Any, limit: int) -> str:
@@ -741,6 +754,97 @@ def build_director_execution_summary(profile: Dict[str, Any]) -> str:
     )
 
 
+def _director_first_text(item: Dict[str, Any], keys: tuple[str, ...]) -> str:
+    """Return the first non-empty scalar value from a scene-memory item."""
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, "", [], {}):
+            return _director_value_as_text(value)
+    return ""
+
+
+def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
+    """Project one model/user scene-memory item to the execution contract.
+
+    Scene memory is intentionally a projection rather than a second source of
+    truth. Unknown keys stay in the editable full profile, while downstream
+    receives only the four stable fields needed to bridge scene boundaries.
+    """
+    if not isinstance(item, dict):
+        item = {"summary": _director_value_as_text(item)}
+
+    scene_ref = _director_first_text(
+        item, ("scene_ref", "scene", "scene_id", "marker", "phase", "id")
+    ) or f"scene-{index + 1}"
+    summary = _director_first_text(
+        item,
+        ("summary", "local_summary", "event", "action", "change", "function", "description"),
+    )
+    if not summary:
+        # Keep a deterministic representation for legacy or unusual model
+        # shapes instead of fabricating a semantic interpretation.
+        summary = _director_value_as_text(item)
+
+    entry: Dict[str, str] = {
+        "scene_ref": _bounded_director_text(scene_ref, DIRECTOR_SCENE_REF_MAX_CHARS),
+        "summary": _bounded_director_text(
+            summary, DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS
+        ),
+    }
+    state_in = _director_first_text(
+        item, ("state_in", "entry_state", "continuity_in", "before")
+    )
+    state_out = _director_first_text(
+        item, ("state_out", "exit_state", "continuity_out", "after")
+    )
+    if state_in:
+        entry["state_in"] = _bounded_director_text(
+            state_in, DIRECTOR_SCENE_STATE_MAX_CHARS
+        )
+    if state_out:
+        entry["state_out"] = _bounded_director_text(
+            state_out, DIRECTOR_SCENE_STATE_MAX_CHARS
+        )
+    return entry
+
+
+def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Return bounded scene-local continuity memory for downstream prompts.
+
+    New Director responses should provide ``scene_summaries`` directly. For
+    legacy profiles, key events and timeline entries are projected into the
+    same shape. If neither exists, a single ``__global__`` fallback is used so
+    callers can distinguish missing scene-local evidence from an empty field.
+    The fallback is deliberately not presented as scene-specific truth.
+    """
+    source = profile.get("scene_summaries")
+    candidates: List[Any] = list(source) if isinstance(source, list) else []
+    if not candidates:
+        for field in ("key_events", "timeline"):
+            values = profile.get(field)
+            if isinstance(values, list):
+                candidates.extend(values)
+
+    if not candidates:
+        global_summary = build_director_execution_summary(profile)
+        if global_summary:
+            candidates = [{"scene_ref": "__global__", "summary": global_summary}]
+
+    result: List[Dict[str, str]] = []
+    for index, item in enumerate(candidates):
+        if index >= DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS:
+            break
+        entry = _director_scene_memory_entry(item, index)
+        candidate = [*result, entry]
+        # Keep the serialized envelope valid while enforcing a separate local
+        # budget. Drop later entries rather than truncating JSON mid-object.
+        serialized_length = len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")))
+        if serialized_length > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
+            break
+        result.append(entry)
+    return result
+
+
 def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> Dict[str, Any]:
     """Expose only the stable, bounded contract consumed downstream."""
     raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
@@ -748,6 +852,7 @@ def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> D
         "revision": raw.get("revision", 1),
         "content_hash": raw.get("content_hash", ""),
         "execution_summary": build_director_execution_summary(raw),
+        "scene_summaries": build_director_scene_summaries(raw),
     }
 
 
@@ -793,6 +898,10 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         normalized["setting"] = {}
 
     for field in _DIRECTOR_OBJECT_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+
+    for field in _DIRECTOR_SCENE_SUMMARY_FIELDS:
         if field in normalized:
             normalized[field] = _normalize_director_object_list(normalized[field])
 

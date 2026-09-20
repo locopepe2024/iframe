@@ -12,6 +12,7 @@ from src.apps.comic_gen.models import (
     Character,
     DirectorProfile,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+    DIRECTOR_SCENE_SUMMARIES_MAX_CHARS,
     director_execution_payload,
     Script,
     Series,
@@ -143,9 +144,51 @@ def test_legacy_profile_gets_bounded_execution_payload_without_full_profile_fiel
 
     execution = director_execution_payload(DirectorProfile(**payload))
 
-    assert set(execution) == {"revision", "content_hash", "execution_summary"}
+    assert set(execution) == {
+        "revision", "content_hash", "execution_summary", "scene_summaries",
+    }
     assert len(execution["execution_summary"]) <= DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
     assert "中国大学校园与北京" in execution["execution_summary"]
+    assert execution["scene_summaries"]
+    assert execution["scene_summaries"][0]["scene_ref"] == "21"
+
+
+def test_scene_memory_is_bounded_and_keeps_transition_fields():
+    payload = {
+        **profile_payload(),
+        "scene_summaries": [
+            {
+                "scene_ref": f"scene-{index}",
+                "summary": "局部事件" * 100,
+                "state_in": "入场状态" * 100,
+                "state_out": "出场状态" * 100,
+                "extra_detail": "不得进入下游" * 100,
+            }
+            for index in range(30)
+        ],
+    }
+
+    execution = director_execution_payload(DirectorProfile(**payload))
+    serialized = json.dumps(execution["scene_summaries"], ensure_ascii=False, separators=(",", ":"))
+
+    assert len(serialized) <= DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
+    assert len(execution["scene_summaries"]) <= 16
+    assert set(execution["scene_summaries"][0]) <= {
+        "scene_ref", "summary", "state_in", "state_out",
+    }
+    assert execution["scene_summaries"][0]["state_in"]
+    assert execution["scene_summaries"][0]["state_out"]
+
+
+def test_legacy_scene_memory_uses_global_fallback_when_no_local_events_exist():
+    execution = director_execution_payload(DirectorProfile(
+        execution_summary="只保留全局连续性规则。",
+    ))
+
+    assert execution["scene_summaries"] == [{
+        "scene_ref": "__global__",
+        "summary": "只保留全局连续性规则。",
+    }]
 
 
 def test_model_summary_is_clipped_during_draft_normalization():
@@ -167,6 +210,12 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     payload = {
         **profile_payload(),
         "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电。",
+        "scene_summaries": [{
+            "scene_ref": "场景21",
+            "summary": "周涵离校，关系进入分离阶段。",
+            "state_in": "仍在校园，关系尚未断裂。",
+            "state_out": "离校后开始异地。",
+        }],
         "sample_plan": [{"bulk": "不要注入下游" * 3000}],
     }
 
@@ -180,6 +229,8 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "confirmed_director_execution_summary" in prompt
     assert "不要注入下游" not in prompt
     assert '"sample_plan"' not in prompt
+    assert "场景21" in prompt
+    assert "state_out" in prompt
 
 
 def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_review():
@@ -234,7 +285,9 @@ def test_storyboard_requests_receive_confirmed_director_profile_and_revision():
     kwargs = pipeline.script_processor.analyze_to_storyboard.call_args.kwargs
     assert kwargs["director_profile"]["revision"] == 3
     assert kwargs["director_profile"]["content_hash"] == "confirmed-hash"
-    assert set(kwargs["director_profile"]) == {"revision", "content_hash", "execution_summary"}
+    assert set(kwargs["director_profile"]) == {
+        "revision", "content_hash", "execution_summary", "scene_summaries",
+    }
     assert "sample_plan" not in kwargs["director_profile"]
 
 

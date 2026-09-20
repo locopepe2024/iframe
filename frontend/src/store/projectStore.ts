@@ -219,6 +219,8 @@ export interface DirectorProfile {
     sample_plan: Record<string, unknown>[];
     /** Bounded downstream contract; the full fields remain editable/auditable. */
     execution_summary?: string;
+    /** Scene-local continuity memory used by storyboard/asset prompts. */
+    scene_summaries?: Record<string, unknown>[];
     revision: number;
     content_hash: string;
     confirmed_at: number;

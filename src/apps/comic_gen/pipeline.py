@@ -1788,11 +1788,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         clean = DirectorProfile(**normalized).model_dump(
             exclude={"revision", "content_hash", "confirmed_at"}
         )
-        # The summary is a bounded downstream projection, not a second source
-        # of narrative truth. Keep historical content hash/revision semantics
+        # Summaries are bounded downstream projections, not a second source of
+        # narrative truth. Keep historical content hash/revision semantics
         # based on the full Director fields only.
         hash_payload = {
-            key: value for key, value in clean.items() if key != "execution_summary"
+            key: value for key, value in clean.items()
+            if key not in {"execution_summary", "scene_summaries"}
         }
         content_hash = hashlib.sha256(json.dumps(
             hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
