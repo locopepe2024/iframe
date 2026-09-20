@@ -7,7 +7,7 @@ import messages from '../../../../messages/en.json';
 import CastWorkbenchModal from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -87,4 +87,74 @@ it('keeps provider prompts out of the default customer view', async () => {
 
  fireEvent.click(screen.getByRole('button', { name: 'Advanced: view model prompts' }));
  expect(screen.getByText(stylePrompt)).toBeTruthy();
+});
+
+it('selects a specific asset-library variant and submits only its stable ids', async () => {
+ const libraryAsset = {
+  id: 'library-scene',
+  name: 'Tea room',
+  description: 'Wooden tea table',
+  source: 'global',
+  image_asset: { variants: [{ id: 'scene-variant', url: 'users/owner/scene.png' }], selected_id: 'scene-variant' },
+ };
+ const withLibrary = { ...project, scenes: [libraryAsset] };
+ useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
+ show();
+
+ fireEvent.click(screen.getByRole('button', { name: 'Choose from library' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Use this Tea room variant as reference' }));
+ expect(screen.getByText('Using a library variant as reference')).toBeTruthy();
+
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ const args = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(args[12]).toEqual({ asset_type: 'scene', asset_id: 'library-scene', variant_id: 'scene-variant' });
+ expect(JSON.stringify(args)).not.toContain('users/owner/scene.png');
+});
+
+it('clears an asset-library reference before the next text-to-image request', async () => {
+ const libraryAsset = {
+  id: 'library-prop',
+  name: 'Tea cup',
+  description: 'Ceramic cup',
+  source: 'global',
+  image_asset: { variants: [{ id: 'prop-variant', url: 'users/owner/prop.png' }], selected_id: 'prop-variant' },
+ };
+ const withLibrary = { ...project, props: [libraryAsset] };
+ useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
+ show();
+
+ fireEvent.click(screen.getByRole('button', { name: 'Choose from library' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Use this Tea cup variant as reference' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Clear library reference' }));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ const args = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(args[12]).toBeUndefined();
+});
+
+it('loads a global library reference when the project response has only local assets', async () => {
+ const localScene = { id: 'scene', name: 'Current scene', description: 'Current' };
+ const libraryScene = {
+  id: 'global-scene',
+  name: 'Shared tea room',
+  description: 'Wooden tea table',
+  image_asset: { variants: [{ id: 'global-variant', url: 'users/owner/scene.png' }], selected_id: 'global-variant' },
+ };
+ const localProject = { ...project, scenes: [localScene] };
+ useProjectStore.setState({ currentProject: localProject, projects: [localProject] });
+ vi.mocked(api.getProject).mockResolvedValue(localProject as any);
+ vi.mocked(api.listLibraryAssets).mockResolvedValue({ characters: [], scenes: [libraryScene], props: [] } as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(localProject as any);
+ show();
+
+ await waitFor(() => expect(screen.getByRole('button', { name: 'Choose from library' })).not.toBeDisabled());
+ fireEvent.click(screen.getByRole('button', { name: 'Choose from library' }));
+ const referenceButton = await screen.findByRole('button', { name: 'Use this Shared tea room variant as reference' });
+ fireEvent.click(referenceButton);
+ expect(screen.getByText('Using a library variant as reference')).toBeTruthy();
 });

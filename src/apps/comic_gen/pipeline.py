@@ -21,6 +21,7 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     GlobalAssetLibrary,
+    AssetLibraryReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor
@@ -90,6 +91,10 @@ class LibraryAssetInUseError(Exception):
             f"{len(references)} storyboard frame(s); refusing to delete "
             f"(pass force=True to delete anyway)."
         )
+
+
+class InvalidAssetReference(ValueError):
+    """Raised when a requested asset-library reference cannot be resolved."""
 
 
 class ComicGenPipeline(StudioOwnerMixin):
@@ -680,12 +685,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+
+        reference_provenance = None
+        if reference is not None:
+            # Structured identity always wins over the legacy URL. Resolve it
+            # again during execution so a queued task cannot use a deleted or
+            # cross-owner variant.
+            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+                script,
+                reference,
+            )
+            use_reference_image = True
         
         # Get effective model names from project settings if not overridden
         t2i_model = model_name or script.model_settings.t2i_model
@@ -782,7 +798,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     batch_size=batch_size,
                     model_name=t2i_model,
                     i2i_model_name=i2i_model,
-                    size=effective_size
+                    size=effective_size,
+                    reference_provenance=reference_provenance,
                 )
             elif asset_type == "scene":
                 self.asset_generator.generate_scene(
@@ -793,6 +810,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     model_name=t2i_model,
                     size=effective_size,
                     prompt=prompt,
+                    reference_image_url=reference_image_url,
+                    reference_provenance=reference_provenance,
                 )
             elif asset_type == "prop":
                 self.asset_generator.generate_prop(
@@ -803,6 +822,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     model_name=t2i_model,
                     size=effective_size,
                     prompt=prompt,
+                    reference_image_url=reference_image_url,
+                    reference_provenance=reference_provenance,
                 )
                 
             target_asset.status = GenerationStatus.COMPLETED
@@ -824,7 +845,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       style_prompt: str = None, generation_type: str = "all",
                                       prompt: str = None, apply_style: bool = True,
                                       negative_prompt: str = None, batch_size: int = 1,
-                                      model_name: str = None, aspect_ratio: str = None) -> Tuple[Script, str]:
+                                      model_name: str = None, aspect_ratio: str = None,
+                                      reference: Any = None) -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
@@ -835,6 +857,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+
+        normalized_reference = None
+        if reference is not None:
+            # Validate both identity and media before creating the task. The
+            # same IDs are resolved again when the background task executes.
+            _resolved_reference, normalized_reference = self._resolve_asset_library_reference(
+                script,
+                reference,
+            )
 
         target_asset.status = GenerationStatus.PROCESSING
         
@@ -854,6 +885,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "params": {
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
+                "reference": normalized_reference,
                 "style_prompt": style_prompt,
                 "generation_type": generation_type,
                 "prompt": prompt,
@@ -912,6 +944,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params["model_name"],
                     params.get("aspect_ratio"),
                     params.get("use_reference_image", False),
+                    params.get("reference"),
                 )
             task["status"] = "completed"
             task["progress"] = 100
@@ -941,6 +974,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         generation_type = params.get("generation_type", "all")
         prompt = params.get("prompt")
         reference_image_url = params.get("reference_image_url")
+        reference_provenance = None
+        if params.get("reference") is not None:
+            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+                series,
+                params["reference"],
+            )
 
         if asset_type == "character":
             target = next((c for c in series.characters if c.id == asset_id), None)
@@ -950,6 +989,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 target, generation_type=generation_type, prompt=prompt or "",
                 positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         elif asset_type == "scene":
             target = next((s for s in series.scenes if s.id == asset_id), None)
@@ -959,6 +1000,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
                 prompt=prompt,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -968,6 +1011,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
                 prompt=prompt,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
@@ -1216,6 +1261,161 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_library_data()
         else:
             self._save_data()
+
+    @staticmethod
+    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, str]]:
+        """Normalize the public reference contract before resolving it.
+
+        This deliberately keeps only the three stable identifiers. Provider
+        URLs are never copied into an async task snapshot or provenance field.
+        """
+        if reference is None:
+            return None
+        if isinstance(reference, AssetLibraryReference):
+            raw = reference.model_dump()
+        elif isinstance(reference, dict):
+            raw = reference
+        else:
+            raise InvalidAssetReference("reference must be an asset-library reference object")
+
+        asset_type = raw.get("asset_type")
+        asset_id = raw.get("asset_id")
+        variant_id = raw.get("variant_id")
+        if asset_type not in ("character", "scene", "prop"):
+            raise InvalidAssetReference("reference.asset_type is invalid")
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise InvalidAssetReference("reference.asset_id is required")
+        if not isinstance(variant_id, str) or not variant_id.strip():
+            raise InvalidAssetReference("reference.variant_id is required")
+        return {
+            "asset_type": asset_type,
+            "asset_id": asset_id.strip(),
+            "variant_id": variant_id.strip(),
+        }
+
+    @staticmethod
+    def _asset_image_variants(asset: Any, asset_type: str) -> List[Any]:
+        """Return every image variant owned by an asset.
+
+        The character schema has a canonical ``reference_sheet`` plus legacy
+        containers. Scenes and props use ``image_asset``. Keeping the legacy
+        containers in the resolver allows older library records to remain
+        selectable while the UI prefers the canonical sheet when present.
+        """
+        if asset_type == "character":
+            containers = [
+                getattr(asset, "reference_sheet", None),
+                getattr(asset, "full_body_asset", None),
+                getattr(asset, "three_view_asset", None),
+                getattr(asset, "headshot_asset", None),
+            ]
+        else:
+            containers = [getattr(asset, "image_asset", None)]
+
+        variants: List[Any] = []
+        seen_ids = set()
+        for container in containers:
+            if container is None:
+                continue
+            candidates = getattr(container, "image_variants", None)
+            if candidates is None:
+                candidates = getattr(container, "variants", None)
+            for variant in candidates or []:
+                variant_id = getattr(variant, "id", None)
+                if variant_id and variant_id not in seen_ids:
+                    seen_ids.add(variant_id)
+                    variants.append(variant)
+        return variants
+
+    @staticmethod
+    def _resolve_stored_reference_value(value: str, owner_profile_id: Optional[str]) -> str:
+        """Resolve a persisted variant URL/path for a provider adapter.
+
+        HTTP URLs and OSS object keys are already provider-compatible. Local
+        material is accepted only from the managed ``output`` tree and must
+        exist at execution time; this prevents a stale or traversal path from
+        reaching an image provider.
+        """
+        if value.startswith(("https://", "http://")) or is_object_key(value):
+            return value
+
+        # A signed Studio URL can be stored by an older client. Resolve it
+        # through the owner boundary before turning it back into a local path.
+        if value.startswith("/studio/media/") or value.startswith("studio/media/"):
+            if not owner_profile_id:
+                raise InvalidAssetReference("reference media requires an authenticated owner")
+            try:
+                return resolve_studio_reference(
+                    value if value.startswith("/") else f"/{value}",
+                    owner_profile_id,
+                )
+            except Exception as exc:
+                raise InvalidAssetReference("reference variant media is invalid or expired") from exc
+
+        candidate = os.path.realpath(
+            value if value.startswith("output/") or os.path.isabs(value)
+            else os.path.join("output", value)
+        )
+        output_root = os.path.realpath("output")
+        if not candidate.startswith(output_root + os.sep) or not os.path.isfile(candidate):
+            raise InvalidAssetReference("reference variant media is missing")
+        return candidate
+
+    def _resolve_asset_library_reference(
+        self,
+        container: Any,
+        reference: Any,
+    ) -> Tuple[str, Dict[str, str]]:
+        """Resolve a reference against a project or series visible to its owner."""
+        normalized = self._normalize_asset_reference(reference)
+        if normalized is None:
+            raise InvalidAssetReference("reference is required")
+
+        asset_type = normalized["asset_type"]
+        asset_id = normalized["asset_id"]
+        if isinstance(container, Script):
+            asset, _source = self._find_asset_with_source(container, asset_id, asset_type)
+        elif isinstance(container, Series):
+            if asset_type == "character":
+                own_list = container.characters
+            elif asset_type == "scene":
+                own_list = container.scenes
+            else:
+                own_list = container.props
+            asset = next((item for item in own_list if item.id == asset_id), None)
+            if asset is None:
+                asset = next(
+                    (
+                        item
+                        for item in self._library_list_for_type(asset_type, container.owner_profile_id)
+                        if item.id == asset_id
+                    ),
+                    None,
+                )
+        else:
+            raise InvalidAssetReference("reference target container is invalid")
+
+        if asset is None:
+            raise InvalidAssetReference("reference asset is not visible to this owner")
+
+        variant = next(
+            (
+                item
+                for item in self._asset_image_variants(asset, asset_type)
+                if getattr(item, "id", None) == normalized["variant_id"]
+            ),
+            None,
+        )
+        if variant is None:
+            raise InvalidAssetReference("reference variant does not belong to the asset")
+        value = getattr(variant, "url", None)
+        if not isinstance(value, str) or not value.strip():
+            raise InvalidAssetReference("reference variant has no image material")
+        resolved = self._resolve_stored_reference_value(
+            value.strip(),
+            getattr(container, "owner_profile_id", None),
+        )
+        return resolved, normalized
 
     def toggle_asset_lock(self, script_id: str, asset_id: str, asset_type: str) -> Script:
         """Toggle the locked status of an asset. Works on both
@@ -5308,12 +5508,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                               style_prompt: str = None, generation_type: str = "all",
                               prompt: str = None, apply_style: bool = True,
                               negative_prompt: str = None, batch_size: int = 1,
-                              model_name: str = None) -> tuple:
+                              model_name: str = None, reference: Any = None) -> tuple:
         """Generate a Series asset. Creates an async task like project asset generation.
         Returns (series, task_id)."""
         series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
+
+        normalized_reference = None
+        if reference is not None:
+            _resolved_reference, normalized_reference = self._resolve_asset_library_reference(
+                series,
+                reference,
+            )
 
         t2i_model = model_name or series.model_settings.t2i_model
 
@@ -5363,6 +5570,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "params": {
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
+                "reference": normalized_reference,
                 "effective_positive_prompt": effective_positive_prompt,
                 "effective_negative_prompt": effective_negative_prompt,
                 "generation_type": generation_type,

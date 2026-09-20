@@ -40,7 +40,7 @@ import logging
 import re
 import traceback
 from urllib.request import Request as UrlRequest, urlopen
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError
+from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -51,6 +51,7 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    AssetLibraryReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
@@ -323,6 +324,7 @@ class GenerateAssetRequest(BaseModel):
     asset_type: str
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
+    reference: Optional[AssetLibraryReference] = None
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -941,12 +943,15 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.apply_style,
             request.negative_prompt,
             request.batch_size,
-            request.model_name
+            request.model_name,
+            request.reference,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
         response_data["_task_id"] = task_id
         return signed_response(response_data)
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2847,6 +2852,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.aspect_ratio,
+            request.reference,
         )
         
         # Add background processing
@@ -2857,6 +2863,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         response_data["_task_id"] = task_id
         return signed_response(response_data)
 
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

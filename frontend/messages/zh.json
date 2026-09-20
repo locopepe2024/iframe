@@ -224,6 +224,18 @@
   },
   "castWorkbench": {
     "uploadReference": "上传参考图",
+    "chooseFromLibrary": "从资产库选择",
+    "libraryReferenceTitle": "选择资产库参考图",
+    "libraryReferenceHint": "选择一个资产和具体变体作为本次生成的参考，不会把提供方链接提交到浏览器。",
+    "libraryReferenceSelected": "已使用资产库变体作为参考",
+    "clearLibraryReference": "清除资产库参考图",
+    "closeLibraryReferencePicker": "关闭资产库参考图选择",
+    "useLibraryVariant": "使用 {name} 的这张变体作为参考",
+    "librarySource": {
+      "episode": "本集",
+      "series": "系列共享",
+      "global": "全局资产库"
+    },
     "uploading": "上传中…",
     "uploadSuccess": "参考图已上传并选用",
     "uploadFailed": "参考图上传失败",

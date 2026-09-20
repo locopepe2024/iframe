@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
 import json
 import time
@@ -136,6 +136,18 @@ class ImageVariant(BaseModel):
     source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
     source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
     source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
+    reference_asset_type: Optional[Literal["character", "scene", "prop"]] = Field(
+        None,
+        description="Asset-library reference type used to generate this variant",
+    )
+    reference_asset_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference asset ID used to generate this variant",
+    )
+    reference_variant_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference variant ID used to generate this variant",
+    )
     reference_view_role: Optional[str] = Field(
         None,
         description="Optional product view role such as front, right, three_quarter_right, or detail",
@@ -181,6 +193,19 @@ class AssetUnit(BaseModel):
     # Timestamps for consistency tracking
     image_updated_at: float = Field(default_factory=time.time, description="Timestamp of last image update")
     video_updated_at: float = Field(0.0, description="Timestamp of last motion ref update")
+
+
+class AssetLibraryReference(BaseModel):
+    """Stable identity of one reusable image variant from the asset library.
+
+    The browser submits only these IDs. The pipeline resolves the image
+    material against the current owner's project/series/global asset pools at
+    task execution time, so delivery URLs never become durable request state.
+    """
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str = Field(..., min_length=1)
+    variant_id: str = Field(..., min_length=1)
 
 class VideoTask(BaseModel):
     id: str

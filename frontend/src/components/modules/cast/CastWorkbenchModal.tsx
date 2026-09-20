@@ -20,9 +20,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2 } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { api } from "@/lib/api";
+import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { resolveModelId } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -97,6 +97,14 @@ interface ImageVariant {
     is_favorited?: boolean;
     reference_view_role?: string;
     reference_distance?: string;
+}
+
+interface ReferenceLibraryAsset {
+    asset_type: CastKind;
+    asset_id: string;
+    name: string;
+    source?: "episode" | "series" | "global";
+    variants: ImageVariant[];
 }
 
 type CharacterTemplate = "simple" | "detailed" | "design_sheet";
@@ -175,6 +183,35 @@ function readVariants(entity: any, kind: CastKind): ImageVariant[] {
     return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
 }
 
+/**
+ * The Cast gallery intentionally prefers the canonical character sheet, but
+ * an asset-library picker must expose every reusable character image variant.
+ * Older records may only have a full-body, three-view, or headshot container.
+ */
+function readLibraryVariants(entity: any, kind: CastKind): ImageVariant[] {
+    if (!entity) return [];
+    if (kind !== "character") return readVariants(entity, kind);
+
+    const containers = [
+        entity?.reference_sheet?.image_variants,
+        entity?.full_body_asset?.variants,
+        entity?.three_view_asset?.variants,
+        entity?.headshot_asset?.variants,
+    ];
+    const seen = new Set<string>();
+    return containers.flatMap((items: any[] | undefined) => (items || []).flatMap((v: any) => {
+        if (!v?.id || seen.has(v.id)) return [];
+        seen.add(v.id);
+        return [{
+            id: v.id,
+            url: v.url,
+            is_favorited: v.is_favorited,
+            reference_view_role: v.reference_view_role,
+            reference_distance: v.reference_distance,
+        }];
+    }));
+}
+
 function readSelectedId(entity: any, kind: CastKind): string | null {
     if (!entity) return null;
     if (kind === "character") {
@@ -223,6 +260,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
+    const [libraryReference, setLibraryReference] = useState<AssetLibraryReference | null>(null);
+    const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
+        characters: any[];
+        scenes: any[];
+        props: any[];
+    }>({ characters: [], scenes: [], props: [] });
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
@@ -242,6 +286,76 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const lastSeededEntityId = useRef<string | null>(null);
     const overlayMouseDown = useRef(false);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        // A normal GET /projects response already merges series/global assets,
+        // but a freshly-created or cached project can predate that merge. Load
+        // the global pool opportunistically so the picker remains complete;
+        // the current project/series data still renders immediately.
+        const loadGlobalAssets = api.listLibraryAssets;
+        if (typeof loadGlobalAssets !== "function") return;
+        let request: unknown;
+        try {
+            request = loadGlobalAssets();
+        } catch {
+            return;
+        }
+        void Promise.resolve(request)
+            .then((data: any) => {
+                setGlobalLibraryAssets({
+                    characters: data?.characters || [],
+                    scenes: data?.scenes || [],
+                    props: data?.props || [],
+                });
+            })
+            .catch(() => {
+                // The current project response is still a valid source when
+                // the optional global-library read is unavailable.
+            });
+    }, [isOpen]);
+
+    const referenceLibraryAssets = useMemo<ReferenceLibraryAsset[]>(() => {
+        if (!currentProject) return [];
+        const byKey = new Map<string, ReferenceLibraryAsset>();
+        const addGroup = (assetType: CastKind, assets: any[], fallbackSource?: ReferenceLibraryAsset["source"]) => {
+            for (const asset of assets || []) {
+                const variants = readLibraryVariants(asset, assetType);
+                if (!asset?.id || variants.length === 0) continue;
+                const key = `${assetType}:${asset.id}`;
+                // Episode-local/project response data has priority over the
+                // parent series and global fallback pools.
+                if (byKey.has(key)) continue;
+                byKey.set(key, {
+                    asset_type: assetType,
+                    asset_id: asset.id,
+                    name: asset.name,
+                    source: asset.source || fallbackSource,
+                    variants,
+                });
+            }
+        };
+
+        addGroup("character", currentProject.characters || [], "episode");
+        addGroup("scene", currentProject.scenes || [], "episode");
+        addGroup("prop", currentProject.props || [], "episode");
+        addGroup("character", currentSeries?.characters || [], "series");
+        addGroup("scene", currentSeries?.scenes || [], "series");
+        addGroup("prop", currentSeries?.props || [], "series");
+        addGroup("character", globalLibraryAssets.characters, "global");
+        addGroup("scene", globalLibraryAssets.scenes, "global");
+        addGroup("prop", globalLibraryAssets.props, "global");
+        return Array.from(byKey.values());
+    }, [currentProject, currentSeries, globalLibraryAssets]);
+
+    const selectedLibraryAsset = useMemo(() => {
+        if (!libraryReference) return null;
+        const asset = referenceLibraryAssets.find((item) =>
+            item.asset_type === libraryReference.asset_type && item.asset_id === libraryReference.asset_id,
+        );
+        const variant = asset?.variants.find((item) => item.id === libraryReference.variant_id);
+        return asset && variant ? { asset, variant } : null;
+    }, [libraryReference, referenceLibraryAssets]);
+
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
     // to flip the modal closed and back. Clearing happens via the reset
@@ -254,6 +368,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             lastSeededEntityId.current = entity.id;
         }
     }, [isOpen, entity, kind, selectedTemplate]);
+
+    useEffect(() => {
+        setLibraryReference(null);
+        setLibraryPickerOpen(false);
+    }, [currentProject?.id, entity?.id, kind]);
 
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
@@ -374,6 +493,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 effectiveBatchSize,
                 selectedModelId,
                 aspectRatioOverride || undefined,
+                libraryReference ?? undefined,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -406,6 +526,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
                 kind === "character" ? "reference_sheet" : "image");
             updateProject(currentProject.id, updated);
+            setLibraryReference(null);
+            setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
@@ -413,6 +535,19 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        setLibraryReference({
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        });
+        setLibraryPickerOpen(false);
+    };
+
+    const handleClearLibraryReference = () => {
+        setLibraryReference(null);
     };
 
     const handleSelectVariant = async (variantId: string) => {
@@ -943,11 +1078,89 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                         <div className="flex flex-col p-5 overflow-y-auto custom-scrollbar bg-surface">
                             <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
                                 onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
-                            <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
-                                className="glass-button mb-3 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
-                                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                {t(uploading ? "uploading" : "uploadReference")}
-                            </button>
+                            <div className="flex gap-2 mb-3">
+                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
+                                    className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    {t(uploading ? "uploading" : "uploadReference")}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={generating || referenceLibraryAssets.length === 0}
+                                    onClick={() => setLibraryPickerOpen((open) => !open)}
+                                    className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
+                                >
+                                    <Library size={16} />
+                                    {t("chooseFromLibrary")}
+                                </button>
+                            </div>
+                            {selectedLibraryAsset && (
+                                <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/35 bg-primary/5 p-2">
+                                    <PreviewImage
+                                        src={getAssetUrl(selectedLibraryAsset.variant.url)}
+                                        alt={`${selectedLibraryAsset.asset.name} ${selectedLibraryAsset.variant.id}`}
+                                        className="h-12 w-12 rounded object-cover"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
+                                        <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearLibraryReference}
+                                        aria-label={t("clearLibraryReference")}
+                                        className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )}
+                            {libraryPickerOpen && (
+                                <div data-testid="cast-library-reference-picker" className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div>
+                                            <p className="text-[0.75rem] font-medium text-foreground">{t("libraryReferenceTitle")}</p>
+                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("libraryReferenceHint")}</p>
+                                        </div>
+                                        <button type="button" onClick={() => setLibraryPickerOpen(false)} aria-label={t("closeLibraryReferencePicker")} className="p-1 text-text-muted hover:text-foreground">
+                                            <X size={13} />
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {referenceLibraryAssets.map((asset) => (
+                                            <div key={`${asset.asset_type}:${asset.asset_id}`}>
+                                                <div className="mb-1 flex items-center gap-1.5">
+                                                    <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
+                                                    {asset.source && <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source}`)}</span>}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {asset.variants.map((variant) => {
+                                                        const active = libraryReference?.asset_type === asset.asset_type
+                                                            && libraryReference.asset_id === asset.asset_id
+                                                            && libraryReference.variant_id === variant.id;
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={variant.id}
+                                                                aria-label={t("useLibraryVariant", { name: asset.name })}
+                                                                onClick={() => handleChooseLibraryVariant(asset, variant)}
+                                                                className={`relative overflow-hidden rounded border text-left ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
+                                                            >
+                                                                <PreviewImage
+                                                                    src={getAssetUrl(variant.url)}
+                                                                    alt={`${asset.name} ${variant.id}`}
+                                                                    className="h-20 w-full object-cover"
+                                                                />
+                                                                {active && <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-white"><Check size={11} /></span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {/* Gallery header with filter tabs */}
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">

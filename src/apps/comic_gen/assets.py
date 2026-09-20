@@ -80,6 +80,35 @@ class AssetGenerator:
             return self._mulerouter_image_model
         return self.model
 
+    @staticmethod
+    def _reference_path(reference: str) -> str:
+        """Convert a stored asset reference into the adapter's input form.
+
+        Asset variants are stored as HTTP URLs, OSS object keys, or paths
+        relative to ``output``. Keep URL/object-key values intact so the
+        provider adapter can sign or publish them; resolve local paths only at
+        the last boundary before the provider call.
+        """
+        if not reference:
+            return reference
+        if (
+            reference.startswith(("https://", "http://"))
+            or is_object_key(reference)
+            or os.path.isfile(reference)
+        ):
+            return reference
+        return os.path.join("output", reference)
+
+    @staticmethod
+    def _reference_metadata(reference_provenance: Dict[str, str] = None) -> Dict[str, str]:
+        if not reference_provenance:
+            return {}
+        return {
+            "reference_asset_type": reference_provenance["asset_type"],
+            "reference_asset_id": reference_provenance["asset_id"],
+            "reference_variant_id": reference_provenance["variant_id"],
+        }
+
     def generate_character(
         self,
         character: Character,
@@ -94,6 +123,7 @@ class AssetGenerator:
         *,
         reference_image_url: str = None,
         use_reference_image: bool = True,
+        reference_provenance: Dict[str, str] = None,
     ) -> Character:
         """
         Generates character assets based on generation_type.
@@ -128,7 +158,7 @@ class AssetGenerator:
                     reference = selected.url
                 reference_args = {}
                 if reference:
-                    reference_args["ref_image_path"] = reference if reference.startswith(("https://", "http://")) or is_object_key(reference) or os.path.isfile(reference) else os.path.join("output", reference)
+                    reference_args["ref_image_path"] = self._reference_path(reference)
                 effective_prompt = prompt if prompt else build_reference_sheet_prompt(character.name, character.description)
                 if positive_prompt and positive_prompt not in effective_prompt:
                     effective_prompt = append_style_suffix(effective_prompt, positive_prompt)
@@ -164,6 +194,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=effective_prompt,
                             source_origin="generation",
+                            **self._reference_metadata(reference_provenance),
                         )
                         character.reference_sheet.image_variants.append(variant)
 
@@ -215,11 +246,22 @@ class AssetGenerator:
                 # Generate the image with style suffix appended
                 generation_prompt = append_style_suffix(base_prompt, style_suffix)
                 
+                # An explicit library/upload reference is authoritative for
+                # every character generation mode.  The older reverse
+                # generation fallbacks below are only consulted when the
+                # caller did not provide one.  This keeps the provenance
+                # recorded by the pipeline aligned with the actual provider
+                # input instead of silently producing a text-only image.
+                ref_image_path = (
+                    self._reference_path(reference_image_url)
+                    if reference_image_url
+                    else None
+                )
+
                 # Check for base character reference (for variants)
-                ref_image_path = None
                 if character.base_character_id:
                     base_fullbody_path = os.path.join(output_dir, 'characters', f"{character.base_character_id}_fullbody.png")
-                    if os.path.exists(base_fullbody_path):
+                    if not ref_image_path and os.path.exists(base_fullbody_path):
                         ref_image_path = base_fullbody_path
 
                 # === REVERSE GENERATION: Check for uploaded images to use as reference ===
@@ -298,6 +340,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=generation_prompt,
                             source_origin="generation",
+                            **self._reference_metadata(reference_provenance),
                         )
                         character.full_body_asset.variants.insert(0, variant) # Prepend new variants
                         
@@ -354,6 +397,14 @@ class AssetGenerator:
             # === REVERSE GENERATION: Allow using uploaded images as reference if no full body ===
             # Check for uploaded images to use as reference when no full body exists
             uploaded_reference_url = None
+            # When a caller explicitly selects a library/upload reference for
+            # a derived-only request, use it even if the character has no
+            # previously generated full-body variant.
+            explicit_reference_path = (
+                self._reference_path(reference_image_url)
+                if reference_image_url
+                else None
+            )
             if not current_full_body_url:
                 # Check for any uploaded image that can be used as reference
                 # Priority: The asset type being generated > other types
@@ -389,14 +440,25 @@ class AssetGenerator:
                             uploaded_reference_url = uploaded_variant.url
                             logger.debug(f"Reverse generation: Will use own uploaded image as reference")
 
-            if generation_type in ["three_view", "headshot"] and not current_full_body_url and not uploaded_reference_url:
+            if generation_type in ["three_view", "headshot"] and not current_full_body_url and not uploaded_reference_url and not explicit_reference_path:
                 raise ValueError("Full body image is required to generate derived assets. Upload an image or generate a full body first.")
             
-            # Handle reference image path: could be OSS Object Key or local path
-            # Prioritize full body, fall back to uploaded reference
-            reference_url = current_full_body_url or uploaded_reference_url
+            # Handle reference image path: could be an explicit library/upload
+            # input, an OSS Object Key, or a local path. For derived-only
+            # requests the explicit input must win even when an older full
+            # body is already present; otherwise the selected reference would
+            # be recorded but never reach the provider.
+            if generation_type in ["three_view", "headshot"]:
+                reference_url = explicit_reference_path or current_full_body_url or uploaded_reference_url
+            else:
+                # In ``all`` mode, the newly generated full body remains the
+                # canonical source for its derived views when available.
+                reference_url = current_full_body_url or uploaded_reference_url or explicit_reference_path
             if reference_url:
-                if is_object_key(reference_url):
+                if reference_url.startswith(("https://", "http://")):
+                    fullbody_path = reference_url
+                    logger.debug(f"Using remote URL for reference: {reference_url[:100]}")
+                elif is_object_key(reference_url):
                     # OSS Object Key - pass directly, image.py will handle signing
                     fullbody_path = reference_url
                     logger.debug(f"Using OSS Object Key for reference: {reference_url}")
@@ -405,7 +467,7 @@ class AssetGenerator:
                     fullbody_path = os.path.join("output", reference_url)
                     logger.debug(f"Using local path for reference: {fullbody_path}")
             else:
-                fullbody_path = None
+                fullbody_path = explicit_reference_path
 
             # 2. Three View Sheet (Derived)
             if generation_type in ["all", "three_view"]:
@@ -447,6 +509,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=generation_prompt,
                             source_origin="generation",
+                            **self._reference_metadata(reference_provenance),
                         )
                         character.three_view_asset.variants.insert(0, variant)
                         
@@ -528,6 +591,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=generation_prompt,
                             source_origin="generation",
+                            **self._reference_metadata(reference_provenance),
                         )
                         character.headshot_asset.variants.insert(0, variant)
                         
@@ -596,6 +660,8 @@ class AssetGenerator:
         model_name: str = None,
         size: str = None,
         prompt: str = None,
+        reference_image_url: str = None,
+        reference_provenance: Dict[str, str] = None,
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
@@ -623,7 +689,17 @@ class AssetGenerator:
                 output_path = os.path.join(output_dir, 'scenes', f"{scene.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
-                image_path, _ = self._get_model_for(model_name).generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)
+                reference_args = {}
+                if reference_image_url:
+                    reference_args["ref_image_path"] = self._reference_path(reference_image_url)
+                image_path, _ = self._get_model_for(model_name).generate(
+                    prompt,
+                    output_path,
+                    negative_prompt=negative_prompt,
+                    model_name=model_name,
+                    size=effective_size,
+                    **reference_args,
+                )
                 
                 rel_path = os.path.relpath(output_path, "output")
                 
@@ -638,6 +714,7 @@ class AssetGenerator:
                     created_at=time.time(),
                     prompt_used=prompt,
                     source_origin="generation",
+                    **self._reference_metadata(reference_provenance),
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
@@ -676,6 +753,8 @@ class AssetGenerator:
         model_name: str = None,
         size: str = None,
         prompt: str = None,
+        reference_image_url: str = None,
+        reference_provenance: Dict[str, str] = None,
     ) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
@@ -699,7 +778,17 @@ class AssetGenerator:
                 output_path = os.path.join(output_dir, 'props', f"{prop.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
-                image_path, _ = self._get_model_for(model_name).generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)
+                reference_args = {}
+                if reference_image_url:
+                    reference_args["ref_image_path"] = self._reference_path(reference_image_url)
+                image_path, _ = self._get_model_for(model_name).generate(
+                    prompt,
+                    output_path,
+                    negative_prompt=negative_prompt,
+                    model_name=model_name,
+                    size=effective_size,
+                    **reference_args,
+                )
                 
                 rel_path = os.path.relpath(output_path, "output")
                 
@@ -714,6 +803,7 @@ class AssetGenerator:
                     created_at=time.time(),
                     prompt_used=prompt,
                     source_origin="generation",
+                    **self._reference_metadata(reference_provenance),
                 )
                 prop.image_asset.variants.insert(0, variant)
                 

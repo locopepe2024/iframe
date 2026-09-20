@@ -60,6 +60,12 @@ export const authenticatedFetch = (
 
 export type ProviderMode = "dashscope" | "vendor";
 
+export interface AssetLibraryReference {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    variant_id: string;
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -553,7 +559,7 @@ export const api = {
         return response.json();
     },
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string) => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -566,6 +572,7 @@ export const api = {
             batch_size: batchSize,
             model_name: modelName,
             aspect_ratio: aspectRatio,
+            ...(reference ? { reference } : {}),
         });
         return res.data;
     },

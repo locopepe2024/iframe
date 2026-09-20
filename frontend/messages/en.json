@@ -224,6 +224,18 @@
   },
   "castWorkbench": {
     "uploadReference": "Upload reference image",
+    "chooseFromLibrary": "Choose from library",
+    "libraryReferenceTitle": "Choose a library reference",
+    "libraryReferenceHint": "Select an asset and a specific variant for this generation. Provider URLs stay server-side.",
+    "libraryReferenceSelected": "Using a library variant as reference",
+    "clearLibraryReference": "Clear library reference",
+    "closeLibraryReferencePicker": "Close library reference picker",
+    "useLibraryVariant": "Use this {name} variant as reference",
+    "librarySource": {
+      "episode": "Episode",
+      "series": "Series shared",
+      "global": "Global library"
+    },
     "uploading": "Uploading…",
     "uploadSuccess": "Reference uploaded and selected",
     "uploadFailed": "Reference upload failed",
