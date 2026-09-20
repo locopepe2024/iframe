@@ -31,6 +31,11 @@ from src.apps.comic_gen.models import (
     normalize_director_profile_draft,
     normalize_director_profile_patch,
 )
+from src.apps.comic_gen.llm import (
+    DIRECTOR_SOURCE_DIRECT_MAX_CHARS,
+    ScriptProcessor,
+    split_director_source,
+)
 from src.apps.identity import UserContext
 
 
@@ -96,8 +101,6 @@ def make_pipeline():
 
 
 def test_director_refinement_prompt_contains_source_entities_style_draft_and_history():
-    from src.apps.comic_gen.llm import ScriptProcessor
-
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
     processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
@@ -133,8 +136,6 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
 
 
 def test_director_analysis_prompt_defines_bookend_as_optional_structure():
-    from src.apps.comic_gen.llm import ScriptProcessor
-
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
     processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
@@ -669,6 +670,122 @@ def test_asset_generation_receives_and_records_confirmed_director_profile():
     assert character.director_profile_revision == 2
     assert character.director_profile_hash == "profile-2"
     assert character.director_review_required is False
+
+
+def test_director_source_split_preserves_exact_ranges_and_prefers_sentence_boundaries():
+    text = "".join(
+        f"第{i}段：人物在地点{i}推进冲突。接着留下悬念{i}！\n"
+        for i in range(1200)
+    )
+    chunks = split_director_source(
+        text,
+        direct_max_chars=1000,
+        target_chars=1000,
+        max_chars=1200,
+    )
+
+    assert len(chunks) > 1
+    assert "".join(chunk["text"] for chunk in chunks) == text
+    assert chunks[0]["char_start"] == 0
+    assert chunks[-1]["char_end"] == len(text)
+    assert all(chunk["char_end"] - chunk["char_start"] <= 1200 for chunk in chunks)
+    assert all(
+        chunk["source_ref"] == (
+            f"source:chars-{chunk['char_start']}-{chunk['char_end']}"
+        )
+        for chunk in chunks
+    )
+    # The fixture has a sentence boundary well before every hard limit; a
+    # chunk therefore ends after punctuation/newline rather than mid-token.
+    assert all(
+        text[chunk["char_end"] - 1] in "。！？!?；;\n\r”"
+        for chunk in chunks[:-1]
+    )
+
+
+def test_short_director_source_stays_on_single_call_path():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    source = "短剧本：开头、冲突、结尾。"
+
+    processor.analyze_director_profile(source, {"characters": []}, {})
+
+    assert processor.llm.chat.call_count == 1
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert source in prompt
+    assert "source_digest" not in prompt
+
+
+def test_long_director_source_uses_source_digest_and_reuses_map_cache():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+    source = "".join(
+        f"第{i}段：令狐冲在地点{i % 7}面对新的选择。余波仍未平息。\n"
+        for i in range(1200)
+    )
+    assert len(source) > DIRECTOR_SOURCE_DIRECT_MAX_CHARS
+    chunks = split_director_source(source)
+    calls = []
+
+    def chat_side_effect(**kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        calls.append(prompt)
+        if "<source_chunk" in prompt:
+            return json.dumps({
+                "summary": "本片段推进人物关系并留下局部悬念。",
+                "continuity_in": "人物带着上一段冲突进入",
+                "continuity_out": "新的选择改变关系状态",
+                "facts": ["人物关系发生变化"],
+                "open_threads": ["选择的后果尚未揭示"],
+            }, ensure_ascii=False)
+        return json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    processor.analyze_director_profile(source, {"characters": []}, {})
+
+    assert len(calls) == len(chunks) + 1
+    final_prompt = calls[-1]
+    assert "<source_digest>" in final_prompt
+    assert "chunk_summaries" in final_prompt
+    assert "head_anchor" in final_prompt and "tail_anchor" in final_prompt
+    assert len(final_prompt) < 70000
+    # A distinctive middle marker is present in a map request but not copied
+    # verbatim into the final Director request.
+    middle_marker = "第600段：令狐冲"
+    assert any(middle_marker in prompt for prompt in calls[:-1])
+    assert middle_marker not in final_prompt
+
+    map_call_count = len(calls) - 1
+    processor.refine_director_profile(
+        source,
+        {"characters": []},
+        {},
+        profile_payload(),
+        ["强化首尾框架的样片节奏"],
+    )
+    assert len(calls) == map_call_count + 2
+
+
+def test_long_source_map_response_keeps_server_owned_source_ranges():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    source = ("开场人物进入房间。" * 2000) + "结尾回到现实。"
+    chunks = split_director_source(source)
+    processor.llm.chat.return_value = json.dumps({
+        "source_ref": "model-invented-ref",
+        "summary": "有来源的片段摘要。",
+    }, ensure_ascii=False)
+
+    digest = processor._director_source_digest(source)
+
+    assert "model-invented-ref" not in digest
+    assert all(
+        f'"source_ref":"source:chars-{chunk["char_start"]}-{chunk["char_end"]}"'
+        in digest
+        for chunk in chunks
+    )
 
 
 def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monkeypatch):

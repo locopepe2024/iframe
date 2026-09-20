@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import time
 import uuid
@@ -59,6 +60,131 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
     "不要把没有原文依据的推断写成 active 事实。"
 )
+
+# A Director prompt is allowed to carry a complete source only while it is
+# still small enough to be a predictable request.  Larger sources are mapped
+# into source-linked notes before the Director call.  These are character
+# budgets (not token budgets) so the boundary remains deterministic for
+# Chinese and mixed-language scripts.
+DIRECTOR_SOURCE_DIRECT_MAX_CHARS = 16000
+DIRECTOR_SOURCE_CHUNK_TARGET_CHARS = 16000
+DIRECTOR_SOURCE_CHUNK_MAX_CHARS = 18000
+DIRECTOR_SOURCE_CHUNK_MIN_CHARS = 8000
+DIRECTOR_SOURCE_ANCHOR_MAX_CHARS = 5000
+DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS = 360
+DIRECTOR_SOURCE_FACT_MAX_CHARS = 72
+DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS = 64
+DIRECTOR_SOURCE_NOTE_MAX_ITEMS = 2
+DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 64000
+DIRECTOR_SOURCE_CACHE_MAX_ENTRIES = 4
+
+
+def _director_source_boundary_positions(text: str) -> List[int]:
+    """Return character offsets that are safe-ish narrative break points.
+
+    Paragraph/newline boundaries are preferred because they usually align with
+    chapter or scene prose. Sentence punctuation is a fallback for sources
+    that arrive as one wrapped paragraph. The offsets are end-exclusive.
+    """
+    positions = {0, len(text)}
+    for match in re.finditer(r"\r\n|\n|\r", text):
+        positions.add(match.end())
+    # Include closing quote/bracket characters in the preceding sentence so a
+    # split never leaves a dangling Chinese quote at the start of a chunk.
+    for match in re.finditer(
+        r"[。！？!?；;](?:[\"”’'』」）】》]*)", text
+    ):
+        positions.add(match.end())
+    return sorted(positions)
+
+
+def split_director_source(
+    text: str,
+    *,
+    direct_max_chars: int = DIRECTOR_SOURCE_DIRECT_MAX_CHARS,
+    target_chars: int = DIRECTOR_SOURCE_CHUNK_TARGET_CHARS,
+    max_chars: int = DIRECTOR_SOURCE_CHUNK_MAX_CHARS,
+) -> List[Dict[str, Any]]:
+    """Split a Director source into natural-boundary, source-linked chunks.
+
+    The returned ranges use ``[char_start, char_end)`` semantics and concatenate
+    exactly to the input. A hard split is used only when no known boundary fits
+    inside the chunk limit; callers can therefore distinguish a provenance
+    range from a claimed semantic scene boundary.
+    """
+    if not isinstance(text, str):
+        raise TypeError("Director source must be a string")
+    if not text:
+        return []
+    if direct_max_chars < 1 or target_chars < 1 or max_chars < 1:
+        raise ValueError("Director source chunk limits must be positive")
+    if target_chars > max_chars:
+        target_chars = max_chars
+
+    boundaries = _director_source_boundary_positions(text)
+    if len(text) <= direct_max_chars:
+        return [{
+            "source_ref": f"source:chars-0-{len(text)}",
+            "char_start": 0,
+            "char_end": len(text),
+            "text": text,
+        }]
+
+    chunks: List[Dict[str, Any]] = []
+    start = 0
+    while start < len(text):
+        hard_end = min(len(text), start + max_chars)
+        minimum_end = min(
+            hard_end,
+            start + max(1, min(DIRECTOR_SOURCE_CHUNK_MIN_CHARS, target_chars)),
+        )
+
+        # Pick the latest natural boundary within the hard limit. This keeps
+        # the number of map calls low while never exceeding the input budget.
+        eligible = [
+            position for position in boundaries if start < position <= hard_end
+        ]
+        natural = [position for position in eligible if position >= minimum_end]
+        selected_end = max(natural) if natural else None
+        if selected_end is None:
+            # If the source contains an unusually large paragraph, use the
+            # last boundary before the limit when it still makes a useful
+            # chunk; otherwise the hard limit is the only safe option.
+            selected_end = max(eligible) if eligible else hard_end
+        if selected_end <= start:
+            selected_end = hard_end
+
+        chunk_text = text[start:selected_end]
+        chunks.append({
+            "source_ref": f"source:chars-{start}-{selected_end}",
+            "char_start": start,
+            "char_end": selected_end,
+            "text": chunk_text,
+        })
+        start = selected_end
+    return chunks
+
+
+def _bounded_source_text(value: Any, limit: int) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    return value[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _bounded_source_list(value: Any, *, max_items: int, item_limit: int) -> List[str]:
+    if value in (None, "", [], {}):
+        return []
+    values = value if isinstance(value, list) else [value]
+    return [
+        _bounded_source_text(item, item_limit)
+        for item in values[:max_items]
+        if _bounded_source_text(item, item_limit)
+    ]
 
 # This is deliberately prompt guidance rather than a schema branch.  The
 # Director profile stores the user's requested editorial structure in
@@ -473,6 +599,9 @@ class ScriptProcessor:
         self._api_key = api_key
         from .llm_adapter import LLMAdapter
         self.llm = LLMAdapter()
+        # Long Director sources are expensive to map. Keep only compact source
+        # digests in-process; the raw script remains owned by Script storage.
+        self._director_source_cache: Dict[str, str] = {}
 
     @property
     def is_configured(self):
@@ -707,6 +836,172 @@ class ScriptProcessor:
             created_at=time.time(),
             updated_at=time.time()
         )
+
+    def _director_source_cache_key(self, text: str) -> str:
+        """Key a digest by source content and the active model identity."""
+        provider = str(getattr(self.llm, "provider", ""))
+        model = ""
+        model_getter = getattr(self.llm, "_get_default_model", None)
+        if callable(model_getter):
+            try:
+                model = str(model_getter())
+            except Exception:
+                model = ""
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"{provider}:{model}:{digest}"
+
+    def _normalize_director_source_note(
+        self, payload: Any, chunk: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Project one map response into a bounded, source-linked note."""
+        if not isinstance(payload, dict):
+            raise RuntimeError("长文本 Director 分块摘要必须是 JSON 对象")
+
+        summary = _bounded_source_text(
+            payload.get("summary")
+            or payload.get("local_summary")
+            or payload.get("continuity_summary"),
+            DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS,
+        )
+        if not summary:
+            raise RuntimeError(
+                f"长文本 Director 分块 {chunk['source_ref']} 缺少 summary"
+            )
+
+        def first_value(*keys: str) -> Any:
+            for key in keys:
+                if payload.get(key) not in (None, "", [], {}):
+                    return payload.get(key)
+            return None
+
+        return {
+            # The model cannot change provenance. The server owns the range and
+            # keeps it stable even if the model omits or hallucinates a ref.
+            "source_ref": chunk["source_ref"],
+            "char_start": chunk["char_start"],
+            "char_end": chunk["char_end"],
+            "summary": summary,
+            "continuity_in": _bounded_source_text(
+                first_value("continuity_in", "entry_state", "before"),
+                DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS,
+            ),
+            "continuity_out": _bounded_source_text(
+                first_value("continuity_out", "exit_state", "after"),
+                DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS,
+            ),
+            "facts": _bounded_source_list(
+                first_value("facts", "events", "key_events"),
+                max_items=DIRECTOR_SOURCE_NOTE_MAX_ITEMS,
+                item_limit=DIRECTOR_SOURCE_FACT_MAX_CHARS,
+            ),
+            "open_threads": _bounded_source_list(
+                first_value("open_threads", "unresolved_questions", "questions"),
+                max_items=DIRECTOR_SOURCE_NOTE_MAX_ITEMS,
+                item_limit=DIRECTOR_SOURCE_FACT_MAX_CHARS,
+            ),
+        }
+
+    def _director_source_digest(self, text: str) -> str:
+        """Map a long source once and render a bounded Director input digest."""
+        cache = getattr(self, "_director_source_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._director_source_cache = cache
+        cache_key = self._director_source_cache_key(text)
+        cached = cache.get(cache_key)
+        if isinstance(cached, str) and cached:
+            return cached
+
+        chunks = split_director_source(text)
+        if len(chunks) <= 1:
+            # This branch is mostly defensive because callers gate on the
+            # direct threshold, but it keeps the helper safe when used alone.
+            return text
+
+        notes: List[Dict[str, Any]] = []
+        for index, chunk in enumerate(chunks, start=1):
+            note_prompt = f"""你是长篇剧本的连续性编辑。只分析下面一个来源片段，不能调用片段之外的信息，也不能补写剧情。
+输出纯 JSON 对象，不要 Markdown：
+{{
+  "summary": "不超过 {DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS} 字符，概括本片段的角色、地点、时间推进和叙事功能",
+  "continuity_in": "不超过 {DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS} 字符，片段开始时的重要状态；没有依据就留空",
+  "continuity_out": "不超过 {DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS} 字符，片段结束时的重要状态；没有依据就留空",
+  "facts": ["最多 {DIRECTOR_SOURCE_NOTE_MAX_ITEMS} 条、每条不超过 {DIRECTOR_SOURCE_FACT_MAX_CHARS} 字符的关键事实"],
+  "open_threads": ["最多 {DIRECTOR_SOURCE_NOTE_MAX_ITEMS} 条、每条不超过 {DIRECTOR_SOURCE_FACT_MAX_CHARS} 字符的悬念或未解决问题"]
+}}
+不要把来源区间或片段编号当作剧情事实。所有结论必须能回指本片段。
+
+<source_chunk source_ref="{chunk['source_ref']}" chunk_number="{index}/{len(chunks)}" char_start="{chunk['char_start']}" char_end="{chunk['char_end']}">
+{chunk['text']}
+</source_chunk>"""
+            content = self.llm.chat(
+                messages=[{"role": "user", "content": note_prompt}],
+                response_format={"type": "json_object"},
+                timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+            ).strip()
+            try:
+                payload = json.loads(_strip_markdown_json(content))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"长文本 Director 分块 {chunk['source_ref']} 摘要格式错误: {exc}"
+                ) from exc
+            notes.append(self._normalize_director_source_note(payload, chunk))
+
+        anchor_limit = DIRECTOR_SOURCE_ANCHOR_MAX_CHARS
+        head_end = min(len(text), anchor_limit)
+        tail_start = max(0, len(text) - anchor_limit)
+        digest_payload: Dict[str, Any] = {
+            "mode": "map_reduce",
+            "source_char_count": len(text),
+            "range_semantics": "char_start inclusive, char_end exclusive",
+            "head_anchor": {
+                "source_ref": f"source:chars-0-{head_end}",
+                "char_start": 0,
+                "char_end": head_end,
+                "text": text[:head_end],
+            },
+            "chunk_summaries": notes,
+            "tail_anchor": {
+                "source_ref": f"source:chars-{tail_start}-{len(text)}",
+                "char_start": tail_start,
+                "char_end": len(text),
+                "text": text[tail_start:],
+            },
+        }
+        rendered = json.dumps(digest_payload, ensure_ascii=False, separators=(",", ":"))
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            # Keep provenance and anchors intact while shrinking the least
+            # important map fields. In normal operation the per-note budgets
+            # already keep this branch below the envelope limit.
+            for note in notes:
+                note.pop("facts", None)
+                note.pop("open_threads", None)
+            rendered = json.dumps(
+                digest_payload, ensure_ascii=False, separators=(",", ":")
+            )
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            for note in notes:
+                note["summary"] = _bounded_source_text(
+                    note.get("summary"), DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS // 2
+                )
+            rendered = json.dumps(
+                digest_payload, ensure_ascii=False, separators=(",", ":")
+            )
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            raise RuntimeError("长文本 Director 来源摘要超过输入预算")
+
+        result = f"<source_digest>{rendered}</source_digest>"
+        while len(cache) >= DIRECTOR_SOURCE_CACHE_MAX_ENTRIES:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = result
+        return result
+
+    def _director_source_context(self, text: str) -> tuple[str, bool]:
+        """Return the source prompt and whether it is a map/reduce digest."""
+        if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
+            return text, False
+        return self._director_source_digest(text), True
 
     def split_into_episodes(self, text: str, suggested_episodes: int = 3) -> List[Dict[str, Any]]:
         """
@@ -1061,10 +1356,20 @@ class ScriptProcessor:
         """Create a reviewable director draft without mutating project data."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        source_context, is_source_digest = self._director_source_context(text)
+        source_label = (
+            "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
+            if is_source_digest
+            else "原始剧本"
+        )
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
 
-原始剧本：
-<script>{text}</script>
+{source_label}：
+<script>{source_context}</script>
+
+当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
+tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
+不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
 <entities>{_prompt_json(entities_json)}</entities>
@@ -1113,6 +1418,12 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         """Return a source-grounded partial revision patch for a Director draft."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        source_context, is_source_digest = self._director_source_context(text)
+        source_label = (
+            "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
+            if is_source_digest
+            else "原始剧本"
+        )
         # The visible draft already contains the effects of earlier revisions.
         # Keep the newest instructions within a small budget for callers that
         # still submit accumulated history (the UI now submits only one).
@@ -1134,7 +1445,11 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
 视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
 
-<script>{text}</script>
+{source_label}：
+<script>{source_context}</script>
+当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
+tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
+不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 <entities>{_prompt_json(entities_json)}</entities>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
