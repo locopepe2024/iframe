@@ -3,6 +3,7 @@ Storyboard Schema v2 — Prompt Assembly & Dialogue-TTS Sync.
 
 Pure functions with no side effects (no I/O, no pipeline/api imports).
 """
+import re
 from typing import List, Optional
 
 from .models import (
@@ -197,9 +198,32 @@ def enrich_prompt_with_dialogue(
     if not line:
         return prompt
 
-    # Build a visual speaking cue
     subject = speaker or "角色"
     emotion_hint = f"，表情{emotion}" if emotion else ""
+
+    # The Storyboard R2V client already adds the structured dialogue once
+    # (for example ``<d>[Mandarin] ...</d>`` for H3).  Keep this helper
+    # idempotent at the provider boundary: appending the full line again
+    # makes a video model hear/act on the same dialogue twice.  If an older
+    # caller only included the line as plain narrative text, retain the
+    # mouth-movement cue while omitting a second copy of the dialogue body.
+    normalized_prompt = re.sub(r"\s+", "", prompt or "")
+    normalized_line = re.sub(r"\s+", "", line)
+    if normalized_line and normalized_line in normalized_prompt:
+        lower_prompt = (prompt or "").lower()
+        has_speaking_cue = (
+            "张嘴说话" in prompt
+            or "台词" in prompt
+            or "<d>" in lower_prompt
+            or re.search(r"\b(?:says|speaks|speaking|dialogue)\b", lower_prompt)
+        )
+        if has_speaking_cue:
+            return prompt
+        clean = prompt.rstrip("。，. ")
+        cue = f"{subject}张嘴说话{emotion_hint}，按已给台词自然演绎"
+        return f"{clean}。{cue}"
+
+    # Build a visual speaking cue
     cue = f"{subject}张嘴说话{emotion_hint}，台词：「{line}」"
 
     # Append to prompt with separator
