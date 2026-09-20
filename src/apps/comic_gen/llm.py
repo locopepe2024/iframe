@@ -1102,8 +1102,8 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
 用户明确提出的导演风格、剪辑结构、样片时长和取材范围属于执行约束：必须保留在
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
-例如“首尾框架式回忆/书挡式回忆插叙”只约束样片的开头锚点→主观回忆→尾部锚点结构，
-不应泛化成整部作品的回忆录或闪回风格；回忆只能取自原文，不得新增对白、事件或人物动机。
+如果用户指定某种回忆/闪回子类型，它只约束用户指定的样片或段落，不应泛化成整部作品的
+回忆录或闪回风格；回忆只能取自原文，不得新增对白、事件或人物动机。
 保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；scene_summaries 必须保留
@@ -1167,9 +1167,8 @@ current_director_profile 同结构的完整 JSON，不要解释。execution_summ
 scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文或实体中的 scene_ref；
 如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
 使用 execution_summary 的全局约束，不得凭空补写本地状态。execution_summary 中标记为
-“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效；例如首尾框架式回忆只应
-在样片中按开头锚点→主观回忆→尾部锚点组织镜头，不要把全片改成回忆录或闪回风格，且
-回忆内容必须能在原文中找到。
+“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效；回忆/闪回子类型只应
+在用户指定的样片/段落中执行，不要把全片改成回忆录或闪回风格，且回忆内容必须能在原文中找到。
 """ % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
