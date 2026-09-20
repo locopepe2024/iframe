@@ -111,8 +111,10 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert str(DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS) in prompt
     assert "sample_plan 最多 4 项" in prompt
     assert "导演风格、剪辑结构、样片时长和取材范围属于执行约束" in prompt
-    assert "回忆/闪回子类型" in prompt
-    assert "不应泛化成整部作品的" in prompt
+    assert "首尾框架式回忆/书挡式叙事（Bookend Narrative Technique）" in prompt
+    assert "现实/当下开头锚点" in prompt
+    assert "不是默认的‘回忆录风格’" in prompt
+    assert "用户没有明确标注该结构时，不得自行套用" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"
@@ -248,6 +250,28 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "场景21" in prompt
     assert "state_out" in prompt
     assert "首尾框架式回忆" in prompt
+    assert "Bookend Narrative Technique" in prompt
+
+
+def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.refine_director_profile(
+        "开头：公墓。中段：战争往事。结尾：回到公墓。",
+        {"characters": [{"name": "老兵"}]},
+        {"name": "现实主义", "positive_prompt": "restrained"},
+        profile_payload(),
+        ["制作约1分钟样片，使用首尾框架式回忆（书挡式叙事 / Bookend Narrative Technique），只作用于样片。"],
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "只在用户指定的样片或段落范围内生效" in prompt
+    assert "回忆内容必须来自原文" in prompt
+    assert "只作用于样片" in prompt
 
 
 def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_review():

@@ -52,6 +52,18 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "state_in/state_out 各不超过 48 字，总计不超过 3200 字。"
 )
 
+# This is deliberately prompt guidance rather than a schema branch.  The
+# Director profile stores the user's requested editorial structure in
+# ``execution_summary``; downstream stages decide from that bounded text
+# whether the structure applies to a sample or a particular segment.
+BOOKEND_NARRATIVE_EXECUTION_GUIDANCE = (
+    "“首尾框架式回忆/书挡式叙事（Bookend Narrative Technique）”是可选的、"
+    "由用户明确触发的叙事结构标签：现实/当下开头锚点 → 主体回忆或插叙 → "
+    "回到现实/当下尾部锚点。它不是默认的‘回忆录风格’，也不是整部作品的视觉风格；"
+    "只在用户指定的样片或段落范围内生效。回忆内容必须来自原文，不能新增对白、事件或人物动机；"
+    "用户没有明确标注该结构时，不得自行套用。"
+)
+
 
 class PolishError(Exception):
     """提示词润色失败的结构化异常。
@@ -1102,8 +1114,7 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
 用户明确提出的导演风格、剪辑结构、样片时长和取材范围属于执行约束：必须保留在
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
-如果用户指定某种回忆/闪回子类型，它只约束用户指定的样片或段落，不应泛化成整部作品的
-回忆录或闪回风格；回忆只能取自原文，不得新增对白、事件或人物动机。
+{BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；scene_summaries 必须保留
@@ -1167,9 +1178,12 @@ current_director_profile 同结构的完整 JSON，不要解释。execution_summ
 scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文或实体中的 scene_ref；
 如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
 使用 execution_summary 的全局约束，不得凭空补写本地状态。execution_summary 中标记为
-“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效；回忆/闪回子类型只应
-在用户指定的样片/段落中执行，不要把全片改成回忆录或闪回风格，且回忆内容必须能在原文中找到。
-""" % json.dumps(execution_context, ensure_ascii=False, indent=2)
+“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效。
+%s
+""" % (
+                json.dumps(execution_context, ensure_ascii=False, indent=2),
+                BOOKEND_NARRATIVE_EXECUTION_GUIDANCE,
+            )
 
         try:
             content = self.llm.chat(

@@ -54,6 +54,13 @@ for a long script whose causality crosses scene boundaries.
    editorial requests (such as a bookended retrospective insert for a
    one-minute sample) are preserved as execution constraints inside
    `execution_summary`, not as new branching fields or a whole-film style.
+   The canonical vocabulary for this request is **首尾框架式回忆 / 书挡式叙事 /
+   Bookend Narrative Technique**: an explicit present-day/现实 opening anchor,
+   a source-grounded memory or interpolation, and a return to a present-day/现实
+   closing anchor. This is an optional narrative-structure label, not a default
+   “memoir style” and not a whole-project visual style. It applies only to the
+   sample or segment named by the user; the absence of that label must not cause
+   storyboard generation to introduce a bookend structure on its own.
 6. Storyboard prompts must match a source scene marker to `scene_ref` when one
    exists, use `state_out` → `state_in` as the preferred transition memory, and
    fall back to the global summary when no match exists. They must not invent a
@@ -78,6 +85,9 @@ for a long script whose causality crosses scene boundaries.
   scene. Local memory is first made explicit and bounded; request partitioning
   requires a separate segmentation/latency decision.
 - This slice does not change model/provider routing or storyboard schemas.
+- The bookend vocabulary is intentionally represented as natural-language
+  execution guidance. This slice does not add a `narrative_structure` enum,
+  special-case renderer, or branch for one memoir subtype.
 
 ## Success criteria
 
@@ -89,7 +99,8 @@ for a long script whose causality crosses scene boundaries.
    but no full-profile arrays.
 4. The full profile remains editable and hash/revision behavior remains stable.
 5. Tests cover global/local bounds, legacy compatibility, scene matching
-   contract text, and downstream exclusion.
+   contract text, downstream exclusion, and the scoped optional bookend
+   narrative constraint.
 
 ## Verification
 
