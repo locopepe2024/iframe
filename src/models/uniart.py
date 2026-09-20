@@ -179,7 +179,28 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
         if resp.status_code >= 400:
             raise RuntimeError(_provider_error_detail(resp))
         resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            # A completed async task can briefly return an empty/non-JSON body
+            # while the gateway is publishing its terminal envelope. Treat it
+            # like the existing transient HTTP statuses; do not lose the
+            # provider task identity or submit a duplicate paid request.
+            logger.warning(
+                "[UniArt] task poll returned invalid JSON endpoint=%s task=%s",
+                endpoint,
+                task_id,
+            )
+            time.sleep(10)
+            continue
+        if not isinstance(data, dict):
+            logger.warning(
+                "[UniArt] task poll returned a non-object JSON envelope endpoint=%s task=%s",
+                endpoint,
+                task_id,
+            )
+            time.sleep(10)
+            continue
         status = str(data.get("status") or "").lower()
         if status in {"completed", "succeeded", "success"}:
             return data
