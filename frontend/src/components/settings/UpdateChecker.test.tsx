@@ -16,6 +16,6 @@ it('keeps update checking inactive without network requests', () => {
 });
 it('uses the supplied iFrame logo and attribution', () => {
   render(<IFrameBranding />);
-  expect(screen.getByRole('img', { name: 'iFrame' })).toHaveAttribute('src', '/iframe-logo.png');
+  expect(screen.getByRole('img', { name: 'iFrame' })).toHaveAttribute('src', 'iframe-logo.png');
   expect(screen.getByText('Powered by Lumenx & Uniart')).toBeInTheDocument();
 });

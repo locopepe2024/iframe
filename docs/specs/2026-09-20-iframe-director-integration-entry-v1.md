@@ -34,14 +34,13 @@ Selected integration boundary for the iFrame test platform.
   namespace-scoped below `.director3d-root`.
 - `EnvConfigChecker` and the initial workspace sync are explicitly bypassed on
   `#/director`; they resume their existing behavior for non-director routes.
+- Static-export branding assets use relative URLs, matching the GLB asset
+  contract so `/static/#/director` does not escape the configured base path.
 
 ## Not yet proven
 
 - This slice does not prove durable project persistence or a Studio/Core data
   mapping.
-- Production static hosting under `/static` is covered by the relative GLB URL
-  contract and build checks, but has not been exercised against a deployed
-  static server in this slice.
 
 ## Chosen entry
 
@@ -85,6 +84,8 @@ bar keeps four primary destinations and moves secondary destinations under
 - `frontend/src/components/EnvConfigChecker.test.tsx`
 - `frontend/src/components/layout/GlobalSidebar.tsx`
 - `frontend/src/components/layout/BottomTabBar.tsx`
+- `frontend/src/components/layout/IFrameBranding.tsx`
+- `frontend/src/components/settings/UpdateChecker.test.tsx`
 - `frontend/src/components/layout/BottomTabBar.test.tsx`
 - `frontend/messages/en.json`
 - `frontend/messages/zh.json`
@@ -114,3 +115,6 @@ automation.
 - 390px: no horizontal overflow (`scrollWidth === 390`), WebGL canvas present,
   camera tab selection changed, character B selection changed stage status, and
   `iframe.director3d.browser-draft.v1` was written to localStorage.
+- Production static mount: `http://127.0.0.1:3010/static/#/director` returned
+  HTTP 200; logo and GLB both returned 200 under `/static/`, WebGL initialized,
+  and the page had no 4xx responses or console errors.
