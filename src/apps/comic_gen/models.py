@@ -830,18 +830,44 @@ def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, st
         if global_summary:
             candidates = [{"scene_ref": "__global__", "summary": global_summary}]
 
-    result: List[Dict[str, str]] = []
-    for index, item in enumerate(candidates):
-        if index >= DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS:
+    result: List[Dict[str, str]] = [
+        _director_scene_memory_entry(item, index)
+        for index, item in enumerate(candidates[:DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS])
+    ]
+
+    # Keep all selected scene refs when possible. If verbose model text makes
+    # the envelope exceed its budget, shrink state fields first, then local
+    # summaries, and only then the ref. This avoids the more damaging behavior
+    # of dropping every scene after the first overlong entry.
+    def serialized_length() -> int:
+        return len(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16, "scene_ref": 8}
+    # Preserve the transition fields when compressing: a short state bridge is
+    # more useful for cross-scene continuity than a verbose local description.
+    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1, "scene_ref": 2}
+    while serialized_length() > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
+        shrinkable = [
+            (shrink_order[key], -len(entry[key]), index, key)
+            for index, entry in enumerate(result)
+            for key in ("state_in", "state_out", "summary", "scene_ref")
+            if key in entry and len(entry[key]) > minimum_lengths[key]
+        ]
+        if not shrinkable:
+            # The minima above are deliberately small enough that this should
+            # be unreachable, but preserve valid JSON if a future schema adds
+            # unexpected fixed overhead.
+            result = result[: max(1, len(result) - 1)]
             break
-        entry = _director_scene_memory_entry(item, index)
-        candidate = [*result, entry]
-        # Keep the serialized envelope valid while enforcing a separate local
-        # budget. Drop later entries rather than truncating JSON mid-object.
-        serialized_length = len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")))
-        if serialized_length > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
-            break
-        result.append(entry)
+        _, _, index, key = min(shrinkable)
+        entry = result[index]
+        excess = serialized_length() - DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
+        current_length = len(entry[key])
+        target_length = max(minimum_lengths[key], current_length - max(1, excess))
+        if target_length <= 0:
+            entry.pop(key, None)
+        else:
+            entry[key] = _bounded_director_text(entry[key], target_length)
     return result
 
 

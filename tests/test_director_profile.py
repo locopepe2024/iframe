@@ -172,7 +172,7 @@ def test_scene_memory_is_bounded_and_keeps_transition_fields():
     serialized = json.dumps(execution["scene_summaries"], ensure_ascii=False, separators=(",", ":"))
 
     assert len(serialized) <= DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
-    assert len(execution["scene_summaries"]) <= 16
+    assert len(execution["scene_summaries"]) == 16
     assert set(execution["scene_summaries"][0]) <= {
         "scene_ref", "summary", "state_in", "state_out",
     }
