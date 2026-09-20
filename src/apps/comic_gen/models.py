@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
+import hashlib
 import json
 import os
 import time
@@ -20,6 +21,10 @@ DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS = 16000
 # profile, however; the model receives this snapshot and returns a delta.
 DIRECTOR_REFINE_CONTEXT_MAX_CHARS = 16000
 DIRECTOR_REFINE_PATCH_MAX_CHARS = 16000
+DIRECTOR_CANON_STATE_MAX_ITEMS = 32
+DIRECTOR_CANON_STATE_MAX_CHARS = 12000
+DIRECTOR_CANON_EXECUTION_MAX_ITEMS = 16
+DIRECTOR_CANON_EXECUTION_MAX_CHARS = 3600
 
 
 def _coerce_director_execution_summary_limit(raw_value: Optional[str]) -> int:
@@ -681,6 +686,13 @@ class DirectorProfile(BaseModel):
             "a source scene marker and its local summary/state transition."
         ),
     )
+    canon_state: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Source-linked, versioned story facts used to prevent cross-scene "
+            "drift. This is an editable/auditable ledger, not a semantic proof."
+        ),
+    )
     revision: int = Field(1, ge=1)
     content_hash: str = ""
     confirmed_at: float = 0.0
@@ -705,6 +717,28 @@ _DIRECTOR_STRING_LIST_FIELDS = (
     "continuity_constraints",
     "prohibitions",
     "unresolved_questions",
+)
+
+_DIRECTOR_CANON_CATEGORIES = (
+    "characters",
+    "relationships",
+    "world_rules",
+    "timeline",
+    "events",
+    "open_threads",
+    "conflicts",
+    "uncertainties",
+)
+_DIRECTOR_CANON_STATUSES = {"active", "contradicted", "superseded", "uncertain"}
+_DIRECTOR_CANON_ITEM_FIELDS = (
+    "fact_id",
+    "kind",
+    "subject",
+    "value",
+    "source_refs",
+    "source_revision",
+    "status",
+    "supersedes_fact_id",
 )
 
 
@@ -735,6 +769,239 @@ def _bounded_director_text(value: Any, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _canon_state_serialized_length(state: Dict[str, Any]) -> int:
+    return len(json.dumps(state, ensure_ascii=False, separators=(",", ":")))
+
+
+def _canon_state_items(state: Dict[str, Any]):
+    for category in _DIRECTOR_CANON_CATEGORIES:
+        for index, item in enumerate(state.get(category, [])):
+            yield category, index, item
+
+
+def _canon_fact_id(category: str, item: Dict[str, Any]) -> str:
+    """Provide a stable structural id when a model omits one.
+
+    The id is derived only from the normalized fact payload. It is not a
+    semantic identity claim; a changed value naturally receives a new id and
+    can be linked to its predecessor with ``supersedes_fact_id``. The array
+    position is intentionally excluded so reordering facts does not create a
+    new identity on every refinement.
+    """
+    explicit = _bounded_director_text(item.get("fact_id"), 80)
+    if explicit:
+        return explicit
+    seed = json.dumps(
+        {
+            "category": category,
+            "kind": item.get("kind", ""),
+            "subject": item.get("subject", ""),
+            "value": item.get("value", ""),
+            "source_refs": item.get("source_refs", []),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"{category}:{hashlib.sha256(seed.encode()).hexdigest()[:12]}"
+
+
+def _normalize_director_canon_item(
+    category: str, item: Any, index: int
+) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        item = {"value": item}
+    normalized: Dict[str, Any] = {}
+    for field in ("kind", "subject", "value", "supersedes_fact_id"):
+        if field in item and item[field] not in (None, "", [], {}):
+            limit = {
+                "kind": 48,
+                "subject": 120,
+                "value": 420,
+                "supersedes_fact_id": 80,
+            }[field]
+            normalized[field] = _bounded_director_text(item[field], limit)
+
+    refs = item.get("source_refs")
+    if refs not in (None, "", [], {}):
+        if isinstance(refs, str):
+            refs = [refs]
+        if not isinstance(refs, list):
+            raise TypeError(f"canon_state.{category}.source_refs must be a list")
+        normalized["source_refs"] = [
+            _bounded_director_text(ref, 80)
+            for ref in refs[:6]
+            if _bounded_director_text(ref, 80)
+        ]
+
+    source_revision = item.get("source_revision")
+    if source_revision not in (None, "", [], {}):
+        try:
+            source_revision = int(source_revision)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"canon_state.{category}.source_revision must be an integer"
+            ) from exc
+        if source_revision > 0:
+            normalized["source_revision"] = source_revision
+
+    status = item.get("status")
+    if status in _DIRECTOR_CANON_STATUSES:
+        normalized["status"] = status
+
+    normalized["fact_id"] = _canon_fact_id(category, {**item, **normalized})
+    # Keep the identity first in serialized objects so compact projections are
+    # still useful if a later budget pass truncates the tail of an item.
+    return {
+        "fact_id": normalized.pop("fact_id"),
+        **normalized,
+    }
+
+
+def _fit_director_canon_state(
+    state: Dict[str, Any],
+    max_chars: int,
+) -> Dict[str, Any]:
+    """Bound canon state without silently changing fact meaning.
+
+    Long values and source references are shortened first. If the envelope is
+    still too large, the last normalized facts are removed; facts that remain
+    keep their identity and explicit status. This is a transport projection,
+    not a semantic merge.
+    """
+    if max_chars < 2:
+        # An empty JSON object is the smallest valid object projection.
+        return {}
+
+    while _canon_state_serialized_length(state) > max_chars:
+        candidates = [
+            (len(item.get(field, "")), category, index, field, None)
+            for category, index, item in _canon_state_items(state)
+            for field in ("value", "subject", "kind", "supersedes_fact_id")
+            if isinstance(item.get(field), str) and len(item[field]) > 24
+        ]
+        candidates.extend(
+            (len(ref), category, index, "source_refs", ref_index)
+            for category, index, item in _canon_state_items(state)
+            for ref_index, ref in enumerate(item.get("source_refs", []))
+            if isinstance(ref, str) and len(ref) > 24
+        )
+        if candidates:
+            _, category, index, field, ref_index = max(candidates)
+            item = state[category][index]
+            excess = _canon_state_serialized_length(state) - max_chars
+            if field == "source_refs":
+                current = len(item[field][ref_index])
+                target = max(1, current - max(1, excess))
+                item[field][ref_index] = _bounded_director_text(
+                    item[field][ref_index], target
+                )
+            else:
+                current = len(item[field])
+                target = max(1, current - max(1, excess))
+                item[field] = _bounded_director_text(item[field], target)
+            continue
+
+        # At this point only fixed envelope overhead remains. Drop the newest
+        # trailing fact; preserving a fact that cannot fit would violate the
+        # transport contract. The semantic source remains in the editable
+        # profile and can be regenerated into a later projection.
+        for category in reversed(_DIRECTOR_CANON_CATEGORIES):
+            items = state.get(category)
+            if not items:
+                continue
+            items.pop()
+            if not items:
+                del state[category]
+            break
+        else:
+            return {}
+    return state
+
+
+def normalize_director_canon_state(
+    value: Any,
+    *,
+    max_items: int = DIRECTOR_CANON_STATE_MAX_ITEMS,
+    max_chars: int = DIRECTOR_CANON_STATE_MAX_CHARS,
+) -> Dict[str, Any]:
+    """Normalize the source-linked canon ledger at the Director boundary.
+
+    Only known categories and explicitly supported fields survive. The helper
+    raises for malformed category/list shapes so API callers can return a
+    validation error instead of silently inventing or flattening story facts.
+    """
+    if value in (None, "", [], {}):
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("canon_state must be an object")
+
+    raw_categories: Dict[str, List[Any]] = {}
+    for category in _DIRECTOR_CANON_CATEGORIES:
+        raw = value.get(category, [])
+        if raw in (None, ""):
+            raw = []
+        if not isinstance(raw, list):
+            raise TypeError(f"canon_state.{category} must be a list")
+        raw_categories[category] = raw
+
+    # Round-robin selection prevents one large category from starving all
+    # other continuity dimensions before the character limit is reached.
+    normalized: Dict[str, List[Dict[str, Any]]] = {
+        category: [] for category in _DIRECTOR_CANON_CATEGORIES
+    }
+    for offset in range(max_items):
+        added = False
+        for category in _DIRECTOR_CANON_CATEGORIES:
+            items = raw_categories[category]
+            if offset >= len(items):
+                continue
+            normalized[category].append(
+                _normalize_director_canon_item(category, items[offset], offset)
+            )
+            added = True
+            if sum(len(items) for items in normalized.values()) >= max_items:
+                break
+        if not added or sum(len(items) for items in normalized.values()) >= max_items:
+            break
+
+    state = {category: items for category, items in normalized.items() if items}
+    return _fit_director_canon_state(state, max_chars)
+
+
+def merge_director_canon_state(base: Any, patch: Any) -> Dict[str, Any]:
+    """Structurally merge explicit canon facts by ``fact_id``.
+
+    A refinement may send only the category it changed. Existing categories
+    therefore remain intact, while an item with the same stable id is replaced.
+    New ids are appended; the server does not infer that an old fact is false.
+    Callers can express that relationship with ``status`` and
+    ``supersedes_fact_id``.
+    """
+    merged = normalize_director_canon_state(base or {})
+    incoming = normalize_director_canon_state(patch or {})
+    for category, items in incoming.items():
+        existing = merged.setdefault(category, [])
+        by_id = {item.get("fact_id"): index for index, item in enumerate(existing)}
+        for item in items:
+            fact_id = item.get("fact_id")
+            if fact_id in by_id:
+                existing[by_id[fact_id]] = item
+            else:
+                by_id[fact_id] = len(existing)
+                existing.append(item)
+    return _fit_director_canon_state(merged, DIRECTOR_CANON_STATE_MAX_CHARS)
+
+
+def build_director_canon_state(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the compact canon projection for downstream consumers."""
+    return normalize_director_canon_state(
+        profile.get("canon_state", {}),
+        max_items=DIRECTOR_CANON_EXECUTION_MAX_ITEMS,
+        max_chars=DIRECTOR_CANON_EXECUTION_MAX_CHARS,
+    )
 
 
 def build_director_execution_summary(profile: Dict[str, Any]) -> str:
@@ -910,6 +1177,7 @@ def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> D
         "content_hash": raw.get("content_hash", ""),
         "execution_summary": build_director_execution_summary(raw),
         "scene_summaries": build_director_scene_summaries(raw),
+        "canon_state": build_director_canon_state(raw),
     }
 
 
@@ -966,6 +1234,11 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         if field in normalized:
             normalized[field] = _normalize_director_string_list(normalized[field])
 
+    if "canon_state" in normalized:
+        normalized["canon_state"] = normalize_director_canon_state(
+            normalized["canon_state"]
+        )
+
     normalized["execution_summary"] = build_director_execution_summary(normalized)
 
     return normalized
@@ -988,6 +1261,7 @@ _DIRECTOR_PROFILE_FIELDS = (
     "sample_plan",
     "execution_summary",
     "scene_summaries",
+    "canon_state",
 )
 
 
@@ -1021,6 +1295,10 @@ def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
     for field in _DIRECTOR_STRING_LIST_FIELDS:
         if field in normalized:
             normalized[field] = _normalize_director_string_list(normalized[field])
+    if "canon_state" in normalized:
+        normalized["canon_state"] = normalize_director_canon_state(
+            normalized["canon_state"]
+        )
     if "execution_summary" in normalized:
         normalized["execution_summary"] = _bounded_director_text(
             normalized["execution_summary"], DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
@@ -1042,6 +1320,12 @@ def merge_director_profile_patch(
     normalized_patch = normalize_director_profile_patch(patch)
     changed: Dict[str, Any] = {}
     for key, value in normalized_patch.items():
+        if key == "canon_state":
+            merged_canon = merge_director_canon_state(base.get(key, {}), value)
+            if merged_canon == normalize_director_canon_state(base.get(key, {})):
+                continue
+            changed[key] = merged_canon
+            continue
         if key in base and base.get(key) == value:
             continue
         changed[key] = value
@@ -1092,11 +1376,18 @@ def build_director_refinement_context(
     scene_serialized_length = len(
         json.dumps(scene_summaries, ensure_ascii=False, separators=(",", ":"))
     )
+    canon_state = build_director_canon_state(raw)
+    canon_serialized_length = len(
+        json.dumps(canon_state, ensure_ascii=False, separators=(",", ":"))
+    )
     summary_limit = max(
         512,
         min(
             DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
-            DIRECTOR_REFINE_CONTEXT_MAX_CHARS - scene_serialized_length - 128,
+            DIRECTOR_REFINE_CONTEXT_MAX_CHARS
+            - scene_serialized_length
+            - canon_serialized_length
+            - 128,
         ),
     )
     context: Dict[str, Any] = {
@@ -1104,6 +1395,7 @@ def build_director_refinement_context(
             build_director_execution_summary(raw), summary_limit
         ),
         "scene_summaries": scene_summaries,
+        "canon_state": canon_state,
     }
     field_limits = {
         "setting": 700,

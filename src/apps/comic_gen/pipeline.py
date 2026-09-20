@@ -1795,6 +1795,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         hash_payload = {
             key: value for key, value in clean.items()
             if key not in {"execution_summary", "scene_summaries"}
+            and not (key == "canon_state" and value in (None, {}, []))
         }
         content_hash = hashlib.sha256(json.dumps(
             hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")

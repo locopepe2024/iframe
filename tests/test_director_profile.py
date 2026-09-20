@@ -16,11 +16,16 @@ from src.apps.comic_gen.models import (
     DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS,
     DIRECTOR_REFINE_CONTEXT_MAX_CHARS,
+    DIRECTOR_CANON_STATE_MAX_ITEMS,
+    DIRECTOR_CANON_STATE_MAX_CHARS,
+    DIRECTOR_CANON_EXECUTION_MAX_CHARS,
     _coerce_director_execution_summary_limit,
     DIRECTOR_SCENE_SUMMARIES_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
+    merge_director_canon_state,
     merge_director_profile_patch,
+    normalize_director_canon_state,
     Script,
     Series,
     normalize_director_profile_draft,
@@ -113,6 +118,9 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
     assert "execution_summary" in prompt
     assert str(DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS) in prompt
+    assert "canon_state" in prompt
+    assert str(DIRECTOR_CANON_STATE_MAX_ITEMS) in prompt
+    assert str(DIRECTOR_CANON_STATE_MAX_CHARS) in prompt
     assert "sample_plan 最多 4 项" in prompt
     assert "导演风格、剪辑结构、样片时长和取材范围属于执行约束" in prompt
     assert "首尾框架式回忆/书挡式叙事（Bookend Narrative Technique）" in prompt
@@ -139,6 +147,7 @@ def test_director_analysis_prompt_defines_bookend_as_optional_structure():
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "Bookend Narrative Technique" in prompt
+    assert "canon_state" in prompt
     assert "不是默认的‘回忆录风格’" in prompt
     assert "用户没有明确标注该结构时，不得自行套用" in prompt
 
@@ -235,6 +244,163 @@ def test_director_refinement_context_is_bounded_and_keeps_canonical_summary_laye
     assert ("LEGACY-TAIL" * 100) not in serialized
 
 
+def test_canon_state_normalization_is_bounded_and_source_linked():
+    raw = {
+        "characters": [
+            {
+                "fact_id": f"character-{index}",
+                "kind": "identity",
+                "subject": f"人物{index}",
+                "value": "长事实" * 500,
+                "source_refs": ["scene-1", "scene-2"],
+                "source_revision": 4,
+                "status": "active",
+                "supersedes_fact_id": "character-old" if index == 0 else None,
+                "private_note": "不得进入 canon projection",
+            }
+            for index in range(DIRECTOR_CANON_STATE_MAX_ITEMS + 8)
+        ],
+        "uncertainties": [{"subject": "年代", "value": "未明确"}],
+    }
+
+    normalized = normalize_director_canon_state(raw)
+    serialized = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
+
+    assert sum(len(items) for items in normalized.values()) <= DIRECTOR_CANON_STATE_MAX_ITEMS
+    assert len(serialized) <= DIRECTOR_CANON_STATE_MAX_CHARS
+    first = normalized["characters"][0]
+    assert first["source_refs"] == ["scene-1", "scene-2"]
+    assert first["source_revision"] == 4
+    assert first["status"] == "active"
+    assert first["supersedes_fact_id"] == "character-old"
+    assert "private_note" not in first
+
+
+def test_canon_fact_ids_do_not_change_when_facts_are_reordered():
+    facts = [
+        {"kind": "identity", "subject": "沈夏", "value": "大学生"},
+        {"kind": "identity", "subject": "周涵", "value": "离校后异地"},
+    ]
+
+    first = normalize_director_canon_state({"characters": facts})
+    reordered = normalize_director_canon_state({"characters": list(reversed(facts))})
+    first_ids = {item["subject"]: item["fact_id"] for item in first["characters"]}
+    reordered_ids = {item["subject"]: item["fact_id"] for item in reordered["characters"]}
+
+    assert reordered_ids == first_ids
+
+
+def test_canon_merge_replaces_same_fact_and_appends_new_fact():
+    base = {
+        "characters": [{
+            "fact_id": "character-shen",
+            "subject": "沈夏",
+            "value": "仍在校园",
+            "source_refs": ["scene-1"],
+            "status": "active",
+        }],
+        "events": [{
+            "fact_id": "event-graduation",
+            "subject": "毕业",
+            "value": "尚未发生",
+            "status": "uncertain",
+        }],
+    }
+    patch = {
+        "characters": [{
+            "fact_id": "character-shen",
+            "subject": "沈夏",
+            "value": "已经离校",
+            "source_refs": ["scene-21"],
+            "source_revision": 2,
+            "status": "active",
+            "supersedes_fact_id": "character-shen-old",
+        }, {
+            "fact_id": "character-zhou",
+            "subject": "周涵",
+            "value": "开始异地",
+            "source_refs": ["scene-21"],
+            "status": "active",
+        }],
+    }
+
+    merged = merge_director_canon_state(base, patch)
+
+    assert [item["fact_id"] for item in merged["characters"]] == [
+        "character-shen", "character-zhou",
+    ]
+    assert merged["characters"][0]["value"] == "已经离校"
+    assert merged["characters"][0]["supersedes_fact_id"] == "character-shen-old"
+    assert merged["events"][0]["fact_id"] == "event-graduation"
+
+
+def test_unchanged_canon_echo_is_dropped_from_refinement_patch():
+    base = normalize_director_profile_draft({
+        **profile_payload(),
+        "canon_state": {
+            "characters": [{
+                "fact_id": "character-shen",
+                "subject": "沈夏",
+                "value": "仍在校园",
+                "source_refs": ["scene-1"],
+                "status": "active",
+            }],
+        },
+    })
+
+    merged = merge_director_profile_patch(base, {
+        "canon_state": base["canon_state"],
+    })
+
+    assert merged == base
+
+
+def test_downstream_canon_projection_is_compact_and_never_forwards_unknown_fields():
+    profile = DirectorProfile(**{
+        **profile_payload(),
+        "canon_state": {
+            "characters": [{
+                "fact_id": "character-shen",
+                "subject": "沈夏",
+                "value": "中国大学生",
+                "source_refs": ["scene-1"],
+                "status": "active",
+                "private_note": "不得传给分镜",
+            }],
+            "unknown_category": [{"value": "不得传给分镜"}],
+        },
+    })
+
+    execution = director_execution_payload(profile)
+    serialized = json.dumps(execution["canon_state"], ensure_ascii=False, separators=(",", ":"))
+
+    assert len(serialized) <= DIRECTOR_CANON_EXECUTION_MAX_CHARS
+    assert "private_note" not in serialized
+    assert "不得传给分镜" not in serialized
+    assert execution["canon_state"]["characters"][0]["source_refs"] == ["scene-1"]
+
+
+def test_refinement_context_includes_compact_canon_state():
+    context = build_director_refinement_context({
+        **profile_payload(),
+        "canon_state": {
+            "characters": [{
+                "fact_id": "character-shen",
+                "subject": "沈夏",
+                "value": "已经离校",
+                "source_refs": ["scene-21"],
+                "source_revision": 3,
+                "status": "active",
+            }],
+        },
+    })
+    serialized = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+
+    assert len(serialized) <= DIRECTOR_REFINE_CONTEXT_MAX_CHARS
+    assert context["canon_state"]["characters"][0]["fact_id"] == "character-shen"
+    assert context["canon_state"]["characters"][0]["source_revision"] == 3
+
+
 def test_director_refinement_prompt_requests_delta_not_full_profile_echo():
     from src.apps.comic_gen.llm import ScriptProcessor
 
@@ -292,7 +458,7 @@ def test_legacy_profile_gets_bounded_execution_payload_without_full_profile_fiel
     execution = director_execution_payload(DirectorProfile(**payload))
 
     assert set(execution) == {
-        "revision", "content_hash", "execution_summary", "scene_summaries",
+        "revision", "content_hash", "execution_summary", "scene_summaries", "canon_state",
     }
     assert len(execution["execution_summary"]) <= DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
     assert "中国大学校园与北京" in execution["execution_summary"]
@@ -465,7 +631,7 @@ def test_storyboard_requests_receive_confirmed_director_profile_and_revision():
     assert kwargs["director_profile"]["revision"] == 3
     assert kwargs["director_profile"]["content_hash"] == "confirmed-hash"
     assert set(kwargs["director_profile"]) == {
-        "revision", "content_hash", "execution_summary", "scene_summaries",
+        "revision", "content_hash", "execution_summary", "scene_summaries", "canon_state",
     }
     assert "sample_plan" not in kwargs["director_profile"]
 

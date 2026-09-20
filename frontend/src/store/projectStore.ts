@@ -221,6 +221,8 @@ export interface DirectorProfile {
     execution_summary?: string;
     /** Scene-local continuity memory used by storyboard/asset prompts. */
     scene_summaries?: Record<string, unknown>[];
+    /** Source-linked cross-scene canon ledger; bounded by the backend contract. */
+    canon_state?: Record<string, unknown>;
     revision: number;
     content_hash: string;
     confirmed_at: number;

@@ -15,6 +15,8 @@ from .models import (
     Prop,
     StoryboardFrame,
     GenerationStatus,
+    DIRECTOR_CANON_STATE_MAX_CHARS,
+    DIRECTOR_CANON_STATE_MAX_ITEMS,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
@@ -52,6 +54,10 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "每项不超过 120 字；scene_summaries 最多 16 项，每项只能有 scene_ref、"
     "summary、state_in、state_out 四个键；scene_ref 不超过 40 字，summary 不超过 64 字，"
     "state_in/state_out 各不超过 48 字，总计不超过 3200 字。"
+    f"canon_state 最多 {DIRECTOR_CANON_STATE_MAX_ITEMS} 条事实、最多 {DIRECTOR_CANON_STATE_MAX_CHARS} 个字符；"
+    "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
+    "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
+    "不要把没有原文依据的推断写成 active 事实。"
 )
 
 # This is deliberately prompt guidance rather than a schema branch.  The
@@ -1074,7 +1080,7 @@ class ScriptProcessor:
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
-execution_summary, scene_summaries。
+execution_summary, scene_summaries, canon_state。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
@@ -1085,7 +1091,10 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
-只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。"""
+只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。
+canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
+人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
+删除或把未知内容标成 active。"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
@@ -1141,7 +1150,9 @@ execution_summary 或相应方向字段中，并标记为用户要求；它们�
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
 execution_summary 必须最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；
 scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，并且只保留后续分镜和
-资产设计需要的事实与约束。只返回 JSON 对象，不要解释。
+资产设计需要的事实与约束。canon_state 只返回本次受影响的事实分类；优先复用已有
+fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
+不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
