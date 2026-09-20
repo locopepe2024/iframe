@@ -217,6 +217,8 @@ export interface DirectorProfile {
     prohibitions: string[];
     unresolved_questions: string[];
     sample_plan: Record<string, unknown>[];
+    /** Bounded downstream contract; the full fields remain editable/auditable. */
+    execution_summary?: string;
     revision: number;
     content_hash: string;
     confirmed_at: number;

@@ -11,6 +11,8 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+    director_execution_payload,
     Script,
     Series,
     normalize_director_profile_draft,
@@ -100,6 +102,8 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "日式真人爱情" in prompt
     assert "距离→压力→沟通失效→关系消耗" in prompt
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
+    assert "execution_summary" in prompt
+    assert "3200" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"
@@ -130,6 +134,51 @@ def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
     assert isinstance(result["sound_direction"], str)
     assert "电话接通前的静默" in result["sound_direction"]
     DirectorProfile(**result)
+
+
+def test_legacy_profile_gets_bounded_execution_payload_without_full_profile_fields():
+    payload = profile_payload()
+    payload["sample_plan"] = [{"seconds": str(index), "detail": "细节" * 2000} for index in range(4)]
+
+    execution = director_execution_payload(DirectorProfile(**payload))
+
+    assert set(execution) == {"revision", "content_hash", "execution_summary"}
+    assert len(execution["execution_summary"]) <= DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+    assert "中国大学校园与北京" in execution["execution_summary"]
+
+
+def test_model_summary_is_clipped_during_draft_normalization():
+    normalized = normalize_director_profile_draft({
+        **profile_payload(),
+        "execution_summary": "摘要" * 5000,
+    })
+
+    assert len(normalized["execution_summary"]) == DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+    DirectorProfile(**normalized)
+
+
+def test_storyboard_prompt_filters_full_profile_to_execution_summary():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"frames": [{"action_summary": "离校"}]})
+    payload = {
+        **profile_payload(),
+        "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电。",
+        "sample_plan": [{"bulk": "不要注入下游" * 3000}],
+    }
+
+    result = processor.analyze_to_storyboard(
+        "场景21 周涵离校", {"characters": []}, director_profile=payload
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert result == [{"action_summary": "离校"}]
+    assert "只保留中国背景" in prompt
+    assert "confirmed_director_execution_summary" in prompt
+    assert "不要注入下游" not in prompt
+    assert '"sample_plan"' not in prompt
 
 
 def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_review():
@@ -184,6 +233,8 @@ def test_storyboard_requests_receive_confirmed_director_profile_and_revision():
     kwargs = pipeline.script_processor.analyze_to_storyboard.call_args.kwargs
     assert kwargs["director_profile"]["revision"] == 3
     assert kwargs["director_profile"]["content_hash"] == "confirmed-hash"
+    assert set(kwargs["director_profile"]) == {"revision", "content_hash", "execution_summary"}
+    assert "sample_plan" not in kwargs["director_profile"]
 
 
 def test_asset_prompt_context_contains_director_profile():
@@ -197,6 +248,8 @@ def test_asset_prompt_context_contains_director_profile():
     assert "中国大学校园与北京" in context
     assert "不引入日本招牌" in context
     assert "Director profile revision: 2" in context
+    assert '"execution_summary"' in context
+    assert '"timeline"' not in context
 
 
 def test_asset_generation_receives_and_records_confirmed_director_profile():

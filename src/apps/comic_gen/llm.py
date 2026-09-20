@@ -8,7 +8,15 @@ import re
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 
-from .models import Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus
+from .models import (
+    Script,
+    Character,
+    Scene,
+    Prop,
+    StoryboardFrame,
+    GenerationStatus,
+    director_execution_payload,
+)
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -1041,8 +1049,12 @@ class ScriptProcessor:
 
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
-sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan。
-setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。"""
+sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
+execution_summary。
+setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
+地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
+使用短句或项目符号，最多 12 条、最多 3200 个字符，不要重复完整 timeline 或 sample_plan。"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
@@ -1072,7 +1084,9 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
-保留未要求改变的正确内容。只返回与 current_director_profile 同结构的完整 JSON，不要解释。"""
+保留未要求改变的正确内容，并同步刷新 execution_summary。只返回与
+current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
+3200 个字符、最多 12 条短句，并且只保留后续分镜和资产设计需要的事实与约束。"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "返回修订后的完整导演设定。"}],
@@ -1119,14 +1133,15 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
         if director_profile:
+            execution_context = director_execution_payload(director_profile)
             system_prompt += """
 
-以下是用户在第二步明确确认的导演设定。它约束镜头选择、表演、节奏、声音和连续性；
+以下是用户在第二步明确确认的导演执行摘要。它约束镜头选择、表演、节奏、声音和连续性；
 不得把 unresolved_questions 补写成事实，也不得违反 prohibitions：
-<confirmed_director_profile>
+<confirmed_director_execution_summary>
 %s
-</confirmed_director_profile>
-""" % json.dumps(director_profile, ensure_ascii=False, indent=2)
+</confirmed_director_execution_summary>
+""" % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
             content = self.llm.chat(
@@ -1201,9 +1216,9 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
         )
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
         if director_profile:
-            baseline += "\n\n<confirmed_director_profile>\n" + json.dumps(
-                director_profile, ensure_ascii=False, indent=2
-            ) + "\n</confirmed_director_profile>"
+            baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
+                director_execution_payload(director_profile), ensure_ascii=False, indent=2
+            ) + "\n</confirmed_director_execution_summary>"
         numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
         prompt = f"""{baseline}
 

@@ -20,6 +20,7 @@ from .models import (
     PromptConfig,
     ArtDirection,
     DirectorProfile,
+    director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
     normalize_director_profile_draft,
@@ -1740,12 +1741,19 @@ class ComicGenPipeline(StudioOwnerMixin):
         profile = self.effective_director_profile(script)
         if not profile:
             return ""
-        payload = profile.model_dump(exclude={"confirmed_at"})
+        payload = director_execution_payload(profile)
         return (
             f"Director profile revision: {profile.revision}. Treat this as confirmed narrative "
             "context. Do not turn unresolved questions into facts. "
             + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         )
+
+    def director_execution_context(self, script: Script) -> Optional[Dict[str, Any]]:
+        """Return the bounded Director contract used by downstream design calls."""
+        profile = self.effective_director_profile(script)
+        if not profile:
+            return None
+        return director_execution_payload(profile)
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
         script, entities, _ = self.storyboard_analysis_context(script_id)
@@ -1780,8 +1788,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         clean = DirectorProfile(**normalized).model_dump(
             exclude={"revision", "content_hash", "confirmed_at"}
         )
+        # The summary is a bounded downstream projection, not a second source
+        # of narrative truth. Keep historical content hash/revision semantics
+        # based on the full Director fields only.
+        hash_payload = {
+            key: value for key, value in clean.items() if key != "execution_summary"
+        }
         content_hash = hashlib.sha256(json.dumps(
-            clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
         current = self.effective_director_profile(script)
         revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
@@ -1825,10 +1839,10 @@ class ComicGenPipeline(StudioOwnerMixin):
     def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         frames = self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
@@ -1839,10 +1853,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     instructions: List[str]) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -1865,10 +1879,11 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # An explicit reviewed draft is applied exactly as shown and never
         # triggers a second analysis call.
-        director_profile = self.effective_director_profile(script)
+        confirmed_director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
 
         if not raw_frames:
@@ -1941,8 +1956,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 dialogue=frame_data.get("dialogue"),
                 speaker=frame_data.get("speaker"),
                 duration=frame_data.get("duration"),
-                director_profile_revision=director_profile.revision if director_profile else None,
-                director_profile_hash=director_profile.content_hash if director_profile else None,
+                director_profile_revision=(
+                    confirmed_director_profile.revision if confirmed_director_profile else None
+                ),
+                director_profile_hash=(
+                    confirmed_director_profile.content_hash if confirmed_director_profile else None
+                ),
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)

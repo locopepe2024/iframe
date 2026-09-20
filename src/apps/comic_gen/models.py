@@ -634,6 +634,14 @@ class DirectorProfile(BaseModel):
     prohibitions: List[str] = Field(default_factory=list)
     unresolved_questions: List[str] = Field(default_factory=list)
     sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
+    execution_summary: str = Field(
+        "",
+        max_length=3200,
+        description=(
+            "Bounded, source-grounded direction for downstream storyboard and "
+            "asset prompts. The full profile remains the audit/edit source."
+        ),
+    )
     revision: int = Field(1, ge=1)
     content_hash: str = ""
     confirmed_at: float = 0.0
@@ -672,6 +680,75 @@ def _director_value_as_text(value: Any) -> str:
         # Drafts normally come from JSON, but keep validation deterministic if
         # an in-process caller passes a non-JSON value.
         return str(value)
+
+
+DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS = 3200
+
+
+def _bounded_director_text(value: Any, limit: int) -> str:
+    """Turn summary input into text with an explicit hard character bound."""
+    text = _director_value_as_text(value).strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 1)].rstrip() + "…"
+
+
+def build_director_execution_summary(profile: Dict[str, Any]) -> str:
+    """Return the bounded downstream projection for a Director profile.
+
+    A model-produced ``execution_summary`` is preferred.  Older persisted
+    profiles do not have that field, so the compatibility projection keeps the
+    most useful constraints and direction fields under the same hard bound.
+    This helper is deliberately deterministic; it is not presented as a
+    semantic replacement for a model-generated summary.
+    """
+    existing = profile.get("execution_summary")
+    if isinstance(existing, str) and existing.strip():
+        return _bounded_director_text(existing, DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS)
+
+    sections = (
+        ("SETTING", profile.get("setting"), 300),
+        ("TIMELINE", profile.get("timeline"), 400),
+        ("RELATIONSHIPS", profile.get("relationships"), 400),
+        ("KEY_EVENTS", profile.get("key_events"), 550),
+        (
+            "DIRECTION",
+            {
+                field: profile.get(field)
+                for field in _DIRECTOR_TEXT_FIELDS
+                if profile.get(field)
+            },
+            700,
+        ),
+        (
+            "GUARDRAILS",
+            {
+                field: profile.get(field)
+                for field in _DIRECTOR_STRING_LIST_FIELDS
+                if profile.get(field)
+            },
+            700,
+        ),
+        ("SAMPLE_PLAN", profile.get("sample_plan"), 500),
+    )
+    rendered = []
+    for label, value, limit in sections:
+        if value in (None, "", [], {}):
+            continue
+        rendered.append(f"{label}: {_bounded_director_text(value, limit)}")
+    return _bounded_director_text(
+        "\n".join(rendered), DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+    )
+
+
+def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> Dict[str, Any]:
+    """Expose only the stable, bounded contract consumed downstream."""
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
+    return {
+        "revision": raw.get("revision", 1),
+        "content_hash": raw.get("content_hash", ""),
+        "execution_summary": build_director_execution_summary(raw),
+    }
 
 
 def _normalize_director_object_list(value: Any) -> Any:
@@ -722,6 +799,8 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     for field in _DIRECTOR_STRING_LIST_FIELDS:
         if field in normalized:
             normalized[field] = _normalize_director_string_list(normalized[field])
+
+    normalized["execution_summary"] = build_director_execution_summary(normalized)
 
     return normalized
 
