@@ -2655,6 +2655,8 @@ class CreateVideoTaskRequest(BaseModel):
     movement_amplitude: Optional[str] = None
     # HappyHorse params
     reference_image_urls: List[str] = []  # Reference image URLs for HH R2V (max 9)
+    pose_reference_variant_ids: Dict[str, List[str]] = {}
+    director_snapshot_media_id: Optional[str] = None
     ratio: Optional[str] = None  # Aspect ratio for HH T2V/R2V
     # Watermark toggle (wan / kling / vidu / pixverse / happyhorse video).
     # None = leave to provider default; True/False = explicit user choice.
@@ -2727,6 +2729,8 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_director_snapshot_media_id: Optional[str] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2747,6 +2751,8 @@ def update_frame_workbench(
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
             workbench_reference_variant_ids=request.workbench_reference_variant_ids,
+            workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
+            workbench_director_snapshot_media_id=request.workbench_director_snapshot_media_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2801,6 +2807,8 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
+                pose_reference_variant_ids=request.pose_reference_variant_ids,
+                director_snapshot_media_id=request.director_snapshot_media_id,
                 ratio=request.ratio,
                 watermark=request.watermark,
                 mode=request.mode,
@@ -4776,7 +4784,9 @@ class SaveDocumentRequest(BaseModel):
 
 
 class DocumentSnapshotInfo(BaseModel):
+    project_id: str
     timestamp: str  # ISO format
+    created_at: str
     size_bytes: int
 
 
@@ -4795,15 +4805,67 @@ def _ensure_history_dir(project_dir: Path) -> Path:
     return history_dir
 
 
-def _create_snapshot(project_dir: Path) -> None:
-    """Create a timestamped snapshot of the current document.json."""
+def _snapshot_info(project_id: str, snapshot_path: Path) -> DocumentSnapshotInfo:
+    """Build the stable metadata returned to the editor for one snapshot."""
+    created_at = datetime.fromtimestamp(
+        snapshot_path.stat().st_mtime, timezone.utc
+    ).isoformat()
+    return DocumentSnapshotInfo(
+        project_id=project_id,
+        timestamp=snapshot_path.stem,
+        created_at=created_at,
+        size_bytes=snapshot_path.stat().st_size,
+    )
+
+
+def _create_snapshot(project_dir: Path, project_id: Optional[str] = None) -> Optional[DocumentSnapshotInfo]:
+    """Create a unique snapshot of the current document.json."""
     doc_path = project_dir / "document.json"
     if not doc_path.exists():
-        return
+        return None
     history_dir = _ensure_history_dir(project_dir)
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+    # Include microseconds so repeated saves in one second never overwrite a
+    # previous version. The collision loop also covers unusual filesystem clock
+    # resolution and makes the invariant explicit.
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S%fZ")
     snapshot_path = history_dir / f"{ts}.json"
+    while snapshot_path.exists():
+        ts = f"{ts}-{uuid.uuid4().hex[:8]}"
+        snapshot_path = history_dir / f"{ts}.json"
     shutil.copy2(str(doc_path), str(snapshot_path))
+    return _snapshot_info(project_id or project_dir.name, snapshot_path)
+
+
+def _document_response(project_id: str, content: dict, doc_path: Path) -> dict:
+    """Return one consistent document envelope for load and restore."""
+    updated_at = datetime.fromtimestamp(
+        doc_path.stat().st_mtime, timezone.utc
+    ).isoformat() if doc_path.exists() else None
+    return {
+        "project_id": project_id,
+        "content": content,
+        "updated_at": updated_at,
+    }
+
+
+def _legacy_script_document(project_id: str) -> dict:
+    """Convert an older project's plain script text into editor blocks."""
+    getter = getattr(pipeline, "get_script", None)
+    script = getter(project_id) if callable(getter) else None
+    text = getattr(script, "original_text", "") if script else ""
+    blocks = []
+    for line in (text or "").splitlines():
+        if line:
+            blocks.append({
+                "type": "action",
+                "content": [{"type": "text", "text": line}],
+            })
+    if not blocks and text:
+        blocks.append({
+            "type": "action",
+            "content": [{"type": "text", "text": text}],
+        })
+    return {"type": "doc", "content": blocks}
 
 
 @app.post("/projects/{project_id}/document")
@@ -4814,9 +4876,10 @@ def save_document(project_id: str, request: SaveDocumentRequest):
 
     doc_path = project_dir / "document.json"
 
+    snapshot = None
     # Optionally create a snapshot before overwriting
     if request.create_snapshot and doc_path.exists():
-        _create_snapshot(project_dir)
+        snapshot = _create_snapshot(project_dir, project_id)
 
     try:
         with open(doc_path, "w", encoding="utf-8") as f:
@@ -4824,7 +4887,18 @@ def save_document(project_id: str, request: SaveDocumentRequest):
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
 
-    return {"status": "ok", "size_bytes": doc_path.stat().st_size}
+    response = {
+        "status": "ok",
+        "project_id": project_id,
+        "size_bytes": doc_path.stat().st_size,
+        "updated_at": datetime.fromtimestamp(
+            doc_path.stat().st_mtime, timezone.utc
+        ).isoformat(),
+        "snapshot_created": snapshot is not None,
+    }
+    if snapshot is not None:
+        response["snapshot"] = snapshot.model_dump()
+    return response
 
 
 @app.get("/projects/{project_id}/document")
@@ -4834,7 +4908,10 @@ def load_document(project_id: str):
     doc_path = project_dir / "document.json"
 
     if not doc_path.exists():
-        return {"type": "doc", "content": []}
+        # Existing Studio projects predate document.json. Return their source
+        # script as an editable action document so opening the editor never
+        # silently drops the story opening.
+        return _document_response(project_id, _legacy_script_document(project_id), doc_path)
 
     try:
         with open(doc_path, "r", encoding="utf-8") as f:
@@ -4842,7 +4919,7 @@ def load_document(project_id: str):
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 @app.get("/projects/{project_id}/document/snapshots")
@@ -4858,10 +4935,7 @@ def list_document_snapshots(project_id: str):
     for f in history_dir.iterdir():
         if f.suffix == ".json" and f.is_file():
             snapshots.append(
-                DocumentSnapshotInfo(
-                    timestamp=f.stem,
-                    size_bytes=f.stat().st_size,
-                )
+                _snapshot_info(project_id, f)
             )
 
     # Sort by timestamp descending
@@ -4878,8 +4952,11 @@ def create_document_snapshot(project_id: str):
     if not doc_path.exists():
         raise HTTPException(status_code=404, detail="No document to snapshot")
 
-    _create_snapshot(project_dir)
-    return {"status": "ok"}
+    snapshot = _create_snapshot(project_dir, project_id)
+    return {
+        "status": "ok",
+        **(snapshot.model_dump() if snapshot else {}),
+    }
 
 
 @app.post("/projects/{project_id}/document/snapshots/{timestamp}/restore")
@@ -4895,13 +4972,16 @@ def restore_document_snapshot(project_id: str, timestamp: str):
     doc_path = project_dir / "document.json"
 
     try:
+        # Keep the document that is about to be replaced. This gives restore a
+        # reversible boundary and lets a user continue editing either branch.
+        _create_snapshot(project_dir, project_id)
         shutil.copy2(str(snapshot_path), str(doc_path))
         with open(doc_path, "r", encoding="utf-8") as f:
             content = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -263,6 +263,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
         workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
+        workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
+        workbench_director_snapshot_media_id: Optional[str] = None,
     ) -> Optional["StoryboardFrame"]:
         """Persist Storyboard R2V workbench state onto a frame.
 
@@ -332,6 +334,22 @@ class ComicGenPipeline(StudioOwnerMixin):
                     if unique_ids:
                         cleaned_selections[asset_id] = unique_ids
                 frame.workbench_reference_variant_ids = cleaned_selections
+            if workbench_pose_reference_variant_ids is not None:
+                cleaned_pose_selections: Dict[str, List[str]] = {}
+                for asset_id, variant_ids in workbench_pose_reference_variant_ids.items():
+                    if not isinstance(asset_id, str) or not asset_id.strip() or not isinstance(variant_ids, list):
+                        continue
+                    unique_ids: List[str] = []
+                    for variant_id in variant_ids:
+                        if isinstance(variant_id, str) and variant_id.strip() and variant_id not in unique_ids:
+                            unique_ids.append(variant_id)
+                    if unique_ids:
+                        cleaned_pose_selections[asset_id] = unique_ids
+                frame.workbench_pose_reference_variant_ids = cleaned_pose_selections
+            if workbench_director_snapshot_media_id is not None:
+                frame.workbench_director_snapshot_media_id = (
+                    workbench_director_snapshot_media_id.strip() or None
+                )
             frame.updated_at = time.time()
             try:
                 self._save_data()
@@ -2612,7 +2630,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -2737,6 +2755,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             owner_user_id=script.owner_user_id,
             owner_profile_id=script.owner_profile_id,
             frame_id=frame_id,
+            pose_reference_variant_ids={
+                key: list(value)
+                for key, value in (pose_reference_variant_ids or {}).items()
+                if isinstance(key, str) and isinstance(value, list)
+            },
+            director_snapshot_media_id=(
+                director_snapshot_media_id.strip()
+                if isinstance(director_snapshot_media_id, str) and director_snapshot_media_id.strip()
+                else None
+            ),
             image_url=snapshot_url,
             prompt=prompt,
             status="pending",

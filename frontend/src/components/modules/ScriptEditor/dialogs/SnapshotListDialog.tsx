@@ -32,6 +32,7 @@ function formatRelativeTime(dateStr: string, t: (key: string, values?: Record<st
 
 function formatTimestamp(dateStr: string): string {
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
   return date.toLocaleString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
@@ -62,7 +63,7 @@ export default function SnapshotListDialog({
       .then((list) => {
         // Sort by created_at descending (newest first)
         const sorted = [...list].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          (a, b) => new Date(b.created_at || b.timestamp).getTime() - new Date(a.created_at || a.timestamp).getTime()
         );
         setSnapshots(sorted);
       })

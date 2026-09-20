@@ -158,4 +158,9 @@ export function useDerivation(editor: Editor | null) {
       }
     };
   }, [editor, runDerivation]);
+
+  // Consumers that hydrate the editor without emitting an update (for
+  // example, loading a persisted snapshot) can refresh the derived panels
+  // explicitly without marking the document dirty.
+  return runDerivation;
 }

@@ -354,7 +354,9 @@ export const api = {
         // Watermark toggle — supported across wan / kling / vidu / pixverse /
         // happyhorse video. undefined = leave to provider default (typically
         // off); explicit boolean is user's Advanced-section choice.
-        watermark?: boolean
+        watermark?: boolean,
+        poseReferenceVariantIds?: Record<string, string[]>,
+        directorSnapshotMediaId?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -384,6 +386,8 @@ export const api = {
             ratio,
             watermark,
             workbench_tab: workbenchTab,
+            pose_reference_variant_ids: poseReferenceVariantIds,
+            director_snapshot_media_id: directorSnapshotMediaId,
         });
         return res.data;
     },
@@ -428,6 +432,8 @@ export const api = {
             video_model?: string;
             workbench_generate_audio?: boolean;
             workbench_reference_variant_ids?: Record<string, string[]>;
+            workbench_pose_reference_variant_ids?: Record<string, string[]>;
+            workbench_director_snapshot_media_id?: string | null;
         },
     ) => {
         const res = await axios.patch(

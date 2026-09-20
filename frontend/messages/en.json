@@ -584,6 +584,7 @@
     "invalidTimeline": "Timestamps must be ordered, unique source-frame times, excluding the start and end.",
     "refresh": "Refresh",
     "analyze": "Analyze source",
+    "cancelAnalysis": "Cancel analysis",
     "audioTracks": "{count} audio tracks",
     "timeline": "Timeline",
     "shots": "shots",

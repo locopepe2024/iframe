@@ -195,6 +195,17 @@ class AssetUnit(BaseModel):
     video_updated_at: float = Field(0.0, description="Timestamp of last motion ref update")
 
 
+class PoseReferenceSelection(BaseModel):
+    """Durable pose evidence selected for one storyboard shot.
+
+    This is intentionally provider-neutral. It identifies project-owned
+    variants and a director snapshot without pretending either is ControlNet.
+    """
+
+    variant_ids: List[str] = Field(default_factory=list, description="Ordered pose/reference variant IDs")
+    director_snapshot_media_id: Optional[str] = Field(None, description="Durable media ID for a director-desk snapshot")
+
+
 class AssetLibraryReference(BaseModel):
     """Stable identity of one reusable image variant from the asset library.
 
@@ -239,6 +250,14 @@ class VideoTask(BaseModel):
     movement_amplitude: Optional[str] = Field(None, description="Vidu movement amplitude: auto/small/medium/large")
     # HappyHorse params
     reference_image_urls: List[str] = Field(default_factory=list, description="Reference image URLs for HappyHorse R2V (max 9)")
+    pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Immutable semantic pose-reference selections used for this task",
+    )
+    director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable director-desk snapshot media ID used for this task",
+    )
     ratio: Optional[str] = Field(None, description="Aspect ratio for HappyHorse T2V/R2V: 16:9, 9:16, 1:1, 4:3, 3:4")
     audio_setting: Optional[str] = Field(None, description="Audio setting for HappyHorse V2V: auto/origin")
     # Watermark toggle — supported by wan/kling/vidu/pixverse/happyhorse video models.
@@ -300,6 +319,14 @@ class Character(BaseModel):
     reference_sheet: Optional[AssetUnit] = Field(
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
+    )
+    makeup_reference: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Virtual actor identity/makeup reference images",
+    )
+    pose_references: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Reusable pose and gesture reference images for this actor",
     )
 
     # === LEGACY (pre R2V v2): Asset Activation v2 — three separate units ===
@@ -532,6 +559,14 @@ class StoryboardFrame(BaseModel):
     workbench_reference_variant_ids: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",
+    )
+    workbench_pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Ordered per-shot pose reference variant IDs keyed by semantic asset ID",
+    )
+    workbench_director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable media ID for the shot's 3D director snapshot",
     )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top

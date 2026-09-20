@@ -81,6 +81,8 @@ export interface Character {
     // reference_sheet is the canonical character asset (new schema);
     // full_body_asset is legacy, kept only as a read fallback.
     reference_sheet?: AssetUnit;
+    makeup_reference?: AssetUnit;
+    pose_references?: AssetUnit;
     full_body_asset?: ImageAsset;
     three_view_asset?: ImageAsset;
     headshot_asset?: ImageAsset;
@@ -153,6 +155,8 @@ export interface StoryboardFrame {
     locked?: boolean;
     workbench_generate_audio?: boolean | null;
     workbench_reference_variant_ids?: Record<string, string[]>;
+    workbench_pose_reference_variant_ids?: Record<string, string[]>;
+    workbench_director_snapshot_media_id?: string | null;
     // ... other fields
 }
 

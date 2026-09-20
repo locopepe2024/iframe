@@ -584,6 +584,7 @@
     "invalidTimeline": "切点必须是递增、不重复的原片帧时间，不能包含起点和终点。",
     "refresh": "刷新",
     "analyze": "分析原片",
+    "cancelAnalysis": "取消分析",
     "audioTracks": "{count} 条音轨",
     "timeline": "时间线",
     "shots": "镜",
