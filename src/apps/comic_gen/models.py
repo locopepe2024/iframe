@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
 import json
+import os
 import time
 from pydantic import BaseModel, Field
 
@@ -8,6 +9,32 @@ from ...utils.model_catalog import get_default_model_settings
 
 
 _DEFAULT_MODEL_SETTINGS = get_default_model_settings()
+
+
+DIRECTOR_EXECUTION_SUMMARY_ENV = "IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS"
+DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS = 7000
+DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS = 1000
+DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS = 16000
+
+
+def _coerce_director_execution_summary_limit(raw_value: Optional[str]) -> int:
+    """Parse the configurable summary budget with safe process-level bounds."""
+    try:
+        value = int(raw_value or DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS)
+    except (TypeError, ValueError):
+        value = DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS
+    return max(
+        DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS,
+        min(value, DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS),
+    )
+
+
+# Read once at process startup so one request cannot change another request's
+# output contract. Set IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS in .env or
+# the service environment when a larger/smaller bounded context is desired.
+DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS = _coerce_director_execution_summary_limit(
+    os.getenv(DIRECTOR_EXECUTION_SUMMARY_ENV)
+)
 
 class AspectRatio(str, Enum):
     SQUARE = "1:1"
@@ -636,7 +663,7 @@ class DirectorProfile(BaseModel):
     sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
     execution_summary: str = Field(
         "",
-        max_length=3200,
+        max_length=DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
         description=(
             "Bounded, source-grounded direction for downstream storyboard and "
             "asset prompts. The full profile remains the audit/edit source."
@@ -690,7 +717,6 @@ def _director_value_as_text(value: Any) -> str:
         return str(value)
 
 
-DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS = 3200
 DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS = 16
 DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 3200
 DIRECTOR_SCENE_REF_MAX_CHARS = 40

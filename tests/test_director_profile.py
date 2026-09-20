@@ -12,6 +12,10 @@ from src.apps.comic_gen.models import (
     Character,
     DirectorProfile,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+    DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS,
+    DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS,
+    DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS,
+    _coerce_director_execution_summary_limit,
     DIRECTOR_SCENE_SUMMARIES_MAX_CHARS,
     director_execution_payload,
     Script,
@@ -104,7 +108,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "距离→压力→沟通失效→关系消耗" in prompt
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
     assert "execution_summary" in prompt
-    assert "3200" in prompt
+    assert str(DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS) in prompt
     assert "sample_plan 最多 4 项" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
@@ -199,6 +203,15 @@ def test_model_summary_is_clipped_during_draft_normalization():
 
     assert len(normalized["execution_summary"]) == DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
     DirectorProfile(**normalized)
+
+
+def test_director_summary_budget_defaults_to_7000_and_clamps_configuration():
+    assert DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS == 7000
+    assert _coerce_director_execution_summary_limit(None) == 7000
+    assert _coerce_director_execution_summary_limit("9000") == 9000
+    assert _coerce_director_execution_summary_limit("not-a-number") == 7000
+    assert _coerce_director_execution_summary_limit("1") == DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS
+    assert _coerce_director_execution_summary_limit("999999") == DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS
 
 
 def test_storyboard_prompt_filters_full_profile_to_execution_summary():

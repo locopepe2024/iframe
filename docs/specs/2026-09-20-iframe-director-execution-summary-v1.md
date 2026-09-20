@@ -27,7 +27,9 @@ for a long script whose causality crosses scene boundaries.
 ## Contract
 
 1. `DirectorProfile.execution_summary` is a generated or user-reviewed string
-   capped at 3,200 characters. It contains cross-scene facts and stable
+   capped at 7,000 characters by default. The effective limit is configurable
+   with `IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS` and clamped to
+   1,000–16,000 characters. It contains cross-scene facts and stable
    directing constraints only.
 2. The Director analysis/refinement prompt must return and refresh this field.
    It must contain only source-grounded decisions needed by asset and storyboard
@@ -37,7 +39,9 @@ for a long script whose causality crosses scene boundaries.
    Each entry has a stable source `scene_ref`, a local event/state summary,
    `state_in`, and `state_out`. The scene reference is a source marker or
    extracted scene name; it is not silently replaced with a generated asset ID.
-   The local-memory projection has its own item and character budget.
+   The local-memory projection has its own 3,200-character item and character
+   budget. With the default, the two bounded layers are capped at 10,200
+   characters before JSON/prompt framing overhead.
 4. If a legacy profile has no summary, the backend builds a deterministic,
    bounded projection from the existing fields. This is a compatibility path,
    not a claim that the projection is semantically equivalent to an LLM summary.
@@ -73,7 +77,8 @@ for a long script whose causality crosses scene boundaries.
 
 ## Success criteria
 
-1. New Director responses expose a bounded `execution_summary`.
+1. New Director responses expose a bounded `execution_summary` suitable for
+   medium-length (roughly 5,000–7,000 character) scripts.
 2. New Director responses expose bounded local scene memory with transition
    state, and legacy profiles remain valid with a deterministic fallback.
 3. Storyboard and asset/video prompt contexts contain the two-layer envelope

@@ -15,6 +15,7 @@ from .models import (
     Prop,
     StoryboardFrame,
     GenerationStatus,
+    DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     director_execution_payload,
 )
 
@@ -1064,7 +1065,8 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
-使用短句或项目符号，最多 12 条、最多 3200 个字符，不要重复完整 timeline 或 sample_plan。
+使用短句或项目符号，最多 20 条、最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符，
+不要重复完整 timeline 或 sample_plan。
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
 只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。"""
@@ -1099,7 +1101,8 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
 保留未要求改变的正确内容，并同步刷新 execution_summary 和 scene_summaries。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
-3200 个字符、最多 12 条短句；scene_summaries 必须保留场景之间的 state_out → state_in
+{DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；scene_summaries 必须保留
+场景之间的 state_out → state_in
 因果衔接，并且只保留后续分镜和资产设计需要的事实与约束。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
