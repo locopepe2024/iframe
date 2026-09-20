@@ -9,7 +9,7 @@ import { api, type BgmPreset } from "@/lib/api";
 import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
-import { countAssemblyReadyFrames, resolveAssemblyVideo } from "./assemblyReadiness";
+import { getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
 
 type AssemblyPhase = "takes" | "mix" | "export";
 
@@ -113,8 +113,11 @@ export default function VideoAssembly() {
 
     const frames = (currentProject?.frames ?? []) as any[];
     const videoTasks = (currentProject?.video_tasks ?? []) as any[];
-    const framesReady = countAssemblyReadyFrames(frames, videoTasks);
-    const framesTotal = frames.length;
+    const {
+        ready: framesReady,
+        total: framesTotal,
+        missing: framesMissing,
+    } = getAssemblyReadiness(frames, videoTasks);
 
     return (
         // Layout v4: outer horizontal split. StepHeader belongs to main
@@ -159,6 +162,15 @@ export default function VideoAssembly() {
                         </button>
                     ))}
                 </div>
+                {phase === "takes" && (
+                    <div
+                        role="status"
+                        className="mx-6 mt-3 flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-xs text-text-secondary"
+                    >
+                        <Film size={13} className="shrink-0 text-primary" aria-hidden="true" />
+                        <span>{ta("selectFrameHint")}</span>
+                    </div>
+                )}
                 {/* Takes phase body */}
                 {phase === "takes" && (
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
@@ -275,6 +287,7 @@ export default function VideoAssembly() {
                             mergeError={mergeError}
                             framesReady={framesReady}
                             framesTotal={framesTotal}
+                            framesMissing={framesMissing}
                             onMerge={handleMerge}
                             onDownload={handleDownload}
                             onDismissError={() => setMergeError(null)}
@@ -521,6 +534,7 @@ function ExportPhase({
     mergeError,
     framesReady,
     framesTotal,
+    framesMissing,
     onMerge,
     onDownload,
     onDismissError,
@@ -531,12 +545,13 @@ function ExportPhase({
     mergeError: string | null;
     framesReady: number;
     framesTotal: number;
+    framesMissing: number;
     onMerge: () => void;
     onDownload: () => void;
     onDismissError: () => void;
 }) {
     const ta = useTranslations("assembly");
-    const allReady = framesTotal > 0 && framesReady === framesTotal;
+    const canMerge = framesTotal > 0 && framesReady > 0;
     return (
         <div className="space-y-6 max-w-3xl">
             <section className="rounded-xl border border-glass-border bg-glass p-6">
@@ -549,10 +564,15 @@ function ExportPhase({
                         <p className="mt-1 text-body-sm text-text-secondary">
                             {ta("exportSubtitle", { ready: framesReady, total: framesTotal })}
                         </p>
+                        {framesMissing > 0 && (
+                            <p className="mt-2 text-xs text-amber-300/90">
+                                {ta("partialExportWarning", { missing: framesMissing })}
+                            </p>
+                        )}
                     </div>
                     <button
                         onClick={onMerge}
-                        disabled={isMerging || !allReady}
+                        disabled={isMerging || !canMerge}
                         className="shrink-0 inline-flex items-center gap-2 bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-md font-semibold text-[0.8125rem]"
                     >
                         {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}

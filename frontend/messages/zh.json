@@ -1438,6 +1438,7 @@
     },
     "exportTitle": "导出最终视频",
     "exportSubtitle": "已选定 {ready} / {total} 帧，准备合并为最终 MP4。",
+    "partialExportWarning": "还有 {missing} 帧没有可用视频；点击合并将先跳过这些帧。",
     "framesLabel": "帧",
     "framesReadyLabel": "已完成"
   },

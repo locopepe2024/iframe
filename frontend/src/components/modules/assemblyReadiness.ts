@@ -80,3 +80,31 @@ export function countAssemblyReadyFrames(
         0,
     );
 }
+
+export interface AssemblyReadiness {
+    total: number;
+    ready: number;
+    missing: number;
+    canMerge: boolean;
+}
+
+/**
+ * Describe the merge gate exposed by the assembly UI.
+ *
+ * The backend can concatenate every usable clip and skip frames that have no
+ * clip yet. Keep the UI honest about that partial result while still allowing
+ * a user to export when at least one frame is available.
+ */
+export function getAssemblyReadiness(
+    frames: AssemblyFrameInput[],
+    tasks: AssemblyVideoTaskInput[],
+): AssemblyReadiness {
+    const total = frames.length;
+    const ready = countAssemblyReadyFrames(frames, tasks);
+    return {
+        total,
+        ready,
+        missing: Math.max(0, total - ready),
+        canMerge: ready > 0,
+    };
+}

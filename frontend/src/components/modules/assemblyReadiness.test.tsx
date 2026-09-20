@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { countAssemblyReadyFrames, resolveAssemblyVideo } from "./assemblyReadiness";
+import { countAssemblyReadyFrames, getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
 
 const completed = (id: string, frame_id: string, video_url = `${id}.mp4`) => ({
     id,
@@ -36,5 +36,21 @@ it("prefers an available dubbed clip for assembly", () => {
         id: "take-1",
         video_url: "dubbed.mp4",
         source: "dubbed",
+    });
+});
+
+it("allows a partial merge while reporting missing frames", () => {
+    const frames = [{ id: "frame-1" }, { id: "frame-2" }];
+    const readiness = getAssemblyReadiness(frames, [completed("take-1", "frame-1")]);
+
+    expect(readiness).toEqual({ total: 2, ready: 1, missing: 1, canMerge: true });
+});
+
+it("does not allow a merge when no frame has a usable clip", () => {
+    expect(getAssemblyReadiness([{ id: "frame-1" }], [])).toEqual({
+        total: 1,
+        ready: 0,
+        missing: 1,
+        canMerge: false,
     });
 });
