@@ -10,7 +10,7 @@ export interface SourceAnalysis {
 }
 export interface RecreationProject {
   id: string; title: string; source_url: string; revision: number; analysis_id: string;
-  status: "registered" | "queued" | "analyzing" | "review" | "confirmed" | "failed";
+  status: "registered" | "queued" | "analyzing" | "review" | "confirmed" | "failed" | "cancelled";
   error: string | null; analysis: SourceAnalysis | null;
   timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
 }
@@ -41,7 +41,7 @@ export function importCuts(text: string, analysis: SourceAnalysis): number[] {
   return cuts;
 }
 
-export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image";
+export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image" | "generated_video" | "final_video";
 export interface RecreationMedia {
   media_id: string; project_id: string; kind: RecreationMediaKind; display_name: string;
   storage_path: string; sha256: string; created_at: number;
@@ -49,15 +49,30 @@ export interface RecreationMedia {
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 export interface RecreationKeyframeTask {
-  task_id: string; status: "pending" | "processing" | "completed" | "failed";
+  task_id: string; status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   output_media: RecreationMedia | null; error: string | null;
 }
 
 export interface RecreationPlan {
-  revision: number; ready: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
+  revision: number; ready: boolean; submission_enabled?: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
   blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
   shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
     images: { media_id: string; label: string }[] }[];
+}
+export interface RecreationGenerationTask {
+  task_id: string; generation_id: string; project_id: string; shot_id: string; shot_number: number;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  model: string; duration: number; generate_audio: boolean; provider_task_id?: string | null;
+  output_media: RecreationMedia | null; error: string | null;
+}
+export interface RecreationGenerationSubmission {
+  generation_id: string; project_id: string; revision: number; analysis_id: string;
+  model: string; audio_policy: string; tasks: RecreationGenerationTask[];
+}
+export interface RecreationAssemblyTask {
+  task_id: string; project_id: string; generation_id: string; revision: number;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  audio_policy: string; output_media: RecreationMedia | null; error: string | null;
 }
 export const recreationApi = {
   generationPlan: (project: RecreationProject, model = "uniart/minimax-h3-vip", options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number> } = { audio_policy: "silent", soundscape: "", generation_durations: {} }): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model, ...options }).then(r => r.data),
@@ -74,6 +89,26 @@ export const recreationApi = {
     }).then(r => r.data),
   keyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
     axios.get(`${API_URL}/recreation/keyframe-tasks/${taskId}`).then(r => r.data),
+  cancelKeyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
+    axios.post(`${API_URL}/recreation/keyframe-tasks/${taskId}/cancel`).then(r => r.data),
+  submitGeneration: (project: RecreationProject, model: string, options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number>; accept_cost: boolean; seed?: number | null }): Promise<RecreationGenerationSubmission> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/generation-tasks`, { revision: project.revision, model, ...options }).then(r => r.data),
+  generationTasks: (projectId: string, generationId?: string): Promise<RecreationGenerationTask[]> =>
+    axios.get(`${API_URL}/recreation/projects/${projectId}/generation-tasks`, { params: generationId ? { generation_id: generationId } : undefined }).then(r => r.data),
+  cancelGenerationTask: (taskId: string): Promise<RecreationGenerationTask> =>
+    axios.post(`${API_URL}/recreation/generation-tasks/${taskId}/cancel`).then(r => r.data),
+  retryGenerationTask: (taskId: string, acceptCost: boolean): Promise<RecreationGenerationTask> =>
+    axios.post(`${API_URL}/recreation/generation-tasks/${taskId}/retry`, { accept_cost: acceptCost }).then(r => r.data),
+  submitAssembly: (project: RecreationProject, generationId: string): Promise<RecreationAssemblyTask> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/assembly-tasks`, { revision: project.revision, generation_id: generationId }).then(r => r.data),
+  assemblyTask: (taskId: string): Promise<RecreationAssemblyTask> =>
+    axios.get(`${API_URL}/recreation/assembly-tasks/${taskId}`).then(r => r.data),
+  assemblyTasks: (projectId: string, generationId?: string): Promise<RecreationAssemblyTask[]> =>
+    axios.get(`${API_URL}/recreation/projects/${projectId}/assembly-tasks`, { params: generationId ? { generation_id: generationId } : undefined }).then(r => r.data),
+  cancelAssemblyTask: (taskId: string): Promise<RecreationAssemblyTask> =>
+    axios.post(`${API_URL}/recreation/assembly-tasks/${taskId}/cancel`).then(r => r.data),
+  retryAssemblyTask: (taskId: string): Promise<RecreationAssemblyTask> =>
+    axios.post(`${API_URL}/recreation/assembly-tasks/${taskId}/retry`).then(r => r.data),
   bindShot: (project: RecreationProject, shotId: string, binding: Pick<RecreationShot, "reference_media_id" | "replacement_media_id" | "instruction" | "description" | "instruction_refs">): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/references`, {
       revision: project.revision, analysis_id: project.analysis_id, ...binding,
@@ -91,6 +126,8 @@ export const recreationApi = {
   },
   analyze: (project: RecreationProject): Promise<RecreationProject> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/analyze`, { revision: project.revision }).then(r => r.data),
+  cancelAnalysis: (project: RecreationProject): Promise<RecreationProject> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/analyze/${project.analysis_id}/cancel`, { revision: project.revision }).then(r => r.data),
   confirm: (project: RecreationProject, cuts: number[]): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/timeline`, {
       revision: project.revision, analysis_id: project.analysis_id, cut_pts: cuts,

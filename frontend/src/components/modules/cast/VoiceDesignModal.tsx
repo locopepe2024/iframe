@@ -99,7 +99,7 @@ export default function VoiceDesignModal({
             setVoicePrompt(voice_prompt);
             setPhase("draft");
         } catch (e: any) {
-            setErrorMsg(e?.message || "Translate failed");
+            setErrorMsg(e?.message || t("translateFailed"));
             setPhase("error");
         }
     };
@@ -134,7 +134,7 @@ export default function VoiceDesignModal({
             setPlaying(true);
             await audio.play();
         } catch (e: any) {
-            setErrorMsg(e?.message || "Preview failed");
+            setErrorMsg(e?.message || t("previewFailed"));
             setPhase("error");
         }
     };
@@ -174,7 +174,7 @@ export default function VoiceDesignModal({
                 onClose();
             }, 600);
         } catch (e: any) {
-            setErrorMsg(e?.message || "Save failed");
+            setErrorMsg(e?.message || t("saveFailed"));
             setPhase("error");
         }
     };
@@ -289,7 +289,7 @@ export default function VoiceDesignModal({
                         <div className="flex items-center gap-2 rounded-md border border-glass-border bg-black/30 px-3 py-2.5">
                             <button
                                 onClick={handleReplay}
-                                aria-label={playing ? "Pause" : "Play"}
+                                aria-label={playing ? t("previewStop") : t("previewPlay")}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-primary/40 bg-primary/10 text-primary"
                             >
                                 {playing ? <Pause size={13} /> : <Play size={13} />}

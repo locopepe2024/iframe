@@ -984,6 +984,11 @@ export default function StoryboardR2V() {
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
                     imageBased ? referenceUrls : undefined, // referenceImageUrls
+                    undefined, // ratio
+                    shot.tabMode,
+                    undefined, // watermark
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1078,6 +1083,11 @@ export default function StoryboardR2V() {
                     videoConfig.movementAmplitude,
                     // HappyHorse
                     undefined,
+                    undefined, // ratio
+                    shot.tabMode,
+                    undefined, // watermark
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1260,6 +1270,8 @@ export default function StoryboardR2V() {
                         params?.ratio,
                         tabMode,
                         params?.watermark,
+                        shot.poseReferenceVariantIds,
+                        shot.directorSnapshotMediaId ?? undefined,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
                     return task?.id ?? null;
@@ -1298,6 +1310,8 @@ export default function StoryboardR2V() {
                     undefined,
                     tabMode,
                     params?.watermark,
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
                 return task?.id ?? null;

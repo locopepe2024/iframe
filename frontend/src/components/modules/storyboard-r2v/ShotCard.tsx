@@ -46,6 +46,8 @@ export interface ShotNode {
     generateAudio?: boolean;
     /** Explicit image variants selected from each semantic asset for this shot. */
     referenceVariantIds?: Record<string, string[]>;
+    poseReferenceVariantIds?: Record<string, string[]>;
+    directorSnapshotMediaId?: string | null;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy

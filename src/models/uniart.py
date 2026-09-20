@@ -83,6 +83,10 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
         # Preserve the provider's actionable error without logging the request
         # body (which may contain prompts or media references) or credentials.
         detail = _provider_error_detail(resp)
+        if resp.status_code in {400, 403} and _is_moderation_rejection(detail):
+            context = _moderation_context(path, body)
+            logger.warning("UniArt image request rejected by content moderation (%s)", context)
+            detail = f"{detail} [{context}]"
         raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
@@ -124,6 +128,31 @@ def _provider_error_detail(resp: requests.Response) -> str:
     suffix = f" (request id: {request_id})" if request_id else ""
     code_part = f" {code}" if code else ""
     return f"UniArt request failed ({status}{code_part}): {message}{suffix}"
+
+
+def _image_reference_count(body: Dict[str, Any]) -> int:
+    """Count image inputs without exposing their URLs or request payload."""
+    images = body.get("images")
+    if isinstance(images, list):
+        return len(images)
+    count = 1 if body.get("image") else 0
+    references = body.get("reference_images")
+    if isinstance(references, list):
+        count += len(references)
+    return count
+
+
+def _is_moderation_rejection(detail: str) -> bool:
+    text = detail.lower()
+    return any(marker in text for marker in ("content moderation", "moderation", "safety policy", "content policy"))
+
+
+def _moderation_context(endpoint: str, body: Dict[str, Any]) -> str:
+    """Return safe diagnostic context for a provider moderation rejection."""
+    model = str(body.get("model") or "unknown")
+    references = _image_reference_count(body)
+    mode = "edit" if endpoint.rstrip("/").endswith("/edits") else "generation"
+    return f"model={model}, mode={mode}, reference_images={references}"
 
 
 def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, endpoint: str = "videos") -> Dict[str, Any]:

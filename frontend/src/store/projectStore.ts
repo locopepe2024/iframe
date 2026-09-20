@@ -23,6 +23,9 @@ export interface ImageVariant {
     source_origin?: "upload" | "workbench" | "generation";
     source_generation_id?: string;
     source_output_id?: string;
+    reference_asset_type?: "character" | "scene" | "prop";
+    reference_asset_id?: string;
+    reference_variant_id?: string;
     reference_view_role?: string;
     reference_distance?: string;
     camera_yaw?: number;
@@ -78,6 +81,8 @@ export interface Character {
     // reference_sheet is the canonical character asset (new schema);
     // full_body_asset is legacy, kept only as a read fallback.
     reference_sheet?: AssetUnit;
+    makeup_reference?: AssetUnit;
+    pose_references?: AssetUnit;
     full_body_asset?: ImageAsset;
     three_view_asset?: ImageAsset;
     headshot_asset?: ImageAsset;
@@ -103,7 +108,7 @@ export interface Character {
      *  Drives UI badges + the "high-cost action" confirm modal
      *  (A2 design decision). Not persisted; set fresh on every
      *  GET /projects/{id} response. */
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Scene {
@@ -119,7 +124,7 @@ export interface Scene {
     starred?: boolean;
     time_of_day?: string;
     lighting_mood?: string;
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Prop {
@@ -133,7 +138,7 @@ export interface Prop {
     status?: string;
     locked?: boolean;
     starred?: boolean;
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface StoryboardFrame {
@@ -150,6 +155,8 @@ export interface StoryboardFrame {
     locked?: boolean;
     workbench_generate_audio?: boolean | null;
     workbench_reference_variant_ids?: Record<string, string[]>;
+    workbench_pose_reference_variant_ids?: Record<string, string[]>;
+    workbench_director_snapshot_media_id?: string | null;
     // ... other fields
 }
 

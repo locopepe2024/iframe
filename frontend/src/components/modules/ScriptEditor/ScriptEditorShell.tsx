@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X } from 'lucide-react';
@@ -13,7 +13,11 @@ import { useContinuityCheck } from './hooks/useContinuityCheck';
 import { useSceneFolding } from './hooks/useSceneFolding';
 import { useViewMode } from './hooks/useViewMode';
 import { useOfflineCache } from './hooks/useOfflineCache';
+import { useAutoSave } from './hooks/useAutoSave';
+import { useDerivation } from './hooks/useDerivation';
 import { useL3Completion } from './hooks/useL3Completion';
+import { scriptEditorApi } from '@/lib/scriptEditorApi';
+import SnapshotListDialog from './dialogs/SnapshotListDialog';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
 import { ContinuityIndicator } from './components/ContinuityIndicator';
@@ -34,12 +38,16 @@ export default function ScriptEditorShell({
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
   const { editor, isReady } = useEditorSetup({ content: initialContent });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [documentLoading, setDocumentLoading] = useState(Boolean(projectId));
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
   const { enabled: foldingEnabled, isAllExpanded, totalScenes: foldingTotal } = useSceneFolding(editor);
   const { mode: viewMode, setMode: setViewMode, isReadOnly, showToolbar, showSidebars } = useViewMode();
   const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(projectId, editor);
+  const { save } = useAutoSave(editor, projectId ?? null);
+  const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, projectId ?? null);
 
   const isDirty = useEditorStore((s) => s.isDirty);
@@ -52,6 +60,51 @@ export default function ScriptEditorShell({
   const rightCollapsed = useEditorStore((s) => s.rightSidebarCollapsed);
   const toggleLeft = useEditorStore((s) => s.toggleLeftSidebar);
   const toggleRight = useEditorStore((s) => s.toggleRightSidebar);
+
+  // The editor is a view over the persisted document. Load it after the
+  // Tiptap instance exists, and suppress the update event so loading a saved
+  // version does not look like a new edit.
+  useEffect(() => {
+    if (!editor) return;
+    const store = useEditorStore.getState();
+    store.setProjectId(projectId ?? null);
+    let cancelled = false;
+
+    if (!projectId) {
+      setDocumentLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setDocumentLoading(true);
+    store.setLoading(true);
+    scriptEditorApi.loadDocument(projectId)
+      .then((response) => {
+        if (cancelled) return;
+        editor.commands.setContent(response.content, { emitUpdate: false });
+        refreshDerivation();
+        store.setDirty(false);
+        store.setLastSavedAt(response.updated_at ? new Date(response.updated_at) : null);
+      })
+      .catch((error) => {
+        if (!cancelled) console.error('[ScriptEditorShell] Failed to load document:', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDocumentLoading(false);
+          store.setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [editor, projectId, refreshDerivation]);
+
+  const handleRestore = useCallback((content: object) => {
+    if (!editor) return;
+    editor.commands.setContent(content, { emitUpdate: false });
+    refreshDerivation();
+    useEditorStore.getState().setDirty(false);
+    useEditorStore.getState().setLastSavedAt(new Date());
+  }, [editor, refreshDerivation]);
 
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
@@ -80,7 +133,14 @@ export default function ScriptEditorShell({
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#050508]">
       {/* Format Toolbar */}
       {!hideAllSidebars && showToolbar && (
-        <FormatToolbar editor={editor} viewMode={viewMode} onViewModeChange={setViewMode} />
+        <FormatToolbar
+          editor={editor}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onSave={() => { void save(true); }}
+          onOpenHistory={() => setHistoryOpen(true)}
+          canPersist={Boolean(projectId) && !documentLoading}
+        />
       )}
 
       {/* Top Toolbar */}
@@ -246,6 +306,15 @@ export default function ScriptEditorShell({
 
       {/* Shortcut Help Panel */}
       <ShortcutHelpPanel open={showShortcutHelp} onClose={closeShortcutHelp} />
+
+      {projectId && (
+        <SnapshotListDialog
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          projectId={projectId}
+          onRestore={handleRestore}
+        />
+      )}
     </div>
   );
 }

@@ -17,6 +17,19 @@ class _ErrorResponse:
         raise uniart.requests.HTTPError(response=self)
 
 
+class _ModerationResponse(_ErrorResponse):
+    status_code = 400
+    text = '{"error":{"code":"bad_response_status_code","message":"Your prompt or reference material was rejected by content moderation. Please revise it and submit again."}}'
+
+    def json(self):
+        return {
+            "error": {
+                "code": "bad_response_status_code",
+                "message": "Your prompt or reference material was rejected by content moderation. Please revise it and submit again.",
+            }
+        }
+
+
 def test_post_preserves_provider_error_without_request_body(monkeypatch):
     response = _ErrorResponse()
     monkeypatch.setattr(uniart.requests, "post", lambda *args, **kwargs: response)
@@ -37,4 +50,21 @@ def test_post_preserves_provider_error_without_request_body(monkeypatch):
     assert "route candidates not found" in message
     assert "request-123" in message
     assert "secret-key" not in message
+    assert "private prompt" not in message
+
+
+def test_moderation_error_reports_model_and_reference_count_without_payload(monkeypatch):
+    response = _ModerationResponse()
+    monkeypatch.setattr(uniart.requests, "post", lambda *args, **kwargs: response)
+
+    with pytest.raises(RuntimeError) as caught:
+        uniart._post(
+            {"api_key": "secret-key", "base_url": "https://uniart.fun/v1"},
+            "/images/generations",
+            {"model": "gpt-image-2.5-flare-discount", "prompt": "private prompt"},
+        )
+
+    message = str(caught.value)
+    assert "reference_images=0" in message
+    assert "model=gpt-image-2.5-flare-discount" in message
     assert "private prompt" not in message

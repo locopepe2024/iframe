@@ -209,6 +209,12 @@ export function frameToShotNode(
         referenceVariantIds: frame.workbench_reference_variant_ids && typeof frame.workbench_reference_variant_ids === "object"
             ? frame.workbench_reference_variant_ids
             : {},
+        poseReferenceVariantIds: frame.workbench_pose_reference_variant_ids && typeof frame.workbench_pose_reference_variant_ids === "object"
+            ? frame.workbench_pose_reference_variant_ids
+            : {},
+        directorSnapshotMediaId: typeof frame.workbench_director_snapshot_media_id === "string"
+            ? frame.workbench_director_snapshot_media_id
+            : null,
         videoUrl,
         videoStatus,
         videoTaskId,

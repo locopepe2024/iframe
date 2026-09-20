@@ -117,11 +117,27 @@ def test_uploaded_reference_is_visible_selected_and_keeps_previous_variants(kind
     assert [v.url for v in variants] == ['first.png','second.png']
     assert (unit.selected_image_id if kind == 'character' else unit.selected_id) == variants[-1].id
     assert entity.image_url == 'second.png'
+    assert entity.status.value == 'completed'
     if kind != 'character':
         assert [v.url for v in entity.image_asset.variants] == ['first.png','second.png']
     p.select_asset_variant('project','asset',kind,variants[0].id, 'reference_sheet' if kind=='character' else None)
     assert entity.image_url == 'first.png'
     assert entity.owner_profile_id == 'owner'
+
+
+def test_pending_uploaded_reference_is_repaired_without_generation():
+    from src.apps.comic_gen.models import GlobalAssetLibrary
+
+    p, entity = pipeline('character')
+    p.library_store = GlobalAssetLibrary()
+    p.add_uploaded_asset_variant('project', 'character', entity.id, 'reference_sheet', 'uploaded.png')
+    entity.status = 'pending'
+    p._save_data.reset_mock()
+
+    p._migrate_uploaded_asset_statuses()
+
+    assert entity.status.value == 'completed'
+    p._save_data.assert_called_once()
 
 
 @pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
@@ -277,6 +293,7 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
         assert [c['id'] for c in result['characters']] == ['asset']
         char=result['characters'][0]
         assert char['source']=='global'
+        assert char['status']=='completed'
         variant=char['reference_sheet']['image_variants'][0]
         result=api.select_asset_variant('project',api.SelectVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id'],generation_type='reference_sheet'))
         assert result['characters'][0]['reference_sheet']['selected_image_id']==variant['id']
@@ -362,3 +379,21 @@ def test_cast_reference_generation_sends_valid_uniart_portrait_contract(tmp_path
     assert len(captured)==1
     assert len(entity.reference_sheet.image_variants)==1
     assert entity.status.value=='completed'
+
+
+def test_async_cast_generation_does_not_promote_uploaded_asset_to_reference_input(monkeypatch):
+    p, entity = pipeline('character')
+    p.add_uploaded_asset_variant('project', 'character', entity.id, 'reference_sheet', 'uploaded.png')
+    p.asset_generation_tasks = {}
+    p.asset_generator = Mock()
+    monkeypatch.setattr('src.apps.comic_gen.pipeline.runtime_uniart_for_owner', lambda *args: {})
+
+    _, task_id = p.create_asset_generation_task(
+        'project', entity.id, 'character',
+        generation_type='reference_sheet', model_name='uniart/gpt-image-2.5-flare-discount',
+    )
+    p.process_asset_generation_task(task_id)
+
+    call = p.asset_generator.generate_character.call_args
+    assert call.kwargs['reference_image_url'] is None
+    assert call.kwargs['use_reference_image'] is False

@@ -19,6 +19,19 @@ class GenerationPlanRequest(AnalyzeRequest):
     generation_durations: dict[str, int] = Field(default_factory=dict)
 
 
+class GenerationSubmitRequest(GenerationPlanRequest):
+    accept_cost: bool = False
+    seed: int | None = None
+
+
+class GenerationRetryRequest(BaseModel):
+    accept_cost: bool = False
+
+
+class AssemblySubmitRequest(AnalyzeRequest):
+    generation_id: str = Field(min_length=1, max_length=64)
+
+
 class ConfirmRequest(AnalyzeRequest):
     analysis_id: str
     cut_pts: list[StrictInt] = Field(max_length=120)
@@ -35,7 +48,9 @@ def public(record, user):
 
 @router.get("/projects")
 def projects(user: UserContext = Depends(require_studio_user)):
-    return public(RecreationService(user).list(), user)
+    service = RecreationService(user)
+    service.recover_generation_tasks()
+    return public(service.list(), user)
 
 
 @router.get("/media")
@@ -57,7 +72,9 @@ def register(file: UploadFile = File(...), user: UserContext = Depends(require_s
 
 @router.get("/projects/{project_id}")
 def project(project_id: str, user: UserContext = Depends(require_studio_user)):
-    return public(RecreationService(user).get(project_id), user)
+    service = RecreationService(user)
+    service.recover_generation_tasks()
+    return public(service.get(project_id), user)
 
 
 @router.post("/projects/{project_id}/reindex")
@@ -75,6 +92,12 @@ def start(project_id: str, request: AnalyzeRequest, background: BackgroundTasks,
     record = service.start(project_id, request.revision)
     background.add_task(service.process, project_id, record["analysis_id"])
     return public(record, user)
+
+
+@router.post("/projects/{project_id}/analyze/{analysis_id}/cancel")
+def cancel_analysis(project_id: str, analysis_id: str, request: AnalyzeRequest,
+                    user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).cancel_analysis(project_id, request.revision, analysis_id), user)
 
 
 @router.put("/projects/{project_id}/timeline")
@@ -156,6 +179,11 @@ def keyframe_task(task_id: str, user: UserContext = Depends(require_studio_user)
     return public(RecreationService(user).keyframe_task(task_id), user)
 
 
+@router.post("/keyframe-tasks/{task_id}/cancel")
+def cancel_keyframe_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).cancel_keyframe_task(task_id), user)
+
+
 @router.post("/projects/{project_id}/generation-plan")
 def generation_plan(project_id: str, request: GenerationPlanRequest, user: UserContext = Depends(require_studio_user)):
     try:
@@ -163,3 +191,78 @@ def generation_plan(project_id: str, request: GenerationPlanRequest, user: UserC
                    request.audio_policy, request.soundscape, request.generation_durations)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/generation-tasks", status_code=202)
+def submit_generation(project_id: str, request: GenerationSubmitRequest, background: BackgroundTasks,
+                      user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    result = service.submit_generation(project_id, request.revision, request.model, request.audio_policy,
+                                       request.soundscape, request.generation_durations, request.accept_cost, request.seed)
+    for task in result["tasks"]:
+        background.add_task(service.process_generation_task, task["task_id"])
+    return public(result, user)
+
+
+@router.get("/projects/{project_id}/generation-tasks")
+def generation_tasks(project_id: str, generation_id: str | None = None,
+                     user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    service.recover_generation_tasks()
+    return public(service.generation_tasks(project_id, generation_id), user)
+
+
+@router.get("/generation-tasks/{task_id}")
+def generation_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).generation_task(task_id), user)
+
+
+@router.post("/generation-tasks/{task_id}/cancel")
+def cancel_generation_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).cancel_generation_task(task_id), user)
+
+
+@router.post("/generation-tasks/{task_id}/retry", status_code=202)
+def retry_generation_task(task_id: str, request: GenerationRetryRequest, background: BackgroundTasks,
+                         user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    task = service.retry_generation_task(task_id, request.accept_cost)
+    background.add_task(service.process_generation_task, task_id)
+    return public(task, user)
+
+
+@router.post("/projects/{project_id}/assembly-tasks", status_code=202)
+def submit_assembly(project_id: str, request: AssemblySubmitRequest, background: BackgroundTasks,
+                    user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    try:
+        task = service.submit_assembly(project_id, request.revision, request.generation_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    background.add_task(service.process_assembly_task, task["task_id"])
+    return public(task, user)
+
+
+@router.get("/projects/{project_id}/assembly-tasks")
+def assembly_tasks(project_id: str, generation_id: str | None = None,
+                   user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).assembly_tasks(project_id, generation_id), user)
+
+
+@router.get("/assembly-tasks/{task_id}")
+def assembly_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).assembly_task(task_id), user)
+
+
+@router.post("/assembly-tasks/{task_id}/cancel")
+def cancel_assembly_task(task_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).cancel_assembly_task(task_id), user)
+
+
+@router.post("/assembly-tasks/{task_id}/retry", status_code=202)
+def retry_assembly_task(task_id: str, background: BackgroundTasks,
+                        user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    task = service.retry_assembly_task(task_id)
+    background.add_task(service.process_assembly_task, task_id)
+    return public(task, user)

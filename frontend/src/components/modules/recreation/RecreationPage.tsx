@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Film, Loader2, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Check, Film, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
@@ -113,6 +113,9 @@ export default function RecreationPage() {
             <div className="flex gap-2">
               <button className="glass-button p-2" title={t("refresh")} aria-label={t("refresh")} disabled={busy}
                 onClick={() => void act(async () => open(await recreationApi.get(project.id)))}><RefreshCw size={16} /></button>
+              {processing && project.analysis_id && <button className="glass-button flex items-center gap-2" disabled={busy}
+                onClick={() => void act(async () => open(await recreationApi.cancelAnalysis(project)))}>
+                <X size={16} />{t("cancelAnalysis")}</button>}
               {!analysis && <button className="glass-button flex items-center gap-2" disabled={busy || processing}
                 onClick={() => void act(async () => open(await recreationApi.analyze(project)))}>
                 {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{t("analyze")}</button>}

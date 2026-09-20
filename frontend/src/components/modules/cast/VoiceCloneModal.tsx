@@ -119,7 +119,7 @@ export default function VoiceCloneModal({ isOpen, onClose, seriesId, characterNa
                 onClose();
             }, 600);
         } catch (e: any) {
-            setErrorMsg(e?.message || "Clone failed");
+            setErrorMsg(e?.message || t("cloneFailed"));
             setPhase("error");
         }
     };
