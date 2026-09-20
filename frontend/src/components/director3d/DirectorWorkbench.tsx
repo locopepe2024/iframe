@@ -31,9 +31,10 @@ class DirectorErrorBoundary extends Component<{ children: ReactNode }, { error: 
 
 export default function DirectorWorkbench() {
   const [ready, setReady] = useState(false);
+  const [restoredSavedAt, setRestoredSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    restoreLocalDirectorDraft();
+    setRestoredSavedAt(restoreLocalDirectorDraft());
     restoreBrowserViewState();
     const uninstall = installBrowserViewStatePersistence();
     setReady(true);
@@ -43,7 +44,7 @@ export default function DirectorWorkbench() {
   return (
     <div className="director3d-root">
       <DirectorErrorBoundary>
-        {ready ? <App /> : <div className="director3d-loading" role="status">正在准备三维舞台…</div>}
+        {ready ? <App restoredSavedAt={restoredSavedAt} /> : <div className="director3d-loading" role="status">正在准备三维舞台…</div>}
       </DirectorErrorBoundary>
     </div>
   );

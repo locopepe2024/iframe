@@ -671,6 +671,20 @@
   .director3d-root .multi-select-hint { margin-bottom: 6px; }
   .director3d-root .stage-status { gap: 10px; }
 }
+/* The host shell keeps a persistent desktop sidebar until the mobile
+   breakpoint. Switch to a stage-first flow before the three-column minimum
+   (236px + 520px + 286px) can overflow the remaining content width. */
+@media (min-width: 761px) and (max-width: 1260px) {
+  .director3d-root .app-shell { height: auto; min-height: 100%; display: block; }
+  .director3d-root .app-header { position: sticky; top: 0; z-index: 50; grid-template-columns: 1fr auto; gap: 12px; }
+  .director3d-root .project-identity { display: none; }
+  .director3d-root .header-actions { grid-column: 2; grid-row: 1; }
+  .director3d-root .workbench-grid { display: flex; flex-direction: column; overflow: visible; }
+  .director3d-root .stage-column { order: 1; overflow: visible; }
+  .director3d-root .left-panel { order: 2; max-height: none; overflow: visible; border-top: 1px solid var(--border); border-right: 0; }
+  .director3d-root .inspector-panel { order: 3; overflow: visible; border-top: 1px solid var(--border); border-left: 0; }
+  .director3d-root .command-bar { grid-template-columns: 240px minmax(0, 1fr) 100px; }
+}
 @media (max-width: 760px) {
   .director3d-root { height: 100%; }
   .director3d-root .app-shell { height: auto; min-height: 100%; display: block; }

@@ -23,7 +23,16 @@ import { saveLocalDirectorDraft } from "./state/local-draft";
 
 const VIEW_LABELS: Record<ViewMode, string> = { director: "导演视图", top: "俯视舞台", camera: "镜头视图" };
 
-export function App() {
+interface DirectorAppProps {
+  restoredSavedAt?: string | null;
+}
+
+function formatSavedTime(savedAt: string): string {
+  const date = new Date(savedAt);
+  return Number.isNaN(date.getTime()) ? "时间未知" : date.toLocaleTimeString();
+}
+
+export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const viewMode = useWorkbenchStore((state) => state.viewMode);
   const setViewMode = useWorkbenchStore((state) => state.setViewMode);
   const showJointHandles = useWorkbenchStore((state) => state.showJointHandles);
@@ -44,8 +53,10 @@ export function App() {
   const redo = useWorkbenchStore((state) => state.redo);
   const unsavedChanges = useWorkbenchStore((state) => state.unsavedChanges);
   const markExplicitlySaved = useWorkbenchStore((state) => state.markExplicitlySaved);
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>({ status: "idle", message: "" });
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(restoredSavedAt);
+  const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
+    ? { status: "saved", message: `本地草稿已恢复 ${formatSavedTime(restoredSavedAt)}` }
+    : { status: "idle", message: "" });
   const selectedCharacterIds = useWorkbenchStore((state) => state.selectedCharacterIds);
   const selectedCharacter = useWorkbenchStore((state) => state.characters[state.selectedCharacterId]);
   const selectedSceneObjectId = useWorkbenchStore((state) => state.selectedSceneObjectId);
@@ -76,7 +87,7 @@ export function App() {
       const savedAt = saveLocalDirectorDraft();
       setLastSavedAt(savedAt);
       markExplicitlySaved();
-      setSaveState({ status: "saved", message: `本地草稿已保存 ${new Date(savedAt).toLocaleTimeString()}` });
+      setSaveState({ status: "saved", message: `本地草稿已保存 ${formatSavedTime(savedAt)}` });
     } catch (caught) {
       setSaveState({ status: "error", message: caught instanceof Error ? caught.message : "保存本地草稿失败" });
     }
