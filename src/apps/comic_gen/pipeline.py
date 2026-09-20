@@ -785,9 +785,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                     size=effective_size
                 )
             elif asset_type == "scene":
-                self.asset_generator.generate_scene(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_scene(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt,
+                )
             elif asset_type == "prop":
-                self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_prop(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt,
+                )
                 
             target_asset.status = GenerationStatus.COMPLETED
             director_profile = self.effective_director_profile(script)
@@ -942,6 +958,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self.asset_generator.generate_scene(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                prompt=prompt,
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -950,6 +967,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self.asset_generator.generate_prop(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                prompt=prompt,
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")

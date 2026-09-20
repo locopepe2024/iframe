@@ -587,7 +587,16 @@ class AssetGenerator:
             
         return character
 
-    def generate_scene(self, scene: Scene, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Scene:
+    def generate_scene(
+        self,
+        scene: Scene,
+        positive_prompt: str = None,
+        negative_prompt: str = "",
+        batch_size: int = 1,
+        model_name: str = None,
+        size: str = None,
+        prompt: str = None,
+    ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
         output_dir = self._output_dir_for(scene)
@@ -599,7 +608,14 @@ class AssetGenerator:
         # Default size for scenes (landscape)
         effective_size = size or "1024*576"
         
-        prompt = f"Scene Concept Art: {scene.name}. {scene.description}. High quality, detailed. {positive_prompt}"
+        # An explicit prompt is the user's generation instruction and must be
+        # sent through unchanged as the semantic subject. The old scene path
+        # silently discarded it, which made a manually requested scene render
+        # from stale name/description text instead.
+        subject_prompt = (prompt or "").strip()
+        if not subject_prompt:
+            subject_prompt = f"Scene Concept Art: {scene.name}. {scene.description}."
+        prompt = f"{subject_prompt} High quality, detailed. {positive_prompt}"
         
         try:
             for _ in range(batch_size):
@@ -651,7 +667,16 @@ class AssetGenerator:
             
         return scene
 
-    def generate_prop(self, prop: Prop, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Prop:
+    def generate_prop(
+        self,
+        prop: Prop,
+        positive_prompt: str = None,
+        negative_prompt: str = "",
+        batch_size: int = 1,
+        model_name: str = None,
+        size: str = None,
+        prompt: str = None,
+    ) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
         output_dir = self._output_dir_for(prop)
@@ -663,7 +688,10 @@ class AssetGenerator:
         # Default size for props (square)
         effective_size = size or "1024*1024"
         
-        prompt = f"Prop Design: {prop.name}. {prop.description}. Isolated on white background, high quality, detailed. {positive_prompt}"
+        subject_prompt = (prompt or "").strip()
+        if not subject_prompt:
+            subject_prompt = f"Prop Design: {prop.name}. {prop.description}."
+        prompt = f"{subject_prompt} Isolated on white background, high quality, detailed. {positive_prompt}"
         
         try:
             for _ in range(batch_size):
