@@ -9,6 +9,7 @@ import { api, type BgmPreset } from "@/lib/api";
 import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
+import { countAssemblyReadyFrames, resolveAssemblyVideo } from "./assemblyReadiness";
 
 type AssemblyPhase = "takes" | "mix" | "export";
 
@@ -110,8 +111,10 @@ export default function VideoAssembly() {
 
     const variants = selectedFrameId ? videosByFrame[selectedFrameId] || [] : [];
 
-    const framesReady = currentProject?.frames?.filter((f: any) => f.selected_video_id).length ?? 0;
-    const framesTotal = currentProject?.frames?.length ?? 0;
+    const frames = (currentProject?.frames ?? []) as any[];
+    const videoTasks = (currentProject?.video_tasks ?? []) as any[];
+    const framesReady = countAssemblyReadyFrames(frames, videoTasks);
+    const framesTotal = frames.length;
 
     return (
         // Layout v4: outer horizontal split. StepHeader belongs to main
@@ -162,8 +165,7 @@ export default function VideoAssembly() {
                         {currentProject?.frames?.map((frame: any, index: number) => {
                             const hasVideos = videosByFrame[frame.id]?.length > 0;
                             const isSelected = frame.id === selectedFrameId;
-                            const selectedVideoId = frame.selected_video_id;
-                            const selectedVideo = currentProject.video_tasks?.find((v: any) => v.id === selectedVideoId);
+                            const selectedVideo = resolveAssemblyVideo(frame, videoTasks);
 
                             return (
                                 <motion.div
@@ -171,18 +173,14 @@ export default function VideoAssembly() {
                                     layoutId={`frame-${frame.id}`}
                                     onClick={() => setSelectedFrameId(frame.id)}
                                     className={`group relative flex rounded-xl overflow-hidden cursor-pointer border transition-all bg-glass hover:bg-hover-bg ${isSelected ? "border-primary ring-1 ring-primary/50" :
-                                        selectedVideoId ? "border-green-500/30" : "border-glass-border"
+                                        selectedVideo ? "border-green-500/30" : "border-glass-border"
                                         }`}
                                 >
                                     {/* Left: Preview */}
                                     <div className="w-48 aspect-video relative flex-shrink-0 border-r border-glass-border bg-elevated">
                                         {selectedVideo ? (
                                             <video
-                                                src={getAssetUrl(
-                                                    frame.dubbed_video_task_id === selectedVideo.id && frame.dubbed_video_url
-                                                        ? frame.dubbed_video_url
-                                                        : selectedVideo.video_url
-                                                )}
+                                                src={getAssetUrl(selectedVideo.video_url)}
                                                 className="w-full h-full object-cover"
                                                 muted
                                                 onMouseOver={(e) => e.currentTarget.play()}
@@ -238,14 +236,14 @@ export default function VideoAssembly() {
                                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-subtle">
                                             <div className="flex items-center gap-4 text-xs text-text-muted">
                                                 <span className="flex items-center gap-1">
-                                                    <Clock size={12} /> {selectedVideo ? `${selectedVideo.duration}s` : "--"}
+                                                    <Clock size={12} /> {selectedVideo?.duration ? `${selectedVideo.duration}s` : "--"}
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <Film size={12} /> {videosByFrame[frame.id]?.length || 0} {ta("variants")}
                                                 </span>
                                             </div>
 
-                                            {selectedVideoId && (
+                                            {selectedVideo && (
                                                 <div className="flex items-center gap-1 text-green-500 text-xs font-bold">
                                                     <Check size={12} /> Ready
                                                 </div>
@@ -300,7 +298,10 @@ export default function VideoAssembly() {
                             <div className="space-y-4">
                                 {variants.length > 0 ? (
                                     variants.map((video: any, idx: number) => {
-                                        const isSelected = selectedFrame?.selected_video_id === video.id;
+                                        const activeVideo = selectedFrame
+                                            ? resolveAssemblyVideo(selectedFrame, videoTasks)
+                                            : null;
+                                        const isSelected = activeVideo?.id === video.id;
                                         return (
                                             <div
                                                 key={video.id}
