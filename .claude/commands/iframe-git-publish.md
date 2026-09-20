@@ -14,7 +14,7 @@ description: iFrame GitHub 发布流程 - 安全提交、敏感数据扫描、�
 - **Commit Message 遵循 Conventional Commits** (`feat:` / `fix:` / `docs:` / `refactor:` / `chore:`)
 - **GitHub remote 名称为 `github`**，仓库地址：`https://github.com/locopepe2024/iframe.git`
 - **iFrame GitHub 镜像提交的作者固定为** `Owen <owen.fang1977@gmail.com>`
-- **GitHub PR 统一由** `Star-Lotus` **账号发起**；如果当前活跃账号不是 `Star-Lotus`，需要先切换再执行 `gh pr create`
+- **GitHub PR 统一由** `locopepe2024` **账号发起**；如果当前活跃账号不是 `locopepe2024`，需要先切换再执行 `gh pr create`
 
 ## 阶段一：提交前检查
 
@@ -131,7 +131,7 @@ git push -u github <branch-name>
 先切换到有 PR 创建权限的账号：
 
 ```bash
-gh auth switch --hostname github.com --user Star-Lotus
+gh auth switch --hostname github.com --user locopepe2024
 ```
 
 ```bash
