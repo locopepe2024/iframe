@@ -4138,6 +4138,7 @@ def start_director_profile_analysis(
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {"profile": pipeline.preview_director_profile(script_id)},
+        queue_group="director",
     )
 
 
@@ -4157,6 +4158,8 @@ def start_director_profile_refinement(
         lambda: {"profile": pipeline.refine_director_profile(
             script_id, draft, instructions
         )},
+        queue_policy="lifo",
+        queue_group="director",
     )
 
 

@@ -47,6 +47,56 @@ def test_failure_is_explicit_and_retryable(tmp_path):
         assert wait_done(store, retry)['status'] == 'completed'
 
 
+def test_lifo_latest_wins_queue_discards_older_director_revisions(tmp_path):
+    first_started = Event()
+    release_first = Event()
+    calls = []
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'lifo-jobs.db', executor=executor)
+
+        def first_work():
+            calls.append('first')
+            first_started.set()
+            release_first.wait(10)
+            return {'version': 'first'}
+
+        first = store.start(
+            'owner', 'project', 'director-first', first_work,
+            queue_policy='fifo', queue_group='director',
+        )
+        assert first_started.wait(1)
+
+        older = store.start(
+            'owner', 'project', 'director-older',
+            lambda: calls.append('older') or {'version': 'older'},
+            queue_policy='lifo', queue_group='director',
+        )
+        latest = store.start(
+            'owner', 'project', 'director-latest',
+            lambda: calls.append('latest') or {'version': 'latest'},
+            queue_policy='lifo', queue_group='director',
+        )
+
+        assert older['status'] == 'queued'
+        assert latest['status'] == 'queued'
+        assert store.get('owner', 'project', older['id'])['status'] == 'superseded'
+
+        release_first.set()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            completed = store.get('owner', 'project', latest['id'])
+            if completed['status'] == 'completed':
+                break
+            time.sleep(.01)
+        else:
+            pytest.fail('latest Director revision did not finish')
+
+        assert calls == ['first', 'latest']
+        assert store.get('owner', 'project', first['id'])['status'] == 'superseded'
+        assert completed['result'] == {'version': 'latest'}
+
+
 def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from fastapi.testclient import TestClient
