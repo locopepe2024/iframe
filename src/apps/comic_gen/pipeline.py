@@ -866,6 +866,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 script,
                 reference,
             )
+            # A structured library reference is the durable source of truth.
+            # Do not retain a browser/provider URL alongside it in the async
+            # snapshot; this also guarantees the structured reference wins if
+            # an older client sends both fields.
+            reference_image_url = None
 
         target_asset.status = GenerationStatus.PROCESSING
         
@@ -5521,6 +5526,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 series,
                 reference,
             )
+            # Keep only stable asset/variant IDs in the task snapshot when a
+            # structured reference is selected. Legacy URL-only callers still
+            # use ``reference_image_url`` below.
+            reference_image_url = None
 
         t2i_model = model_name or series.model_settings.t2i_model
 

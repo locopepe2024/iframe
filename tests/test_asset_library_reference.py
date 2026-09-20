@@ -87,6 +87,7 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
         "scene",
         prompt="Tea room",
         model_name="test-image-model",
+        reference_image_url="https://example.test/legacy-provider-url.png",
         reference={
             "asset_type": "prop",
             "asset_id": "library-prop",
@@ -99,6 +100,7 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
         "asset_id": "library-prop",
         "variant_id": "variant-1",
     }
+    assert task["params"]["reference_image_url"] is None
     assert "library.png" not in str(task["params"])
 
     pipeline.process_asset_generation_task(task_id)
@@ -194,6 +196,7 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
         "scene",
         prompt="Tea room",
         model_name="test-image-model",
+        reference_image_url="https://example.test/legacy-provider-url.png",
         reference={
             "asset_type": "prop",
             "asset_id": reference_asset.id,
@@ -205,6 +208,7 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
         "asset_id": "global-prop",
         "variant_id": "global-variant",
     }
+    assert pipeline.asset_generation_tasks[task_id]["params"]["reference_image_url"] is None
 
     monkeypatch.setattr(
         "src.apps.comic_gen.pipeline.runtime_uniart_for_owner",
