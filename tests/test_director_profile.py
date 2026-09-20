@@ -104,6 +104,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
     assert "execution_summary" in prompt
     assert "3200" in prompt
+    assert "sample_plan 最多 4 项" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"

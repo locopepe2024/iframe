@@ -38,6 +38,10 @@ downstream design and generation prompts.
 5. The full profile remains available to the Director editor and refinement
    request. Applying a profile persists the summary together with the full
    profile and keeps the existing revision/hash/review semantics.
+6. The analysis/refinement prompt imposes a compact source budget: bounded
+   timeline/relationship/event/sample-plan item counts and concise field
+   values. This is an output-shaping measure; it does not replace the summary
+   contract or silently truncate persisted user edits.
 
 ## Boundaries
 

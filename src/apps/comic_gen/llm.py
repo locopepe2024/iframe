@@ -41,6 +41,13 @@ def _prompt_json(value: Any) -> str:
 
 DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
 DIRECTOR_PROFILE_MAX_RETRIES = 0
+DIRECTOR_PROFILE_OUTPUT_BUDGET = (
+    "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"
+    "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
+    "每个值尽量控制在 120 字以内；六个方向文本字段各不超过 240 字；"
+    "continuity_constraints、prohibitions、unresolved_questions 各最多 8 项、"
+    "每项不超过 120 字。"
+)
 
 
 class PolishError(Exception):
@@ -1052,6 +1059,7 @@ emotional_arc, pacing, visual_language, performance_direction, dialogue_directio
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
 execution_summary。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+{DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
 使用短句或项目符号，最多 12 条、最多 3200 个字符，不要重复完整 timeline 或 sample_plan。"""
@@ -1086,7 +1094,8 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
 保留未要求改变的正确内容，并同步刷新 execution_summary。只返回与
 current_director_profile 同结构的完整 JSON，不要解释。execution_summary 必须最多
-3200 个字符、最多 12 条短句，并且只保留后续分镜和资产设计需要的事实与约束。"""
+3200 个字符、最多 12 条短句，并且只保留后续分镜和资产设计需要的事实与约束。
+{DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "返回修订后的完整导演设定。"}],
