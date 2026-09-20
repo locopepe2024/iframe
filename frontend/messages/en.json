@@ -1156,6 +1156,22 @@
     "directorRefineFailed": "Director revision failed",
     "directorApplyFailed": "Failed to save director profile",
     "directorApplied": "Director profile confirmed",
+    "directorStatus": {
+      "analyzing": "Analyzing the script and building the director profile…",
+      "refining": "Updating the director profile from your revision request…",
+      "applying": "Saving the director profile…",
+      "analyzed": "Director analysis complete. The draft has been updated.",
+      "refined": "Director revision complete. The draft has been updated.",
+      "applied": "Director profile confirmed and saved.",
+      "failed": "Director profile action failed: {message}",
+      "jobState": {
+        "queued": "Queued",
+        "running": "Processing",
+        "processing": "Processing",
+        "completed": "Complete",
+        "failed": "Failed"
+      }
+    },
     "inheritsBaseline": "Inherits series baseline:",
     "inheritHint": "This episode auto-inherits the series style. No need to redefine.",
     "unlockEdit": "Unlock to override",
