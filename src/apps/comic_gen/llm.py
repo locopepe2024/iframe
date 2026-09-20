@@ -1180,11 +1180,9 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
 如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
 使用 execution_summary 的全局约束，不得凭空补写本地状态。execution_summary 中标记为
 “用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效。
-%s
-""" % (
-                json.dumps(execution_context, ensure_ascii=False, indent=2),
-                BOOKEND_NARRATIVE_EXECUTION_GUIDANCE,
-            )
+任何回忆/闪回子类型或剪辑结构都必须以 execution_summary 中明确标记的“用户要求”为准；
+未标注时不得自行套用，且回忆内容必须能在原文中找到。
+""" % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
             content = self.llm.chat(

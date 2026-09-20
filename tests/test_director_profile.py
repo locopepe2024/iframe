@@ -269,7 +269,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "场景21" in prompt
     assert "state_out" in prompt
     assert "首尾框架式回忆" in prompt
-    assert "Bookend Narrative Technique" in prompt
+    assert "未标注时不得自行套用" in prompt
 
 
 def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style():
