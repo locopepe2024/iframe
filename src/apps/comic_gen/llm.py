@@ -20,6 +20,21 @@ def _strip_markdown_json(content: str) -> str:
     return content.strip()
 
 
+def _prompt_json(value: Any) -> str:
+    """Serialize structured context without indentation overhead.
+
+    Director prompts can contain the full script, all shared entities, and a
+    previous profile. Pretty-printed JSON adds thousands of whitespace tokens
+    without adding facts and can push an OpenAI-compatible gateway over its
+    input/output context budget.
+    """
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
+DIRECTOR_PROFILE_MAX_RETRIES = 0
+
+
 class PolishError(Exception):
     """提示词润色失败的结构化异常。
     旧实现遇到任何问题都静默返回原文（fallback），导致前端无法判断
@@ -1014,10 +1029,10 @@ class ScriptProcessor:
 <script>{text}</script>
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
+<entities>{_prompt_json(entities_json)}</entities>
 
 用户选择的视觉风格：
-<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
+<visual_style>{_prompt_json(style_config)}</visual_style>
 
 视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
 剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
@@ -1032,6 +1047,8 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
             response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
         ).strip()
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
@@ -1049,9 +1066,9 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
 视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
 
 <script>{text}</script>
-<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
-<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
-<current_director_profile>{json.dumps(draft, ensure_ascii=False, indent=2)}</current_director_profile>
+<entities>{_prompt_json(entities_json)}</entities>
+<visual_style>{_prompt_json(style_config)}</visual_style>
+<current_director_profile>{_prompt_json(draft)}</current_director_profile>
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
@@ -1060,6 +1077,8 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "返回修订后的完整导演设定。"}],
             response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
         ).strip()
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
