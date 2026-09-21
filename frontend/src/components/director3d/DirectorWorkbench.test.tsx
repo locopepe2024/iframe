@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -31,6 +31,37 @@ it("switches director views without calling the standalone API", () => {
   expect(topView).toHaveAttribute("aria-selected", "true");
   expect(useWorkbenchStore.getState().viewMode).toBe("top");
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("moves focus with the view tab keyboard contract", () => {
+  render(<App />);
+  const directorView = screen.getByRole("tab", { name: "导演视图" });
+  const topView = screen.getByRole("tab", { name: "俯视舞台" });
+
+  directorView.focus();
+  fireEvent.keyDown(directorView, { key: "ArrowRight" });
+
+  expect(useWorkbenchStore.getState().viewMode).toBe("top");
+  expect(topView).toHaveAttribute("aria-selected", "true");
+  expect(topView).toHaveFocus();
+});
+
+it("announces the local draft save state", async () => {
+  render(<App />);
+  const characterId = useWorkbenchStore.getState().selectedCharacterId;
+
+  act(() => {
+    useWorkbenchStore.getState().renameCharacter(characterId, "交互验收人物");
+  });
+
+  const saveStatus = screen.getByText("浏览器场景草稿").closest(".project-identity");
+  expect(saveStatus).not.toBeNull();
+  expect(saveStatus).toHaveAttribute("aria-busy", "false");
+  fireEvent.click(screen.getByRole("button", { name: "保存本地草稿" }));
+
+  expect(await screen.findByText(/本地草稿已保存/)).toBeInTheDocument();
+  expect(saveStatus).toHaveAttribute("aria-busy", "false");
+  expect(useWorkbenchStore.getState().unsavedChanges).toBe(false);
 });
 
 it("keeps the model URL relative for the /static production mount", () => {
