@@ -8,7 +8,7 @@ import { recreationApi, RecreationProject } from "@/lib/recreation";
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
+  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), models: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
 }));
 
 const project: RecreationProject = {
@@ -24,6 +24,7 @@ beforeEach(() => {
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
   vi.mocked(recreationApi.media).mockResolvedValue({ media_id: "image", project_id: "source", kind: "evidence_frame", display_name: "Evidence", storage_path: "/image.png", sha256: "hash", created_at: 1, metadata: {} });
+  vi.mocked(recreationApi.models).mockResolvedValue({ provider: "uniart", source: "static", defaults: { image_model: "uniart/gpt-image-2", video_model: "uniart/minimax-h3-vip" }, image_models: [{ id: "uniart/gpt-image-2", display_name: "GPT Image 2", capabilities: ["i2i"] }], video_models: [{ id: "uniart/minimax-h3-vip", display_name: "MiniMax H3", capabilities: ["r2v"] }] });
   vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.generationTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]);
