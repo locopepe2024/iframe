@@ -1,5 +1,6 @@
 from fractions import Fraction
 from io import BytesIO
+import json
 from pathlib import Path
 import subprocess
 import os
@@ -161,6 +162,12 @@ def test_timeout_is_explicit(monkeypatch):
     monkeypatch.setattr(subprocess, "run", Mock(side_effect=subprocess.TimeoutExpired("ffmpeg", 90)))
     with pytest.raises(ValueError, match="timed out"):
         analysis.run(["ffmpeg"])
+
+
+def test_assembly_media_timeout_is_explicit(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", Mock(side_effect=subprocess.TimeoutExpired("ffmpeg", 1)))
+    with pytest.raises(ValueError, match="timed out"):
+        RecreationService._run_media_command(["ffmpeg"], timeout=1)
 
 
 def test_derived_index_and_manual_evidence_survive_confirmation(service, video):
@@ -370,6 +377,8 @@ def test_reference_api_upload_signing_binding_and_owner_isolation(service, video
     assert task_response.status_code == 202
     assert "prompt" not in task_response.json()
     assert client.get(f'/recreation/keyframe-tasks/{task_response.json()["task_id"]}').status_code == 200
+    listed = client.get(f'/recreation/projects/{p["id"]}/keyframe-tasks', params={"shot_id": p["timeline"]["shots"][0]["id"]})
+    assert listed.status_code == 200 and [item["task_id"] for item in listed.json()] == [task_response.json()["task_id"]]
     endpoint = f'/recreation/projects/{p["id"]}/shots/{p["timeline"]["shots"][0]["id"]}/references'
     payload = {"revision": p["revision"], "analysis_id": p["analysis_id"], "replacement_media_id": media["media_id"]}
     assert client.put(endpoint, json=payload).status_code == 200
@@ -378,6 +387,7 @@ def test_reference_api_upload_signing_binding_and_owner_isolation(service, video
     app.dependency_overrides[require_studio_user] = lambda: UserContext("foreign", "foreign", "Foreign", "")
     assert client.get(f'/recreation/media/{media["media_id"]}').status_code == 404
     assert client.get(f'/recreation/keyframe-tasks/{task_response.json()["task_id"]}').status_code == 404
+    assert client.get(f'/recreation/projects/{p["id"]}/keyframe-tasks').status_code == 404
     assert client.put(endpoint, json=payload).status_code == 404
 
 
@@ -418,6 +428,32 @@ def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, v
     assert exc.value.status_code == 409
 
 
+def test_generation_submit_maps_missing_source_to_conflict(service, video):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.recreation.api import router
+    from src.apps.studio_access import require_studio_user
+
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    (Path('output') / project['source_url']).unlink()
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_studio_user] = lambda: service.user
+    client = TestClient(app)
+    response = client.post(
+        f"/recreation/projects/{project['id']}/generation-tasks",
+        json={"revision": project['revision'], "generation_durations": {shot['id']: 5}, "accept_cost": True},
+    )
+    assert response.status_code == 409
+    assert 'register the source again' in response.json()['detail']
+
+
 def test_keyframe_task_generates_indexed_reference_without_binding(service, video, monkeypatch):
     p = completed(service, video)
     p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
@@ -434,7 +470,7 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert task['prompt_sha256'] and 'prompt' not in task
 
     def generate(_self, prompt, output_path, **kwargs):
-        assert kwargs['model_name'] == 'uniart/gpt-image-2'
+        assert kwargs['model_name'] == 'uniart/gpt-image-2.5'
         assert kwargs['ref_image_paths'] == [
             str((Path('output') / source['storage_path']).resolve()),
             str((Path('output') / product['storage_path']).resolve()),
@@ -485,6 +521,93 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
     assert done['provider_task_id'] == 'provider-task-1'
     assert done['output_media']['kind'] == 'generated_video'
     assert service.search_media(project_id=p['id'], kind='generated_video')['items']
+
+
+def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    task_id = submitted['tasks'][0]['task_id']
+    with service.db() as db:
+        task = service._generation_task(db, task_id)
+        task.update(status='processing', provider_task_id='provider-recovered', updated_at=time.time())
+        db.execute('UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?',
+                   (json.dumps(task), task_id, service.user.owner_profile_id))
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        assert kwargs['resume_task_id'] == 'provider-recovered'
+        assert kwargs['model'] == 'uniart/minimax-h3-vip'
+        Path(output_path).write_bytes(b'recovered-mp4')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    monkeypatch.setattr('src.apps.studio_access.runtime_uniart_for_owner', lambda *_args: {'api_key': 'runtime-only'})
+
+    class ImmediateThread:
+        def __init__(self, target, args=(), daemon=None):
+            self.target, self.args = target, args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr('src.apps.recreation.service.threading.Thread', ImmediateThread)
+    service.recover_generation_tasks()
+    recovered = service.generation_task(task_id)
+    assert recovered['status'] == 'completed', recovered
+    assert recovered['provider_task_id'] == 'provider-recovered'
+
+
+def test_generation_worker_marks_interrupted_submission_failed_without_resubmitting(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    task_id = submitted['tasks'][0]['task_id']
+    with service.db() as db:
+        task = service._generation_task(db, task_id)
+        task.update(status='processing', provider_task_id=None, updated_at=time.time())
+        db.execute('UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?',
+                   (json.dumps(task), task_id, service.user.owner_profile_id))
+    provider = Mock()
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', provider)
+
+    service.process_generation_task(task_id, {'api_key': 'never-persisted'})
+    failed = service.generation_task(task_id)
+    assert failed['status'] == 'failed'
+    assert 'upstream task ID' in failed['error']
+    provider.assert_not_called()
+
+
+def test_generation_and_assembly_task_lists_are_ordered_from_json_timestamps(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    listed = service.generation_tasks(project['id'])
+    assert [task['task_id'] for task in listed] == [submitted['tasks'][0]['task_id']]
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        Path(output_path).write_bytes(b'fake-mp4')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    service.process_generation_task(submitted['tasks'][0]['task_id'], {'api_key': 'never-persisted'})
+    assembly = service.submit_assembly(project['id'], project['revision'], submitted['generation_id'])
+    listed_assemblies = service.assembly_tasks(project['id'])
+    assert [task['task_id'] for task in listed_assemblies] == [assembly['task_id']]
 
 
 def test_generation_cancel_prevents_late_result_and_is_owner_scoped(service, video, monkeypatch):

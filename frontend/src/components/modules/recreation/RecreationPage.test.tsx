@@ -8,7 +8,7 @@ import { recreationApi, RecreationProject } from "@/lib/recreation";
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn() },
+  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
 }));
 
 const project: RecreationProject = {
@@ -23,6 +23,10 @@ const project: RecreationProject = {
 beforeEach(() => {
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
+  vi.mocked(recreationApi.media).mockResolvedValue({ media_id: "image", project_id: "source", kind: "evidence_frame", display_name: "Evidence", storage_path: "/image.png", sha256: "hash", created_at: 1, metadata: {} });
+  vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]);
+  vi.mocked(recreationApi.generationTasks).mockResolvedValue([]);
+  vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
     timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } });
 });

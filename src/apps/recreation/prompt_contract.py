@@ -1,4 +1,4 @@
-"""Model-specific recreation planning; no provider submission occurs here."""
+"""Model-specific recreation prompt planning; provider submission stays in the service layer."""
 import hashlib
 from scripts.check_h3_prompt import check_prompt
 from ..agent_skills import catalog

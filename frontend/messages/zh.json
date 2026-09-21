@@ -562,7 +562,9 @@
     "library": "资产库",
     "editor": "剧本编辑器",
     "playground": "创作台",
+    "director3d": "3D 导演台",
     "settings": "设置",
+    "more": "更多",
     "workspaceAria": "iFrame Studio · 工作区",
     "mainNavAria": "主导航"
   },
@@ -601,6 +603,8 @@
     "after": "切点首帧",
     "evidence": "加载相邻帧",
     "contactSheet": "联系表",
+    "download": "下载最终视频",
+    "keyframeAcceptCost": "我确认生成修正关键帧会产生费用",
     "unsaved": "修改待确认",
     "oversized": "原片不能超过 256 MiB",
     "whiteModel": "3D 白模参考",

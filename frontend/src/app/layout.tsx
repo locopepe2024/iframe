@@ -1,4 +1,5 @@
 import "./globals.css";
+import "@/components/director3d/styles.css";
 import EnvConfigChecker from "@/components/EnvConfigChecker";
 import { Providers } from "@/components/Providers";
 import TauriDragBar from "@/components/layout/TauriDragBar";

@@ -562,7 +562,9 @@
     "library": "Library",
     "editor": "Script Editor",
     "playground": "Playground",
+    "director3d": "3D Director",
     "settings": "Settings",
+    "more": "More",
     "workspaceAria": "iFrame Studio · Workspace",
     "mainNavAria": "Main navigation"
   },
@@ -601,6 +603,8 @@
     "after": "First frame after cut",
     "evidence": "Load adjacent frames",
     "contactSheet": "Contact sheet",
+    "download": "Download final video",
+    "keyframeAcceptCost": "I understand generating this corrected keyframe incurs a charge",
     "unsaved": "Unconfirmed changes",
     "oversized": "Source exceeds 256 MiB",
     "whiteModel": "3D white-model reference",

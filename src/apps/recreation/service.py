@@ -25,6 +25,7 @@ from .prompt_contract import compile_h3, guidance_snapshot
 
 _RECOVERY_LOCK = threading.RLock()
 _RECOVERY_TASKS: set[str] = set()
+_MEDIA_COMMAND_TIMEOUT_SECONDS = 600
 
 class RecreationService:
     def __init__(self, user: UserContext):
@@ -74,6 +75,23 @@ class RecreationService:
         if not path.is_relative_to(self.root) or not path.is_file():
             raise ValueError("Source is missing or outside the project owner")
         return path
+
+    def _verified_source_path(self, record):
+        """Return the registered source or expose a retryable stale-state error.
+
+        Generation planning runs before a paid submission transaction.  A
+        missing or changed source must therefore be represented as a conflict
+        rather than escaping as an unhandled ``ValueError`` (which would turn
+        the submit endpoint into a 500 and obscure the recovery action).
+        """
+        try:
+            source = self._path(record["source_url"])
+            digest = fingerprint(source)
+        except ValueError as exc:
+            raise HTTPException(409, "Source is missing or changed; register the source again") from exc
+        if digest != record["source_fingerprint"]:
+            raise HTTPException(409, "Source is missing or changed; register the source again")
+        return source
 
     def register(self, stream, filename: str):
         suffix = Path(filename).suffix.lower()
@@ -316,7 +334,7 @@ class RecreationService:
             task = {
                 "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
                 "revision": revision, "analysis_id": analysis_id, "status": "pending",
-                "model": "uniart/gpt-image-2", "reference_media_id": reference_media_id,
+                "model": "uniart/gpt-image-2.5", "reference_media_id": reference_media_id,
                 "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
                 "replacement_sha256": replacement["sha256"], "prompt": prompt,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -330,6 +348,21 @@ class RecreationService:
         with self.db() as db:
             task = self._task(db, task_id)
             return self._public_task(db, task)
+
+    def keyframe_tasks(self, project_id, shot_id=None):
+        with self.db() as db:
+            self._get(db, project_id)
+            conditions = ["owner=?", "project_id=?"]
+            params = [self.user.owner_profile_id, project_id]
+            if shot_id:
+                conditions.append("json_extract(data, '$.shot_id')=?")
+                params.append(shot_id)
+            rows = db.execute(
+                "SELECT data FROM keyframe_tasks WHERE " + " AND ".join(conditions) +
+                " ORDER BY json_extract(data, '$.created_at') DESC, task_id DESC",
+                params,
+            ).fetchall()
+            return [self._public_task(db, json.loads(row[0])) for row in rows]
 
     def cancel_keyframe_task(self, task_id):
         with self.db() as db:
@@ -461,8 +494,7 @@ class RecreationService:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
                 raise HTTPException(409, "Confirm the current timeline before preparing a plan")
-            if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
-                raise HTTPException(409, "Source fingerprint changed")
+            self._verified_source_path(record)
             shots, blockers = [], []
             for index, shot in enumerate(record["timeline"]["shots"], 1):
                 description = shot.get("description", "").strip()
@@ -540,6 +572,13 @@ class RecreationService:
         now = time.time()
         with self.db() as db:
             record = self._get(db, project_id)
+            # The plan is compiled in a separate read transaction. Recheck
+            # every revision-bearing fact after acquiring the submission
+            # transaction so a timeline edit cannot create a stale paid task.
+            if (record["revision"] != revision or record["status"] != "confirmed" or
+                    not record.get("timeline") or record.get("analysis_id") != plan["analysis_id"]):
+                raise HTTPException(409, "Timeline changed; refresh before submitting generation")
+            self._verified_source_path(record)
             active = db.execute(
                 "SELECT COUNT(*) FROM recreation_generation_tasks WHERE owner=? AND project_id=? "
                 "AND json_extract(data, '$.status') IN ('pending','processing')",
@@ -581,7 +620,7 @@ class RecreationService:
                 params.append(generation_id)
             rows = db.execute(
                 "SELECT data FROM recreation_generation_tasks WHERE " + " AND ".join(conditions) +
-                " ORDER BY json_extract(data, '$.shot_number'), created_at",
+                " ORDER BY json_extract(data, '$.shot_number'), json_extract(data, '$.created_at')",
                 params,
             ).fetchall()
             return [self._public_generation_task(db, json.loads(row[0])) for row in rows]
@@ -756,7 +795,7 @@ class RecreationService:
         return f"{float(value):.9f}"
 
     @staticmethod
-    def _run_media_command(command):
+    def _run_media_command(command, timeout=_MEDIA_COMMAND_TIMEOUT_SECONDS):
         try:
             result = subprocess.run(
                 command,
@@ -764,7 +803,10 @@ class RecreationService:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
+                timeout=timeout,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(f"FFmpeg media command timed out after {timeout} seconds") from exc
         except FileNotFoundError as exc:
             raise ValueError("FFmpeg/FFprobe is unavailable") from exc
         if result.returncode:
@@ -882,7 +924,7 @@ class RecreationService:
                 params.append(generation_id)
             rows = db.execute(
                 "SELECT data FROM recreation_assembly_tasks WHERE " + " AND ".join(conditions) +
-                " ORDER BY created_at DESC, task_id DESC", params,
+                " ORDER BY json_extract(data, '$.created_at') DESC, task_id DESC", params,
             ).fetchall()
             return [self._public_assembly_task(db, json.loads(row[0])) for row in rows]
 
