@@ -1,11 +1,18 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
 const isWin = os.platform() === 'win32';
 const pythonPath = isWin
-  ? path.join(__dirname, '..', '.venv', 'Scripts', 'python')
+  ? path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe')
   : path.join(__dirname, '..', '.venv', 'bin', 'python');
+
+if (!fs.existsSync(pythonPath)) {
+  console.error(`[backend] Python runtime not found: ${pythonPath}`);
+  console.error('[backend] Run `npm run predev` from the repository root first.');
+  process.exit(1);
+}
 
 const env = {
   ...process.env,
@@ -21,4 +28,11 @@ const backend = spawn(pythonPath, [
   env
 });
 
-backend.on('exit', (code) => process.exit(code || 0));
+backend.on('error', (error) => {
+  console.error(`[backend] Failed to start uvicorn: ${error.message}`);
+  process.exit(1);
+});
+
+backend.on('exit', (code, signal) => {
+  process.exit(code ?? (signal ? 1 : 0));
+});
