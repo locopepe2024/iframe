@@ -844,6 +844,36 @@ def put_series_assembly_plan(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.post("/series/{series_id}/assembly-plan/render")
+def render_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved series Assembly plan."""
+    if not pipeline.get_series(series_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Series not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "series",
+            series_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.put("/series/{series_id}")
 def update_series(series_id: str, request: UpdateSeriesRequest):
     """Update Series fields. Uses `exclude_unset=True` so explicitly-null
@@ -1889,6 +1919,36 @@ def put_project_assembly_plan(
         if "not found" in str(exc).lower():
             raise HTTPException(status_code=404, detail=str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assembly-plan/render")
+def render_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved project Assembly plan."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "project",
+            script_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 

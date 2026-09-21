@@ -4765,6 +4765,272 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         return plan
 
+    def _resolve_assembly_video_source(
+        self,
+        clip: Any,
+        source_project: Script,
+    ) -> str:
+        """Resolve one clip to a local, owner-scoped Motion output."""
+        task = None
+        frame = None
+        if clip.source_frame_id:
+            frame = next(
+                (item for item in source_project.frames if item.id == clip.source_frame_id),
+                None,
+            )
+
+        if clip.source_task_id:
+            task = next(
+                (item for item in source_project.video_tasks if item.id == clip.source_task_id),
+                None,
+            )
+        elif frame and frame.selected_video_id:
+            task = next(
+                (item for item in source_project.video_tasks
+                 if item.id == frame.selected_video_id),
+                None,
+            )
+
+        if task is not None:
+            if task.status != "completed":
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} video task is not completed"
+                )
+            if task.owner_profile_id and task.owner_profile_id != source_project.owner_profile_id:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} video task belongs to another owner"
+                )
+            source_ref = task.video_url
+        else:
+            source_ref = frame.video_url if frame is not None else None
+
+        if not source_ref:
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} has no rendered Motion output"
+            )
+        if source_ref.startswith(("http://", "https://")):
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} must use a local managed output"
+            )
+
+        try:
+            if source_project.owner_profile_id:
+                relative = resolve_studio_reference(
+                    source_ref,
+                    source_project.owner_profile_id,
+                )
+                source_path = _safe_resolve_path("output", relative)
+            else:
+                source_path = _safe_resolve_path("output", source_ref)
+        except (OSError, ValueError) as exc:
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} source is outside local managed output"
+            ) from exc
+
+        if not os.path.isfile(source_path):
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} source media is missing"
+            )
+        return source_path
+
+    def render_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+        owner_profile_id: Optional[str] = None,
+    ) -> Any:
+        """Compile a saved Assembly video timeline into one local MP4.
+
+        This v1 compiler is deliberately explicit and video-only. Saving an
+        edit plan never calls this method, and this method never submits a
+        provider generation task.
+        """
+        self._assembly_resource_kind(scope)
+        _validate_safe_id(resource_id, f"{scope}_id")
+        resource = (
+            self.get_script(resource_id, owner_profile_id)
+            if scope == "project"
+            else self.get_series(resource_id, owner_profile_id)
+        )
+        if not resource:
+            raise AssemblyPlanValidationError(
+                "Project not found" if scope == "project" else "Series not found"
+            )
+        plan = getattr(resource, "assembly_plan", None)
+        if plan is None:
+            raise AssemblyPlanValidationError("Assembly plan not found")
+
+        # Revalidate at execution time: a referenced task or episode may have
+        # changed since the plan was saved.
+        self._validate_assembly_plan_references(scope, resource_id, plan)
+        plan_revision = plan.revision
+
+        unsupported = [
+            lane.kind
+            for lane in plan.lanes
+            if lane.kind in ("dialogue", "bgm", "sfx")
+            and any(clip.enabled for clip in lane.clips)
+        ]
+        if unsupported:
+            kinds = ", ".join(sorted(set(unsupported)))
+            raise AssemblyPlanValidationError(
+                f"Assembly audio lanes are not supported by render v1: {kinds}"
+            )
+
+        clips = sorted(
+            [
+                clip
+                for lane in plan.lanes
+                if lane.kind == "video"
+                for clip in lane.clips
+                if clip.enabled
+            ],
+            key=lambda item: (item.timeline_start_ms, item.timeline_end_ms, item.id),
+        )
+        if not clips:
+            raise AssemblyPlanValidationError("Assembly plan has no enabled video clips")
+
+        cursor = 0
+        for clip in clips:
+            if clip.timeline_start_ms != cursor:
+                if cursor == 0:
+                    raise AssemblyPlanValidationError(
+                        "Assembly video timeline must begin at 0"
+                    )
+                raise AssemblyPlanValidationError(
+                    f"Assembly video timeline has a gap or overlap before clip {clip.id}"
+                )
+            cursor = clip.timeline_end_ms
+        if cursor != plan.target_duration_ms:
+            raise AssemblyPlanValidationError(
+                "Assembly video timeline must end at target_duration_ms"
+            )
+
+        if scope == "project":
+            projects = {resource.id: resource}
+        else:
+            projects = {
+                episode_id: self.get_script(episode_id, resource.owner_profile_id)
+                for episode_id in resource.episode_ids
+            }
+
+        source_paths: List[str] = []
+        filter_steps: List[str] = []
+        for index, clip in enumerate(clips):
+            project_id = clip.source_project_id or clip.source_episode_id
+            source_project = projects.get(project_id)
+            if source_project is None:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} source project is unavailable"
+                )
+            source_paths.append(
+                self._resolve_assembly_video_source(clip, source_project)
+            )
+
+            timeline_duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000
+            source_start = clip.source_start_ms / 1000
+            source_end_ms = (
+                clip.source_end_ms
+                if clip.source_end_ms is not None
+                else clip.source_start_ms + (clip.timeline_end_ms - clip.timeline_start_ms)
+            )
+            source_end = source_end_ms / 1000
+            source_duration = source_end - source_start
+            if source_duration <= 0:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} has a non-positive source range"
+                )
+            speed_factor = timeline_duration / source_duration
+            filter_steps.append(
+                f"[{index}:v]"
+                f"trim=start={source_start:.6f}:end={source_end:.6f},"
+                f"setpts=(PTS-STARTPTS)*{speed_factor:.9f},"
+                "scale=1280:720:force_original_aspect_ratio=decrease,"
+                "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
+                "setsar=1,fps=24,format=yuv420p"
+                f"[v{index}]"
+            )
+
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for Assembly rendering. "
+                + get_ffmpeg_install_instructions()
+            )
+
+        filter_steps.append(
+            "".join(f"[v{index}]" for index in range(len(clips)))
+            + f"concat=n={len(clips)}:v=1:a=0[outv]"
+        )
+        output_dir = self._owner_output_dir(resource, "video")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = _safe_resolve_path(
+            output_dir,
+            f"assembly_{scope}_{resource_id}_{int(time.time())}.mp4",
+        )
+        command = [ffmpeg_path, "-y"]
+        for source_path in source_paths:
+            command.extend(["-i", source_path])
+        command.extend([
+            "-filter_complex",
+            ";".join(filter_steps),
+            "-map",
+            "[outv]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "fast",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ])
+
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("Assembly FFmpeg render timed out") from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode(errors="replace") if exc.stderr else ""
+            logger.error("[ASSEMBLY] FFmpeg failed: %s", stderr)
+            raise RuntimeError(
+                self._extract_ffmpeg_error_message(stderr, source_paths)
+            ) from exc
+
+        if not os.path.isfile(output_path):
+            raise RuntimeError("Assembly render completed without an output file")
+
+        with self._save_lock:
+            current = (
+                self.get_script(resource_id, owner_profile_id)
+                if scope == "project"
+                else self.get_series(resource_id, owner_profile_id)
+            )
+            current_plan = getattr(current, "assembly_plan", None) if current else None
+            if current_plan is None or current_plan.revision != plan_revision:
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+                raise AssemblyPlanConflictError(
+                    "assembly plan changed while rendering",
+                    current_revision=(current_plan.revision if current_plan else None),
+                )
+            current.merged_video_url = os.path.relpath(output_path, "output")
+            current.updated_at = time.time()
+            if scope == "project":
+                self._save_data()
+            else:
+                self._save_series_data_unlocked()
+        return current
+
     def save_assembly_plan(
         self,
         scope: str,

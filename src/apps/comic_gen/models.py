@@ -1741,6 +1741,11 @@ class Series(BaseModel):
         description="Series-level Assembly swimlane plan; None means no custom cut",
     )
 
+    merged_video_url: Optional[str] = Field(
+        None,
+        description="Owner-scoped rendered artifact for the series Assembly plan",
+    )
+
     created_at: float
     updated_at: float
 
