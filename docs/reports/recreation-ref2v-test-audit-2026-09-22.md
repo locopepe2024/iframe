@@ -59,9 +59,13 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   - analysis submission HTTP 202;
   - terminal `review` state with 362 analyzed frame PTS values;
   - no page exceptions;
-  - repeated cancelled video Range requests while the signed source URL was
-    refreshed. The media remained visible and analysis completed, so these are
-    recorded as browser request cancellations rather than failed analysis.
+  - before the polling optimization, four distinct signed source URLs produced
+    nine cancelled browser media requests as project status refreshed;
+  - after preserving the current source URL through the automatic analysis
+    lifecycle, the same run used one signed URL and produced three cancelled
+    requests for that URL. The media remained visible and analysis completed;
+    the remaining cancellations are recorded as browser observations without
+    assigning a cause.
 - Before the same-origin change, the same browser script reproduced upload
   HTTP 201 followed by analysis HTTP 404 `Recreation project not found`.
   Backend access logs showed a valid analyze route, and the client used
@@ -73,7 +77,7 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
 - Backend targeted Ref2V tests: 124 passed, 1 skipped.
 - Backend full suite after workbench fixes: 648 passed, 1 skipped.
 - Frontend logic tests: 177 passed.
-- Frontend UI tests: 195 passed.
+- Frontend UI tests: 196 passed.
 - Frontend typecheck: passed.
 - Frontend production build: passed. Next static-export rewrite warnings remain
   non-failing and pre-existing.
@@ -92,6 +96,9 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   while the settings UI can still distinguish whether a personal key exists.
 - Anonymous local workbench ownership now remains stable across the ordinary
   multi-request recreation workflow in browser development.
+- Analysis polling no longer replaces `<video src>` whenever a freshly signed
+  representation of the same source arrives. Manual refresh and reopening a
+  project still obtain a current signed URL.
 
 ## Not yet proven
 

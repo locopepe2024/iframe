@@ -33,9 +33,11 @@ export default function RecreationPage() {
     ? (typeof err.response?.data?.detail === "string" ? err.response.data.detail : t("requestFailed"))
     : err instanceof Error && (err.message === "invalidTimeline" || err.message === "oversized") ? t(err.message) : t("requestFailed"));
 
-  function open(record: RecreationProject) {
+  function open(record: RecreationProject, preserveSourceUrl = false) {
     activeId.current = record.id;
-    setProject(record);
+    setProject(current => preserveSourceUrl && current?.id === record.id
+      ? { ...record, source_url: current.source_url }
+      : record);
     setCuts(record.timeline?.cuts.map(c => c.pts) ?? record.analysis?.candidates.map(c => c.pts) ?? []);
     setEvidence(Object.fromEntries([...(record.analysis?.candidates ?? []), ...Object.values(record.analysis?.manual_evidence ?? {})].map(c => [c.pts, c])));
     setFrameIndex(1); setImportText(""); setError("");
@@ -58,8 +60,12 @@ export default function RecreationPage() {
     const timer = setInterval(() => {
       recreationApi.get(id).then(record => {
         if (!alive || activeId.current !== id) return;
-        if (record.status === "queued" || record.status === "analyzing") setProject(record);
-        else open(record);
+        if (record.status === "queued" || record.status === "analyzing") {
+          setProject(current => current?.id === record.id
+            ? { ...record, source_url: current.source_url }
+            : record);
+        }
+        else open(record, true);
       }).catch(err => { if (alive) report(err); });
     }, 2000);
     return () => { alive = false; clearInterval(timer); };
@@ -117,7 +123,7 @@ export default function RecreationPage() {
                 onClick={() => void act(async () => open(await recreationApi.cancelAnalysis(project)))}>
                 <X size={16} />{t("cancelAnalysis")}</button>}
               {!analysis && <button className="glass-button flex items-center gap-2" disabled={busy || processing}
-                onClick={() => void act(async () => open(await recreationApi.analyze(project)))}>
+                onClick={() => void act(async () => open(await recreationApi.analyze(project), true))}>
                 {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{t("analyze")}</button>}
             </div>
           </div>
