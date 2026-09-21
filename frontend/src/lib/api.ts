@@ -12,11 +12,32 @@ import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
 // 1. Explicit override: NEXT_PUBLIC_API_URL (any env / proxy setup).
-// 2. Dev mode (`next dev`, NODE_ENV==='development'): backend runs on a separate
-//    port, so target the same host on the backend port — works for ANY dev port.
+// 2. Browser dev mode (`next dev`, NODE_ENV==='development'): use Next's
+//    same-origin proxy so anonymous identity cookies persist across requests.
 // 3. Production / packaged (Electron): frontend is served by the backend, so use
 //    the same origin.
 const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || "17177";
+
+type BrowserApiLocation = Pick<Location, "protocol" | "hostname" | "port">;
+
+export const resolveBrowserApiUrl = (
+    location: BrowserApiLocation,
+    environment: string | undefined,
+    backendPort: string,
+): string => {
+    const { protocol, hostname, port } = location;
+
+    // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
+    if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
+        return `http://127.0.0.1:${backendPort}`;
+    }
+
+    if (environment === 'development') {
+        return "/api-proxy";
+    }
+
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+};
 
 const getApiUrl = (): string => {
     // Explicit override always wins (strip any trailing slash).
@@ -26,21 +47,7 @@ const getApiUrl = (): string => {
     }
 
     if (typeof window !== 'undefined') {
-        const { protocol, hostname, port } = window.location;
-
-        // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
-        if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
-            return `http://127.0.0.1:${BACKEND_PORT}`;
-        }
-
-        // Dev server: backend lives on a different port regardless of which
-        // dev port Next.js picked (3008/3009/3018/...).
-        if (process.env.NODE_ENV === 'development') {
-            return `${protocol}//${hostname}:${BACKEND_PORT}`;
-        }
-
-        // Production / packaged: frontend is served by the backend → same origin.
-        return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+        return resolveBrowserApiUrl(window.location, process.env.NODE_ENV, BACKEND_PORT);
     }
 
     // SSR fallback
@@ -139,6 +146,7 @@ export interface UserConfigPayload {
     UNIART_API_KEY?: string;
     UNIART_BASE_URL?: string;
     preferences?: Record<string, unknown>;
+    runtime_uniart_available?: boolean;
     secrets_configured?: Record<string, boolean>;
     secret_prefixes?: Record<string, string>;
 }

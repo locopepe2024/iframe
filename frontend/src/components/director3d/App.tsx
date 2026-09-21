@@ -57,6 +57,15 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
     ? { status: "saved", message: `本地草稿已恢复 ${formatSavedTime(restoredSavedAt)}` }
     : { status: "idle", message: "" });
+  const saveIndicator = saveState.status === "saving"
+    ? "saving"
+    : saveState.status === "error"
+      ? "error"
+      : unsavedChanges
+        ? "unsaved"
+        : lastSavedAt
+          ? "saved"
+          : "idle";
   const selectedCharacterIds = useWorkbenchStore((state) => state.selectedCharacterIds);
   const selectedCharacter = useWorkbenchStore((state) => state.characters[state.selectedCharacterId]);
   const selectedSceneObjectId = useWorkbenchStore((state) => state.selectedSceneObjectId);
@@ -101,7 +110,12 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
           <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m8 10 4-2.2 4 2.2v4L12 16.2 8 14v-4Z"/></svg></div>
           <div><p className="kicker">iFrame Director</p><h1>3D 导演台</h1></div>
         </div>
-        <div className="project-identity"><span className="status-dot" />浏览器场景草稿 <strong>{unsavedChanges ? "有未保存修改" : lastSavedAt ? "已保存到本机" : "尚未保存"}</strong><small>{saveState.message || `${commandHistoryLength} 条操作`}</small></div>
+        <div className="project-identity" role="status" aria-live="polite" aria-atomic="true" aria-busy={saveState.status === "saving"}>
+          <span className={`status-dot ${saveIndicator}`} aria-hidden="true" />
+          <span>浏览器场景草稿</span>
+          <strong className={saveIndicator}>{unsavedChanges ? "有未保存修改" : lastSavedAt ? "已保存到本机" : "尚未保存"}</strong>
+          <small>{saveState.message || `${commandHistoryLength} 条操作`}</small>
+        </div>
         <div className="header-actions">
           <button type="button" className="secondary" aria-keyshortcuts="Control+Z Meta+Z" title="撤销（Ctrl/⌘ Z）" disabled={undoDepth === 0} onClick={undo}>撤销</button>
           <button type="button" className="secondary" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" title="重做（Ctrl/⌘ Shift+Z）" disabled={redoDepth === 0} onClick={redo}>重做</button>

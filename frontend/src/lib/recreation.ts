@@ -57,6 +57,7 @@ export interface RecreationKeyframeTask {
 
 export interface RecreationPlan {
   revision: number; ready: boolean; submission_enabled?: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
+  source_video?: { media_id: string; sha256: string; label: "<Video 1>" };
   blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
   shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
     images: { media_id: string; label: string }[] }[];
@@ -66,6 +67,7 @@ export interface RecreationGenerationTask {
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   revision?: number; analysis_id?: string; created_at?: number; updated_at?: number;
   model: string; duration: number; generate_audio: boolean; provider_task_id?: string | null;
+  source_media_id?: string; source_fingerprint?: string;
   output_media: RecreationMedia | null; error: string | null;
 }
 export interface RecreationGenerationSubmission {
