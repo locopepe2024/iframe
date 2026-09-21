@@ -107,7 +107,7 @@ interface ReferenceLibraryAsset {
     variants: ImageVariant[];
 }
 
-type CharacterTemplate = "simple" | "detailed" | "design_sheet";
+type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
@@ -129,6 +129,13 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
         descKey: "tplDetailedDesc",
         composition: "构图：单张统一的详细角色参考图，无边框或分隔框，浅灰色中性背景。左侧为三个并排的全身站立视图，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然；右上为头部近景肖像（肩部以上，面部细节清晰）；右下为三个较小的头部角度特写，展示正面、四分之三侧面和侧面。所有视图使用统一的柔和摄影棚光线，避免硬阴影，整体光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
+        exampleImage: "/assets/templates/detailed-reference.png",
+    },
+    face_focus: {
+        labelKey: "tplFaceFocusLabel",
+        descKey: "tplFaceFocusDesc",
+        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45度、右前45度和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
+        negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images, inconsistent face, different person, deformed eyes, asymmetrical features",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
     design_sheet: {
@@ -936,6 +943,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         { key: "studioLighting", value: "studio lighting" },
                                         { key: "whiteBackground", value: "white background" },
                                         { key: "detailedFace", value: "detailed face" },
+                                        { key: "faceDesign", value: "face design reference board" },
                                     ]
                                     : kind === "scene"
                                         ? [
