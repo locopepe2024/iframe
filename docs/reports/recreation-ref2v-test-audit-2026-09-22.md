@@ -29,6 +29,8 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   `/api-proxy`. This preserves the anonymous browser-profile cookie across
   upload, analysis, and polling. Explicit API overrides, Tauri, and production
   same-origin resolution retain their existing routing behavior.
+- The legacy embedded 3D white-model reference was removed from Recreation.
+  The separate 3D Director workbench and its rigged GLB assets remain intact.
 
 ### Runtime observations
 
@@ -77,7 +79,7 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
 - Backend targeted Ref2V tests: 124 passed, 1 skipped.
 - Backend full suite after workbench fixes: 648 passed, 1 skipped.
 - Frontend logic tests: 177 passed.
-- Frontend UI tests: 196 passed.
+- Frontend UI tests: 195 passed after removing the obsolete white-model test.
 - Frontend typecheck: passed.
 - Frontend production build: passed. Next static-export rewrite warnings remain
   non-failing and pre-existing.
