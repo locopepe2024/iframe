@@ -4,7 +4,11 @@ from pydantic import BaseModel, Field, StrictInt
 
 from ..identity import UserContext
 from ..studio_access import require_studio_user, sign_studio_media_paths
-from .service import RecreationService
+from .service import (
+    DEFAULT_KEYFRAME_IMAGE_MODEL,
+    DEFAULT_RECREATION_VIDEO_MODEL,
+    RecreationService,
+)
 
 router = APIRouter(prefix="/recreation", tags=["recreation"])
 
@@ -13,7 +17,7 @@ class AnalyzeRequest(BaseModel):
     revision: int = Field(ge=0)
 
 class GenerationPlanRequest(AnalyzeRequest):
-    model: str = Field(default="uniart/minimax-h3-vip", min_length=1, max_length=120)
+    model: str = Field(default=DEFAULT_RECREATION_VIDEO_MODEL, min_length=1, max_length=120)
     audio_policy: str = "silent"
     soundscape: str = Field(default="", max_length=2000)
     generation_durations: dict[str, int] = Field(default_factory=dict)
@@ -51,6 +55,12 @@ def projects(user: UserContext = Depends(require_studio_user)):
     service = RecreationService(user)
     service.recover_generation_tasks()
     return public(service.list(), user)
+
+
+@router.get("/models")
+def models(user: UserContext = Depends(require_studio_user)):
+    """Return the owner catalog filtered to verified recreation contracts."""
+    return RecreationService(user).model_options()
 
 
 @router.get("/media")
@@ -131,6 +141,7 @@ class KeyframeTaskRequest(AnalyzeRequest):
     reference_media_id: str = Field(min_length=1, max_length=64)
     replacement_media_id: str = Field(min_length=1, max_length=64)
     instruction: str = Field(default="", max_length=2000)
+    model: str = Field(default=DEFAULT_KEYFRAME_IMAGE_MODEL, min_length=1, max_length=120)
     accept_cost: bool = False
 
 
@@ -166,7 +177,7 @@ def create_keyframe_task(project_id: str, shot_id: str, request: KeyframeTaskReq
         task = service.create_keyframe_task(
             project_id, shot_id, request.revision, request.analysis_id,
             request.reference_media_id, request.replacement_media_id,
-            request.instruction, request.accept_cost,
+            request.instruction, request.accept_cost, request.model,
         )
         background.add_task(service.process_keyframe_task, task["task_id"])
         return public(task, user)

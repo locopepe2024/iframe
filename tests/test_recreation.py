@@ -244,6 +244,9 @@ def test_api_registration_analysis_evidence_and_confirmation(service, video, mon
     client = TestClient(app)
     assert client.get("/recreation/projects").status_code == 401
     app.dependency_overrides[require_studio_user] = lambda: service.user
+    model_response = client.get("/recreation/models")
+    assert model_response.status_code == 200
+    assert model_response.json()["defaults"]["image_model"] == "uniart/gpt-image-2"
     monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only-signing-key")
     with video.open("rb") as source:
         response = client.post("/recreation/projects", files={"file": ("original.mp4", source, "video/mp4")})
@@ -472,7 +475,7 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert task['prompt_sha256'] and 'prompt' not in task
 
     def generate(_self, prompt, output_path, **kwargs):
-        assert kwargs['model_name'] == 'uniart/gpt-image-2.5'
+        assert kwargs['model_name'] == 'uniart/gpt-image-2'
         assert kwargs['ref_image_paths'] == [
             str((Path('output') / source['storage_path']).resolve()),
             str((Path('output') / product['storage_path']).resolve()),
@@ -491,6 +494,51 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert output['metadata']['parent_media_id'] == source['media_id']
     assert output['metadata']['replacement_media_id'] == product['media_id']
     assert service.get(p['id'])['timeline']['shots'][0].get('reference_media_id') is None
+
+
+def test_keyframe_task_rejects_non_editing_model_before_persisting(service, video):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(
+            p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+            'Replace the red box', True, model='uniart/minimax-h3-vip',
+        )
+    assert exc.value.status_code == 422
+    assert service.keyframe_tasks(p['id'], shot['id']) == []
+
+
+def test_keyframe_task_accepts_current_owner_editing_model(service, video, monkeypatch):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    shot = p['timeline']['shots'][0]
+    monkeypatch.setattr(service, '_live_uniart_models', lambda: [
+        {'id': 'uniart/gpt-image-2.5-flare-discount', 'capabilities': ['t2i', 'i2i']},
+    ])
+
+    task = service.create_keyframe_task(
+        p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+        'Replace the red box', True, model='uniart/gpt-image-2.5-flare-discount',
+    )
+    assert task['model'] == 'uniart/gpt-image-2.5-flare-discount'
+
+
+def test_recreation_model_options_keep_unverified_video_contracts_hidden(service, monkeypatch):
+    monkeypatch.setattr(service, '_live_uniart_models', lambda: [
+        {'id': 'uniart/gpt-image-2', 'display_name': 'GPT Image 2', 'capabilities': ['t2i', 'i2i']},
+        {'id': 'uniart/minimax-h3-vip', 'display_name': 'MiniMax H3', 'capabilities': ['r2v']},
+        {'id': 'uniart/seedance-2.5-vip', 'display_name': 'Seedance', 'capabilities': ['r2v']},
+    ])
+    options = service.model_options()
+    assert [item['id'] for item in options['image_models']] == ['uniart/gpt-image-2']
+    assert [item['id'] for item in options['video_models']] == ['uniart/minimax-h3-vip']
+    assert options['defaults'] == {'image_model': 'uniart/gpt-image-2', 'video_model': 'uniart/minimax-h3-vip'}
 
 
 def test_generation_submission_persists_provider_task_and_indexes_video(service, video, monkeypatch):

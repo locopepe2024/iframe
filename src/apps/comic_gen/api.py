@@ -39,7 +39,7 @@ import uuid
 import logging
 import re
 import traceback
-from urllib.request import Request as UrlRequest, urlopen
+from ...utils.uniart_catalog import fetch_uniart_catalog
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
 from .models import (
     ArtDirection,
@@ -56,7 +56,6 @@ from .models import (
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
-from ...utils.uniart_catalog import normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
@@ -4702,14 +4701,10 @@ def get_uniart_models():
     """
     runtime_config = studio_uniart_config()
     base = runtime_config["base_url"].rstrip("/")
-    key = runtime_config["api_key"]
-    req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
     try:
-        with urlopen(req, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        models = fetch_uniart_catalog(runtime_config)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    models = normalize_uniart_catalog(payload)
     return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
