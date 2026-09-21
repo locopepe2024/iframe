@@ -24,7 +24,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from typing import Optional, Dict, List, Any, Tuple, Literal
+from typing import Optional, Dict, List, Any, Tuple, Literal, Union
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -40,7 +40,13 @@ import logging
 import re
 import traceback
 from urllib.request import Request as UrlRequest, urlopen
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
+from .pipeline import (
+    ComicGenPipeline,
+    LibraryAssetInUseError,
+    InvalidAssetReference,
+    AssemblyPlanValidationError,
+    AssemblyPlanConflictError,
+)
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -51,6 +57,7 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    AssemblyEditPlan,
     AssetLibraryReference,
     normalize_director_profile_draft,
 )
@@ -734,6 +741,13 @@ class UpdateSeriesRequest(BaseModel):
     art_direction: Optional[ArtDirection] = None
 
 
+class AssemblyPlanEnvelope(BaseModel):
+    """Optional envelope for clients that keep the base revision separately."""
+
+    plan: AssemblyEditPlan
+    expected_revision: Optional[int] = Field(None, ge=1)
+
+
 @app.post("/series")
 def create_series(
     request: CreateSeriesRequest,
@@ -779,6 +793,55 @@ def get_series(series_id: str):
         for ep in episodes
     ]
     return signed_response(result)
+
+
+@app.get("/series/{series_id}/assembly-plan")
+def get_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the series Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_series(series_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Series not found")
+        return signed_response(pipeline.get_assembly_plan("series", series_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/series/{series_id}/assembly-plan")
+def put_series_assembly_plan(
+    series_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated series Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "series",
+            series_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.put("/series/{series_id}")
@@ -1777,6 +1840,55 @@ def get_project(script_id: str):
                 d["source"] = "global"
                 payload["props"].append(d)
     return signed_response(payload)
+
+
+@app.get("/projects/{script_id}/assembly-plan")
+def get_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the project Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_script(script_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        return signed_response(pipeline.get_assembly_plan("project", script_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/projects/{script_id}/assembly-plan")
+def put_project_assembly_plan(
+    script_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated project Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "project",
+            script_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 

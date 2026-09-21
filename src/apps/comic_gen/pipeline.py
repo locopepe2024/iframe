@@ -20,6 +20,7 @@ from .models import (
     PromptConfig,
     ArtDirection,
     DirectorProfile,
+    AssemblyEditPlan,
     director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
@@ -97,6 +98,18 @@ class LibraryAssetInUseError(Exception):
 
 class InvalidAssetReference(ValueError):
     """Raised when a requested asset-library reference cannot be resolved."""
+
+
+class AssemblyPlanValidationError(ValueError):
+    """Raised when an Assembly plan crosses an owner/reference boundary."""
+
+
+class AssemblyPlanConflictError(ValueError):
+    """Raised when an Assembly plan update uses a stale revision."""
+
+    def __init__(self, message: str, current_revision: Optional[int] = None):
+        self.current_revision = current_revision
+        super().__init__(message)
 
 
 class ComicGenPipeline(StudioOwnerMixin):
@@ -4580,6 +4593,243 @@ class ComicGenPipeline(StudioOwnerMixin):
     # ============================================================
     # Series Storage & CRUD
     # ============================================================
+
+    @staticmethod
+    def _assembly_resource_kind(kind: str) -> str:
+        if kind not in ("project", "series"):
+            raise AssemblyPlanValidationError(
+                "assembly scope must be 'project' or 'series'"
+            )
+        return kind
+
+    def _validate_assembly_plan_references(
+        self,
+        scope: str,
+        resource_id: str,
+        plan: AssemblyEditPlan,
+    ) -> None:
+        """Validate stable source IDs against the current owner-scoped store.
+
+        Pydantic validates the shape and timeline geometry.  This second
+        boundary is intentionally here, next to persistence, because only the
+        pipeline can prove that an episode/frame/task belongs to the resource
+        being edited.  We do not resolve or persist signed URLs.
+        """
+        self._assembly_resource_kind(scope)
+        if plan.scope != scope:
+            raise AssemblyPlanValidationError(
+                f"plan scope {plan.scope!r} does not match {scope!r} resource"
+            )
+
+        if scope == "project":
+            resource = self.get_script(resource_id)
+            if not resource:
+                raise AssemblyPlanValidationError("Project not found")
+            projects = {resource.id: resource}
+        else:
+            resource = self.get_series(resource_id)
+            if not resource:
+                raise AssemblyPlanValidationError("Series not found")
+            projects = {}
+            for episode_id in resource.episode_ids:
+                episode = self.get_script(episode_id, resource.owner_profile_id)
+                if episode:
+                    projects[episode.id] = episode
+
+        for lane in plan.lanes:
+            # A marker lane is retained for editor compatibility, but markers
+            # themselves live in plan.markers and never need media ownership.
+            for clip in lane.clips:
+                project_id = clip.source_project_id or clip.source_episode_id
+                if project_id is not None and project_id not in projects:
+                    raise AssemblyPlanValidationError(
+                        f"clip {clip.id} references project outside {scope}: {project_id}"
+                    )
+
+                if clip.source_episode_id is not None:
+                    if clip.source_episode_id not in projects:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references episode outside series: "
+                            f"{clip.source_episode_id}"
+                        )
+                    if scope == "project" and clip.source_episode_id != resource_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references a different project episode"
+                        )
+
+                if clip.source_project_id is not None and scope == "project":
+                    if clip.source_project_id != resource_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references a different project"
+                        )
+
+                # Editorial video clips must have an unambiguous project and a
+                # durable frame or task identity.  Audio clips may be external
+                # or carry only a source_ref, so they remain less restrictive.
+                if lane.kind == "video":
+                    if project_id is None:
+                        raise AssemblyPlanValidationError(
+                            f"video clip {clip.id} requires source_project_id"
+                        )
+                    if not clip.source_frame_id and not clip.source_task_id:
+                        raise AssemblyPlanValidationError(
+                            f"video clip {clip.id} requires source_frame_id or source_task_id"
+                        )
+
+                source_project = projects.get(project_id) if project_id else None
+                frame = None
+                task = None
+                if clip.source_frame_id:
+                    if source_project is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} has a frame without a valid source project"
+                        )
+                    frame = next(
+                        (item for item in source_project.frames
+                         if item.id == clip.source_frame_id),
+                        None,
+                    )
+                    if frame is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references unknown frame "
+                            f"{clip.source_frame_id}"
+                        )
+
+                if clip.source_task_id:
+                    if source_project is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} has a task without a valid source project"
+                        )
+                    task = next(
+                        (item for item in source_project.video_tasks
+                         if item.id == clip.source_task_id),
+                        None,
+                    )
+                    if task is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references unknown video task "
+                            f"{clip.source_task_id}"
+                        )
+                    task_project_id = getattr(task, "project_id", None)
+                    if task_project_id and task_project_id != source_project.id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} video task belongs to another project"
+                        )
+                    task_frame_id = getattr(task, "frame_id", None)
+                    if clip.source_frame_id and task_frame_id and task_frame_id != clip.source_frame_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} task/frame references do not match"
+                        )
+
+                if frame is not None and clip.source_episode_id:
+                    # The frame lookup above is deliberately episode-local;
+                    # this check makes the relation explicit for series plans.
+                    if source_project.id != clip.source_episode_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} frame is not owned by source episode"
+                        )
+
+        for marker in plan.markers:
+            if marker.source_episode_id is None:
+                continue
+            if marker.source_episode_id not in projects:
+                raise AssemblyPlanValidationError(
+                    f"marker {marker.id} references episode outside {scope}: "
+                    f"{marker.source_episode_id}"
+                )
+            if scope == "project" and marker.source_episode_id != resource_id:
+                raise AssemblyPlanValidationError(
+                    f"marker {marker.id} references a different project"
+                )
+
+    def get_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+    ) -> Optional[AssemblyEditPlan]:
+        """Return an owner-scoped plan, or ``None`` for legacy resources."""
+        self._assembly_resource_kind(scope)
+        resource = (
+            self.get_script(resource_id)
+            if scope == "project"
+            else self.get_series(resource_id)
+        )
+        if not resource:
+            return None
+        plan = getattr(resource, "assembly_plan", None)
+        if plan is not None and plan.scope != scope:
+            # Old/corrupt records should fail closed instead of being silently
+            # interpreted as a plan for the other resource kind.
+            raise AssemblyPlanValidationError(
+                f"stored plan scope {plan.scope!r} does not match {scope!r}"
+            )
+        return plan
+
+    def save_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+        plan: AssemblyEditPlan,
+        expected_revision: Optional[int] = None,
+    ) -> AssemblyEditPlan:
+        """Persist a validated plan with optimistic revision checking.
+
+        New plans start at revision 1.  Existing plans require the caller to
+        send the current revision (either ``expected_revision`` or the plan's
+        revision) and are returned with an incremented revision.
+        """
+        self._assembly_resource_kind(scope)
+        with self._save_lock:
+            resource = (
+                self.get_script(resource_id)
+                if scope == "project"
+                else self.get_series(resource_id)
+            )
+            if not resource:
+                raise AssemblyPlanValidationError(
+                    "Project not found" if scope == "project" else "Series not found"
+                )
+
+            current = getattr(resource, "assembly_plan", None)
+            if current is None:
+                if expected_revision not in (None, 1):
+                    raise AssemblyPlanConflictError(
+                        "assembly plan does not exist; expected_revision must be 1",
+                        current_revision=None,
+                    )
+                if plan.revision != 1:
+                    raise AssemblyPlanConflictError(
+                        "new assembly plan must start at revision 1",
+                        current_revision=None,
+                    )
+                saved = plan
+            else:
+                requested_revision = (
+                    expected_revision
+                    if expected_revision is not None
+                    else plan.revision
+                )
+                if requested_revision != current.revision:
+                    raise AssemblyPlanConflictError(
+                        "stale assembly plan revision",
+                        current_revision=current.revision,
+                    )
+                saved = plan.model_copy(
+                    update={"revision": current.revision + 1}
+                )
+
+            # Check the references after the optimistic-concurrency boundary.
+            # A stale client receives 409 even if another editor changed or
+            # removed one of its now-old source references.
+            self._validate_assembly_plan_references(scope, resource_id, plan)
+
+            resource.assembly_plan = saved
+            resource.updated_at = time.time()
+            if scope == "project":
+                self._save_data()
+            else:
+                self._save_series_data_unlocked()
+            return saved
 
     def _load_series_data(self) -> Dict[str, Series]:
         if not os.path.exists(self.series_data_file):

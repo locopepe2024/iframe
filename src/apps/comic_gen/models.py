@@ -4,7 +4,8 @@ import hashlib
 import json
 import os
 import time
-from pydantic import BaseModel, Field
+import uuid
+from pydantic import BaseModel, Field, model_validator
 
 from ...utils.model_catalog import get_default_model_settings
 
@@ -1454,6 +1455,145 @@ class PromptConfig(BaseModel):
     # 显式覆盖时用于切到 vision-capable 或更便宜的模型（qwen3.6-flash、kimi-k2.6 等）。
     polish_model: str = Field("", description="Override LLM model id used for polish calls; empty = use system default")
 
+
+# ---------------------------------------------------------------------------
+# Assembly edit plan
+# ---------------------------------------------------------------------------
+# These models describe editorial intent and stable media identity.  They do
+# not contain signed delivery URLs and they never submit a provider task by
+# themselves.  The pipeline performs the owner/reference checks that require
+# access to the persisted project and series stores.
+
+ASSEMBLY_DEFAULT_TARGET_DURATION_MS = 60_000
+ASSEMBLY_MAX_TARGET_DURATION_MS = 3_600_000
+
+
+class AssemblyClip(BaseModel):
+    """One bounded source range placed on a timeline lane."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    timeline_start_ms: int = Field(..., ge=0)
+    timeline_end_ms: int = Field(..., gt=0)
+    source_start_ms: int = Field(0, ge=0)
+    source_end_ms: Optional[int] = Field(None, gt=0)
+
+    # Stable project/episode/frame/task identities.  ``source_project_id`` is
+    # the owning Script id; for a series plan this points at the episode
+    # project.  The optional episode field is retained as an explicit marker
+    # so a plan can preserve editorial context without relying on title text.
+    source_project_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_episode_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_frame_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_task_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_refs: List[str] = Field(default_factory=list, max_length=12)
+
+    label: Optional[str] = Field(None, max_length=200)
+    enabled: bool = True
+    gain: Optional[float] = Field(None, ge=0, le=2)
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.timeline_end_ms <= self.timeline_start_ms:
+            raise ValueError("timeline_end_ms must be greater than timeline_start_ms")
+        if self.source_end_ms is not None and self.source_end_ms <= self.source_start_ms:
+            raise ValueError("source_end_ms must be greater than source_start_ms")
+        return self
+
+
+class AssemblyLane(BaseModel):
+    """An ordered video/audio/editorial lane in an Assembly plan."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    kind: Literal["video", "dialogue", "bgm", "sfx", "markers"]
+    clips: List[AssemblyClip] = Field(default_factory=list, max_length=256)
+    # Overlap is explicit for audio lanes.  Video overlap is never accepted;
+    # markers are not rendered and are handled separately on the plan.
+    allow_overlap: bool = False
+    label: Optional[str] = Field(None, max_length=120)
+
+
+class AssemblyMarker(BaseModel):
+    """Non-rendering editorial evidence on the Assembly timeline."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    time_ms: int = Field(..., ge=0)
+    label: str = Field(..., min_length=1, max_length=240)
+    marker_type: Literal["episode", "memory", "story_node", "note"] = "note"
+    source_refs: List[str] = Field(default_factory=list, max_length=12)
+    source_episode_id: Optional[str] = Field(None, min_length=1, max_length=120)
+
+
+class AssemblyEditPlan(BaseModel):
+    """Versioned, owner-scoped swimlane plan for project or series Assembly."""
+
+    id: str = Field(
+        default_factory=lambda: f"assembly-{uuid.uuid4().hex}",
+        min_length=1,
+        max_length=120,
+    )
+    scope: Literal["project", "series"]
+    target_duration_ms: int = Field(
+        ASSEMBLY_DEFAULT_TARGET_DURATION_MS,
+        ge=1,
+        le=ASSEMBLY_MAX_TARGET_DURATION_MS,
+    )
+    revision: int = Field(1, ge=1)
+    # Provenance is intentionally descriptive; the persisted source of truth
+    # remains Director/Content IR and their source_refs, not this free-form
+    # dictionary.
+    source_revision: Optional[int] = Field(None, ge=1)
+    director_revision: Optional[int] = Field(None, ge=1)
+    content_ir_revision: Optional[int] = Field(None, ge=1)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    lanes: List[AssemblyLane] = Field(default_factory=list, max_length=8)
+    markers: List[AssemblyMarker] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_timeline(self):
+        lane_ids = [lane.id for lane in self.lanes]
+        if len(lane_ids) != len(set(lane_ids)):
+            raise ValueError("assembly lane ids must be unique")
+
+        clip_ids: set[str] = set()
+        for lane in self.lanes:
+            previous: List[AssemblyClip] = []
+            for clip in lane.clips:
+                if clip.id in clip_ids:
+                    raise ValueError(f"assembly clip id must be unique: {clip.id}")
+                clip_ids.add(clip.id)
+                if clip.timeline_end_ms > self.target_duration_ms:
+                    raise ValueError(
+                        f"clip {clip.id} ends after target_duration_ms"
+                    )
+                if lane.kind == "video" and not clip.source_refs:
+                    raise ValueError(
+                        f"video clip {clip.id} requires source_refs"
+                    )
+
+                # Clips are interpreted as half-open [start, end) ranges.
+                # Sorting is unnecessary for validation and would mutate the
+                # user's editorial order, so compare against prior clips.
+                overlapping = any(
+                    clip.timeline_start_ms < other.timeline_end_ms
+                    and other.timeline_start_ms < clip.timeline_end_ms
+                    for other in previous
+                )
+                if overlapping and (lane.kind == "video" or not lane.allow_overlap):
+                    raise ValueError(
+                        f"overlapping clips are not allowed in lane {lane.id}"
+                    )
+                previous.append(clip)
+
+        marker_ids = [marker.id for marker in self.markers]
+        if len(marker_ids) != len(set(marker_ids)):
+            raise ValueError("assembly marker ids must be unique")
+        for marker in self.markers:
+            if marker.time_ms > self.target_duration_ms:
+                raise ValueError(
+                    f"marker {marker.id} is after target_duration_ms"
+                )
+        return self
+
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
     owner_user_id: Optional[str] = Field(None, description="Authenticated UniArt user owner")
@@ -1502,6 +1642,13 @@ class Script(BaseModel):
     mix_settings: Dict[str, int] = Field(
         default_factory=lambda: {"dialogue": 100, "bgm": 35, "sfx": 60},
         description="Per-track gain 0-100: dialogue / bgm / sfx",
+    )
+
+    # Optional v1 timeline.  None deliberately preserves the legacy frame-
+    # order merge path for projects that have not opted into Assembly edits.
+    assembly_plan: Optional[AssemblyEditPlan] = Field(
+        None,
+        description="Owner-scoped Assembly swimlane plan; None uses legacy merge",
     )
 
     # Series association
@@ -1586,6 +1733,13 @@ class Series(BaseModel):
 
     # Episode references
     episode_ids: List[str] = Field(default_factory=list, description="Ordered list of Episode/Script IDs")
+
+    # Optional series-level timeline.  It may reference only episode projects
+    # registered in this series; pipeline validation enforces that boundary.
+    assembly_plan: Optional[AssemblyEditPlan] = Field(
+        None,
+        description="Series-level Assembly swimlane plan; None means no custom cut",
+    )
 
     created_at: float
     updated_at: float
