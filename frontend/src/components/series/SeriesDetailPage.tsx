@@ -9,6 +9,9 @@ import type { Series, Character, Scene, Prop, Project } from "@/store/projectSto
 import AssetCard from "@/components/common/AssetCard";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
+import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
+import { buildDraftSeriesAssemblyPlan } from "@/components/modules/assemblyEditPlan";
+import type { AssemblyEditPlan } from "@/lib/api";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -34,6 +37,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [showImportAssets, setShowImportAssets] = useState(false);
+  const [assemblyPlan, setAssemblyPlan] = useState<AssemblyEditPlan | null>(null);
 
   const t = useTranslations("series");
   const tc = useTranslations("common");
@@ -54,6 +58,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         ]);
         setSeries(seriesData);
         setEpisodes(episodesData);
+        setAssemblyPlan(seriesData.assembly_plan ?? null);
         setEditTitle(seriesData.title);
       } catch (error) {
         console.error("Failed to fetch series data:", error);
@@ -123,6 +128,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       ]);
       setSeries(seriesData);
       setEpisodes(episodesData);
+      setAssemblyPlan(seriesData.assembly_plan ?? null);
     } catch (error) {
       console.error("Failed to refresh series data:", error);
     }
@@ -197,6 +203,14 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
               seriesId={seriesId}
               onSaved={refreshSeriesData}
             />
+          ) : activeItem.kind === "assembly" ? (
+            <SeriesAssemblyPanel
+              key="series-assembly"
+              series={series}
+              episodes={episodes}
+              plan={assemblyPlan}
+              onChange={setAssemblyPlan}
+            />
           ) : activeItem.kind === "asset" ? (
             <AssetContentPanel
               key={`asset-${activeItem.tab}`}
@@ -235,6 +249,71 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         onImported={refreshSeriesData}
       />
     </main>
+  );
+}
+
+function SeriesAssemblyPanel({
+  series,
+  episodes,
+  plan,
+  onChange,
+}: {
+  series: Series;
+  episodes: Project[];
+  plan: AssemblyEditPlan | null;
+  onChange: (plan: AssemblyEditPlan | null) => void;
+}) {
+  const t = useTranslations("series");
+  const [draft, setDraft] = useState<AssemblyEditPlan | null>(plan);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(plan);
+  }, [plan]);
+
+  const readyCount = episodes.reduce((total, episode) => {
+    const tasks = episode.video_tasks ?? [];
+    return total + (episode.frames ?? []).filter((frame: any) => {
+      const selected = frame.selected_video_id
+        ? tasks.find((task: any) => task.id === frame.selected_video_id)
+        : tasks.find((task: any) => task.frame_id === frame.id && task.status === "completed" && task.video_url);
+      return Boolean(frame.dubbed_video_url || (selected?.status === "completed" && selected?.video_url));
+    }).length;
+  }, 0);
+
+  const handleSave = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await api.saveAssemblyPlan("series", series.id, draft);
+      setDraft(saved);
+      onChange(saved);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Series Assembly save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-8 pt-6 pb-2">
+        <h2 className="text-xl font-display font-bold text-foreground">{t("assemblyTitle")}</h2>
+        <p className="mt-1 text-xs text-text-muted">{t("assemblySubtitle")}</p>
+      </div>
+      <AssemblyPlanPhase
+        project={null}
+        plan={draft}
+        isSaving={saving}
+        error={error}
+        readyCountOverride={readyCount}
+        onCreate={() => setDraft(buildDraftSeriesAssemblyPlan(series.id, episodes))}
+        onChange={setDraft}
+        onSave={handleSave}
+      />
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
+import type { AssemblyEditPlan } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
@@ -293,6 +294,7 @@ export interface Series {
      *  direct_r2v); 'i2v' = 画面优先 (new shots default t2i_i2v). */
     default_generation_mode?: "r2v" | "i2v";
     episode_ids: string[];
+    assembly_plan?: AssemblyEditPlan | null;
     created_at: number;
     updated_at: number;
 }
@@ -322,6 +324,7 @@ export interface Project {
     /** PR-3k · Assembly Mix phase fields */
     bgm_url?: string | null;
     mix_settings?: Record<string, number>;
+    assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */

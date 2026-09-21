@@ -159,6 +159,58 @@ export interface BgmPreset {
     url: string;
 }
 
+// Assembly v1 — stable, URL-free editorial plan.  The backend owns the
+// reference/overlap checks; the client only edits bounded millisecond ranges.
+export type AssemblyScope = "project" | "series";
+export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "markers";
+export type AssemblyMarkerType = "episode" | "memory" | "story_node" | "note";
+
+export interface AssemblyClip {
+    id: string;
+    timeline_start_ms: number;
+    timeline_end_ms: number;
+    source_start_ms?: number;
+    source_end_ms?: number | null;
+    source_project_id?: string | null;
+    source_episode_id?: string | null;
+    source_frame_id?: string | null;
+    source_task_id?: string | null;
+    source_refs: string[];
+    label?: string | null;
+    enabled: boolean;
+    gain?: number | null;
+}
+
+export interface AssemblyLane {
+    id: string;
+    kind: AssemblyLaneKind;
+    clips: AssemblyClip[];
+    allow_overlap: boolean;
+    label?: string | null;
+}
+
+export interface AssemblyMarker {
+    id: string;
+    time_ms: number;
+    label: string;
+    marker_type: AssemblyMarkerType;
+    source_refs: string[];
+    source_episode_id?: string | null;
+}
+
+export interface AssemblyEditPlan {
+    id: string;
+    scope: AssemblyScope;
+    target_duration_ms: number;
+    revision: number;
+    source_revision?: number | null;
+    director_revision?: number | null;
+    content_ir_revision?: number | null;
+    provenance: Record<string, unknown>;
+    lanes: AssemblyLane[];
+    markers: AssemblyMarker[];
+}
+
 export interface ReconcileAction {
     local_id: string;
     action: "merge_into_series" | "create_new_in_series" | "skip";
@@ -274,6 +326,26 @@ export const api = {
     getProject: async (scriptId: string) => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
         return { ...res.data, originalText: res.data.original_text };
+    },
+
+    getAssemblyPlan: async (scope: AssemblyScope, resourceId: string): Promise<AssemblyEditPlan | null> => {
+        const base = scope === "series" ? "series" : "projects";
+        const res = await axios.get<AssemblyEditPlan | null>(`${API_URL}/${base}/${resourceId}/assembly-plan`);
+        return res.data;
+    },
+
+    saveAssemblyPlan: async (
+        scope: AssemblyScope,
+        resourceId: string,
+        plan: AssemblyEditPlan,
+        expectedRevision?: number,
+    ): Promise<AssemblyEditPlan> => {
+        const base = scope === "series" ? "series" : "projects";
+        const body = expectedRevision == null
+            ? plan
+            : { plan, expected_revision: expectedRevision };
+        const res = await axios.put<AssemblyEditPlan>(`${API_URL}/${base}/${resourceId}/assembly-plan`, body);
+        return res.data;
     },
 
     deleteProject: async (scriptId: string) => {
