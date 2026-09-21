@@ -348,6 +348,17 @@ export const api = {
         return res.data;
     },
 
+    renderAssemblyPlan: async (
+        scope: AssemblyScope,
+        resourceId: string,
+    ): Promise<{ url: string }> => {
+        const base = scope === "series" ? "series" : "projects";
+        const res = await axios.post<{ url: string }>(
+            `${API_URL}/${base}/${resourceId}/assembly-plan/render`,
+        );
+        return res.data;
+    },
+
     deleteProject: async (scriptId: string) => {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;

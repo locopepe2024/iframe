@@ -4,6 +4,15 @@ import { resolveAssemblyVideo } from "./assemblyReadiness";
 
 export const ASSEMBLY_DEFAULT_DURATION_MS = 60_000;
 
+export function hasAssemblyPlanChanges(
+    draft: AssemblyEditPlan | null,
+    saved: AssemblyEditPlan | null | undefined,
+): boolean {
+    return Boolean(draft) && (
+        !saved || JSON.stringify(draft) !== JSON.stringify(saved)
+    );
+}
+
 export function formatAssemblyTime(milliseconds: number): string {
     const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
     const minutes = Math.floor(totalSeconds / 60);

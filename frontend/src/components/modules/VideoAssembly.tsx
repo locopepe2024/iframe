@@ -10,7 +10,7 @@ import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
 import { getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
-import { buildDraftAssemblyPlan, formatAssemblyTime, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
+import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
 
 type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
@@ -30,6 +30,10 @@ export default function VideoAssembly() {
     );
     const [isSavingPlan, setIsSavingPlan] = useState(false);
     const [planError, setPlanError] = useState<string | null>(null);
+    const hasUnsavedAssemblyChanges = hasAssemblyPlanChanges(
+        assemblyPlan,
+        currentProject?.assembly_plan,
+    );
 
     useEffect(() => {
         setAssemblyPlan(currentProject?.assembly_plan ?? null);
@@ -68,8 +72,17 @@ export default function VideoAssembly() {
         setMergeError(null);  // Clear previous errors
 
         try {
-            const updatedProject = await api.mergeVideos(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
+            if (assemblyPlan) {
+                if (hasUnsavedAssemblyChanges) {
+                    setMergeError(ta("savePlanBeforeRender"));
+                    return;
+                }
+                const rendered = await api.renderAssemblyPlan("project", currentProject.id);
+                updateProject(currentProject.id, { merged_video_url: rendered.url });
+            } else {
+                const updatedProject = await api.mergeVideos(currentProject.id);
+                updateProject(currentProject.id, updatedProject);
+            }
             // Success - error will be null, merged video will show below
         } catch (error: any) {
             console.error("Failed to merge videos:", error);
@@ -332,6 +345,8 @@ export default function VideoAssembly() {
                             framesReady={framesReady}
                             framesTotal={framesTotal}
                             framesMissing={framesMissing}
+                            usesAssemblyPlan={Boolean(assemblyPlan)}
+                            hasUnsavedPlan={hasUnsavedAssemblyChanges}
                             onMerge={handleMerge}
                             onDownload={handleDownload}
                             onDismissError={() => setMergeError(null)}
@@ -827,6 +842,8 @@ function ExportPhase({
     framesReady,
     framesTotal,
     framesMissing,
+    usesAssemblyPlan,
+    hasUnsavedPlan,
     onMerge,
     onDownload,
     onDismissError,
@@ -838,12 +855,16 @@ function ExportPhase({
     framesReady: number;
     framesTotal: number;
     framesMissing: number;
+    usesAssemblyPlan: boolean;
+    hasUnsavedPlan: boolean;
     onMerge: () => void;
     onDownload: () => void;
     onDismissError: () => void;
 }) {
     const ta = useTranslations("assembly");
-    const canMerge = framesTotal > 0 && framesReady > 0;
+    const canMerge = usesAssemblyPlan
+        ? !hasUnsavedPlan
+        : framesTotal > 0 && framesReady > 0;
     return (
         <div className="space-y-6 max-w-3xl">
             <section className="rounded-xl border border-glass-border bg-glass p-6">
@@ -854,9 +875,16 @@ function ExportPhase({
                             {ta("exportTitle")}
                         </h3>
                         <p className="mt-1 text-body-sm text-text-secondary">
-                            {ta("exportSubtitle", { ready: framesReady, total: framesTotal })}
+                            {usesAssemblyPlan
+                                ? ta("assemblyExportSubtitle")
+                                : ta("exportSubtitle", { ready: framesReady, total: framesTotal })}
                         </p>
-                        {framesMissing > 0 && (
+                        {hasUnsavedPlan && (
+                            <p role="status" className="mt-2 text-xs text-amber-300/90">
+                                {ta("savePlanBeforeRender")}
+                            </p>
+                        )}
+                        {!usesAssemblyPlan && framesMissing > 0 && (
                             <p className="mt-2 text-xs text-amber-300/90">
                                 {ta("partialExportWarning", { missing: framesMissing })}
                             </p>
@@ -868,7 +896,9 @@ function ExportPhase({
                         className="shrink-0 inline-flex items-center gap-2 bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-md font-semibold text-[0.8125rem]"
                     >
                         {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
-                        {ta("mergeAndProceed")}
+                        {isMerging
+                            ? ta("renderingAssembly")
+                            : usesAssemblyPlan ? ta("renderAssembly") : ta("mergeAndProceed")}
                     </button>
                 </div>
             </section>

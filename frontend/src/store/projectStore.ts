@@ -295,6 +295,7 @@ export interface Series {
     default_generation_mode?: "r2v" | "i2v";
     episode_ids: string[];
     assembly_plan?: AssemblyEditPlan | null;
+    merged_video_url?: string | null;
     created_at: number;
     updated_at: number;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftAssemblyPlan, formatAssemblyTime, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
+import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
 import type { Project } from "@/store/projectStore";
 
 function project(): Project {
@@ -46,5 +46,14 @@ describe("assembly edit plan helpers", () => {
         expect(moved.lanes[0].clips[1].enabled).toBe(false);
         expect(formatAssemblyTime(60_000)).toBe("1:00");
     });
-});
 
+    it("requires a new or changed draft to be saved before rendering", () => {
+        const saved = buildDraftAssemblyPlan(project());
+        expect(hasAssemblyPlanChanges(saved, null)).toBe(true);
+        expect(hasAssemblyPlanChanges(saved, structuredClone(saved))).toBe(false);
+
+        const changed = updateAssemblyClip(saved, "video-main", "clip-f1", { enabled: false });
+        expect(hasAssemblyPlanChanges(changed, saved)).toBe(true);
+        expect(hasAssemblyPlanChanges(null, saved)).toBe(false);
+    });
+});
