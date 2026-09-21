@@ -51,26 +51,34 @@ def _media(value: Optional[str]) -> Optional[str]:
 
 
 def _image_reference_url(value: str) -> str:
-    """Publish image references through managed storage; never inline bytes."""
+    """Publish image/video/audio references through managed storage.
+
+    The historical helper name is retained for callers, but every UniArt
+    reference modality uses the same URL-only boundary.  Local bytes and
+    filesystem paths never reach the provider request body.
+    """
     if value.startswith(("https://", "http://")):
         return value
     if value.startswith(("data:", "blob:")):
-        raise ValueError("UniArt image references require HTTP(S) material URLs")
+        raise ValueError("UniArt media references require HTTP(S) material URLs")
     from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:
-        raise RuntimeError("Image reference material storage is not configured")
+        raise RuntimeError("Media reference material storage is not configured")
     if is_object_key(value):
         key = value
     else:
         path = value if os.path.isfile(value) else os.path.join("output", value)
         if not os.path.isfile(path):
-            raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
+            raise ValueError("Media material is not a resolved local file or HTTP(S) URL")
         key = uploader.upload_file(path, sub_path="image-edit-inputs")
         if not key:
             raise RuntimeError("Could not upload image edit material")
     url = uploader.sign_url_for_api(key)
     if not url or not url.startswith(("https://", "http://")):
+        # Keep the historical error text for image-edit callers; the helper is
+        # shared with video/audio references but this remains a stable API
+        # diagnostic consumed by the Studio image path.
         raise RuntimeError("Could not create image edit material URL")
     return url
 

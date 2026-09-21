@@ -28,6 +28,10 @@ const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"),
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const RecreationPage = dynamic(() => import("@/components/modules/recreation/RecreationPage"), { ssr: false });
+const DirectorWorkbench = dynamic(() => import("@/components/director3d/DirectorWorkbench"), {
+  ssr: false,
+  loading: () => <div className="grid h-full place-items-center text-sm text-text-secondary" role="status">正在加载 3D 导演台…</div>,
+});
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
 
 // ── Create Series Dialog ──
@@ -463,7 +467,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'recreation' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'recreation' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -474,6 +478,7 @@ export default function Home() {
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [seriesEpisodes, setSeriesEpisodes] = useState<Record<string, Project[]>>({});
   const [, setEpisodesLoading] = useState(false);
+  const workspaceDataSyncedRef = useRef(false);
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
@@ -482,10 +487,18 @@ export default function Home() {
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
 
-  // Sync projects and series from backend on mount
+  // The browser-only director must remain usable without the project backend.
+  // Defer the normal workspace sync until the user leaves that route.
   useEffect(() => {
-    syncProjects();
-    fetchSeriesList();
+    const syncWorkspaceData = () => {
+      if (window.location.hash === "#/director" || workspaceDataSyncedRef.current) return;
+      workspaceDataSyncedRef.current = true;
+      void syncProjects();
+      void fetchSeriesList();
+    };
+    syncWorkspaceData();
+    window.addEventListener("hashchange", syncWorkspaceData);
+    return () => window.removeEventListener("hashchange", syncWorkspaceData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -623,6 +636,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/director') {
+        setCurrentView('director3d');
+        setActiveTab('director3d');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       if (hash === '#/settings') {
         setCurrentView('settings');
         setActiveTab('settings');
@@ -698,6 +719,9 @@ export default function Home() {
   const renderContent = () => {
     if (currentView === 'recreation') {
       return <RecreationPage />;
+    }
+    if (currentView === 'director3d') {
+      return <DirectorWorkbench />;
     }
     if (currentView === 'library') {
       return <AssetLibraryPage />;

@@ -49,12 +49,15 @@ export interface RecreationMedia {
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
 export interface RecreationKeyframeTask {
-  task_id: string; status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  task_id: string; project_id?: string; shot_id?: string; revision?: number; analysis_id?: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  created_at?: number; updated_at?: number;
   output_media: RecreationMedia | null; error: string | null;
 }
 
 export interface RecreationPlan {
   revision: number; ready: boolean; submission_enabled?: boolean; model?: string; model_family?: "minimax_h3" | "seedance"; mapping_strategy?: string;
+  source_video?: { media_id: string; sha256: string; label: "<Video 1>" };
   blockers: { shot_id: string; shot_number: number; reasons: string[] }[];
   shots: { shot_id: string; shot_number: number; target_duration: string; prompt: string | null;
     images: { media_id: string; label: string }[] }[];
@@ -62,7 +65,9 @@ export interface RecreationPlan {
 export interface RecreationGenerationTask {
   task_id: string; generation_id: string; project_id: string; shot_id: string; shot_number: number;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  revision?: number; analysis_id?: string; created_at?: number; updated_at?: number;
   model: string; duration: number; generate_audio: boolean; provider_task_id?: string | null;
+  source_media_id?: string; source_fingerprint?: string;
   output_media: RecreationMedia | null; error: string | null;
 }
 export interface RecreationGenerationSubmission {
@@ -72,6 +77,7 @@ export interface RecreationGenerationSubmission {
 export interface RecreationAssemblyTask {
   task_id: string; project_id: string; generation_id: string; revision: number;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  analysis_id?: string; created_at?: number; updated_at?: number;
   audio_policy: string; output_media: RecreationMedia | null; error: string | null;
 }
 export const recreationApi = {
@@ -82,13 +88,15 @@ export const recreationApi = {
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string): Promise<RecreationKeyframeTask> =>
+  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string, acceptCost: boolean): Promise<RecreationKeyframeTask> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/keyframe-tasks`, {
       revision: project.revision, analysis_id: project.analysis_id, reference_media_id: referenceMediaId,
-      replacement_media_id: replacementMediaId, instruction, accept_cost: true,
+      replacement_media_id: replacementMediaId, instruction, accept_cost: acceptCost,
     }).then(r => r.data),
   keyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
     axios.get(`${API_URL}/recreation/keyframe-tasks/${taskId}`).then(r => r.data),
+  keyframeTasks: (projectId: string, shotId?: string): Promise<RecreationKeyframeTask[]> =>
+    axios.get(`${API_URL}/recreation/projects/${projectId}/keyframe-tasks`, { params: shotId ? { shot_id: shotId } : undefined }).then(r => r.data),
   cancelKeyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
     axios.post(`${API_URL}/recreation/keyframe-tasks/${taskId}/cancel`).then(r => r.data),
   submitGeneration: (project: RecreationProject, model: string, options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number>; accept_cost: boolean; seed?: number | null }): Promise<RecreationGenerationSubmission> =>

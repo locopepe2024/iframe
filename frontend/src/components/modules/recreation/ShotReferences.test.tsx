@@ -3,12 +3,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import ShotReferences from './ShotReferences';
 import { recreationApi, RecreationProject, RecreationMedia } from '@/lib/recreation';
 
-vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn() } }));
+vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() } }));
 vi.mock('next/dynamic', () => ({ default: () => ({ onSave }: { onSave: (file: File) => Promise<void> }) => <button onClick={() => void onSave(new File(['edited'], 'edited.png', { type: 'image/png' }))}>export edit</button> }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 const image: RecreationMedia = { media_id: 'image', project_id: 'p', kind: 'evidence_frame', display_name: 'Evidence', storage_path: '/image.png', sha256: 'hash', created_at: 1, metadata: {} };
 const project = { id: 'p', revision: 4, analysis_id: 'a', status: 'confirmed', analysis: { start_pts: 0, time_base: '1/24' }, timeline: { cuts: [], shots: [{ id: 'shot', start_pts: 0, end_pts: 24 }] } } as unknown as RecreationProject;
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(recreationApi.media).mockResolvedValue(image); vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [image], next_cursor: null }); });
+beforeEach(() => { vi.resetAllMocks(); vi.mocked(recreationApi.media).mockResolvedValue(image); vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [image], next_cursor: null }); vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]); vi.mocked(recreationApi.generationTasks).mockResolvedValue([]); vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]); });
 
 it('selects a stable media ID and saves only on explicit action, retaining draft after failure', async () => {
   const onSaved = vi.fn();
@@ -71,10 +71,40 @@ it('runs a paid keyframe task and selects its output without binding it', async 
   fireEvent.change(screen.getByRole('combobox', { name: 'kind' }), { target: { value: 'replacement_image' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Product' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'instruction' }), { target: { value: 'Keep hand occlusion' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'keyframeAcceptCost' }));
   fireEvent.click(screen.getByRole('button', { name: 'generateCorrected' }));
   expect(await screen.findByText('Corrected')).toBeInTheDocument();
-  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion');
+  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion', true);
   expect(recreationApi.bindShot).not.toHaveBeenCalled();
+});
+
+it('restores the latest completed keyframe output after a reload', async () => {
+  const corrected = { ...image, media_id: 'corrected', kind: 'reference_image' as const, display_name: 'Restored corrected' };
+  vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([{ task_id: 'task', project_id: 'p', shot_id: 'shot', revision: 4, analysis_id: 'a', status: 'completed', output_media: corrected, error: null }]);
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  expect(await screen.findByText('Restored corrected')).toBeInTheDocument();
+  expect(recreationApi.keyframeTasks).toHaveBeenCalledWith('p', 'shot');
+});
+
+it('does not restore a keyframe from an older timeline revision', async () => {
+  const stale = { ...image, media_id: 'stale', kind: 'reference_image' as const, display_name: 'Stale corrected' };
+  vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([{ task_id: 'stale-task', project_id: 'p', shot_id: 'shot', revision: 3, analysis_id: 'old-analysis', status: 'completed', output_media: stale, error: null }]);
+  render(<ShotReferences project={{ ...project, revision: 4, analysis_id: 'a' }} disabled={false} onSaved={vi.fn()} />);
+  await waitFor(() => expect(recreationApi.keyframeTasks).toHaveBeenCalledWith('p', 'shot'));
+  expect(screen.queryByText('Stale corrected')).not.toBeInTheDocument();
+});
+
+it('shows the persisted keyframe failure after a reload', async () => {
+  vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([{ task_id: 'failed-task', project_id: 'p', shot_id: 'shot', revision: 4, analysis_id: 'a', status: 'failed', output_media: null, error: 'provider rejected the request' }]);
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('provider rejected the request');
+});
+
+it('restores the latest generation task group after a reload', async () => {
+  vi.mocked(recreationApi.generationTasks).mockResolvedValue([{ task_id: 'generation-task', generation_id: 'generation', project_id: 'p', shot_id: 'shot', shot_number: 1, revision: 4, analysis_id: 'a', status: 'completed', model: 'uniart/minimax-h3-vip', duration: 5, generate_audio: false, output_media: null, error: null, created_at: 10 }]);
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  expect(await screen.findByText(/generationStatus\.completed/)).toBeInTheDocument();
+  expect(recreationApi.generationTasks).toHaveBeenCalledWith('p');
 });
 
 it('shows saved-plan blockers and clears the preview when revision changes', async () => {

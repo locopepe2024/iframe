@@ -179,6 +179,12 @@ def keyframe_task(task_id: str, user: UserContext = Depends(require_studio_user)
     return public(RecreationService(user).keyframe_task(task_id), user)
 
 
+@router.get("/projects/{project_id}/keyframe-tasks")
+def keyframe_tasks(project_id: str, shot_id: str | None = None,
+                   user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).keyframe_tasks(project_id, shot_id), user)
+
+
 @router.post("/keyframe-tasks/{task_id}/cancel")
 def cancel_keyframe_task(task_id: str, user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).cancel_keyframe_task(task_id), user)

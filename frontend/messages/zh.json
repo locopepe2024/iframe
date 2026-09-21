@@ -562,7 +562,9 @@
     "library": "资产库",
     "editor": "剧本编辑器",
     "playground": "创作台",
+    "director3d": "3D 导演台",
     "settings": "设置",
+    "more": "更多",
     "workspaceAria": "iFrame Studio · 工作区",
     "mainNavAria": "主导航"
   },
@@ -601,17 +603,10 @@
     "after": "切点首帧",
     "evidence": "加载相邻帧",
     "contactSheet": "联系表",
+    "download": "下载最终视频",
+    "keyframeAcceptCost": "我确认生成修正关键帧会产生费用",
     "unsaved": "修改待确认",
-    "oversized": "原片不能超过 256 MiB",
-    "whiteModel": "3D 白模参考",
-    "whiteModelDescription": "使用可旋转、可缩放的中性人体白模辅助核对人物占位、镜头角度和构图。它只是本次复刻的视觉参考，不会自动写入资产库或生成请求。",
-    "whiteModelReset": "重置视角",
-    "whiteModelWireframe": "显示线框",
-    "whiteModelSolid": "显示实体",
-    "whiteModelLoading": "正在加载白模…",
-    "whiteModelUnavailable": "当前浏览器未启用 WebGL，无法显示白模。",
-    "whiteModelFailed": "白模加载失败，请稍后重试。",
-    "whiteModelSource": "模型来源："
+    "oversized": "原片不能超过 256 MiB"
   },
   "workspace": {
     "title": "我的工作区",

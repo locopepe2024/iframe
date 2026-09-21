@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../messages/en.json";
@@ -8,7 +8,7 @@ import { recreationApi, RecreationProject } from "@/lib/recreation";
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn() },
+  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
 }));
 
 const project: RecreationProject = {
@@ -23,10 +23,14 @@ const project: RecreationProject = {
 beforeEach(() => {
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
+  vi.mocked(recreationApi.media).mockResolvedValue({ media_id: "image", project_id: "source", kind: "evidence_frame", display_name: "Evidence", storage_path: "/image.png", sha256: "hash", created_at: 1, metadata: {} });
+  vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]);
+  vi.mocked(recreationApi.generationTasks).mockResolvedValue([]);
+  vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
     timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } });
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 
 async function open() {
   render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
@@ -63,5 +67,27 @@ describe("recreation confirmation", () => {
     expect(screen.getByText("One continuous shot")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
     await waitFor(() => expect(recreationApi.confirm).toHaveBeenCalledWith(project, []));
+  });
+
+  it("keeps the source video URL stable while analysis polling refreshes signatures", async () => {
+    vi.useFakeTimers();
+    const processing = { ...project, status: "analyzing" as const, analysis: null, source_url: "/source-initial.mp4" };
+    vi.mocked(recreationApi.list).mockResolvedValueOnce([processing]);
+    vi.mocked(recreationApi.get)
+      .mockResolvedValueOnce(processing)
+      .mockResolvedValueOnce({ ...project, source_url: "/source-rotated.mp4" });
+
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole("button", { name: /Original.mp4/ }));
+    await act(async () => { await Promise.resolve(); });
+    const initialSource = document.querySelector("video")?.getAttribute("src");
+    expect(initialSource).toContain("/source-initial.mp4");
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    expect(document.querySelector("video")?.getAttribute("src")).toBe(initialSource);
   });
 });

@@ -134,6 +134,31 @@ def test_user_configs_are_separate_and_secret_is_not_returned(tmp_path: Path):
     assert "sk-user-a-secret" not in raw
 
 
+def test_user_config_reports_runtime_uniart_availability_without_exposing_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = UserConfigStore(str(tmp_path / "users.db"), master_key="test-master-key")
+    user = identity("user-a", "profile-a")
+
+    monkeypatch.setenv("UNIART_API_KEY", "sk-shared-secret")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false")
+    unavailable = store.get_public(user)
+    assert unavailable["runtime_uniart_available"] is False
+
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "true")
+    shared = store.get_public(user)
+    assert shared["runtime_uniart_available"] is True
+    assert "sk-shared-secret" not in json.dumps(shared)
+
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false")
+    personal = store.update(user, UserConfigUpdate(UNIART_API_KEY="sk-personal-secret"))
+    assert personal["runtime_uniart_available"] is True
+    assert personal["secrets_configured"]["UNIART_API_KEY"] is True
+    assert "sk-personal-secret" not in json.dumps(personal)
+
+
 def test_user_config_uses_identity_scoped_key_without_master(tmp_path: Path):
     store = UserConfigStore(str(tmp_path / "users.db"), master_key="")
     user_a = identity("user-a", "profile-a")
