@@ -298,6 +298,7 @@
     "toastGenErrUnknown": "Unknown error",
     "toastSelected": "✓ Reference image updated",
     "toastSelectErr": "Failed to set reference",
+    "editVariant": "Edit a copy of this reference",
     "deleteVariant": "Delete reference image",
     "confirmDeleteVariant": "Delete this reference image? It will also be removed from saved shot selections.",
     "toastDeleted": "Reference image deleted",

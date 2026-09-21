@@ -298,6 +298,7 @@
     "toastGenErrUnknown": "未知错误",
     "toastSelected": "✓ 参考图已切换",
     "toastSelectErr": "切换失败",
+    "editVariant": "编辑参考图副本",
     "deleteVariant": "删除参考图",
     "confirmDeleteVariant": "删除这张参考图？已保存到分镜的对应选择也会一并移除。",
     "toastDeleted": "参考图已删除",

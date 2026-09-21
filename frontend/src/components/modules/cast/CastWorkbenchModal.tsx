@@ -20,7 +20,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
@@ -29,6 +30,8 @@ import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
+
+const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
 export type CastKind = "character" | "scene" | "prop";
 
@@ -260,6 +263,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
+    const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
     const [libraryReference, setLibraryReference] = useState<AssetLibraryReference | null>(null);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
     const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
@@ -532,6 +536,29 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
             toast.error(t("uploadFailed"), { body: String(err?.message || t("toastGenErrUnknown")) });
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleSaveEditedVariant = async (file: File) => {
+        if (!currentProject || !editingVariant || kind !== "character") return;
+        setUploading(true);
+        try {
+            const updated = await api.uploadAsset(
+                currentProject.id,
+                "character",
+                entity!.id,
+                file,
+                "reference_sheet",
+            );
+            updateProject(currentProject.id, updated);
+            setEditingVariant(null);
+            toast.success(t("uploadSuccess"));
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("uploadFailed"), { body: String(detail) });
+            throw err;
         } finally {
             setUploading(false);
         }
@@ -1249,6 +1276,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 >
                                                     {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
+                                                {kind === "character" && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={uploading}
+                                                        onClick={(e) => { e.stopPropagation(); setEditingVariant(v); }}
+                                                        aria-label={t("editVariant")}
+                                                        title={t("editVariant")}
+                                                        className="absolute bottom-[68px] right-12 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-primary/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                )}
                                                 {/* Selected badge */}
                                                 {isSelected && (
                                                     <div className={`absolute top-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground shadow-md ${accent.selectBadge}`}>
@@ -1316,6 +1355,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     </footer>
                 </motion.div>
             </motion.div>
+            {editingVariant && kind === "character" && (
+                <ImageEditor
+                    source={getAssetUrl(editingVariant.url)}
+                    title={`${entity?.name ?? "Character"} · ${t("editVariant")}`}
+                    onClose={() => setEditingVariant(null)}
+                    onSave={handleSaveEditedVariant}
+                />
+            )}
         </AnimatePresence>
     ), document.body);
 }
