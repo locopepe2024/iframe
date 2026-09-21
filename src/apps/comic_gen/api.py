@@ -39,6 +39,7 @@ import uuid
 import logging
 import re
 import traceback
+from urllib.parse import unquote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
@@ -62,10 +63,10 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
-from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
+from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
 from ...utils.uniart_catalog import normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
@@ -502,6 +503,71 @@ def upload_asset(
     except Exception as e:
         logger.exception(f"Error uploading asset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+_EDITOR_IMAGE_MAX_BYTES = 25 * 1024 * 1024
+
+
+@app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/variants/{variant_id}/content")
+def get_asset_variant_content(
+    script_id: str,
+    asset_type: str,
+    asset_id: str,
+    variant_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return an owner-visible image variant through the Studio origin.
+
+    Canvas editors cannot reliably read private COS images directly because a
+    displayable signed URL may still lack browser canvas CORS headers. Resolve
+    the stable variant ids server-side so this endpoint never becomes an
+    arbitrary URL proxy.
+    """
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        resolved, _ = pipeline._resolve_asset_library_reference(script, {
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "variant_id": variant_id,
+        })
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    if os.path.isfile(resolved):
+        if os.path.getsize(resolved) > _EDITOR_IMAGE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+        return FileResponse(resolved, headers=headers)
+
+    uploader = OSSImageUploader()
+    fetch_url = ""
+    if is_object_key(resolved):
+        fetch_url = uploader.sign_url_for_api(resolved)
+    elif resolved.startswith(("https://", "http://")) and uploader.is_configured:
+        parsed = urlparse(resolved)
+        probe = urlparse(uploader.sign_url_for_api("__iframe_editor_probe__"))
+        if parsed.hostname and parsed.hostname == probe.hostname:
+            fetch_url = uploader.sign_url_for_api(unquote(parsed.path.lstrip("/")))
+    if not fetch_url:
+        raise HTTPException(status_code=422, detail="Variant image storage is not editable")
+
+    try:
+        request = UrlRequest(fetch_url, headers={"User-Agent": "iFrame-Studio/1.0"})
+        with urlopen(request, timeout=30) as remote:
+            content_type = (remote.headers.get_content_type() or "").lower()
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=422, detail="Variant content is not an image")
+            data = remote.read(_EDITOR_IMAGE_MAX_BYTES + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Unable to read asset variant %s for editor: %s", variant_id, exc)
+        raise HTTPException(status_code=502, detail="Unable to load image for editing") from exc
+    if len(data) > _EDITOR_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+    return Response(data, media_type=content_type, headers=headers)
 
 
 class CreateProjectRequest(BaseModel):

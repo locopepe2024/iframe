@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { WorkbenchPanel } from "./CharacterWorkbench";
 import {
@@ -52,6 +52,16 @@ it("does not offer editing when a panel has no selected image", () => {
     render(<WorkbenchPanel {...baseProps} editImageUrl={undefined} onEditImage={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
+});
+
+it("uploads a new image directly from the static asset panel", async () => {
+    const onUploadImage = vi.fn().mockResolvedValue(undefined);
+    render(<WorkbenchPanel {...baseProps} onUploadImage={onUploadImage} />);
+    const file = new File(["image"], "actor.png", { type: "image/png" });
+
+    fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
+
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

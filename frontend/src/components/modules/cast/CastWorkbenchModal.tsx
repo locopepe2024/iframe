@@ -1357,7 +1357,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             </motion.div>
             {editingVariant && kind === "character" && (
                 <ImageEditor
-                    source={getAssetUrl(editingVariant.url)}
+                    source={api.assetVariantContentUrl(currentProject.id, "character", entity!.id, editingVariant.id)}
                     title={`${entity?.name ?? "Character"} · ${t("editVariant")}`}
                     onClose={() => setEditingVariant(null)}
                     onSave={handleSaveEditedVariant}

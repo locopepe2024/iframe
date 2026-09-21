@@ -7,6 +7,42 @@ from src.apps.comic_gen.models import Script, Character, Scene, Prop, Storyboard
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
+def test_asset_variant_content_serves_only_resolved_project_variant(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    image = tmp_path / 'owned.png'
+    image.write_bytes(b'png-bytes')
+    resolver = Mock(return_value=(str(image), {
+        'asset_type': 'character', 'asset_id': 'asset', 'variant_id': 'variant',
+    }))
+    fake_pipeline = Mock(get_script=Mock(return_value=SimpleNamespace(id='project')),
+                         _resolve_asset_library_reference=resolver)
+    monkeypatch.setattr(api, 'pipeline', fake_pipeline)
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+
+    response = api.get_asset_variant_content('project', 'character', 'asset', 'variant', user)
+
+    assert response.path == str(image)
+    assert response.headers['cache-control'] == 'private, no-store'
+    resolver.assert_called_once_with(fake_pipeline.get_script.return_value, {
+        'asset_type': 'character', 'asset_id': 'asset', 'variant_id': 'variant',
+    })
+
+
+def test_asset_variant_content_does_not_accept_unresolved_variant(monkeypatch):
+    from fastapi import HTTPException
+    from src.apps.comic_gen import api
+
+    fake_pipeline = Mock(get_script=Mock(return_value=SimpleNamespace(id='project')))
+    fake_pipeline._resolve_asset_library_reference.side_effect = api.InvalidAssetReference('not visible')
+    monkeypatch.setattr(api, 'pipeline', fake_pipeline)
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+
+    with pytest.raises(HTTPException) as error:
+        api.get_asset_variant_content('project', 'character', 'asset', 'foreign', user)
+    assert error.value.status_code == 404
+
+
 def test_workbench_import_resolves_owned_output_instead_of_preview_url(monkeypatch):
     from src.apps.comic_gen import api
 
