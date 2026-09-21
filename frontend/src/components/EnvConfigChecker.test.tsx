@@ -47,6 +47,27 @@ describe("EnvConfigChecker route boundaries", () => {
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
   });
 
+  it("does not block when shared runtime credentials are available", async () => {
+    history.replaceState(null, "", "#/recreation");
+    mocks.getUserConfig.mockResolvedValueOnce({
+      runtime_uniart_available: true,
+      secrets_configured: {},
+    });
+    render(<EnvConfigChecker />);
+    await waitFor(() => expect(mocks.getUserConfig).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("blocks when runtime credentials are unavailable", async () => {
+    history.replaceState(null, "", "#/recreation");
+    mocks.getUserConfig.mockResolvedValueOnce({
+      runtime_uniart_available: false,
+      secrets_configured: {},
+    });
+    render(<EnvConfigChecker />);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
+
   it("closes an already-open gate when navigating to the director", async () => {
     history.replaceState(null, "", "#/");
     mocks.getUserConfig.mockResolvedValueOnce({ secrets_configured: {} });

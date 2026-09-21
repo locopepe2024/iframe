@@ -21,6 +21,14 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   short-lived signed `/studio/media` URL at the configured public origin.
 - No ControlNet, OpenPose, Depth, Edge, pose-control, or 3D white-model field
   was added to the generation request.
+- `GET /user/config` now reports only a non-sensitive
+  `runtime_uniart_available` boolean. It is true for either an owner-scoped
+  encrypted key or an explicitly enabled shared runtime key; it does not copy
+  or expose the shared key as personal configuration.
+- Browser development now sends API requests through Next's same-origin
+  `/api-proxy`. This preserves the anonymous browser-profile cookie across
+  upload, analysis, and polling. Explicit API overrides, Tauri, and production
+  same-origin resolution retain their existing routing behavior.
 
 ### Runtime observations
 
@@ -44,13 +52,28 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   upload attempt. A no-reload server completed the same workflow. The exact
   reload trigger was not instrumented, so attributing the interruption to
   `output/` file changes remains unproven.
+- A real headless-browser workbench run at `#/recreation` observed:
+  - no required personal-configuration modal when shared runtime credentials
+    were available;
+  - source upload HTTP 201 and visible `已登记` state;
+  - analysis submission HTTP 202;
+  - terminal `review` state with 362 analyzed frame PTS values;
+  - no page exceptions;
+  - repeated cancelled video Range requests while the signed source URL was
+    refreshed. The media remained visible and analysis completed, so these are
+    recorded as browser request cancellations rather than failed analysis.
+- Before the same-origin change, the same browser script reproduced upload
+  HTTP 201 followed by analysis HTTP 404 `Recreation project not found`.
+  Backend access logs showed a valid analyze route, and the client used
+  cross-origin Axios without credentials; the anonymous owner cookie therefore
+  did not persist to the analysis request.
 
 ### Automated verification
 
-- Backend targeted tests: 124 passed, 1 skipped.
-- Backend full suite: 647 passed, 1 skipped.
-- Frontend logic tests: 174 passed.
-- Frontend UI tests: 193 passed.
+- Backend targeted Ref2V tests: 124 passed, 1 skipped.
+- Backend full suite after workbench fixes: 648 passed, 1 skipped.
+- Frontend logic tests: 177 passed.
+- Frontend UI tests: 195 passed.
 - Frontend typecheck: passed.
 - Frontend production build: passed. Next static-export rewrite warnings remain
   non-failing and pre-existing.
@@ -65,6 +88,10 @@ local disk/COS publication boundaries, cost gating, and regression coverage.
   media route through a provider-reachable HTTPS origin. Otherwise COS/OSS is
   required for local source and reference files.
 - Cost consent remains a hard gate and was exercised through the HTTP API.
+- Shared runtime credentials no longer falsely trigger the personal-key gate,
+  while the settings UI can still distinguish whether a personal key exists.
+- Anonymous local workbench ownership now remains stable across the ordinary
+  multi-request recreation workflow in browser development.
 
 ## Not yet proven
 

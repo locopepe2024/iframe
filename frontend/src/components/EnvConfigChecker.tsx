@@ -52,7 +52,7 @@ export default function EnvConfigChecker() {
     if (isDirectorRoute(window.location.hash)) return;
     try {
       const config = await api.getUserConfig();
-      const hasRequired = Boolean(config.secrets_configured?.UNIART_API_KEY);
+      const hasRequired = Boolean(config.runtime_uniart_available);
 
       if (!isDirectorRoute(window.location.hash) && !hasRequired) {
         setEnvRequired(true);
