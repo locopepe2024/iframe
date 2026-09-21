@@ -65,4 +65,3 @@ an explicit capability boundary until their source media contract is added.
 - `src/apps/comic_gen/pipeline.py`
 - `src/apps/comic_gen/api.py`
 - `tests/test_assembly_render_compiler.py`
-

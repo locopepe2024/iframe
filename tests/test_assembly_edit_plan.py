@@ -243,4 +243,3 @@ def test_series_plan_accepts_registered_episodes_and_preserves_legacy_none(pipel
     saved = pipeline.save_assembly_plan("series", series.id, plan)
     assert saved.scope == "series"
     assert series.assembly_plan.revision == 1
-
