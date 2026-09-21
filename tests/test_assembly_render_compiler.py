@@ -1,6 +1,8 @@
 """Assembly plan render compiler and endpoint contract tests."""
 
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -315,3 +317,106 @@ def test_explicit_render_endpoints_are_registered():
     }
     assert ("/projects/{script_id}/assembly-plan/render", "POST") in routes
     assert ("/series/{series_id}/assembly-plan/render", "POST") in routes
+
+
+def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg and ffprobe are required for the Assembly smoke test")
+
+    clips = []
+    project_ids = []
+    for index, color in enumerate(("red", "green", "blue")):
+        project_id = f"episode-{index + 1}"
+        relative = f"video/{color}.mp4"
+        source = Path("output") / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c={color}:s=160x90:d=1:r=24",
+                "-an",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(source),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        pipeline.scripts[project_id] = _project(project_id, relative)
+        project_ids.append(project_id)
+        clips.append(
+            _clip(
+                project_id,
+                index * 1_000,
+                (index + 1) * 1_000,
+                source_start_ms=0,
+                source_end_ms=1_000,
+            )
+        )
+
+    series = Series(
+        id="series-real-ffmpeg",
+        title="RGB timeline",
+        episode_ids=project_ids,
+        assembly_plan=_plan("series", clips, 3_000),
+        created_at=time.time(),
+        updated_at=time.time(),
+    )
+    pipeline.series_store[series.id] = series
+
+    rendered = pipeline.render_assembly_plan("series", series.id)
+    output = Path("output") / rendered.merged_video_url
+    duration = float(subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip())
+    assert duration == pytest.approx(3.0, abs=0.1)
+
+    samples = []
+    for timestamp in (0.5, 1.5, 2.5):
+        pixel = subprocess.run(
+            [
+                ffmpeg,
+                "-v",
+                "error",
+                "-ss",
+                str(timestamp),
+                "-i",
+                str(output),
+                "-vf",
+                "scale=1:1",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-",
+            ],
+            check=True,
+            capture_output=True,
+        ).stdout
+        samples.append(tuple(pixel[:3]))
+
+    assert samples[0][0] > samples[0][1] + 80
+    assert samples[1][1] > samples[1][0] + 60
+    assert samples[2][2] > samples[2][1] + 80
