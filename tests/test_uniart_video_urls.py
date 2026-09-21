@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from src.models import uniart
@@ -44,6 +45,50 @@ def test_video_material_storage_failure_prevents_submission(monkeypatch, tmp_pat
     image.write_bytes(b'image')
     with pytest.raises(RuntimeError, match='storage is not configured'):
         uniart.UniArtVideoModel({}).generate('walk', str(tmp_path / 'result.mp4'), img_path=str(image))
+
+
+def test_h3_ref2v_emits_video_reference_content_after_ordered_images(monkeypatch, tmp_path):
+    from src.utils import oss_utils
+    image = tmp_path / 'frame.png'
+    video = tmp_path / 'source.mp4'
+    image.write_bytes(b'image')
+    video.write_bytes(b'video')
+
+    class Storage:
+        is_configured = True
+
+        def upload_file(self, path, sub_path):
+            return f'materials/{Path(path).name}'
+
+        def sign_url_for_api(self, key):
+            return f'https://storage.example/{key}?signature=test'
+
+    monkeypatch.setattr(oss_utils, 'OSSImageUploader', Storage)
+    captured = {}
+
+    def post(_config, endpoint, body):
+        captured.update(endpoint=endpoint, body=body)
+        return {'task_id': 'h3-task'}
+
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_poll', lambda *args, **kwargs: {})
+    monkeypatch.setattr(uniart, '_download_result', lambda *args: None)
+    uniart.UniArtVideoModel({}).generate(
+        'recreate the shot',
+        str(tmp_path / 'result.mp4'),
+        model='minimax-h3-vip',
+        mode='reference2video',
+        ref_image_urls=[str(image)],
+        ref_video_urls=[str(video)],
+    )
+
+    assert captured['endpoint'] == '/videos'
+    assert captured['body']['mode'] == 'reference2video'
+    assert captured['body']['content'][1]['type'] == 'image_url'
+    assert captured['body']['content'][1]['role'] == 'reference_image'
+    assert captured['body']['content'][2]['type'] == 'video_url'
+    assert captured['body']['content'][2]['role'] == 'reference_video'
+    assert captured['body']['content'][2]['video_url']['url'].startswith('https://storage.example/')
 
 
 @pytest.mark.parametrize('model', ['minimax-h3-vip', 'seedance-2.5-vip', 'kling', 'vidu', 'wan', 'happyhorse', 'pixverse'])

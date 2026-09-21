@@ -414,6 +414,8 @@ def test_generation_plan_requires_explicit_inputs_and_preserves_order(service, v
     row = plan['shots'][0]
     assert [i['media_id'] for i in row['images']] == [ref['media_id'], product['media_id']]
     assert [i['label'] for i in row['images']] == ['<Picture 1>', '<Picture 2>']
+    assert plan['source_video'] == {'media_id': p['source_media_id'], 'sha256': p['source_fingerprint'], 'label': '<Video 1>'}
+    assert '<Video 1>' in row['prompt']
     assert Fraction(row['target_duration']) == (shot['end_pts'] - shot['start_pts']) * Fraction(p['analysis']['time_base'])
     assert 'overall_soundscape:\nN/A' in row['prompt']
     assert service.get(p['id'])['revision'] == p['revision']
@@ -502,14 +504,17 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
     submitted = service.submit_generation(p['id'], p['revision'], generation_durations={shot['id']: 5}, accept_cost=True)
     assert len(submitted['tasks']) == 1
     task_id = submitted['tasks'][0]['task_id']
+    assert submitted['tasks'][0]['source_media_id'] == p['source_media_id']
+    assert submitted['tasks'][0]['source_fingerprint'] == p['source_fingerprint']
 
     def generate(_self, prompt, output_path, **kwargs):
-        assert '<Picture 1>' in prompt and '<Picture 2>' in prompt
+        assert '<Picture 1>' in prompt and '<Picture 2>' in prompt and '<Video 1>' in prompt
         assert kwargs['model'] == 'uniart/minimax-h3-vip'
         assert kwargs['mode'] == 'reference2video'
         assert kwargs['duration'] == 5
         assert kwargs['generate_audio'] is False
         assert len(kwargs['ref_image_urls']) == 2
+        assert kwargs['ref_video_urls'] == [str((Path('output') / p['source_url']).resolve())]
         kwargs['on_task_submitted']('provider-task-1')
         Path(output_path).write_bytes(b'fake-mp4')
         return output_path, 0.1
@@ -521,6 +526,51 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
     assert done['provider_task_id'] == 'provider-task-1'
     assert done['output_media']['kind'] == 'generated_video'
     assert service.search_media(project_id=p['id'], kind='generated_video')['items']
+
+
+def test_generation_worker_rejects_changed_source_before_provider_submission(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    source_path = Path('output') / project['source_url']
+    source_path.write_bytes(b'changed-after-submit')
+    provider = Mock()
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', provider)
+
+    service.process_generation_task(submitted['tasks'][0]['task_id'], {'api_key': 'never-persisted'})
+    failed = service.generation_task(submitted['tasks'][0]['task_id'])
+    assert failed['status'] == 'failed'
+    assert 'source fingerprint' in failed['error']
+    provider.assert_not_called()
+
+
+def test_generation_worker_can_use_signed_disk_media_url(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    monkeypatch.setenv('UNIART_MEDIA_BASE_URL', 'https://iframe.example.test')
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-only')
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        assert kwargs['ref_image_urls'][0].startswith('https://iframe.example.test/studio/media/')
+        assert kwargs['ref_video_urls'][0].startswith('https://iframe.example.test/studio/media/')
+        assert all('signature=' in value for value in kwargs['ref_image_urls'] + kwargs['ref_video_urls'])
+        Path(output_path).write_bytes(b'disk-url-mp4')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    service.process_generation_task(submitted['tasks'][0]['task_id'], {'api_key': 'never-persisted'})
+    assert service.generation_task(submitted['tasks'][0]['task_id'])['status'] == 'completed'
 
 
 def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service, video, monkeypatch):
@@ -560,6 +610,35 @@ def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service,
     recovered = service.generation_task(task_id)
     assert recovered['status'] == 'completed', recovered
     assert recovered['provider_task_id'] == 'provider-recovered'
+
+
+def test_generation_worker_recovers_legacy_saved_provider_without_new_source_snapshot(service, video, monkeypatch):
+    project = completed(service, video)
+    project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
+    reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
+    shot = project['timeline']['shots'][0]
+    project = service.bind_shot(project['id'], shot['id'], project['revision'], project['analysis_id'],
+                                reference['media_id'], None, '', 'Static shot.')
+    submitted = service.submit_generation(project['id'], project['revision'],
+                                          generation_durations={shot['id']: 5}, accept_cost=True)
+    task_id = submitted['tasks'][0]['task_id']
+    with service.db() as db:
+        task = service._generation_task(db, task_id)
+        task.pop('source_media_id')
+        task.pop('source_fingerprint')
+        task.update(status='processing', provider_task_id='legacy-provider-task', updated_at=time.time())
+        db.execute('UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?',
+                   (json.dumps(task), task_id, service.user.owner_profile_id))
+
+    def generate(_self, _prompt, output_path, **kwargs):
+        assert kwargs['resume_task_id'] == 'legacy-provider-task'
+        assert 'ref_image_urls' not in kwargs and 'ref_video_urls' not in kwargs
+        Path(output_path).write_bytes(b'legacy-recovered-mp4')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtVideoModel.generate', generate)
+    service.process_generation_task(task_id, {'api_key': 'never-persisted'})
+    assert service.generation_task(task_id)['status'] == 'completed'
 
 
 def test_generation_worker_marks_interrupted_submission_failed_without_resubmitting(service, video, monkeypatch):
