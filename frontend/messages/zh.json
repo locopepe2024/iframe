@@ -1152,6 +1152,22 @@
     "directorRefineFailed": "导演设定修订失败",
     "directorApplyFailed": "导演设定保存失败",
     "directorApplied": "导演设定已确认",
+    "directorStatus": {
+      "analyzing": "正在分析剧本并生成导演设定…",
+      "refining": "正在根据修改要求更新导演设定…",
+      "applying": "正在保存导演设定…",
+      "analyzed": "导演设定分析完成，草稿已更新。",
+      "refined": "导演设定修订完成，草稿已更新。",
+      "applied": "导演设定已确认并保存。",
+      "failed": "导演设定操作失败：{message}",
+      "jobState": {
+        "queued": "排队中",
+        "running": "处理中",
+        "processing": "处理中",
+        "completed": "已完成",
+        "failed": "失败"
+      }
+    },
     "inheritsBaseline": "继承系列基线：",
     "inheritHint": "本集风格自动继承系列设定，无需重复定义",
     "unlockEdit": "解锁本集编辑",
@@ -1433,6 +1449,7 @@
     },
     "exportTitle": "导出最终视频",
     "exportSubtitle": "已选定 {ready} / {total} 帧，准备合并为最终 MP4。",
+    "partialExportWarning": "还有 {missing} 帧没有可用视频；点击合并将先跳过这些帧。",
     "framesLabel": "帧",
     "framesReadyLabel": "已完成"
   },

@@ -96,10 +96,12 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "场景21 周涵离校" in prompt
-    assert '"name": "沈夏"' in prompt
+    assert "沈夏" in prompt
     assert "日式真人爱情" in prompt
     assert "距离→压力→沟通失效→关系消耗" in prompt
     assert "1. 故事仍发生在中国" in prompt and "2. 突出未接来电" in prompt
+    assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
+    assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"
 
 

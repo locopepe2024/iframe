@@ -2,7 +2,12 @@ import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
-import { analyzeDirectorProfile, refineDirectorProfile, type DirectorProfileDraft } from "./directorProfile";
+import {
+    analyzeDirectorProfile,
+    refineDirectorProfile,
+    type DirectorProfileDraft,
+    type DirectorProfileJobStatusListener,
+} from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -805,13 +810,15 @@ export const api = {
         return res.data;
     },
 
-    analyzeDirectorProfile: (scriptId: string) => analyzeDirectorProfile(API_URL, scriptId),
+    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener) =>
+        analyzeDirectorProfile(API_URL, scriptId, onStatus),
 
     refineDirectorProfile: (
         scriptId: string,
         draft: DirectorProfileDraft,
         instructions: string[],
-    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions),
+        onStatus?: DirectorProfileJobStatusListener,
+    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
