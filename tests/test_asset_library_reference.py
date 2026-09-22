@@ -111,6 +111,75 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
     assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
 
 
+def test_explicit_character_and_watch_mentions_compile_in_prompt_order(tmp_path, monkeypatch):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    output = tmp_path / "output"
+    character_path = output / "users" / "owner" / "character.png"
+    watch_path = output / "users" / "owner" / "watch.png"
+    character_path.parent.mkdir(parents=True)
+    character_path.write_bytes(b"character")
+    watch_path.write_bytes(b"watch")
+
+    character = Character(
+        id="actor", name="Actor", description="", owner_user_id="user", owner_profile_id="owner"
+    )
+    character.reference_sheet.image_variants.append(
+        ImageVariant(id="actor-front", url=str(character_path.relative_to(output)))
+    )
+    watch = Prop(
+        id="watch", name="Watch", description="", owner_user_id="user", owner_profile_id="owner"
+    )
+    watch.image_asset.variants.append(
+        ImageVariant(id="watch-front", url=str(watch_path.relative_to(output)))
+    )
+    pipeline.library_store.characters = [character]
+    pipeline.library_store.props = [watch]
+    pipeline.asset_generator = Mock()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+
+    references = [
+        {"mention_id": "actor_ref", "asset_type": "character", "asset_id": "actor", "variant_id": "actor-front"},
+        {"mention_id": "watch_ref", "asset_type": "prop", "asset_id": "watch", "variant_id": "watch-front"},
+    ]
+    _, task_id = pipeline.create_asset_generation_task(
+        "project",
+        target.id,
+        "scene",
+        prompt="Keep @{actor_ref}; put @{watch_ref} on the left wrist.",
+        references=references,
+    )
+    assert pipeline.asset_generation_tasks[task_id]["params"]["references"] == references
+
+    pipeline.process_asset_generation_task(task_id)
+
+    call = pipeline.asset_generator.generate_scene.call_args
+    assert call.kwargs["prompt"] == "Keep <Picture 1>; put <Picture 2> on the left wrist."
+    assert call.kwargs["reference_image_url"] is None
+    assert call.kwargs["reference_image_urls"] == [str(character_path), str(watch_path)]
+    assert call.kwargs["reference_provenance_list"] == [
+        {"asset_type": "character", "asset_id": "actor", "variant_id": "actor-front"},
+        {"asset_type": "prop", "asset_id": "watch", "variant_id": "watch-front"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "prompt,references,error",
+    [
+        ("Use @watch", [], "unresolved @"),
+        ("Use <Picture 1>", [], "provider picture labels"),
+        ("No image", [{"mention_id": "watch_ref", "asset_type": "prop", "asset_id": "watch", "variant_id": "front"}], "not mentioned"),
+    ],
+)
+def test_invalid_explicit_mentions_fail_before_task_creation(tmp_path, prompt, references, error):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    with pytest.raises(InvalidAssetReference, match=error):
+        pipeline.create_asset_generation_task(
+            "project", target.id, "scene", prompt=prompt, references=references
+        )
+    assert pipeline.asset_generation_tasks == {}
+
+
 def test_library_reference_rejects_foreign_asset_and_wrong_variant(tmp_path, monkeypatch):
     pipeline, target = _pipeline_with_assets(tmp_path)
     foreign = Prop(

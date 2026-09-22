@@ -60,6 +60,7 @@ from .models import (
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
+    AssetPromptReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
@@ -333,6 +334,7 @@ class GenerateAssetRequest(BaseModel):
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
     reference: Optional[AssetLibraryReference] = None
+    references: List[AssetPromptReference] = Field(default_factory=list, max_length=9)
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -1104,6 +1106,7 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.reference,
+            request.references,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -3099,6 +3102,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.model_name,
             request.aspect_ratio,
             request.reference,
+            request.references,
         )
         
         # Add background processing

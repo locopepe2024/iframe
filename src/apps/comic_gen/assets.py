@@ -100,14 +100,22 @@ class AssetGenerator:
         return os.path.join("output", reference)
 
     @staticmethod
-    def _reference_metadata(reference_provenance: Dict[str, str] = None) -> Dict[str, str]:
-        if not reference_provenance:
-            return {}
-        return {
-            "reference_asset_type": reference_provenance["asset_type"],
-            "reference_asset_id": reference_provenance["asset_id"],
-            "reference_variant_id": reference_provenance["variant_id"],
-        }
+    def _reference_metadata(
+        reference_provenance: Dict[str, str] = None,
+        reference_provenance_list: List[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        ordered = []
+        if reference_provenance:
+            ordered.append(reference_provenance)
+        ordered.extend(reference_provenance_list or [])
+        metadata: Dict[str, Any] = {"reference_inputs": ordered} if ordered else {}
+        if reference_provenance:
+            metadata.update({
+                "reference_asset_type": reference_provenance["asset_type"],
+                "reference_asset_id": reference_provenance["asset_id"],
+                "reference_variant_id": reference_provenance["variant_id"],
+            })
+        return metadata
 
     def generate_character(
         self,
@@ -124,6 +132,8 @@ class AssetGenerator:
         reference_image_url: str = None,
         use_reference_image: bool = True,
         reference_provenance: Dict[str, str] = None,
+        reference_image_urls: List[str] = None,
+        reference_provenance_list: List[Dict[str, str]] = None,
     ) -> Character:
         """
         Generates character assets based on generation_type.
@@ -159,6 +169,8 @@ class AssetGenerator:
                 reference_args = {}
                 if reference:
                     reference_args["ref_image_path"] = self._reference_path(reference)
+                if reference_image_urls:
+                    reference_args["ref_image_paths"] = [self._reference_path(item) for item in reference_image_urls]
                 effective_prompt = prompt if prompt else build_reference_sheet_prompt(character.name, character.description)
                 if positive_prompt and positive_prompt not in effective_prompt:
                     effective_prompt = append_style_suffix(effective_prompt, positive_prompt)
@@ -196,7 +208,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=effective_prompt,
                             source_origin="generation",
-                            **self._reference_metadata(reference_provenance),
+                            **self._reference_metadata(reference_provenance, reference_provenance_list),
                         )
                         character.reference_sheet.image_variants.append(variant)
 
@@ -259,6 +271,7 @@ class AssetGenerator:
                     if reference_image_url
                     else None
                 )
+                extra_ref_image_paths = [self._reference_path(item) for item in (reference_image_urls or [])]
 
                 # Check for base character reference (for variants)
                 if character.base_character_id:
@@ -315,7 +328,7 @@ class AssetGenerator:
                         # Select model: use I2I model (wan2.6-image) when reference image is provided
                         effective_model_name = model_name
                         effective_generation_prompt = generation_prompt
-                        if ref_image_path:
+                        if ref_image_path or extra_ref_image_paths:
                             # Override to I2I model when using reference image
                             effective_model_name = i2i_model_name or "wan2.6-image"
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
@@ -324,7 +337,7 @@ class AssetGenerator:
                             effective_generation_prompt = bind_character_reference_prompt(generation_prompt)
                             logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
                         
-                        self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size)
+                        self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, ref_image_paths=extra_ref_image_paths, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size)
                         
                         rel_fullbody_path = os.path.relpath(fullbody_path, "output")
                         
@@ -340,7 +353,7 @@ class AssetGenerator:
                             created_at=time.time(),
                             prompt_used=effective_generation_prompt,
                             source_origin="generation",
-                            **self._reference_metadata(reference_provenance),
+                            **self._reference_metadata(reference_provenance, reference_provenance_list),
                         )
                         character.full_body_asset.variants.insert(0, variant) # Prepend new variants
                         
@@ -672,6 +685,8 @@ class AssetGenerator:
         prompt: str = None,
         reference_image_url: str = None,
         reference_provenance: Dict[str, str] = None,
+        reference_image_urls: List[str] = None,
+        reference_provenance_list: List[Dict[str, str]] = None,
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
@@ -702,6 +717,8 @@ class AssetGenerator:
                 reference_args = {}
                 if reference_image_url:
                     reference_args["ref_image_path"] = self._reference_path(reference_image_url)
+                if reference_image_urls:
+                    reference_args["ref_image_paths"] = [self._reference_path(item) for item in reference_image_urls]
                 image_path, _ = self._get_model_for(model_name).generate(
                     prompt,
                     output_path,
@@ -724,7 +741,7 @@ class AssetGenerator:
                     created_at=time.time(),
                     prompt_used=prompt,
                     source_origin="generation",
-                    **self._reference_metadata(reference_provenance),
+                    **self._reference_metadata(reference_provenance, reference_provenance_list),
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
@@ -765,6 +782,8 @@ class AssetGenerator:
         prompt: str = None,
         reference_image_url: str = None,
         reference_provenance: Dict[str, str] = None,
+        reference_image_urls: List[str] = None,
+        reference_provenance_list: List[Dict[str, str]] = None,
     ) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
@@ -791,6 +810,8 @@ class AssetGenerator:
                 reference_args = {}
                 if reference_image_url:
                     reference_args["ref_image_path"] = self._reference_path(reference_image_url)
+                if reference_image_urls:
+                    reference_args["ref_image_paths"] = [self._reference_path(item) for item in reference_image_urls]
                 image_path, _ = self._get_model_for(model_name).generate(
                     prompt,
                     output_path,
@@ -813,7 +834,7 @@ class AssetGenerator:
                     created_at=time.time(),
                     prompt_used=prompt,
                     source_origin="generation",
-                    **self._reference_metadata(reference_provenance),
+                    **self._reference_metadata(reference_provenance, reference_provenance_list),
                 )
                 prop.image_asset.variants.insert(0, variant)
                 
