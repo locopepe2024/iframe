@@ -6,6 +6,7 @@ import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "luc
 import { api } from "@/lib/api";
 import type { Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
+import { getAssetUrl } from "@/lib/utils";
 import { toast } from "@/store/toastStore";
 import { characterImageUrl, characterVariants } from "@/lib/characterImage";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
@@ -48,13 +49,19 @@ interface RenderGroup {
 
 /** 取图：character 走 characterImageUrl（reference_sheet→full_body→legacy）；scene/prop 用 image_asset。 */
 function getImageUrl(asset: Character | Scene | Prop, type: AssetTab): string | undefined {
-  if (type === "characters") return characterImageUrl(asset as Character);
+  if (type === "characters") {
+    const raw = characterImageUrl(asset as Character);
+    return raw ? getAssetUrl(raw) : undefined;
+  }
   const a = asset as Scene | Prop;
+  let raw: string | undefined;
   if (a.image_asset?.variants?.length) {
     const sel = a.image_asset.variants.find((v) => v.id === a.image_asset?.selected_id);
-    return sel?.url || a.image_asset.variants[0]?.url;
+    raw = sel?.url || a.image_asset.variants[0]?.url;
+  } else {
+    raw = a.image_url;
   }
-  return a.image_url;
+  return raw ? getAssetUrl(raw) : undefined;
 }
 
 function variantCount(asset: Character | Scene | Prop, type: AssetTab): number {

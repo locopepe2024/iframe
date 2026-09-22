@@ -11,6 +11,7 @@ import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
+import { getAssetUrl } from "@/lib/utils";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -163,7 +164,7 @@ export default function AssetInspector({
   }, []);
 
   const activeVariant = variants.find((v) => v.id === activeVariantId) ?? variants[0];
-  const heroUrl = activeVariant?.url ?? fallbackUrl(asset, type);
+  const heroUrl = getAssetUrl(activeVariant?.url ?? fallbackUrl(asset, type));
   const prompt = activeVariant?.prompt_used ?? "";
 
   // 元数据行（数据驱动）：先放现有四项，再在字段存在时追加 SEED/MODEL/SIZE。
@@ -380,7 +381,7 @@ export default function AssetInspector({
                       on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
                     }`}
                   >
-                    <img src={v.url} alt={t("variantAlt")} className="w-full h-full object-cover" />
+                    <img src={getAssetUrl(v.url)} alt={t("variantAlt")} className="w-full h-full object-cover" />
                   </button>
                 );
               })}

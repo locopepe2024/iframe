@@ -4,7 +4,7 @@ import AssetLibraryPage from './AssetLibraryPage';
 const mocked = vi.hoisted(() => ({
   getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), error: vi.fn(),
 }));
-vi.mock('@/lib/api', () => ({ api: mocked }));
+vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '' }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
 vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
@@ -30,6 +30,28 @@ it('retains referenced assets and explains the deletion conflict', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'deleteNamed Test character' }));
   await waitFor(() => expect(mocked.error).toHaveBeenCalledWith('deleteInUse'));
   expect(screen.getByText('Test character')).toBeInTheDocument();
+});
+
+it('resolves local variant paths before rendering library previews', async () => {
+  mocked.getAssetLibraryIndex.mockResolvedValue({
+    schema_version: 1,
+    project_id: 'library',
+    assets: [{
+      asset_type: 'scene',
+      asset_id: 'night-train',
+      name: '夜间火车车厢',
+      source_scope: 'series',
+      source_container_id: 'series-1',
+      source_name: '投稿系列',
+      selected_variant_id: 'variant-1',
+      variants: [{ id: 'variant-1', url: 'assets/scenes/night-train.png' }],
+    }],
+  });
+  render(<AssetLibraryPage />);
+  expect(await screen.findByRole('img', { name: '夜间火车车厢' })).toHaveAttribute(
+    'src',
+    '/files/assets/scenes/night-train.png',
+  );
 });
 
 it('opens recreation media from the library and returns to semantic assets', async () => {
