@@ -25,7 +25,7 @@ import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { resolveModelId } from "@/lib/modelCatalog";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -276,14 +276,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
     // would bypass the refreshed selector and submit the retired SKU anyway.
-    // Keep the legacy local fallback only when the project has no model setting
-    // at all, so older projects still behave as they did before the catalog
-    // became runtime-authoritative.
     const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
-    const selectedModelId = requestedModelId
-        ? resolveModelId("t2i", requestedModelId, "project_settings")
-        : "wan2.1-t2i";
-    const isGptImage2 = selectedModelId === "gpt-image-2";
+    const selectedModelId = resolveAssetGenerationModel(requestedModelId);
+    const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);

@@ -1590,6 +1590,7 @@
     "loadingProject": "加载项目中...",
     "noItemsFound": "未找到{type}",
     "genFailed": "生成失败，请稍后重试",
+    "genFailedDetail": "生成失败：{error}",
     "pollFailed": "轮询任务状态失败: {error}",
     "startGenFailed": "启动生成任务失败: {error}",
     "confirmDelete": "确定要删除此{type}吗？",

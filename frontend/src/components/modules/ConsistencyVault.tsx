@@ -14,6 +14,7 @@ import UploadAssetModal from "../modals/UploadAssetModal";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -30,6 +31,10 @@ export default function ConsistencyVault() {
     const generatingTasks = useProjectStore((state) => state.generatingTasks || []); // Fallback to empty array if not defined yet
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
+
+    const taskFailureMessage = (error?: unknown) => error
+        ? tv("genFailedDetail", { error: String(error) })
+        : tv("genFailed");
 
     // Store ID and Type instead of full object to ensure reactivity
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -97,7 +102,7 @@ export default function ConsistencyVault() {
                 applyStyle,
                 negativePrompt,
                 batchSize,
-                currentProject.model_settings?.t2i_model
+                resolveAssetGenerationModel(currentProject.model_settings?.t2i_model)
             );
 
             const taskId = response._task_id;
@@ -123,7 +128,7 @@ export default function ConsistencyVault() {
                         } else if (status.status === "failed") {
                             clearInterval(pollInterval);
                             console.error("Asset generation failed:", status.error);
-                            alert(tv('genFailed', { error: status.error || '' }));
+                            alert(taskFailureMessage(status.error));
 
                             // Also refresh project to show updated status
                             try {
@@ -266,7 +271,7 @@ export default function ConsistencyVault() {
                             console.log(`[Video Polling] ${generationType} generated successfully`);
                         } else if (status.status === "failed") {
                             clearInterval(pollInterval);
-                            alert(tv('genFailed', { error: status.error || '' }));
+                            alert(taskFailureMessage(status.error));
                             if (removeGeneratingTask) {
                                 removeGeneratingTask(assetId, generationType);
                             }
