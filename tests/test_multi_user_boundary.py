@@ -365,6 +365,30 @@ def test_studio_media_urls_are_owner_scoped_and_signed(tmp_path: Path, monkeypat
     assert getattr(exc_info.value, "status_code", None) == 401
 
 
+def test_legacy_object_key_uses_owner_scoped_local_media_when_available(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-signing-key")
+    monkeypatch.setenv("LUMENX_COS_KEY_PREFIX", "lumenx")
+    owner_key = studio_owner_key("profile-a")
+    stored_path = "lumenx/assets/scenes/night-train.png"
+    media_path = tmp_path / "output" / "users" / owner_key / "studio" / "assets" / "scenes" / "night-train.png"
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"image")
+
+    signed = sign_studio_media_paths({"url": stored_path}, "profile-a")["url"]
+    assert signed.startswith(f"/studio/media/{owner_key}/assets/scenes/night-train.png?")
+    query = dict(part.split("=", 1) for part in signed.split("?", 1)[1].split("&"))
+    resolved = verify_studio_media(
+        owner_key,
+        "assets/scenes/night-train.png",
+        int(query["expires"]),
+        query["signature"],
+    )
+    assert Path(resolved).read_bytes() == b"image"
+
+
 def test_studio_uniart_config_is_request_scoped():
     token_a = set_studio_uniart_config(
         {"api_key": "sk-user-a", "base_url": "https://a.example/v1"}

@@ -187,6 +187,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path.startswith("/recreation/")
         or path == "/library"
         or path.startswith("/library/")
+        or path == "/asset-index"
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")

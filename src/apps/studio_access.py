@@ -111,6 +111,43 @@ def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int =
     )
 
 
+def _local_studio_path_for_object_key(
+    stored_path: str,
+    owner_profile_id: str,
+) -> str:
+    """Map a legacy object key to the owner's local Studio copy when present.
+
+    Older asset records keep the COS key (usually ``lumenx/assets/...``) even
+    when generation also retained the file in the owner-scoped Studio tree.
+    In local-only deployments there is no object-storage signer to turn that
+    key into a browser URL.  Resolve only the configured object-key prefixes
+    and only inside the authenticated owner's directory; otherwise preserve
+    the original value for the COS signer or other URL handling.
+    """
+    normalized = stored_path.replace("\\", "/").lstrip("/")
+    prefixes = {
+        value.strip().strip("/ ")
+        for value in (
+            os.getenv("LUMENX_COS_KEY_PREFIX", "lumenx"),
+            os.getenv("OSS_BASE_PATH", "lumenx"),
+        )
+        if value and value.strip().strip("/ ")
+    }
+    prefix = next(
+        (candidate for candidate in prefixes if normalized.startswith(f"{candidate}/")),
+        None,
+    )
+    if not prefix:
+        return stored_path
+
+    relative = normalized[len(prefix) + 1 :]
+    owner_root = os.path.realpath(studio_owner_dir(owner_profile_id))
+    candidate = os.path.realpath(os.path.join(owner_root, relative))
+    if not candidate.startswith(owner_root + os.sep) or not os.path.isfile(candidate):
+        return stored_path
+    return os.path.relpath(candidate, "output")
+
+
 def verify_studio_media(owner_key: str, relative_path: str, expires: int, signature: str) -> str:
     if len(owner_key) != 24 or any(char not in "0123456789abcdef" for char in owner_key):
         raise HTTPException(status_code=404, detail="Media not found")
@@ -162,7 +199,8 @@ def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
 
 def sign_studio_media_paths(value: Any, owner_profile_id: str) -> Any:
     if isinstance(value, str):
-        return studio_media_url(owner_profile_id, value)
+        local_path = _local_studio_path_for_object_key(value, owner_profile_id)
+        return studio_media_url(owner_profile_id, local_path)
     if isinstance(value, list):
         return [sign_studio_media_paths(item, owner_profile_id) for item in value]
     if isinstance(value, dict):

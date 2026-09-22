@@ -221,5 +221,11 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
                 }],
             }
             assert client.get("/projects/missing/asset-index").status_code == 404
+            library_response = client.get("/asset-index")
+            assert library_response.status_code == 200
+            library_assets = library_response.json()["assets"]
+            assert [(item["source_scope"], item["asset_id"]) for item in library_assets] == [
+                ("project", "actor"),
+            ]
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
