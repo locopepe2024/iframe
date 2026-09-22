@@ -141,6 +141,39 @@ def test_asset_reference_index_keeps_legacy_character_variants_readable():
     assert [item.id for item in index.assets[0].variants] == ["legacy-full"]
 
 
+def test_asset_library_index_projects_each_owned_container_without_effective_scope_shadowing():
+    project = Script(
+        id="standalone",
+        title="Standalone",
+        original_text="text",
+        owner_profile_id="owner",
+        props=[_prop("watch", "Project watch", "project-watch")],
+        created_at=0,
+        updated_at=0,
+    )
+    project.props[0].owner_profile_id = "owner"
+    series = Series(
+        id="series",
+        title="Series",
+        owner_profile_id="owner",
+        characters=[_character("actor", "Series actor", "series-actor")],
+        created_at=0,
+        updated_at=0,
+    )
+    series.characters[0].owner_profile_id = "owner"
+    global_scene = _scene("stage", "Global stage", "global-stage")
+    global_scene.owner_profile_id = "owner"
+
+    index = _pipeline(project, series, GlobalAssetLibrary(scenes=[global_scene])).get_asset_library_reference_index("owner")
+
+    assert [(item.source_scope, item.source_container_id, item.source_name, item.asset_id) for item in index.assets] == [
+        ("series", "series", "Series", "actor"),
+        ("project", "standalone", "Standalone", "watch"),
+        ("global", None, None, "stage"),
+    ]
+    assert index.assets[1].selected_variant_id == "project-watch"
+
+
 def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
     from fastapi.testclient import TestClient
 
@@ -178,8 +211,11 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
                     "asset_type": "character",
                     "asset_id": "actor",
                     "name": "Actor",
+                    "description": "Actor",
+                    "starred": False,
                     "source_scope": "episode",
                     "source_container_id": "owned-project",
+                    "source_name": "Owned",
                     "selected_variant_id": "actor-view",
                     "variants": [project.characters[0].reference_sheet.image_variants[0].model_dump()],
                 }],

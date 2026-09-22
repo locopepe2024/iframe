@@ -1505,6 +1505,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             assets: List[Any],
             source_scope: str,
             source_container_id: Optional[str],
+            source_name: Optional[str],
             seen: set,
         ) -> None:
             for asset in assets:
@@ -1515,8 +1516,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                     asset_type=asset_type,
                     asset_id=asset.id,
                     name=asset.name,
+                    description=getattr(asset, "description", "") or "",
+                    starred=bool(getattr(asset, "starred", False)),
                     source_scope=source_scope,
                     source_container_id=source_container_id,
+                    source_name=source_name,
                     selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
                     variants=self._asset_image_variants(asset, asset_type),
                 ))
@@ -1527,18 +1531,52 @@ class ComicGenPipeline(StudioOwnerMixin):
             ("prop", "props"),
         ):
             seen: set = set()
-            append_scope(asset_type, getattr(script, attr), "episode", script.id, seen)
+            append_scope(asset_type, getattr(script, attr), "episode", script.id, script.title, seen)
             if series:
-                append_scope(asset_type, getattr(series, attr), "series", series.id, seen)
+                append_scope(asset_type, getattr(series, attr), "series", series.id, series.title, seen)
             append_scope(
                 asset_type,
                 self._library_list_for_type(asset_type, script.owner_profile_id),
                 "global",
                 None,
+                None,
                 seen,
             )
 
         return AssetReferenceIndex(project_id=script.id, assets=entries)
+
+    def get_asset_library_reference_index(self, owner_profile_id: Optional[str] = None) -> AssetReferenceIndex:
+        """Return the normalized cross-container asset view for the library."""
+        entries: List[AssetReferenceIndexEntry] = []
+
+        def append_container(container: Any, scope: str, container_id: Optional[str], name: Optional[str]) -> None:
+            for asset_type, attr in (("character", "characters"), ("scene", "scenes"), ("prop", "props")):
+                for asset in getattr(container, attr, []) or []:
+                    entries.append(AssetReferenceIndexEntry(
+                        asset_type=asset_type,
+                        asset_id=asset.id,
+                        name=asset.name,
+                        description=getattr(asset, "description", "") or "",
+                        starred=bool(getattr(asset, "starred", False)),
+                        source_scope=scope,
+                        source_container_id=container_id,
+                        source_name=name,
+                        selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
+                        variants=self._asset_image_variants(asset, asset_type),
+                    ))
+
+        for series in self.list_series(owner_profile_id):
+            append_container(series, "series", series.id, series.title)
+        for script in self.list_scripts(owner_profile_id):
+            if not script.series_id:
+                append_container(script, "project", script.id, script.title)
+        global_pool = GlobalAssetLibrary(
+            characters=self._library_list_for_type("character", owner_profile_id),
+            scenes=self._library_list_for_type("scene", owner_profile_id),
+            props=self._library_list_for_type("prop", owner_profile_id),
+        )
+        append_container(global_pool, "global", None, None)
+        return AssetReferenceIndex(project_id="library", assets=entries)
 
     @staticmethod
     def _resolve_stored_reference_value(value: str, owner_profile_id: Optional[str]) -> str:

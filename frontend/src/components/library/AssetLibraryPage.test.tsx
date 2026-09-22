@@ -2,8 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import AssetLibraryPage from './AssetLibraryPage';
 const mocked = vi.hoisted(() => ({
-  listSeries: vi.fn().mockResolvedValue([]), getProjects: vi.fn().mockResolvedValue([]),
-  listLibraryAssets: vi.fn(), deleteLibraryAsset: vi.fn(), error: vi.fn(),
+  getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), error: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
@@ -13,13 +12,13 @@ vi.mock('./AssetInspector', () => ({ default: () => <div>inspector</div> }));
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
   vi.clearAllMocks();
-  mocked.listLibraryAssets.mockResolvedValue({ characters: [{ id: 'character-1', name: 'Test character' }], scenes: [], props: [] });
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, variants: [] }] });
 });
 it('deletes a library character without selecting its card', async () => {
   mocked.deleteLibraryAsset.mockResolvedValue({ status: 'deleted' });
   render(<AssetLibraryPage />);
   const button = await screen.findByRole('button', { name: 'deleteNamed Test character' });
-  mocked.listLibraryAssets.mockResolvedValue({ characters: [], scenes: [], props: [] });
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [] });
   fireEvent.click(button);
   await waitFor(() => expect(mocked.deleteLibraryAsset).toHaveBeenCalledWith('character', 'character-1'));
   await waitFor(() => expect(screen.queryByText('Test character')).not.toBeInTheDocument());

@@ -90,8 +90,11 @@ export interface AssetReferenceIndexEntry {
     asset_type: "character" | "scene" | "prop";
     asset_id: string;
     name: string;
-    source_scope: "episode" | "series" | "global";
+    description?: string;
+    starred?: boolean;
+    source_scope: "episode" | "project" | "series" | "global";
     source_container_id?: string | null;
+    source_name?: string | null;
     selected_variant_id?: string | null;
     variants: AssetReferenceIndexVariant[];
 }
@@ -362,6 +365,11 @@ export const api = {
 
     getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
         const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`);
+        return res.data;
+    },
+
+    getAssetLibraryIndex: async (): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/asset-index`);
         return res.data;
     },
 

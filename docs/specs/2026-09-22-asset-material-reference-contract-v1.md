@@ -84,12 +84,21 @@ Rules:
 5. This endpoint is a read model. Mutations continue through existing asset and
    variant endpoints in V1.
 
+`GET /asset-index` returns the same entry schema for the owner-scoped Assets
+catalog. Unlike the project endpoint, it preserves each series, standalone
+project, and global placement instead of applying episode precedence. Entries
+include `source_name`, `description`, and `starred` so the catalog does not need
+to join or reconstruct display state from the persisted containers.
+
 ## V1 Scope
 
 In scope:
 
 - Add the normalized, owner-scoped project asset index.
 - Move Cast's reusable-reference picker to that index.
+- Move Assets and storyboard selectors to the normalized index. A single
+  compatibility adapter may read legacy project arrays while an index request
+  is unavailable; selector components do not inspect container schemas.
 - Keep explicit text/reference generation mode and ordered stable references.
 - Preserve legacy generation requests and persisted project shapes.
 
@@ -117,5 +126,6 @@ Out of scope:
 1. Add a shared owner-scoped media registry and backfill `media_id`.
 2. Add immutable variant lineage and fresh child variant IDs on fork/copy.
 3. Introduce asset placements so sharing does not require deep-copy.
-4. Move Assets and storyboard selectors to the same index/query service.
+4. Remove the legacy selector adapter after all project readers require schema
+   version 1.
 5. Add tombstones and reverse-reference checks before retiring hard deletion.

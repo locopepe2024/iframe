@@ -267,8 +267,11 @@ class AssetReferenceIndexEntry(BaseModel):
     asset_type: Literal["character", "scene", "prop"]
     asset_id: str
     name: str
-    source_scope: Literal["episode", "series", "global"]
+    description: str = ""
+    starred: bool = False
+    source_scope: Literal["episode", "project", "series", "global"]
     source_container_id: Optional[str] = None
+    source_name: Optional[str] = None
     selected_variant_id: Optional[str] = None
     variants: List[ImageVariant] = Field(default_factory=list)
 

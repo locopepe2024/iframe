@@ -24,6 +24,15 @@ it("inserts one semantic asset while selecting multiple child views", () => {
                         { id: "close", url: "close.png", reference_distance: "close" },
                     ],
                 } }]}
+                assetIndex={[{
+                    asset_type: "prop", asset_id: "product", name: "穿心莲",
+                    source_scope: "series", selected_variant_id: "front",
+                    variants: [
+                        { id: "front", url: "front.png", reference_view_role: "front" },
+                        { id: "medium", url: "medium.png", reference_distance: "medium" },
+                        { id: "close", url: "close.png", reference_distance: "close" },
+                    ],
+                }]}
                 selectedVariantIds={{ product: ["front", "medium"] }}
                 onInsertAsset={insert}
                 onToggleVariant={toggle}

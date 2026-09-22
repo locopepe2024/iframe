@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Series, Project, Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
+import type { Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
+import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { toast } from "@/store/toastStore";
 import { characterImageUrl, characterVariants } from "@/lib/characterImage";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
@@ -118,61 +119,25 @@ function SemanticAssetLibrary() {
   const loadAssets = async () => {
     setLoading(true);
     try {
-      const [seriesList, projects, globalPool] = await Promise.all([
-        api.listSeries(),
-        api.getProjects(),
-        api.listLibraryAssets(),
-      ]);
-      const result: AssetSource[] = [];
-
-      for (const s of seriesList as Series[]) {
-        if ((s.characters?.length || 0) + (s.scenes?.length || 0) + (s.props?.length || 0) > 0) {
-          result.push({
-            id: `series-${s.id}`,
-            rawId: s.id,
-            name: s.title,
-            kind: "series",
-            characters: s.characters || [],
-            scenes: s.scenes || [],
-            props: s.props || [],
-          });
+      const index = await api.getAssetLibraryIndex();
+      const grouped = new Map<string, AssetSource>();
+      const toAsset = (entry: AssetReferenceIndexEntry): Character | Scene | Prop => {
+        const variants = entry.variants || [];
+        const imageAsset = { selected_id: entry.selected_variant_id || variants[0]?.id, variants };
+        if (entry.asset_type === "character") {
+          return { id: entry.asset_id, name: entry.name, description: entry.description, starred: entry.starred, reference_sheet: { selected_image_id: imageAsset.selected_id, image_variants: variants } } as Character;
         }
+        return { id: entry.asset_id, name: entry.name, description: entry.description, starred: entry.starred, image_asset: imageAsset } as Scene | Prop;
+      };
+      for (const entry of index.assets) {
+        const key = entry.source_scope === "global" ? "global" : `${entry.source_scope}-${entry.source_container_id}`;
+        const kind = entry.source_scope === "global" ? "global" : entry.source_scope === "series" ? "series" : "project";
+        const source = grouped.get(key) || { id: key, rawId: entry.source_container_id || "global", name: entry.source_name || t("globalGroup"), kind, characters: [], scenes: [], props: [] };
+        const asset = toAsset(entry);
+        source[`${entry.asset_type}s` as "characters" | "scenes" | "props"].push(asset as never);
+        grouped.set(key, source);
       }
-
-      const standaloneProjects = (projects as Project[]).filter((p) => !p.series_id);
-      for (const p of standaloneProjects) {
-        if ((p.characters?.length || 0) + (p.scenes?.length || 0) + (p.props?.length || 0) > 0) {
-          result.push({
-            id: `project-${p.id}`,
-            rawId: p.id,
-            name: p.title,
-            kind: "project",
-            characters: p.characters || [],
-            scenes: p.scenes || [],
-            props: p.props || [],
-          });
-        }
-      }
-
-      // 全局/共享池作为一个 kind:"global" 源（空池则不加）。名称在加载时取 i18n，
-      // 与 series/project 的 data 名同样存进 source.name。
-      const g = (globalPool || {}) as { characters?: Character[]; scenes?: Scene[]; props?: Prop[] };
-      const gChars = g.characters ?? [];
-      const gScenes = g.scenes ?? [];
-      const gProps = g.props ?? [];
-      if (gChars.length + gScenes.length + gProps.length > 0) {
-        result.push({
-          id: "global",
-          rawId: "global",
-          name: t("globalGroup"),
-          kind: "global",
-          characters: gChars,
-          scenes: gScenes,
-          props: gProps,
-        });
-      }
-
-      setSources(result);
+      setSources(Array.from(grouped.values()));
     } catch (error) {
       console.error("Failed to load asset library:", error);
       toast.error(t("loadFailed"), { body: t("loadFailedBody") });
@@ -557,7 +522,7 @@ function SemanticAssetLibrary() {
                       const isChar = type === "characters";
                       return (
                         <div
-                          key={`${type}-${asset.id}`}
+                          key={`${src.id}-${type}-${asset.id}`}
                           role="button"
                           tabIndex={0}
                           onClick={() => setSelected({ sourceId: src.id, assetId: asset.id, type })}

@@ -1956,6 +1956,12 @@ def get_project_asset_index(
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@app.get("/asset-index")
+def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
+    """Return the normalized cross-series/project/global asset view."""
+    return signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
+
+
 @app.get("/projects/{script_id}/assembly-plan")
 def get_project_assembly_plan(
     script_id: str,
