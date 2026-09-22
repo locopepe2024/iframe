@@ -93,6 +93,7 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
             "asset_id": "library-prop",
             "variant_id": "variant-1",
         },
+        image_generation_mode="reference",
     )
     task = pipeline.asset_generation_tasks[task_id]
     assert task["params"]["reference"] == {
@@ -111,7 +112,7 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
     assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
 
 
-def test_explicit_character_and_watch_mentions_compile_in_prompt_order(tmp_path, monkeypatch):
+def test_structured_character_and_watch_references_keep_prompt_and_attachment_order(tmp_path, monkeypatch):
     pipeline, target = _pipeline_with_assets(tmp_path)
     output = tmp_path / "output"
     character_path = output / "users" / "owner" / "character.png"
@@ -139,14 +140,15 @@ def test_explicit_character_and_watch_mentions_compile_in_prompt_order(tmp_path,
     monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
 
     references = [
-        {"mention_id": "actor_ref", "asset_type": "character", "asset_id": "actor", "variant_id": "actor-front"},
-        {"mention_id": "watch_ref", "asset_type": "prop", "asset_id": "watch", "variant_id": "watch-front"},
+        {"asset_type": "character", "asset_id": "actor", "variant_id": "actor-front"},
+        {"asset_type": "prop", "asset_id": "watch", "variant_id": "watch-front"},
     ]
     _, task_id = pipeline.create_asset_generation_task(
         "project",
         target.id,
         "scene",
-        prompt="Keep @{actor_ref}; put @{watch_ref} on the left wrist.",
+        prompt="Keep the character; put the referenced watch on the left wrist.",
+        image_generation_mode="reference",
         references=references,
     )
     assert pipeline.asset_generation_tasks[task_id]["params"]["references"] == references
@@ -154,28 +156,51 @@ def test_explicit_character_and_watch_mentions_compile_in_prompt_order(tmp_path,
     pipeline.process_asset_generation_task(task_id)
 
     call = pipeline.asset_generator.generate_scene.call_args
-    assert call.kwargs["prompt"] == "Keep <Picture 1>; put <Picture 2> on the left wrist."
+    assert call.kwargs["prompt"] == "Keep the character; put the referenced watch on the left wrist."
     assert call.kwargs["reference_image_url"] is None
     assert call.kwargs["reference_image_urls"] == [str(character_path), str(watch_path)]
+    assert call.kwargs["image_generation_mode"] == "reference"
     assert call.kwargs["reference_provenance_list"] == [
         {"asset_type": "character", "asset_id": "actor", "variant_id": "actor-front"},
         {"asset_type": "prop", "asset_id": "watch", "variant_id": "watch-front"},
     ]
 
 
+def test_duplicate_structured_references_fail_before_task_creation(tmp_path):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    references = [
+        {"asset_type": "prop", "asset_id": "watch", "variant_id": "front"},
+        {"asset_type": "prop", "asset_id": "watch", "variant_id": "front"},
+    ]
+    with pytest.raises(InvalidAssetReference, match="duplicate"):
+        pipeline.create_asset_generation_task(
+            "project",
+            target.id,
+            "scene",
+            prompt="Use the watch",
+            references=references,
+            image_generation_mode="reference",
+        )
+    assert pipeline.asset_generation_tasks == {}
+
+
 @pytest.mark.parametrize(
-    "prompt,references,error",
+    "mode,references,error",
     [
-        ("Use @watch", [], "unresolved @"),
-        ("Use <Picture 1>", [], "provider picture labels"),
-        ("No image", [{"mention_id": "watch_ref", "asset_type": "prop", "asset_id": "watch", "variant_id": "front"}], "not mentioned"),
+        ("text", [{"asset_type": "prop", "asset_id": "watch", "variant_id": "front"}], "text mode"),
+        ("reference", [], "requires at least one"),
     ],
 )
-def test_invalid_explicit_mentions_fail_before_task_creation(tmp_path, prompt, references, error):
+def test_generation_mode_rejects_inconsistent_reference_inputs(tmp_path, mode, references, error):
     pipeline, target = _pipeline_with_assets(tmp_path)
     with pytest.raises(InvalidAssetReference, match=error):
         pipeline.create_asset_generation_task(
-            "project", target.id, "scene", prompt=prompt, references=references
+            "project",
+            target.id,
+            "scene",
+            prompt="Watch",
+            references=references,
+            image_generation_mode=mode,
         )
     assert pipeline.asset_generation_tasks == {}
 
@@ -203,6 +228,7 @@ def test_library_reference_rejects_foreign_asset_and_wrong_variant(tmp_path, mon
                 "asset_id": "foreign-prop",
                 "variant_id": "foreign-variant",
             },
+            image_generation_mode="reference",
         )
 
     owned = foreign.model_copy(update={"owner_user_id": "user", "owner_profile_id": "owner", "id": "owned-prop"})
@@ -217,6 +243,7 @@ def test_library_reference_rejects_foreign_asset_and_wrong_variant(tmp_path, mon
                 "asset_id": "owned-prop",
                 "variant_id": "missing-variant",
             },
+            image_generation_mode="reference",
         )
 
 
@@ -271,6 +298,7 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
             "asset_id": reference_asset.id,
             "variant_id": "global-variant",
         },
+        image_generation_mode="reference",
     )
     assert pipeline.asset_generation_tasks[task_id]["params"]["reference"] == {
         "asset_type": "prop",
@@ -313,7 +341,7 @@ def test_asset_generation_endpoint_maps_invalid_reference_to_http_400(monkeypatc
     assert error.value.status_code == 400
 
 
-def test_legacy_upload_url_remains_compatible(tmp_path, monkeypatch):
+def test_explicit_upload_url_reference_mode_remains_compatible(tmp_path, monkeypatch):
     pipeline, target = _pipeline_with_assets(tmp_path)
     monkeypatch.setattr(
         "src.apps.comic_gen.pipeline.runtime_uniart_for_owner",
@@ -325,6 +353,7 @@ def test_legacy_upload_url_remains_compatible(tmp_path, monkeypatch):
         target.id,
         "scene",
         reference_image_url="https://example.test/uploaded.png",
+        image_generation_mode="reference",
     )
     assert pipeline.asset_generation_tasks[task_id]["params"]["reference"] is None
     pipeline.process_asset_generation_task(task_id)

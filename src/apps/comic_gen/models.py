@@ -261,11 +261,6 @@ class AssetLibraryReference(BaseModel):
     variant_id: str = Field(..., min_length=1)
 
 
-class AssetPromptReference(AssetLibraryReference):
-    """One explicit prompt mention mapped to a stable asset variant."""
-
-    mention_id: str = Field(..., min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_-]+$")
-
 class VideoTask(BaseModel):
     id: str
     project_id: str

@@ -1,6 +1,9 @@
 import base64
 
+import pytest
+
 from src.models.image import WanxImageModel
+from src.models.mulerouter import GPT_IMAGE_API_PATHS, MuleRouterImageModel
 
 
 PNG_1X1_BASE64 = (
@@ -85,3 +88,42 @@ class TestImageProviderMediaResolverIntegration:
         assert captured["backend"] == "dashscope"
         assert captured["modality"] == "image"
         assert captured["model_name"] == "future-image-model"
+
+
+def test_gpt_image_2_uses_edit_route_for_ordered_reference_images(monkeypatch, tmp_path):
+    captured = {}
+
+    monkeypatch.setattr("src.models.mulerouter._get_base_url_for_model", lambda _model: "https://router.test")
+    monkeypatch.setattr("src.models.mulerouter._resolve_image_input", lambda path: f"resolved:{path}")
+
+    def submit(base_url, api_path, body):
+        captured.update(base_url=base_url, api_path=api_path, body=body)
+        return "task-1"
+
+    monkeypatch.setattr("src.models.mulerouter._submit_task", submit)
+    monkeypatch.setattr("src.models.mulerouter._poll_task", lambda *_args: {"images": ["https://result.test/image.png"]})
+    monkeypatch.setattr("src.models.mulerouter._download_file", lambda *_args: None)
+
+    MuleRouterImageModel({})._generate_via_http(
+        "Keep the actor and add the watch",
+        str(tmp_path / "result.png"),
+        image_generation_mode="reference",
+        ref_image_paths=["actor.png", "watch.png"],
+    )
+
+    assert captured["api_path"] == GPT_IMAGE_API_PATHS["edit"]
+    assert captured["body"]["image"] == "resolved:actor.png"
+    assert captured["body"]["reference_images"] == ["resolved:watch.png"]
+    assert captured["body"]["prompt"] == "Keep the actor and add the watch"
+
+
+def test_gpt_image_2_explicit_text_mode_does_not_infer_edit_from_images(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.models.mulerouter._get_base_url_for_model", lambda _model: "https://router.test")
+
+    with pytest.raises(ValueError, match="text mode"):
+        MuleRouterImageModel({})._generate_via_http(
+            "Create a portrait",
+            str(tmp_path / "result.png"),
+            image_generation_mode="text",
+            ref_image_paths=["actor.png"],
+        )

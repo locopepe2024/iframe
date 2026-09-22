@@ -14,9 +14,10 @@ const character = { id: 'char', name: 'Test', description: 'Person' };
 const project: any = { id: 'project', title: 'Project', characters: [character], scenes: [], props: [] };
 function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
 beforeEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
-it('opens upload from the empty gallery and appends a selected reference', async () => {
+it('attaches an uploaded reference without changing the prompt', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);
  show();
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  const input = screen.getByLabelText('Upload reference image');
  const click = vi.spyOn(input, 'click');
  fireEvent.click(screen.getByText(messages.castWorkbench.emptyVariantsTitle));
@@ -30,12 +31,12 @@ it('opens upload from the empty gallery and appends a selected reference', async
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([{
-  mention_id: 'ref_one',
   asset_type: 'character',
   asset_id: 'char',
   variant_id: 'one',
  }]);
- expect(vi.mocked(api.generateAsset).mock.calls[0][6]).toContain('@{ref_one}');
+ expect(vi.mocked(api.generateAsset).mock.calls[0][14]).toBe('reference');
+ expect(vi.mocked(api.generateAsset).mock.calls[0][6]).not.toContain('@');
 });
 it('selects a canonical output without silently using it as generation input', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
@@ -48,10 +49,12 @@ it('selects a canonical output without silently using it as generation input', a
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([]);
+ expect(vi.mocked(api.generateAsset).mock.calls[0][14]).toBe('text');
 });
 it('allows retrying the same file after upload fails', async () => {
  vi.mocked(api.uploadAsset).mockRejectedValue(new Error('Upload unavailable'));
- show(); const input = screen.getByLabelText('Upload reference image');
+ show(); fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ const input = screen.getByLabelText('Upload reference image');
  const file = new File(['image'], 'reference.png', { type: 'image/png' });
  fireEvent.change(input, { target: { files: [file] } });
  await waitFor(() => expect((screen.getByRole('button', { name: 'Upload reference image' }) as HTMLButtonElement).disabled).toBe(false));
@@ -106,7 +109,7 @@ it('keeps provider prompts out of the default customer view', async () => {
  expect(screen.getByText(stylePrompt)).toBeTruthy();
 });
 
-it('inserts a specific asset-library variant into the prompt and submits only stable ids', async () => {
+it('attaches a specific asset-library variant and submits only stable ids', async () => {
  const libraryAsset = {
   id: 'library-scene',
   name: 'Tea room',
@@ -120,20 +123,24 @@ it('inserts a specific asset-library variant into the prompt and submits only st
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
- fireEvent.click(screen.getAllByRole('button', { name: '@ Insert asset' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Insert this Tea room variant into the prompt' }));
- expect(screen.getByLabelText('Active asset references')).toHaveTextContent('Tea room');
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ const promptBefore = (screen.getByRole('textbox') as HTMLTextAreaElement).value;
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(screen.getByRole('button', { name: 'Add this Tea room variant as a reference image' }));
+ expect(screen.getByLabelText('Reference images for this generation')).toHaveTextContent('Tea room');
+ expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(promptBefore);
 
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toBeUndefined();
- expect(args[13]).toEqual([{ mention_id: 'ref_scene-variant', asset_type: 'scene', asset_id: 'library-scene', variant_id: 'scene-variant' }]);
- expect(args[6]).toContain('@{ref_scene-variant}');
+ expect(args[13]).toEqual([{ asset_type: 'scene', asset_id: 'library-scene', variant_id: 'scene-variant' }]);
+ expect(args[14]).toBe('reference');
+ expect(args[6]).not.toContain('@');
  expect(JSON.stringify(args)).not.toContain('users/owner/scene.png');
 });
 
-it('removes an explicit asset mention before the next text-to-image request', async () => {
+it('removes an explicit reference image before the next text-to-image request', async () => {
  const libraryAsset = {
   id: 'library-prop',
   name: 'Tea cup',
@@ -147,15 +154,18 @@ it('removes an explicit asset mention before the next text-to-image request', as
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
- fireEvent.click(screen.getAllByRole('button', { name: '@ Insert asset' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Insert this Tea cup variant into the prompt' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(screen.getByRole('button', { name: 'Add this Tea cup variant as a reference image' }));
  fireEvent.click(screen.getByRole('button', { name: 'Remove Tea cup reference' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toBeUndefined();
  expect(args[13]).toEqual([]);
- expect(args[6]).not.toContain('@{');
+ expect(args[14]).toBe('text');
+ expect(args[6]).not.toContain('@');
 });
 
 it('loads a global library reference when the project response has only local assets', async () => {
@@ -173,9 +183,10 @@ it('loads a global library reference when the project response has only local as
  vi.mocked(api.generateAsset).mockResolvedValue(localProject as any);
  show();
 
- await waitFor(() => expect(screen.getAllByRole('button', { name: '@ Insert asset' })[0]).not.toBeDisabled());
- fireEvent.click(screen.getAllByRole('button', { name: '@ Insert asset' })[0]);
- const referenceButton = await screen.findByRole('button', { name: 'Insert this Shared tea room variant into the prompt' });
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ const referenceButton = await screen.findByRole('button', { name: 'Add this Shared tea room variant as a reference image' });
  fireEvent.click(referenceButton);
- expect(screen.getByLabelText('Active asset references')).toHaveTextContent('Shared tea room');
+ expect(screen.getByLabelText('Reference images for this generation')).toHaveTextContent('Shared tea room');
 });

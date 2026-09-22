@@ -24,13 +24,11 @@ from .models import (
     director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
-    AssetPromptReference,
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
-from .asset_mentions import InvalidAssetMention, compile_asset_mentions
 from .storyboard import StoryboardGenerator
 from .video import VideoGenerator
 from .audio import AudioGenerator
@@ -720,14 +718,18 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text") -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
         if references and (reference is not None or reference_image_url):
-            raise InvalidAssetReference("explicit prompt references cannot be combined with a hidden legacy reference")
+            raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
+        self._validate_asset_generation_mode(
+            image_generation_mode,
+            bool(reference is not None or reference_image_url or references),
+        )
 
         reference_provenance = None
         if reference is not None:
@@ -740,17 +742,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             use_reference_image = True
 
-        resolved_prompt_references = []
+        resolved_references = []
         reference_provenance_list = []
         if references:
-            normalized_references = self._normalize_asset_prompt_references(references)
-            try:
-                prompt, ordered_references = compile_asset_mentions(prompt or "", normalized_references)
-            except InvalidAssetMention as exc:
-                raise InvalidAssetReference(str(exc)) from exc
-            for prompt_reference in ordered_references:
-                resolved, provenance = self._resolve_asset_library_reference(script, prompt_reference)
-                resolved_prompt_references.append(resolved)
+            normalized_references = self._normalize_asset_references(references)
+            for structured_reference in normalized_references:
+                resolved, provenance = self._resolve_asset_library_reference(script, structured_reference)
+                resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
         
         # Get effective model names from project settings if not overridden
@@ -850,8 +848,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                     i2i_model_name=i2i_model,
                     size=effective_size,
                     reference_provenance=reference_provenance,
-                    reference_image_urls=resolved_prompt_references,
+                    reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
+                    image_generation_mode=image_generation_mode,
                 )
             elif asset_type == "scene":
                 self.asset_generator.generate_scene(
@@ -864,8 +863,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                     prompt=prompt,
                     reference_image_url=reference_image_url,
                     reference_provenance=reference_provenance,
-                    reference_image_urls=resolved_prompt_references,
+                    reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
+                    image_generation_mode=image_generation_mode,
                 )
             elif asset_type == "prop":
                 self.asset_generator.generate_prop(
@@ -878,8 +878,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                     prompt=prompt,
                     reference_image_url=reference_image_url,
                     reference_provenance=reference_provenance,
-                    reference_image_urls=resolved_prompt_references,
+                    reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
+                    image_generation_mode=image_generation_mode,
                 )
                 
             target_asset.status = GenerationStatus.COMPLETED
@@ -902,7 +903,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       prompt: str = None, apply_style: bool = True,
                                       negative_prompt: str = None, batch_size: int = 1,
                                       model_name: str = None, aspect_ratio: str = None,
-                                      reference: Any = None, references: Any = None) -> Tuple[Script, str]:
+                                      reference: Any = None, references: Any = None,
+                                      image_generation_mode: str = "text") -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
@@ -915,7 +917,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
         if references and (reference is not None or reference_image_url):
-            raise InvalidAssetReference("explicit prompt references cannot be combined with a hidden legacy reference")
+            raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
+        self._validate_asset_generation_mode(
+            image_generation_mode,
+            bool(reference is not None or reference_image_url or references),
+        )
 
         normalized_reference = None
         if reference is not None:
@@ -931,21 +937,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             # an older client sends both fields.
             reference_image_url = None
 
-        normalized_references = self._normalize_asset_prompt_references(references or [])
-        try:
-            _compiled_prompt, ordered_references = compile_asset_mentions(prompt or "", normalized_references)
-        except InvalidAssetMention as exc:
-            raise InvalidAssetReference(str(exc)) from exc
+        normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = model_name or script.model_settings.t2i_model
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(ordered_references) > reference_limit:
+        if len(normalized_references) > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )
         # Resolve now to reject stale, deleted, or cross-owner inputs before a
         # paid asynchronous task can be persisted. Execution resolves again.
-        for prompt_reference in ordered_references:
-            self._resolve_asset_library_reference(script, prompt_reference)
+        for structured_reference in normalized_references:
+            self._resolve_asset_library_reference(script, structured_reference)
 
         target_asset.status = GenerationStatus.PROCESSING
         
@@ -966,7 +968,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
                 "reference": normalized_reference,
-                "references": ordered_references,
+                "references": normalized_references,
+                "image_generation_mode": image_generation_mode,
                 "style_prompt": style_prompt,
                 "generation_type": generation_type,
                 "prompt": prompt,
@@ -1027,6 +1030,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("use_reference_image", False),
                     params.get("reference"),
                     params.get("references"),
+                    params.get("image_generation_mode", "text"),
                 )
             task["status"] = "completed"
             task["progress"] = 100
@@ -1056,25 +1060,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         generation_type = params.get("generation_type", "all")
         prompt = params.get("prompt")
         reference_image_url = params.get("reference_image_url")
+        image_generation_mode = params.get("image_generation_mode", "text")
         reference_provenance = None
         if params.get("reference") is not None:
             reference_image_url, reference_provenance = self._resolve_asset_library_reference(
                 series,
                 params["reference"],
             )
-        resolved_prompt_references = []
+        resolved_references = []
         reference_provenance_list = []
         if params.get("references"):
-            try:
-                prompt, ordered_references = compile_asset_mentions(
-                    prompt or "",
-                    self._normalize_asset_prompt_references(params["references"]),
-                )
-            except InvalidAssetMention as exc:
-                raise InvalidAssetReference(str(exc)) from exc
-            for prompt_reference in ordered_references:
-                resolved, provenance = self._resolve_asset_library_reference(series, prompt_reference)
-                resolved_prompt_references.append(resolved)
+            normalized_references = self._normalize_asset_references(params["references"])
+            for structured_reference in normalized_references:
+                resolved, provenance = self._resolve_asset_library_reference(series, structured_reference)
+                resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
 
         if asset_type == "character":
@@ -1087,8 +1086,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
                 reference_image_url=reference_image_url,
                 reference_provenance=reference_provenance,
-                reference_image_urls=resolved_prompt_references,
+                reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
+                image_generation_mode=image_generation_mode,
             )
         elif asset_type == "scene":
             target = next((s for s in series.scenes if s.id == asset_id), None)
@@ -1100,8 +1100,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 prompt=prompt,
                 reference_image_url=reference_image_url,
                 reference_provenance=reference_provenance,
-                reference_image_urls=resolved_prompt_references,
+                reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
+                image_generation_mode=image_generation_mode,
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -1113,8 +1114,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 prompt=prompt,
                 reference_image_url=reference_image_url,
                 reference_provenance=reference_provenance,
-                reference_image_urls=resolved_prompt_references,
+                reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
+                image_generation_mode=image_generation_mode,
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
@@ -1396,25 +1398,36 @@ class ComicGenPipeline(StudioOwnerMixin):
         }
 
     @classmethod
-    def _normalize_asset_prompt_references(cls, references: Any) -> List[Dict[str, str]]:
+    def _normalize_asset_references(cls, references: Any) -> List[Dict[str, str]]:
         if references is None:
             return []
         if not isinstance(references, (list, tuple)):
             raise InvalidAssetReference("references must be a list")
         normalized = []
+        identities = set()
         for reference in references:
-            if isinstance(reference, AssetPromptReference):
+            if isinstance(reference, AssetLibraryReference):
                 raw = reference.model_dump()
             elif isinstance(reference, dict):
                 raw = reference
             else:
-                raise InvalidAssetReference("each prompt reference must be an asset-library reference object")
+                raise InvalidAssetReference("each reference must be an asset-library reference object")
             stable = cls._normalize_asset_reference(raw)
-            mention_id = raw.get("mention_id")
-            if not isinstance(mention_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", mention_id):
-                raise InvalidAssetReference("reference.mention_id is invalid")
-            normalized.append({"mention_id": mention_id, **stable})
+            identity = (stable["asset_type"], stable["asset_id"], stable["variant_id"])
+            if identity in identities:
+                raise InvalidAssetReference("duplicate asset reference")
+            identities.add(identity)
+            normalized.append(stable)
         return normalized
+
+    @staticmethod
+    def _validate_asset_generation_mode(image_generation_mode: str, has_references: bool) -> None:
+        if image_generation_mode not in ("text", "reference"):
+            raise InvalidAssetReference("image_generation_mode must be 'text' or 'reference'")
+        if image_generation_mode == "text" and has_references:
+            raise InvalidAssetReference("text mode cannot include reference images")
+        if image_generation_mode == "reference" and not has_references:
+            raise InvalidAssetReference("reference mode requires at least one reference image")
 
     @staticmethod
     def _asset_reference_limit(model_name: Optional[str]) -> int:
@@ -6175,7 +6188,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                               prompt: str = None, apply_style: bool = True,
                               negative_prompt: str = None, batch_size: int = 1,
                               model_name: str = None, reference: Any = None,
-                              references: Any = None) -> tuple:
+                              references: Any = None,
+                              image_generation_mode: str = "text") -> tuple:
         """Generate a Series asset. Creates an async task like project asset generation.
         Returns (series, task_id)."""
         series = self.get_series(series_id)
@@ -6183,7 +6197,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Series not found")
 
         if references and (reference is not None or reference_image_url):
-            raise InvalidAssetReference("explicit prompt references cannot be combined with a hidden legacy reference")
+            raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
+        self._validate_asset_generation_mode(
+            image_generation_mode,
+            bool(reference is not None or reference_image_url or references),
+        )
 
         normalized_reference = None
         if reference is not None:
@@ -6196,19 +6214,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             # use ``reference_image_url`` below.
             reference_image_url = None
 
-        normalized_references = self._normalize_asset_prompt_references(references or [])
-        try:
-            _compiled_prompt, ordered_references = compile_asset_mentions(prompt or "", normalized_references)
-        except InvalidAssetMention as exc:
-            raise InvalidAssetReference(str(exc)) from exc
+        normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = model_name or series.model_settings.t2i_model
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(ordered_references) > reference_limit:
+        if len(normalized_references) > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )
-        for prompt_reference in ordered_references:
-            self._resolve_asset_library_reference(series, prompt_reference)
+        for structured_reference in normalized_references:
+            self._resolve_asset_library_reference(series, structured_reference)
 
         t2i_model = model_name or series.model_settings.t2i_model
 
@@ -6259,7 +6273,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
                 "reference": normalized_reference,
-                "references": ordered_references,
+                "references": normalized_references,
+                "image_generation_mode": image_generation_mode,
                 "effective_positive_prompt": effective_positive_prompt,
                 "effective_negative_prompt": effective_negative_prompt,
                 "generation_type": generation_type,
