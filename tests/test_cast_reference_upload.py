@@ -333,6 +333,11 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
         variant=char['reference_sheet']['image_variants'][0]
         result=api.select_asset_variant('project',api.SelectVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id'],generation_type='reference_sheet'))
         assert result['characters'][0]['reference_sheet']['selected_image_id']==variant['id']
+        result=api.delete_asset_variant('project',api.DeleteVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id']))
+        assert [c['id'] for c in result['characters']] == ['asset']
+        assert result['characters'][0]['source'] == 'global'
+        assert result['characters'][0]['reference_sheet']['image_variants'] == []
+        assert result['characters'][0]['reference_sheet']['selected_image_id'] is None
         assert not p.scripts['project'].characters
     finally:
         reset_studio_user(token)

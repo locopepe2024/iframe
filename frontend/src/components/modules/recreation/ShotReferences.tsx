@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Pencil, Save, Search, Sparkles, Upload, X } from "lucide-react";
 import { API_URL } from "@/lib/api";
-import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, RecreationKeyframeTask, RecreationMedia, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
+import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, RecreationKeyframeTask, RecreationMedia, RecreationModelOption, RecreationModelOptions, RecreationProject, RecreationShot, RecreationPlan, seconds } from "@/lib/recreation";
 
 import MaterialInstruction from "./MaterialInstruction";
 
@@ -13,6 +13,14 @@ const ImageEditor = dynamic(() => import("@/components/shared/image-editor/Image
 const url = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 type Role = "reference" | "replacement";
 const terminalTask = (status: string) => status === "completed" || status === "failed" || status === "cancelled";
+const DEFAULT_VIDEO_MODEL = "uniart/minimax-h3-vip";
+const DEFAULT_IMAGE_MODEL = "uniart/gpt-image-2";
+const FALLBACK_VIDEO_MODEL: RecreationModelOption = {
+  id: DEFAULT_VIDEO_MODEL, display_name: "UniArt Minimax H3 VIP", description: "", capabilities: ["r2v"],
+};
+const FALLBACK_IMAGE_MODEL: RecreationModelOption = {
+  id: DEFAULT_IMAGE_MODEL, display_name: "UniArt GPT Image 2", description: "", capabilities: ["i2i"],
+};
 
 function Picker({ onSelect, onClose }: { onSelect: (item: RecreationMedia) => void; onClose: () => void }) {
   const t = useTranslations("shotReferences");
@@ -65,6 +73,10 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const [audioPolicy, setAudioPolicy] = useState("silent");
   const [soundscape, setSoundscape] = useState("");
   const [durations, setDurations] = useState<Record<string, number>>({});
+  const [modelOptions, setModelOptions] = useState<RecreationModelOptions | null>(null);
+  const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
+  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
+  const [modelLoadError, setModelLoadError] = useState(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [generationTasks, setGenerationTasks] = useState<RecreationGenerationTask[]>([]);
   const [generationBusy, setGenerationBusy] = useState(false);
@@ -75,10 +87,23 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   const [assemblyError, setAssemblyError] = useState("");
   const generationIdRef = useRef<string | null>(null);
   const revision = useRef(project.revision);
-  const planKey = JSON.stringify([project.revision, audioPolicy, soundscape, durations]);
+  const planKey = JSON.stringify([project.revision, videoModel, audioPolicy, soundscape, durations]);
   const activePlan = useRef(planKey);
   activePlan.current = planKey;
   revision.current = project.revision;
+  useEffect(() => {
+    let active = true;
+    recreationApi.models().then(options => {
+      if (!active) return;
+      setModelOptions(options);
+      setVideoModel(current => options.video_models.some(item => item.id === current) ? current : options.defaults.video_model);
+      setImageModel(current => options.image_models.some(item => item.id === current) ? current : options.defaults.image_model);
+      setModelLoadError(false);
+    }).catch(() => { if (active) setModelLoadError(true); });
+    return () => { active = false; };
+  }, [project.id]);
+  const videoModels = modelOptions ? modelOptions.video_models : [FALLBACK_VIDEO_MODEL];
+  const imageModels = modelOptions ? modelOptions.image_models : [FALLBACK_IMAGE_MODEL];
   useEffect(() => {
     setPlan(null); setPlanError(false); setCostAccepted(false); generationIdRef.current = null;
     setGenerationId(null); setGenerationTasks([]); setGenerationError(""); setAssemblyTask(null); setAssemblyError("");
@@ -152,7 +177,11 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
     <select aria-label={t("shot")} className="glass-input max-w-full" value={shotId || ""} onChange={e => setShotId(e.target.value)}>
       {project.timeline?.shots.map((s, i) => <option key={s.id} value={s.id}>{t("shot")} {i + 1} · {seconds(project.analysis!, s.start_pts).toFixed(6)} - {seconds(project.analysis!, s.end_pts).toFixed(6)} s</option>)}
     </select>
-    {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} onSaved={onSaved} />}
+    {modelLoadError && <p role="status" className="text-sm">{t("modelCatalogFallback")}</p>}
+    {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} imageModel={imageModel} imageModels={imageModels} onImageModelChange={setImageModel} onSaved={onSaved} />}
+    <label className="block text-sm">{t("videoModel")}<select aria-label={t("videoModel")} className="glass-input block" value={videoModel} disabled={disabled || !videoModels.length} onChange={e => { setVideoModel(e.target.value); setPlan(null); setPlanError(false); }}>
+      {videoModels.map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.id}</option>)}
+    </select></label>
     <label className="block text-sm">{t("audioPolicy")}<select className="glass-input block" value={audioPolicy} onChange={e => setAudioPolicy(e.target.value)}>
       <option value="silent">{t("silent")}</option><option value="generated">{t("generatedAudio")}</option><option value="preserve_source">{t("preserveAudio")}</option>
     </select></label>
@@ -160,9 +189,9 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
     <div className="flex flex-wrap gap-3">{project.timeline?.shots.map((s, i) => <label key={s.id} className="text-sm">{t("shot")} {i + 1} · {t("generationSeconds")}
       <input type="number" min={4} max={15} step={1} className="glass-input block w-24" value={durations[s.id!] ?? ""} onChange={e => setDurations(all => ({ ...all, [s.id!]: Number(e.target.value) }))} />
     </label>)}</div>
-    <button className="glass-button" disabled={disabled || planBusy} onClick={async () => {
+    <button className="glass-button" disabled={disabled || planBusy || !videoModels.length} onClick={async () => {
       const current = planKey; setPlanBusy(true); setPlanError(false);
-      try { const result = await recreationApi.generationPlan(project, "uniart/minimax-h3-vip", { audio_policy: audioPolicy, soundscape, generation_durations: durations }); if (activePlan.current === current) setPlan(result); }
+      try { const result = await recreationApi.generationPlan(project, videoModel, { audio_policy: audioPolicy, soundscape, generation_durations: durations }); if (activePlan.current === current) setPlan(result); }
       catch { if (activePlan.current === current) setPlanError(true); } finally { setPlanBusy(false); }
     }}>{t("checkPlan")}</button>
     {planError && <p role="alert">{t("failed")}</p>}
@@ -184,7 +213,7 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
         <button className="glass-button" disabled={!costAccepted || generationBusy} onClick={async () => {
           setGenerationBusy(true); setGenerationError("");
           try {
-            const result = await recreationApi.submitGeneration(project, "uniart/minimax-h3-vip", { audio_policy: audioPolicy, soundscape, generation_durations: durations, accept_cost: costAccepted });
+            const result = await recreationApi.submitGeneration(project, videoModel, { audio_policy: audioPolicy, soundscape, generation_durations: durations, accept_cost: costAccepted });
             generationIdRef.current = result.generation_id; setGenerationId(result.generation_id); setGenerationTasks(result.tasks);
           } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); }
           finally { setGenerationBusy(false); }
@@ -205,7 +234,7 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
   </section>;
 }
 
-function ReferenceForm({ project, shot, disabled, onSaved }: { project: RecreationProject; shot: RecreationShot; disabled: boolean; onSaved: (project: RecreationProject) => void }) {
+function ReferenceForm({ project, shot, disabled, imageModel, imageModels, onImageModelChange, onSaved }: { project: RecreationProject; shot: RecreationShot; disabled: boolean; imageModel: string; imageModels: RecreationModelOption[]; onImageModelChange: (model: string) => void; onSaved: (project: RecreationProject) => void }) {
   const t = useTranslations("shotReferences");
   const recreationT = useTranslations("recreation");
   const [selected, setSelected] = useState<Partial<Record<Role, RecreationMedia>>>({});
@@ -286,7 +315,7 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
     setKeyframeBusy(true); setKeyframeError(""); setSaved(false);
     try {
       const task = await recreationApi.createKeyframeTask(
-        project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction, keyframeCostAccepted,
+        project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction, keyframeCostAccepted, imageModel,
       );
       if (alive.current) {
         setKeyframeTask(task); setKeyframeTaskId(task.task_id);
@@ -333,8 +362,11 @@ function ReferenceForm({ project, shot, disabled, onSaved }: { project: Recreati
         </div>
       </div>)}</div>
       {selected.reference && selected.replacement && <>
+        <label className="block text-sm">{t("keyframeImageModel")}<select aria-label={t("keyframeImageModel")} className="glass-input block" value={imageModel} disabled={keyframeBusy || !imageModels.length} onChange={e => onImageModelChange(e.target.value)}>
+          {imageModels.map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.id}</option>)}
+        </select></label>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" aria-label={recreationT("keyframeAcceptCost")} checked={keyframeCostAccepted} onChange={e => setKeyframeCostAccepted(e.target.checked)} />{recreationT("keyframeAcceptCost")}</label>
-        <button type="button" className="glass-button flex items-center gap-2" disabled={keyframeBusy || !keyframeCostAccepted || !instruction.replace(/@\{[a-f0-9]{32}\}/g, "").trim()} aria-label={t("generateCorrected")} onClick={generateCorrected}>
+        <button type="button" className="glass-button flex items-center gap-2" disabled={keyframeBusy || !imageModels.length || !keyframeCostAccepted || !instruction.replace(/@\{[a-f0-9]{32}\}/g, "").trim()} aria-label={t("generateCorrected")} onClick={generateCorrected}>
           <Sparkles size={16} />{keyframeBusy ? t("generatingCorrected") : t("generateCorrected")}
         </button>
       </>}

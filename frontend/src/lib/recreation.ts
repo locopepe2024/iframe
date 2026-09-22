@@ -51,8 +51,28 @@ export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: nu
 export interface RecreationKeyframeTask {
   task_id: string; project_id?: string; shot_id?: string; revision?: number; analysis_id?: string;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  model?: string;
   created_at?: number; updated_at?: number;
   output_media: RecreationMedia | null; error: string | null;
+}
+
+export interface RecreationModelOption {
+  id: string;
+  display_name: string;
+  description?: string;
+  family?: string;
+  capabilities: string[];
+  duration?: Record<string, unknown> | null;
+  params?: Record<string, unknown>;
+  inputs?: Record<string, { max?: number }>;
+}
+
+export interface RecreationModelOptions {
+  provider: "uniart";
+  source: "live" | "static";
+  defaults: { image_model: string; video_model: string };
+  image_models: RecreationModelOption[];
+  video_models: RecreationModelOption[];
 }
 
 export interface RecreationPlan {
@@ -81,6 +101,7 @@ export interface RecreationAssemblyTask {
   audio_policy: string; output_media: RecreationMedia | null; error: string | null;
 }
 export const recreationApi = {
+  models: (): Promise<RecreationModelOptions> => axios.get(`${API_URL}/recreation/models`).then(r => r.data),
   generationPlan: (project: RecreationProject, model = "uniart/minimax-h3-vip", options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number> } = { audio_policy: "silent", soundscape: "", generation_durations: {} }): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model, ...options }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
   uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
@@ -88,10 +109,10 @@ export const recreationApi = {
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string, acceptCost: boolean): Promise<RecreationKeyframeTask> =>
+  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string, acceptCost: boolean, model = "uniart/gpt-image-2"): Promise<RecreationKeyframeTask> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/keyframe-tasks`, {
       revision: project.revision, analysis_id: project.analysis_id, reference_media_id: referenceMediaId,
-      replacement_media_id: replacementMediaId, instruction, accept_cost: acceptCost,
+      replacement_media_id: replacementMediaId, instruction, model, accept_cost: acceptCost,
     }).then(r => r.data),
   keyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
     axios.get(`${API_URL}/recreation/keyframe-tasks/${taskId}`).then(r => r.data),

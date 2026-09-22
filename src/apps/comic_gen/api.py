@@ -60,11 +60,12 @@ from .models import (
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
+    AssetPromptReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
-from ...utils.uniart_catalog import normalize_uniart_catalog
+from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
@@ -333,6 +334,7 @@ class GenerateAssetRequest(BaseModel):
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
     reference: Optional[AssetLibraryReference] = None
+    references: List[AssetPromptReference] = Field(default_factory=list, max_length=9)
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -1104,6 +1106,7 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.reference,
+            request.references,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -3099,6 +3102,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.model_name,
             request.aspect_ratio,
             request.reference,
+            request.references,
         )
         
         # Add background processing
@@ -3336,13 +3340,16 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
-        updated_script = pipeline.delete_asset_variant(
+        pipeline.delete_asset_variant(
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id
         )
-        return signed_response(updated_script)
+        # Shared series/global assets are merged into a project only at read
+        # time. Returning the raw episode Script would temporarily remove the
+        # edited asset from the frontend and close its detail workbench.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -4943,14 +4950,10 @@ def get_uniart_models():
     """
     runtime_config = studio_uniart_config()
     base = runtime_config["base_url"].rstrip("/")
-    key = runtime_config["api_key"]
-    req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
     try:
-        with urlopen(req, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        models = fetch_uniart_catalog(runtime_config)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    models = normalize_uniart_catalog(payload)
     return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 

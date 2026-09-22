@@ -186,6 +186,10 @@ class ImageVariant(BaseModel):
         None,
         description="Asset-library reference variant ID used to generate this variant",
     )
+    reference_inputs: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Ordered stable asset-library inputs used to generate this variant",
+    )
     reference_view_role: Optional[str] = Field(
         None,
         description="Optional product view role such as front, right, three_quarter_right, or detail",
@@ -255,6 +259,12 @@ class AssetLibraryReference(BaseModel):
     asset_type: Literal["character", "scene", "prop"]
     asset_id: str = Field(..., min_length=1)
     variant_id: str = Field(..., min_length=1)
+
+
+class AssetPromptReference(AssetLibraryReference):
+    """One explicit prompt mention mapped to a stable asset variant."""
+
+    mention_id: str = Field(..., min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_-]+$")
 
 class VideoTask(BaseModel):
     id: str
