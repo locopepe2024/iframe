@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { api, type AssetLibraryReference } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -102,13 +102,7 @@ interface ImageVariant {
     reference_distance?: string;
 }
 
-interface ReferenceLibraryAsset {
-    asset_type: CastKind;
-    asset_id: string;
-    name: string;
-    source?: "episode" | "series" | "global";
-    variants: ImageVariant[];
-}
+type ReferenceLibraryAsset = AssetReferenceIndexEntry;
 
 type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
@@ -274,11 +268,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
     const [generationReferences, setGenerationReferences] = useState<AssetLibraryReference[]>([]);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
-    const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
-        characters: any[];
-        scenes: any[];
-        props: any[];
-    }>({ characters: [], scenes: [], props: [] });
+    const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
@@ -299,65 +289,20 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     }, [entityId, kind]);
 
     useEffect(() => {
-        if (!isOpen) return;
-        // A normal GET /projects response already merges series/global assets,
-        // but a freshly-created or cached project can predate that merge. Load
-        // the global pool opportunistically so the picker remains complete;
-        // the current project/series data still renders immediately.
-        const loadGlobalAssets = api.listLibraryAssets;
-        if (typeof loadGlobalAssets !== "function") return;
-        let request: unknown;
-        try {
-            request = loadGlobalAssets();
-        } catch {
+        if (!isOpen || !currentProject) {
+            setReferenceLibraryAssets([]);
             return;
         }
-        void Promise.resolve(request)
-            .then((data: any) => {
-                setGlobalLibraryAssets({
-                    characters: data?.characters || [],
-                    scenes: data?.scenes || [],
-                    props: data?.props || [],
-                });
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id)
+            .then((index) => {
+                if (active) setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
             })
             .catch(() => {
-                // The current project response is still a valid source when
-                // the optional global-library read is unavailable.
+                if (active) setReferenceLibraryAssets([]);
             });
-    }, [isOpen]);
-
-    const referenceLibraryAssets = useMemo<ReferenceLibraryAsset[]>(() => {
-        if (!currentProject) return [];
-        const byKey = new Map<string, ReferenceLibraryAsset>();
-        const addGroup = (assetType: CastKind, assets: any[], fallbackSource?: ReferenceLibraryAsset["source"]) => {
-            for (const asset of assets || []) {
-                const variants = readLibraryVariants(asset, assetType);
-                if (!asset?.id || variants.length === 0) continue;
-                const key = `${assetType}:${asset.id}`;
-                // Episode-local/project response data has priority over the
-                // parent series and global fallback pools.
-                if (byKey.has(key)) continue;
-                byKey.set(key, {
-                    asset_type: assetType,
-                    asset_id: asset.id,
-                    name: asset.name,
-                    source: asset.source || fallbackSource,
-                    variants,
-                });
-            }
-        };
-
-        addGroup("character", currentProject.characters || [], "episode");
-        addGroup("scene", currentProject.scenes || [], "episode");
-        addGroup("prop", currentProject.props || [], "episode");
-        addGroup("character", currentSeries?.characters || [], "series");
-        addGroup("scene", currentSeries?.scenes || [], "series");
-        addGroup("prop", currentSeries?.props || [], "series");
-        addGroup("character", globalLibraryAssets.characters, "global");
-        addGroup("scene", globalLibraryAssets.scenes, "global");
-        addGroup("prop", globalLibraryAssets.props, "global");
-        return Array.from(byKey.values());
-    }, [currentProject, currentSeries, globalLibraryAssets]);
+        return () => { active = false; };
+    }, [isOpen, currentProject?.id]);
 
     const visibleGenerationReferences = useMemo(() => generationReferences.flatMap((reference) => {
         const asset = referenceLibraryAssets.find((item) =>
@@ -436,6 +381,19 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
             if (exists || current.length >= 9) return current;
             return [...current, reference];
+        });
+    };
+
+    const retainUploadedVariantInIndex = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        setReferenceLibraryAssets((current) => {
+            const keyMatches = (item: ReferenceLibraryAsset) => item.asset_type === asset.asset_type
+                && item.asset_id === asset.asset_id;
+            const existing = current.find(keyMatches);
+            if (!existing) return [...current, { ...asset, variants: [variant] }];
+            if (existing.variants.some((item) => item.id === variant.id)) return current;
+            return current.map((item) => keyMatches(item)
+                ? { ...item, selected_variant_id: variant.id, variants: [...item.variants, variant] }
+                : item);
         });
     };
 
@@ -576,8 +534,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const uploadedVariantId = readSelectedId(updatedEntity, kind);
             const uploadedVariant = readLibraryVariants(updatedEntity, kind).find((item) => item.id === uploadedVariantId);
             if (uploadedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: kind,
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: uploadedVariant.id,
+                    variants: [uploadedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, uploadedVariant);
                 addGenerationReference(
-                    { asset_type: kind, asset_id: entity.id, name: entity.name, source: "episode", variants: [uploadedVariant] },
+                    indexedAsset,
                     uploadedVariant,
                 );
             }
@@ -607,8 +575,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const editedVariantId = readSelectedId(updatedEntity, "character");
             const editedVariant = readLibraryVariants(updatedEntity, "character").find((item) => item.id === editedVariantId);
             if (editedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: "character",
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: editedVariant.id,
+                    variants: [editedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, editedVariant);
                 addGenerationReference(
-                    { asset_type: "character", asset_id: entity.id, name: entity.name, source: "episode", variants: [editedVariant] },
+                    indexedAsset,
                     editedVariant,
                 );
             }
@@ -674,6 +652,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setGenerationReferences((current) => current.filter((item) => !(
                 item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
             )));
+            setReferenceLibraryAssets((current) => current.flatMap((asset) => {
+                if (asset.asset_type !== kind || asset.asset_id !== entity.id) return [asset];
+                const remaining = asset.variants.filter((variant) => variant.id !== variantId);
+                return remaining.length > 0 ? [{ ...asset, variants: remaining }] : [];
+            }));
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -1254,7 +1237,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <div key={`${asset.asset_type}:${asset.asset_id}`}>
                                                 <div className="mb-1 flex items-center gap-1.5">
                                                     <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
-                                                    {asset.source && <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source}`)}</span>}
+                                                    <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source_scope}`)}</span>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-1.5">
                                                     {asset.variants.map((variant) => {

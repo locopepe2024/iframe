@@ -78,6 +78,30 @@ export interface AssetLibraryReference {
     variant_id: string;
 }
 
+export interface AssetReferenceIndexVariant {
+    id: string;
+    url: string;
+    is_favorited?: boolean;
+    reference_view_role?: string;
+    reference_distance?: string;
+}
+
+export interface AssetReferenceIndexEntry {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    name: string;
+    source_scope: "episode" | "series" | "global";
+    source_container_id?: string | null;
+    selected_variant_id?: string | null;
+    variants: AssetReferenceIndexVariant[];
+}
+
+export interface AssetReferenceIndex {
+    schema_version: 1;
+    project_id: string;
+    assets: AssetReferenceIndexEntry[];
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -334,6 +358,11 @@ export const api = {
     getProject: async (scriptId: string) => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
         return { ...res.data, originalText: res.data.original_text };
+    },
+
+    getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`);
+        return res.data;
     },
 
     getAssemblyPlan: async (scope: AssemblyScope, resourceId: string): Promise<AssemblyEditPlan | null> => {
