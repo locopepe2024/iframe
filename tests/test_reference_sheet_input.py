@@ -23,6 +23,51 @@ def test_selected_reference_reaches_every_candidate(tmp_path, monkeypatch, refer
     assert all(call.kwargs.get("ref_image_path") == expected for call in model.generate.call_args_list)
 
 
+def test_selected_reference_is_bound_to_character_identity_in_prompt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_dir = "output/assets"
+    model = Mock()
+    generator._get_model_for = Mock(return_value=model)
+    character = Character(id="c", name="Test", description="Test")
+
+    generator.generate_character(
+        character,
+        generation_type="reference_sheet",
+        prompt="角色设定参考图。构图：左侧头像，右侧正侧背全身视图。",
+        positive_prompt="写实电影质感",
+        model_name="uniart/gpt-image-2",
+        reference_image_url="https://example.test/reference.png",
+        batch_size=1,
+    )
+
+    sent_prompt = model.generate.call_args.args[0]
+    assert sent_prompt.startswith("以输入的参考图作为角色身份依据")
+    assert "严格保持其脸型、五官、发型、肤色、服装和体态特征" in sent_prompt
+    assert "仅按后续要求调整构图、视角、姿势和背景" in sent_prompt
+    assert "构图：左侧头像，右侧正侧背全身视图" in sent_prompt
+    assert sent_prompt.endswith("写实电影质感")
+
+
+def test_text_only_reference_sheet_does_not_claim_an_input_reference(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_dir = "output/assets"
+    model = Mock()
+    generator._get_model_for = Mock(return_value=model)
+    character = Character(id="c", name="Test", description="Test")
+
+    generator.generate_character(
+        character,
+        generation_type="reference_sheet",
+        prompt="角色设定参考图。",
+        model_name="uniart/gpt-image-2",
+        use_reference_image=False,
+    )
+
+    assert "以输入的参考图作为角色身份依据" not in model.generate.call_args.args[0]
+
+
 def test_missing_selected_reference_does_not_silently_generate_text_only(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
@@ -89,6 +134,7 @@ def test_stored_reference_reaches_real_uniart_edit_adapter(tmp_path, monkeypatch
     def post(config, endpoint, body):
         assert endpoint == '/images/edits'
         assert body['images'] == [url]
+        assert body['prompt'].startswith('以输入的参考图作为角色身份依据')
         return {'data': [{'b64_json': base64.b64encode(b'generated').decode()}]}
     submit = Mock(side_effect=post)
     monkeypatch.setattr(uniart, '_post', submit)

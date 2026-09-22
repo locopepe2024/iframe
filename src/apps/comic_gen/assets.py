@@ -7,9 +7,9 @@ from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageV
 from .character_prompts import (
     DEFAULT_CHARACTER_STYLE_SUFFIX,
     append_style_suffix,
+    bind_character_reference_prompt,
     build_character_image_prompt,
     build_reference_sheet_prompt,
-    chinese_reverse_reference_instruction,
 )
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
@@ -162,6 +162,8 @@ class AssetGenerator:
                 effective_prompt = prompt if prompt else build_reference_sheet_prompt(character.name, character.description)
                 if positive_prompt and positive_prompt not in effective_prompt:
                     effective_prompt = append_style_suffix(effective_prompt, positive_prompt)
+                if reference:
+                    effective_prompt = bind_character_reference_prompt(effective_prompt)
 
                 effective_size = size or "1024*1024"
 
@@ -319,10 +321,8 @@ class AssetGenerator:
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)
-                            reverse_enhancement = chinese_reverse_reference_instruction()
-                            if reverse_enhancement.strip() not in effective_generation_prompt:
-                                effective_generation_prompt = f"{reverse_enhancement}{generation_prompt}"
-                                logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
+                            effective_generation_prompt = bind_character_reference_prompt(generation_prompt)
+                            logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
                         
                         self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size)
                         
@@ -338,7 +338,7 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_fullbody_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt,
+                            prompt_used=effective_generation_prompt,
                             source_origin="generation",
                             **self._reference_metadata(reference_provenance),
                         )
@@ -484,6 +484,11 @@ class AssetGenerator:
                 
                 # Generate with style suffix appended
                 generation_prompt = append_style_suffix(base_prompt, style_suffix)
+                effective_generation_prompt = (
+                    bind_character_reference_prompt(generation_prompt)
+                    if fullbody_path
+                    else generation_prompt
+                )
                 
                 sheet_negative = negative_prompt + ", background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs"
 
@@ -494,7 +499,7 @@ class AssetGenerator:
                         variant_id = str(uuid.uuid4())
                         sheet_path = os.path.join(output_dir, 'characters', f"{character.id}_sheet_{variant_id}.png")
                         
-                        self._get_model_for(i2i_model_name).generate(generation_prompt, sheet_path, ref_image_path=fullbody_path, negative_prompt=sheet_negative, ref_strength=0.8, model_name=i2i_model_name)
+                        self._get_model_for(i2i_model_name).generate(effective_generation_prompt, sheet_path, ref_image_path=fullbody_path, negative_prompt=sheet_negative, ref_strength=0.8, model_name=i2i_model_name)
                         
                         rel_sheet_path = os.path.relpath(sheet_path, "output")
                         
@@ -507,7 +512,7 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_sheet_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt,
+                            prompt_used=effective_generation_prompt,
                             source_origin="generation",
                             **self._reference_metadata(reference_provenance),
                         )
@@ -568,6 +573,11 @@ class AssetGenerator:
                 
                 # Generate with style suffix appended
                 generation_prompt = append_style_suffix(base_prompt, style_suffix)
+                effective_generation_prompt = (
+                    bind_character_reference_prompt(generation_prompt)
+                    if fullbody_path
+                    else generation_prompt
+                )
 
                 successful_generations = 0
                 last_error = ""
@@ -576,7 +586,7 @@ class AssetGenerator:
                         variant_id = str(uuid.uuid4())
                         avatar_path = os.path.join(output_dir, 'characters', f"{character.id}_avatar_{variant_id}.png")
                         
-                        self._get_model_for(i2i_model_name).generate(generation_prompt, avatar_path, ref_image_path=fullbody_path, negative_prompt=negative_prompt, ref_strength=0.8, model_name=i2i_model_name)
+                        self._get_model_for(i2i_model_name).generate(effective_generation_prompt, avatar_path, ref_image_path=fullbody_path, negative_prompt=negative_prompt, ref_strength=0.8, model_name=i2i_model_name)
                         
                         rel_avatar_path = os.path.relpath(avatar_path, "output")
                         
@@ -589,7 +599,7 @@ class AssetGenerator:
                             id=variant_id,
                             url=rel_avatar_path,
                             created_at=time.time(),
-                            prompt_used=generation_prompt,
+                            prompt_used=effective_generation_prompt,
                             source_origin="generation",
                             **self._reference_metadata(reference_provenance),
                         )

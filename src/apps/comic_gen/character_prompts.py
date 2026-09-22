@@ -79,7 +79,19 @@ def build_reference_sheet_prompt(name: str, description: str) -> str:
 def chinese_reverse_reference_instruction() -> str:
     """Instruction prepended only when iFrame supplies a reference image."""
 
-    return "严格保持参考图中的角色外观、脸型、发型、肤色和服装。"
+    return (
+        "以输入的参考图作为角色身份依据，严格保持其脸型、五官、发型、肤色、"
+        "服装和体态特征；仅按后续要求调整构图、视角、姿势和背景。"
+    )
+
+
+def bind_character_reference_prompt(prompt: str) -> str:
+    """Place the character-reference contract before composition instructions."""
+
+    value = str(prompt or "").strip()
+    if "以输入的参考图作为角色身份依据" in value or "严格保持参考图" in value:
+        return value
+    return f"{chinese_reverse_reference_instruction()}{value}"
 
 
 def append_style_suffix(prompt: str, style_suffix: str) -> str:
