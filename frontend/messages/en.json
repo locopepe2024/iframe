@@ -227,6 +227,13 @@
   "castWorkbench": {
     "uploadReference": "Upload reference image",
     "chooseFromLibrary": "Choose from library",
+    "insertAssetMention": "@ Insert asset",
+    "mentionPickerTitle": "Insert an asset reference",
+    "mentionPickerHint": "Selecting an image inserts a visible reference at the cursor. Only references left in the prompt are sent to the model.",
+    "insertLibraryVariant": "Insert this {name} variant into the prompt",
+    "activeMentions": "Active asset references",
+    "removeAssetMention": "Remove {name} reference",
+    "keepCharacterFromMention": "Keep the character identity, face, hair, clothing, and body shown in:",
     "libraryReferenceTitle": "Choose a library reference",
     "libraryReferenceHint": "Select an asset and a specific variant for this generation. Provider URLs stay server-side.",
     "libraryReferenceSelected": "Using a library variant as reference",

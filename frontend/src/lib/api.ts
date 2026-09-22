@@ -78,6 +78,10 @@ export interface AssetLibraryReference {
     variant_id: string;
 }
 
+export interface AssetPromptReference extends AssetLibraryReference {
+    mention_id: string;
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -664,7 +668,7 @@ export const api = {
     assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
         `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference) => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetPromptReference[]) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -678,6 +682,7 @@ export const api = {
             model_name: modelName,
             aspect_ratio: aspectRatio,
             ...(reference ? { reference } : {}),
+            ...(references?.length ? { references } : {}),
         });
         return res.data;
     },
