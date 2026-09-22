@@ -3336,13 +3336,16 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
-        updated_script = pipeline.delete_asset_variant(
+        pipeline.delete_asset_variant(
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id
         )
-        return signed_response(updated_script)
+        # Shared series/global assets are merged into a project only at read
+        # time. Returning the raw episode Script would temporarily remove the
+        # edited asset from the frontend and close its detail workbench.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
