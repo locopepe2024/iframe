@@ -286,6 +286,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
+        setLibraryReference(null);
+        setLibraryPickerOpen(false);
+    }, [entityId, kind]);
+
+    useEffect(() => {
         if (!isOpen) return;
         // A normal GET /projects response already merges series/global assets,
         // but a freshly-created or cached project can predate that merge. Load
@@ -525,7 +530,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
                 kind === "character" ? "reference_sheet" : "image");
             updateProject(currentProject.id, updated);
-            setLibraryReference(null);
+            const updatedPool = kind === "character"
+                ? updated.characters
+                : kind === "scene"
+                    ? updated.scenes
+                    : updated.props;
+            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id);
+            const uploadedVariantId = readSelectedId(updatedEntity, kind);
+            setLibraryReference(uploadedVariantId ? {
+                asset_type: kind,
+                asset_id: entity.id,
+                variant_id: uploadedVariantId,
+            } : null);
             setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
@@ -548,6 +564,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 "reference_sheet",
             );
             updateProject(currentProject.id, updated);
+            const updatedEntity = updated.characters?.find((item: any) => item.id === entity.id);
+            const editedVariantId = readSelectedId(updatedEntity, "character");
+            setLibraryReference(editedVariantId ? {
+                asset_type: "character",
+                asset_id: entity.id,
+                variant_id: editedVariantId,
+            } : null);
             setEditingVariant(null);
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
@@ -582,6 +605,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
+            setLibraryReference({
+                asset_type: kind,
+                asset_id: entity.id,
+                variant_id: variantId,
+            });
             toast.success(t("toastSelected"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -616,6 +644,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         try {
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
+            setLibraryReference((current) => current?.asset_type === kind
+                && current.asset_id === entity.id
+                && current.variant_id === variantId
+                ? null
+                : current);
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -1125,7 +1158,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     />
                                     <div className="min-w-0 flex-1">
                                         <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
-                                        <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
+                                        <p className="text-[0.625rem] text-primary/80">
+                                            {selectedLibraryAsset.asset.asset_id === entity.id
+                                                && selectedLibraryAsset.asset.asset_type === kind
+                                                ? t("selectedVariantReference")
+                                                : t("libraryReferenceSelected")}
+                                        </p>
                                     </div>
                                     <button
                                         type="button"

@@ -228,6 +228,7 @@
     "libraryReferenceTitle": "Choose a library reference",
     "libraryReferenceHint": "Select an asset and a specific variant for this generation. Provider URLs stay server-side.",
     "libraryReferenceSelected": "Using a library variant as reference",
+    "selectedVariantReference": "Using the selected variant as generation reference",
     "clearLibraryReference": "Clear library reference",
     "closeLibraryReferencePicker": "Close library reference picker",
     "useLibraryVariant": "Use this {name} variant as reference",

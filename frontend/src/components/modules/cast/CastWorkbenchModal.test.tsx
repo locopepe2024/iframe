@@ -15,6 +15,7 @@ const project: any = { id: 'project', title: 'Project', characters: [character],
 function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
 beforeEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
 it('opens upload from the empty gallery and appends a selected reference', async () => {
+ vi.mocked(api.generateAsset).mockResolvedValue(project as any);
  show();
  const input = screen.getByLabelText('Upload reference image');
  const click = vi.spyOn(input, 'click');
@@ -23,14 +24,30 @@ it('opens upload from the empty gallery and appends a selected reference', async
  const file = new File(['image'], 'reference.png', { type: 'image/png' });
  vi.mocked(api.uploadAsset).mockResolvedValue({ ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] });
  fireEvent.change(input, { target: { files: [file] } });
- await waitFor(() => expect(screen.getByText('Test one')).toBeTruthy());
+ await waitFor(() => expect(screen.getAllByText('Test one')).toHaveLength(2));
  expect(api.uploadAsset).toHaveBeenCalledWith('project', 'character', 'char', file, 'reference_sheet');
+ fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toEqual({
+  asset_type: 'character',
+  asset_id: 'char',
+  variant_id: 'one',
+ });
 });
 it('selects an existing canonical reference without the preview swallowing its click', async () => {
- useProjectStore.setState({ currentProject: { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] } });
- vi.mocked(api.selectAssetVariant).mockResolvedValue(project);
+ const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
+ useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });
+ vi.mocked(api.selectAssetVariant).mockResolvedValue({ ...withVariants, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'one' } }] } as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(withVariants as any);
  show(); fireEvent.click(screen.getByText('Test one'));
  await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'reference_sheet'));
+ fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toEqual({
+  asset_type: 'character',
+  asset_id: 'char',
+  variant_id: 'one',
+ });
 });
 it('allows retrying the same file after upload fails', async () => {
  vi.mocked(api.uploadAsset).mockRejectedValue(new Error('Upload unavailable'));
