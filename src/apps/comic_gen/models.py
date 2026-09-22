@@ -261,6 +261,26 @@ class AssetLibraryReference(BaseModel):
     variant_id: str = Field(..., min_length=1)
 
 
+class AssetReferenceIndexEntry(BaseModel):
+    """Normalized reusable asset entry projected for reference pickers."""
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    name: str
+    source_scope: Literal["episode", "series", "global"]
+    source_container_id: Optional[str] = None
+    selected_variant_id: Optional[str] = None
+    variants: List[ImageVariant] = Field(default_factory=list)
+
+
+class AssetReferenceIndex(BaseModel):
+    """Versioned effective asset view for one project."""
+
+    schema_version: Literal[1] = 1
+    project_id: str
+    assets: List[AssetReferenceIndexEntry] = Field(default_factory=list)
+
+
 class VideoTask(BaseModel):
     id: str
     project_id: str

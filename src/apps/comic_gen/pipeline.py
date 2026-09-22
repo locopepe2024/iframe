@@ -24,6 +24,8 @@ from .models import (
     director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    AssetReferenceIndex,
+    AssetReferenceIndexEntry,
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
@@ -1471,6 +1473,72 @@ class ComicGenPipeline(StudioOwnerMixin):
                     seen_ids.add(variant_id)
                     variants.append(variant)
         return variants
+
+    @staticmethod
+    def _selected_asset_variant_id(asset: Any, asset_type: str) -> Optional[str]:
+        if asset_type == "character":
+            selected = getattr(getattr(asset, "reference_sheet", None), "selected_image_id", None)
+            if selected:
+                return selected
+            for name in ("full_body_asset", "three_view_asset", "headshot_asset"):
+                selected = getattr(getattr(asset, name, None), "selected_id", None)
+                if selected:
+                    return selected
+            return None
+        return getattr(getattr(asset, "image_asset", None), "selected_id", None)
+
+    def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
+        """Return the normalized effective assets used by reference pickers."""
+        script = self.get_script(script_id)
+        if not script:
+            raise ValueError("Project not found")
+
+        series = (
+            self.get_series(script.series_id, script.owner_profile_id)
+            if script.series_id
+            else None
+        )
+        entries: List[AssetReferenceIndexEntry] = []
+
+        def append_scope(
+            asset_type: str,
+            assets: List[Any],
+            source_scope: str,
+            source_container_id: Optional[str],
+            seen: set,
+        ) -> None:
+            for asset in assets:
+                if asset.id in seen:
+                    continue
+                seen.add(asset.id)
+                entries.append(AssetReferenceIndexEntry(
+                    asset_type=asset_type,
+                    asset_id=asset.id,
+                    name=asset.name,
+                    source_scope=source_scope,
+                    source_container_id=source_container_id,
+                    selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
+                    variants=self._asset_image_variants(asset, asset_type),
+                ))
+
+        for asset_type, attr in (
+            ("character", "characters"),
+            ("scene", "scenes"),
+            ("prop", "props"),
+        ):
+            seen: set = set()
+            append_scope(asset_type, getattr(script, attr), "episode", script.id, seen)
+            if series:
+                append_scope(asset_type, getattr(series, attr), "series", series.id, seen)
+            append_scope(
+                asset_type,
+                self._library_list_for_type(asset_type, script.owner_profile_id),
+                "global",
+                None,
+                seen,
+            )
+
+        return AssetReferenceIndex(project_id=script.id, assets=entries)
 
     @staticmethod
     def _resolve_stored_reference_value(value: str, owner_profile_id: Optional[str]) -> str:

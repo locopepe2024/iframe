@@ -1942,6 +1942,20 @@ def get_project(script_id: str):
     return signed_response(payload)
 
 
+@app.get("/projects/{script_id}/asset-index")
+def get_project_asset_index(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the normalized effective asset view used by reference pickers."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return signed_response(pipeline.get_asset_reference_index(script_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @app.get("/projects/{script_id}/assembly-plan")
 def get_project_assembly_plan(
     script_id: str,
