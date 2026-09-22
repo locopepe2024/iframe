@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.1.1] - 2026-09-22
+
+### Fixed
+- **COS 图片编辑器读取** — 角色参考图编辑改走同源、项目权限校验的资产变体接口，避免签名 COS URL 的跨域画布读取失败。
+- **角色参考图变体** — 主体资产、三视图和头像面板支持上传与编辑；每次操作创建并选中新变体，不覆盖原图。
+
+### Changed
+- **应用版本统一** — Web、FastAPI、Tauri、Cargo、README 与设置页统一使用 `0.1.1`，并由根目录 `VERSION` 管理。
+- **版本一致性守卫** — 新增 `scripts/update_version.py` 与 `scripts/check_version_consistency.py`，阻止运行时和文档版本漂移。
+
+---
+
 ## [1.2.1] - 2026-06-09
 
 ### Added
