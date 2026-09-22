@@ -6,6 +6,7 @@ vi.mock('@/lib/recreation', () => ({ recreationApi: { list: vi.fn(), searchMedia
 vi.mock('@/lib/api', () => ({ API_URL: 'https://api.example.test' }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 const item = (id: string): RecreationMedia => ({ media_id: id, project_id: 'p', kind: 'evidence_frame', display_name: id, storage_path: '/frame.jpg?signature=test', sha256: 'hash', created_at: 1, metadata: { parent_media_id: 'original', pts: 61696, time_base: '1/15360' } });
+const videoItem = (id: string, kind: RecreationMedia['kind']): RecreationMedia => ({ media_id: id, project_id: 'p', kind, display_name: id, storage_path: `/${id}.mp4?signature=test`, sha256: 'hash', created_at: 1, metadata: {} });
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(recreationApi.list).mockResolvedValue([{ id: 'p', title: 'Original' } as never]);
@@ -38,4 +39,22 @@ it('resets pages for server filters and ignores older responses', async () => {
   fireEvent.change(screen.getByLabelText('project'), { target: { value: 'p' } });
   await waitFor(() => expect(recreationApi.searchMedia).toHaveBeenLastCalledWith({ q: 'needle', kind: 'evidence_frame', project_id: 'p', cursor: 0, limit: 24 }));
   expect(screen.queryByRole('button', { name: 'preview old' })).not.toBeInTheDocument();
+});
+
+it('keeps source, generated, and final videos playable in the recreation library', async () => {
+  vi.mocked(recreationApi.searchMedia).mockResolvedValue({
+    items: [videoItem('source', 'source_video'), videoItem('generated', 'generated_video'), videoItem('final', 'final_video')],
+    next_cursor: null,
+  });
+  render(<RecreationMediaLibrary />);
+
+  await screen.findByRole('button', { name: 'preview source' });
+  expect(screen.getByRole('option', { name: 'generated_video' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'final_video' })).toBeInTheDocument();
+  expect(document.querySelectorAll('button video')).toHaveLength(3);
+
+  fireEvent.click(screen.getByRole('button', { name: 'preview final' }));
+  const selectedVideo = document.querySelector('video[controls]');
+  expect(selectedVideo).toHaveAttribute('src', 'https://api.example.test/final.mp4?signature=test');
+  expect(screen.queryByRole('img', { name: 'final' })).not.toBeInTheDocument();
 });
