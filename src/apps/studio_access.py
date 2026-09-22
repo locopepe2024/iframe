@@ -1,7 +1,7 @@
 """Request-local Studio ownership boundary.
 
 Identity remains owned by UniArt. This module only carries the authenticated
-owner through LumenX Studio request handling and provides fail-closed resource
+owner through iFrame Studio request handling and provides fail-closed resource
 checks for process-wide legacy stores.
 """
 
@@ -22,10 +22,10 @@ from .identity import UserContext
 
 
 _studio_user: ContextVar[Optional[UserContext]] = ContextVar(
-    "lumenx_studio_user", default=None
+    "iframe_studio_user", default=None
 )
 _studio_uniart: ContextVar[Optional[Dict[str, str]]] = ContextVar(
-    "lumenx_studio_uniart", default=None
+    "iframe_studio_uniart", default=None
 )
 
 

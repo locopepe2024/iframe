@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "iframe-studio",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -36,6 +36,9 @@
     "next-intl": "^4.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-filerobot-image-editor": "4.9.1",
+    "react-konva": "18.2.10",
+    "styled-components": "5.3.11",
     "tailwind-merge": "^3.4.0",
     "three": "^0.181.2",
     "zustand": "^5.0.8"

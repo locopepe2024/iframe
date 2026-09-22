@@ -20,6 +20,16 @@ export interface ImageVariant {
     url: string;
     created_at: number;
     prompt_used?: string;
+    source_origin?: "upload" | "workbench" | "generation";
+    source_generation_id?: string;
+    source_output_id?: string;
+    reference_asset_type?: "character" | "scene" | "prop";
+    reference_asset_id?: string;
+    reference_variant_id?: string;
+    reference_view_role?: string;
+    reference_distance?: string;
+    camera_yaw?: number;
+    camera_pitch?: number;
 }
 
 export interface ImageAsset {
@@ -71,6 +81,8 @@ export interface Character {
     // reference_sheet is the canonical character asset (new schema);
     // full_body_asset is legacy, kept only as a read fallback.
     reference_sheet?: AssetUnit;
+    makeup_reference?: AssetUnit;
+    pose_references?: AssetUnit;
     full_body_asset?: ImageAsset;
     three_view_asset?: ImageAsset;
     headshot_asset?: ImageAsset;
@@ -96,7 +108,7 @@ export interface Character {
      *  Drives UI badges + the "high-cost action" confirm modal
      *  (A2 design decision). Not persisted; set fresh on every
      *  GET /projects/{id} response. */
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Scene {
@@ -112,7 +124,7 @@ export interface Scene {
     starred?: boolean;
     time_of_day?: string;
     lighting_mood?: string;
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Prop {
@@ -126,7 +138,7 @@ export interface Prop {
     status?: string;
     locked?: boolean;
     starred?: boolean;
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface StoryboardFrame {
@@ -136,8 +148,15 @@ export interface StoryboardFrame {
     image_asset?: ImageAsset;
     rendered_image_url?: string;
     rendered_image_asset?: ImageAsset;
+    style_prompt_override?: string | null;
+    lighting_override?: string | null;
+    negative_prompt_override?: string | null;
     status?: string;
     locked?: boolean;
+    workbench_generate_audio?: boolean | null;
+    workbench_reference_variant_ids?: Record<string, string[]>;
+    workbench_pose_reference_variant_ids?: Record<string, string[]>;
+    workbench_director_snapshot_media_id?: string | null;
     // ... other fields
 }
 
@@ -180,6 +199,27 @@ export interface ArtDirection {
     style_config: StyleConfig;
     custom_styles: StyleConfig[];
     ai_recommendations: StyleConfig[];
+    director_profile?: DirectorProfile;
+}
+
+export interface DirectorProfile {
+    setting: Record<string, unknown>;
+    timeline: Record<string, unknown>[];
+    relationships: Record<string, unknown>[];
+    key_events: Record<string, unknown>[];
+    emotional_arc: string;
+    pacing: string;
+    visual_language: string;
+    performance_direction: string;
+    dialogue_direction: string;
+    sound_direction: string;
+    continuity_constraints: string[];
+    prohibitions: string[];
+    unresolved_questions: string[];
+    sample_plan: Record<string, unknown>[];
+    revision: number;
+    content_hash: string;
+    confirmed_at: number;
 }
 
 export type ModelSettings = FrontendModelSettings;
@@ -239,6 +279,7 @@ export interface Series {
     scenes: Scene[];
     props: Prop[];
     art_direction?: ArtDirection;
+    director_review_required?: boolean;
     prompt_config?: PromptConfig;
     model_settings?: ModelSettings;
     workflow_mode?: "r2v" | "i2v_legacy";
@@ -291,6 +332,8 @@ interface ProjectStore {
     // Entity extraction confirmation (persists across step switches)
     pendingExtraction: { characters: any[]; scenes: any[]; props: any[] } | null;
     pendingExtractionScript: string | null;
+    pendingExtractionFeedback: string[];
+    refineExtraction: (instruction: string) => Promise<void>;
     confirmExtraction: () => Promise<void>;
     discardExtraction: () => void;
 
@@ -413,12 +456,45 @@ export const useProjectStore = create<ProjectStore>()(
             // Entity extraction confirmation
             pendingExtraction: null,
             pendingExtractionScript: null,
-            confirmExtraction: async () => {
-                const { currentProject, pendingExtractionScript } = get();
-                if (!currentProject?.id || !pendingExtractionScript) return;
+            pendingExtractionFeedback: [],
+            refineExtraction: async (instruction: string) => {
+                const { currentProject, pendingExtraction, pendingExtractionScript, pendingExtractionFeedback } = get();
+                const trimmed = instruction.trim();
+                if (!currentProject?.id || !pendingExtraction || !pendingExtractionScript || !trimmed) return;
+                const projectId = currentProject.id;
+                const instructions = [...pendingExtractionFeedback, trimmed];
                 set({ isAnalyzing: true });
                 try {
-                    const project = await api.reparseProject(currentProject.id, pendingExtractionScript);
+                    const preview = await api.refineExtraction(
+                        projectId,
+                        pendingExtractionScript,
+                        pendingExtraction,
+                        instructions,
+                    );
+                    if (get().currentProject?.id !== projectId) {
+                        set({ isAnalyzing: false });
+                        return;
+                    }
+                    set({
+                        pendingExtraction: preview,
+                        pendingExtractionFeedback: instructions,
+                        isAnalyzing: false,
+                    });
+                } catch (error) {
+                    set({ isAnalyzing: false });
+                    throw error;
+                }
+            },
+            confirmExtraction: async () => {
+                const { currentProject, pendingExtraction, pendingExtractionScript } = get();
+                if (!currentProject?.id || !pendingExtraction || !pendingExtractionScript) return;
+                set({ isAnalyzing: true });
+                try {
+                    const project = await api.reparseProject(
+                        currentProject.id,
+                        pendingExtractionScript,
+                        pendingExtraction,
+                    );
                     set((state) => ({
                         projects: state.projects.map((p) =>
                             p.id === project.id ? { ...project, updatedAt: new Date().toISOString() } : p
@@ -426,6 +502,7 @@ export const useProjectStore = create<ProjectStore>()(
                         currentProject: { ...project, updatedAt: new Date().toISOString() },
                         pendingExtraction: null,
                         pendingExtractionScript: null,
+                        pendingExtractionFeedback: [],
                         isAnalyzing: false,
                     }));
                 } catch (error) {
@@ -435,7 +512,7 @@ export const useProjectStore = create<ProjectStore>()(
                 }
             },
             discardExtraction: () => {
-                set({ pendingExtraction: null, pendingExtractionScript: null });
+                set({ pendingExtraction: null, pendingExtractionScript: null, pendingExtractionFeedback: [] });
             },
 
             // Sync projects from backend

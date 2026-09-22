@@ -88,3 +88,11 @@ def test_gpt_image_route_aliases_remain_image_models_without_capability_block():
         {"id": "gpt-image-2.5-flare-special"},
     ]})
     assert all(model["capabilities"] == ["t2i", "i2i"] for model in models)
+
+
+def test_false_audio_metadata_still_exposes_optional_audio_control():
+    model = normalize_uniart_catalog({"data": [{
+        "id": "minimax-h3-vip",
+        "video_capability": {"modes": [{"id": "omni_reference"}], "supports_generate_audio": False},
+    }]})[0]
+    assert model["params"]["audio"] is True

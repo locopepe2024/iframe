@@ -127,6 +127,37 @@ class TestGenerateStoryboard:
         assert [c.id for c in kwargs["characters"]] == [c.id for c in project.characters]
         assert [s.id for s in kwargs["scenes"]] == [s.id for s in project.scenes]
 
+    def test_frame_style_overrides_are_persisted_independently(self, pipeline, project):
+        frame = project.frames[0]
+        updated = pipeline.update_frame(
+            project.id,
+            frame.id,
+            style_prompt_override="Japanese live-action film look, restrained night cinema",
+            lighting_override="nighttime practical street lighting, wet reflections",
+            negative_prompt_override="bright daylight, neon cyberpunk",
+        )
+
+        saved = updated.frames[0]
+        assert saved.style_prompt_override == "Japanese live-action film look, restrained night cinema"
+        assert saved.lighting_override == "nighttime practical street lighting, wet reflections"
+        assert saved.negative_prompt_override == "bright daylight, neon cyberpunk"
+
+    def test_storyboard_render_forwards_negative_prompt(self, pipeline, project):
+        frame = project.frames[0]
+        pipeline.storyboard_generator.generate_frame.return_value = frame
+
+        pipeline.generate_storyboard_render(
+            project.id,
+            frame.id,
+            None,
+            "Japanese film look . Rainy night street",
+            1,
+            "bright daylight, neon cyberpunk",
+        )
+
+        _, kwargs = pipeline.storyboard_generator.generate_frame.call_args
+        assert kwargs["negative_prompt"] == "bright daylight, neon cyberpunk"
+
 
 # ---------------------------------------------------------------------------
 # Step 4: Generate Video

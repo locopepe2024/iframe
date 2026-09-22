@@ -3,14 +3,41 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Lock, Unlock, ChevronRight, Maximize2, Video } from "lucide-react";
-import { api, API_URL } from "@/lib/api";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video } from "lucide-react";
+import dynamic from "next/dynamic";
+import { api } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { toast } from "@/store/toastStore";
+import {
+    buildCharacterImagePrompt,
+    buildCharacterMotionPrompt,
+    buildCharacterVideoPrompt,
+    DEFAULT_CHARACTER_NEGATIVE_PROMPT,
+    hasCharacterReferenceConstraint,
+} from "@/lib/characterPrompts";
+
+const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
+
+type CharacterEditUploadType = "full_body" | "three_views" | "head_shot";
+
+interface CharacterEditTarget {
+    source: string;
+    title: string;
+    uploadType: CharacterEditUploadType;
+}
+
+function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
+    const variants = Array.isArray(unit?.variants) ? unit.variants : [];
+    const selectedId = unit?.selected_id || unit?.selected_image_id;
+    return variants.find((variant: any) => variant?.id === selectedId)?.url
+        || fallback
+        || variants.at(-1)?.url;
+}
 
 
 interface CharacterWorkbenchProps {
@@ -28,9 +55,32 @@ interface CharacterWorkbenchProps {
 
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
+    const ti = useTranslations("imageEditor");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
+    const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
+
+    const openImageEditor = (imageUrl: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
+        const source = getAssetUrl(imageUrl);
+        if (!source) return;
+        setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
+    };
+
+    const saveEditedImage = async (file: File) => {
+        if (!currentProject || !editTarget) throw new Error("Project is no longer available");
+        const updatedProject = await api.uploadAsset(
+            currentProject.id,
+            "character",
+            asset.id,
+            file,
+            editTarget.uploadType,
+            asset.description,
+        );
+        updateProject(currentProject.id, updatedProject);
+        toast.success(ti("saved"));
+        setEditTarget(null);
+    };
 
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
@@ -61,20 +111,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         if (existingPrompt) return existingPrompt;
 
-        const baseDesc = asset.description || "";
-        const name = asset.name || "Character";
-
         if (type === "full_body") {
-            const prefix = hasNonFullBodyUpload ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. " : "";
-            return `${prefix}Full body character design of ${name}, concept art. ${baseDesc}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`;
+            return buildCharacterImagePrompt("full_body", asset.name, asset.description, hasNonFullBodyUpload);
         }
         if (type === "three_view") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. " : "";
-            return `${prefix}Character Reference Sheet for ${name}. ${baseDesc}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality.`;
+            return buildCharacterImagePrompt("three_view", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
         }
         if (type === "headshot") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. " : "";
-            return `${prefix}Close-up portrait of the SAME character ${name}. ${baseDesc}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`;
+            return buildCharacterImagePrompt("headshot", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
         }
         return "";
     };
@@ -87,7 +131,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // New State for Style Control
     const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
-    const [negativePrompt, setNegativePrompt] = useState("low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, jpeg artifacts, signature, watermark, blurry");
+    const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
 
@@ -148,20 +192,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             if (assetType === 'full_body') {
                 setFullBodyAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
+                const currentDefault = buildCharacterMotionPrompt('full_body', asset.description, false);
                 const oldDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right to show costume details. No walking away.\nHead to toe shot, stable camera, flat lighting.`;
 
                 if (fullBodyMotionPrompt === currentDefault || fullBodyMotionPrompt === oldDefault || !fullBodyMotionPrompt) {
-                    setFullBodyMotionPrompt(`Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`);
+                    setFullBodyMotionPrompt(buildCharacterMotionPrompt('full_body', asset.description, true));
                 }
             } else {
                 setHeadshotAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
+                const currentDefault = buildCharacterMotionPrompt('headshot', asset.description, false);
                 const oldDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
 
                 if (headshotMotionPrompt === currentDefault || headshotMotionPrompt === oldDefault || !headshotMotionPrompt) {
-                    setHeadshotMotionPrompt(`High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`);
+                    setHeadshotMotionPrompt(buildCharacterMotionPrompt('headshot', asset.description, true));
                 }
             }
         } catch (error: any) {
@@ -174,30 +218,22 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // PRD Motion Prompt Templates
     const getMotionDefault = (type: 'full_body' | 'headshot', hasAudio: boolean) => {
-        if (type === 'full_body') {
-            return hasAudio
-                ? `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`
-                : `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
-        } else {
-            return hasAudio
-                ? `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`
-                : `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
-        }
+        return buildCharacterMotionPrompt(type, asset.description, hasAudio);
     };
 
     // Initialize prompts if empty (first time load)
     useEffect(() => {
         if (!fullBodyPrompt) {
-            setFullBodyPrompt(`Full body character design of ${asset.name}, concept art. ${asset.description}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`);
+            setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
         if (!threeViewPrompt) {
-            setThreeViewPrompt(`Character Reference Sheet for ${asset.name}. ${asset.description}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background.`);
+            setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
         if (!headshotPrompt) {
-            setHeadshotPrompt(`Close-up portrait of the SAME character ${asset.name}. ${asset.description}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`);
+            setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
         if (!videoPrompt) {
-            setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
+            setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
         }
 
         if (!fullBodyMotionPrompt) {
@@ -222,17 +258,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Update local state when asset updates (e.g. after generation)
     useEffect(() => {
         if (asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
-        else if (hasNonFullBodyUpload && !fullBodyPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasNonFullBodyUpload && !hasCharacterReferenceConstraint(fullBodyPrompt)) {
             setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
 
         if (asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
-        else if (hasAnyUpload && !threeViewPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasCharacterReferenceConstraint(threeViewPrompt)) {
             setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
 
         if (asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
-        else if (hasAnyUpload && !headshotPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasCharacterReferenceConstraint(headshotPrompt)) {
             setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
 
@@ -321,6 +357,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.full_body_asset}
                         currentImageUrl={asset.full_body_image_url}
+                        editImageUrl={selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url), tc("masterAsset"), "full_body")}
                         onSelect={(id: string) => handleSelectVariant("full_body", id)}
                         onDelete={(id: string) => handleDeleteVariant("full_body", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("full_body", id, isFav)}
@@ -368,6 +406,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
+                        editImageUrl={selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url), tc("threeViews"), "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
@@ -395,6 +435,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
+                        editImageUrl={selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url)}
+                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url), tc("avatar"), "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
@@ -510,11 +552,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
             </motion.div>
+            {editTarget && (
+                <ImageEditor
+                    source={editTarget.source}
+                    title={editTarget.title}
+                    onClose={() => setEditTarget(null)}
+                    onSave={saveEditedImage}
+                />
+            )}
         </div>
     );
 }
 
-function WorkbenchPanel({
+export function WorkbenchPanel({
     title,
     isActive,
     onClick,
@@ -522,6 +572,8 @@ function WorkbenchPanel({
     // Variant Props
     asset,
     currentImageUrl,
+    editImageUrl,
+    onEditImage,
     onSelect,
     onDelete,
     onFavorite,
@@ -562,6 +614,7 @@ function WorkbenchPanel({
     reverseReferenceUrl = null
 }: any) {
     const tc = useTranslations("character");
+    const ti = useTranslations("imageEditor");
 
     return (
         <div
@@ -574,6 +627,19 @@ function WorkbenchPanel({
                     <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
+
+                    {onEditImage && editImageUrl && mode === 'static' && (
+                        <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); onEditImage(); }}
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                            title={ti("title")}
+                            aria-label={`${ti("title")}: ${title}`}
+                        >
+                            <Pencil size={16} />
+                            <span className="hidden text-xs sm:inline">{ti("title")}</span>
+                        </button>
+                    )}
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (

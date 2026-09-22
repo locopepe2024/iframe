@@ -13,6 +13,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import UploadAssetModal from "../modals/UploadAssetModal";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
+import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -139,11 +140,8 @@ export default function ConsistencyVault() {
                         // If status is "pending" or "processing", continue polling
                     } catch (pollError: any) {
                         console.error("Polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
+                        // A network failure does not cancel the backend task.
+                        // Keep polling so its final provider error is shown.
                     }
                 }, 2000); // Poll every 2 seconds
             } else {
@@ -276,13 +274,9 @@ export default function ConsistencyVault() {
                             const updatedProject = await api.getProject(currentProject.id);
                             updateProject(currentProject.id, updatedProject);
                         }
-                    } catch (pollError: any) {
-                        console.error("Video polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
+                        } catch (pollError: any) {
+                            console.error("Video polling error:", pollError);
+                            // The server task remains active; retry on the next tick.
                     }
                 }, 3000); // Poll every 3 seconds for video
             } else {
@@ -544,7 +538,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
 
     // Style Controls
     const [applyStyle, setApplyStyle] = useState(true);
-    const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || "low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry");
+    const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
@@ -556,7 +550,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
         setDescription(asset.description);
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
         else if (!videoPrompt) {
-            setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
+            setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
         }
     }, [asset]);
 

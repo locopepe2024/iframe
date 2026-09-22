@@ -139,7 +139,7 @@ stash-0-brand-design 中的改动:
 - 品牌图标: 从图片改为渐变 gradient (purple→indigo→pink)
   ```css
   /* 旧 */
-  background-image: url("LumenX-cybr.png");
+  background-image: url("iFrame-cybr.png");
   
   /* 新 */
   background: linear-gradient(135deg, #7c3aed, #4f46e5, #ec4899);

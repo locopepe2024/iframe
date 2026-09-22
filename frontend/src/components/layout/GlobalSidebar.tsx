@@ -1,13 +1,13 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText, Film } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
-import LumenXBranding from "./LumenXBranding";
+import IFrameBranding from "./IFrameBranding";
 import { isTauri } from "@/lib/transport";
 import PlaygroundSessionSubnav from "@/components/modules/playground/PlaygroundSessionSubnav";
 
-export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "recreation" | "settings";
+export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "recreation" | "director3d" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
@@ -22,10 +22,11 @@ export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: s
   { id: "editor", icon: FileText, hash: "#/studio/editor" },
   { id: "playground", icon: Wand2, hash: "#/playground" },
   { id: "recreation", icon: Film, hash: "#/recreation" },
+  { id: "director3d", icon: Box, hash: "#/director" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];
 
-const APP_VERSION = "v0.2.0";
+const APP_VERSION = "V0.1.0";
 
 function NavButton({
   active,
@@ -97,9 +98,9 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
         aria-label={t("workspaceAria")}
         className="text-left px-4 pt-5 pb-4 border-b border-glass-border hover:opacity-90 transition-opacity"
       >
-        <LumenXBranding size="md" showSlogan={false} />
+        <IFrameBranding size="md" showSlogan={false} />
         <p className="font-display atelier-display text-[0.75rem] italic text-text-muted tracking-wide leading-snug mt-2.5">
-          Powered by Lumenx
+          Powered by Lumenx & Uniart
         </p>
       </button>
 

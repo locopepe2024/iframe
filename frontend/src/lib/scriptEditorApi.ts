@@ -28,18 +28,28 @@ const API_BASE = getApiUrl();
 export interface DocumentResponse {
   project_id: string;
   content: object;
-  updated_at: string;
+  updated_at: string | null;
 }
 
 export interface SnapshotResponse {
   project_id: string;
   timestamp: string;
   created_at: string;
+  size_bytes: number;
+}
+
+export interface SaveDocumentResponse {
+  status: 'ok';
+  project_id: string;
+  size_bytes: number;
+  updated_at: string;
+  snapshot_created: boolean;
+  snapshot?: SnapshotResponse;
 }
 
 export const scriptEditorApi = {
   /** 保存文档 */
-  saveDocument: async (projectId: string, content: object, createSnapshot = false): Promise<DocumentResponse> => {
+  saveDocument: async (projectId: string, content: object, createSnapshot = false): Promise<SaveDocumentResponse> => {
     const res = await axios.post(`${API_BASE}/projects/${projectId}/document`, {
       content,
       create_snapshot: createSnapshot,
@@ -113,7 +123,7 @@ export const scriptEditorApi = {
       already_extracted?: { scenes: string[]; characters: string[] };
       gaps?: string[]; // e.g. ['props', 'beats', 'locations']
     }
-  ): Promise<{ results: L3Result[]; task_id?: string }> => {
+  ): Promise<{ results?: L3Result[]; entities?: L3Result[]; task_id?: string }> => {
     const res = await axios.post(`${API_BASE}/projects/${projectId}/derive_gaps`, params);
     return res.data;
   },

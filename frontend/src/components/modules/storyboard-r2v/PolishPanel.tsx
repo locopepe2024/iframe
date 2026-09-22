@@ -33,6 +33,7 @@ type PolishErrorReason =
     | "api_error"
     | "json_parse_error"
     | "missing_keys"
+    | "model_contract_mismatch"
     | "model_echo";
 
 interface PolishErrorState {
@@ -45,6 +46,10 @@ interface PolishErrorState {
 }
 
 interface PolishPanelProps {
+    generateAudio?: boolean;
+    targetDuration?: number;
+    dialogue?: { speaker: string; line: string } | null;
+    videoModel?: string;
     prompt: string;
     tabMode: "t2i_i2v" | "direct_r2v";
     scriptId: string;
@@ -63,6 +68,7 @@ function reasonToI18nKey(reason: PolishErrorReason): string {
         case "api_error": return "polishErrorApi";
         case "json_parse_error": return "polishErrorJsonParse";
         case "missing_keys": return "polishErrorMissingKeys";
+        case "model_contract_mismatch": return "polishErrorModelContract";
         case "model_echo": return "polishWarningModelEcho";
     }
 }
@@ -73,8 +79,16 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
     if (detail && typeof detail === "object" && typeof detail.reason === "string") {
         return {
             reason: detail.reason as PolishErrorReason,
-            messageZh: detail.message_zh || "",
-            messageEn: detail.message_en || "",
+            // The backend includes a provider-safe diagnostic here (for
+            // example an expired/invalid API key). Keep it visible instead of
+            // replacing every structured failure with the generic network
+            // message below.
+            messageZh: typeof detail.message_zh === "string" && detail.message_zh.trim()
+                ? detail.message_zh
+                : t("polishErrorApi"),
+            messageEn: typeof detail.message_en === "string" && detail.message_en.trim()
+                ? detail.message_en
+                : "Model call failed. Please retry or check your network.",
             prompt_cn: detail.prompt_cn,
             prompt_en: detail.prompt_en,
         };
@@ -88,6 +102,10 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
 
 export default function PolishPanel({
     prompt,
+    videoModel = "",
+    generateAudio,
+    targetDuration,
+    dialogue,
     tabMode,
     scriptId,
     slots = [],
@@ -117,8 +135,8 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined);
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");
@@ -142,7 +160,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls]);
+    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);
@@ -237,7 +255,7 @@ export default function PolishPanel({
             {isHardError && error ? (
                 <div className="space-y-2">
                     <p className="font-sans text-body-sm leading-relaxed text-status-failed-fg">
-                        {t(reasonToI18nKey(error.reason) as any)}
+                        {error.messageZh || t(reasonToI18nKey(error.reason) as any)}
                     </p>
                     <div className="flex items-center gap-1">
                         <button

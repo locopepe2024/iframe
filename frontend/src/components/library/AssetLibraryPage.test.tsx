@@ -8,6 +8,7 @@ const mocked = vi.hoisted(() => ({
 vi.mock('@/lib/api', () => ({ api: mocked }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
+vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
 vi.mock('./AssetInspector', () => ({ default: () => <div>inspector</div> }));
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
@@ -30,4 +31,14 @@ it('retains referenced assets and explains the deletion conflict', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'deleteNamed Test character' }));
   await waitFor(() => expect(mocked.error).toHaveBeenCalledWith('deleteInUse'));
   expect(screen.getByText('Test character')).toBeInTheDocument();
+});
+
+it('opens recreation media from the library and returns to semantic assets', async () => {
+  render(<AssetLibraryPage />);
+  await screen.findByText('Test character');
+  fireEvent.click(screen.getByRole('button', { name: 'media' }));
+  expect(screen.getByText('recreation media browser')).toBeInTheDocument();
+  expect(screen.queryByText('Test character')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'assets' }));
+  expect(await screen.findByText('Test character')).toBeInTheDocument();
 });

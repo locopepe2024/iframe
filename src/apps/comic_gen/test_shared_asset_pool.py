@@ -16,7 +16,7 @@ Plus an integration check that ``GET /projects/{id}`` tags global-only
 assets with ``source="global"`` via FastAPI's ``TestClient`` (skipped
 with a reason if the app can't be imported in this environment).
 
-Design RFC: docs/plans/2026-06-18-lumenx-core-shared-asset-pool.md
+Design RFC: docs/plans/2026-06-18-iframe-core-shared-asset-pool.md
 
 These tests build a *bare* ``ComicGenPipeline`` via ``object.__new__`` and
 populate only the attributes the resolver/save seams touch. That avoids

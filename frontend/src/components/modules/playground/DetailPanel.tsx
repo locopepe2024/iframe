@@ -13,12 +13,14 @@ import {
   Copy,
   ChevronLeft,
   ChevronRight,
+  LibraryBig,
 } from 'lucide-react';
 import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { downloadOutput } from './downloadOutput';
+import NewLibraryAssetDialog from '@/components/library/NewLibraryAssetDialog';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -82,6 +84,7 @@ export default function DetailPanel({
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [importAssetOpen, setImportAssetOpen] = useState(false);
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const history = usePlaygroundStore((s) => s.history);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -409,6 +412,16 @@ export default function DetailPanel({
               </button>
             )}
 
+            {!isVideo && output?.media_path && (
+              <button
+                onClick={() => setImportAssetOpen(true)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition border bg-surface-inset border-glass-border text-text-secondary hover:text-foreground hover:bg-hover-bg"
+              >
+                <LibraryBig className="w-4 h-4" />
+                {t('card.importAsAsset')}
+              </button>
+            )}
+
             {output && (
               <p className="text-[0.625rem] leading-relaxed text-text-muted">
                 {t('detail.markHint')}
@@ -454,6 +467,16 @@ export default function DetailPanel({
           </div>
         </div>
       </div>
+      {importAssetOpen && output?.media_path && (
+        <NewLibraryAssetDialog
+          initialImageUrl={output.media_path}
+          initialImageOrigin="workbench"
+          initialSourceGenerationId={generation.id}
+          initialSourceOutputId={output.id}
+          onClose={() => setImportAssetOpen(false)}
+          onCreated={() => setImportAssetOpen(false)}
+        />
+      )}
     </>
   );
 

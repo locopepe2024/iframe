@@ -82,7 +82,9 @@ export function useL3Completion(editor: Editor | null, projectId: string | null)
       });
 
       // 请求成功
-      setL3Results(response.results ?? []);
+      // Backend names this field `entities`; accept `results` too so the
+      // editor remains compatible with the original client contract.
+      setL3Results(response.results ?? response.entities ?? []);
       setL3Status('success');
       setL3LastFetchTime(Date.now());
     } catch (error: unknown) {

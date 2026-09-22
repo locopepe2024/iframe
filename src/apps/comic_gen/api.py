@@ -23,8 +23,8 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any, Tuple
+from pydantic import BaseModel, Field, ValidationError
+from typing import Optional, Dict, List, Any, Tuple, Literal
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -37,11 +37,13 @@ import os
 import shutil
 import uuid
 import logging
+import re
 import traceback
-from urllib.request import Request as UrlRequest, urlopen
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError
+from ...utils.uniart_catalog import fetch_uniart_catalog
+from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
 from .models import (
     ArtDirection,
+    DirectorProfile,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -49,16 +51,17 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    AssetLibraryReference,
+    normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
-from ...utils.uniart_catalog import normalize_uniart_catalog
-from ...utils import setup_logging
+from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="AI Comic Gen API")
+app = FastAPI(title="iFrame Studio API", version="0.1.0")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -91,7 +94,7 @@ from ..studio_access import (
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
-from ..playground.api import router as playground_router
+from ..playground.api import _storage_for as playground_storage_for, router as playground_router
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
 app.include_router(identity_router)
@@ -178,6 +181,11 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")
+        # Prompt polishing resolves the model credentials and optional
+        # episode/series prompt context from the current Studio owner.  Keep
+        # these body-based endpoints inside the same request context even
+        # though the project id is not part of the URL.
+        or path in {"/video/polish_prompt", "/video/polish_r2v_prompt"}
     )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
@@ -315,6 +323,7 @@ class GenerateAssetRequest(BaseModel):
     asset_type: str
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
+    reference: Optional[AssetLibraryReference] = None
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -478,7 +487,7 @@ def upload_asset(
         if not updated_script:
             raise HTTPException(status_code=404, detail="Script or asset not found")
         
-        return signed_response(updated_script)
+        return get_project(script_id)
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -533,6 +542,13 @@ async def create_project(
 
 class ReparseProjectRequest(BaseModel):
     text: str
+    draft: Optional[Dict[str, List[Dict[str, Any]]]] = None
+
+
+class ExtractionRefineRequest(BaseModel):
+    text: str
+    draft: Dict[str, List[Dict[str, Any]]]
+    instructions: List[str] = Field(min_length=1, max_length=12)
 
 
 class UpdateScriptTextRequest(BaseModel):
@@ -564,7 +580,7 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,  # Use default executor
-            partial(pipeline.reparse_project, script_id, request.text)
+            partial(pipeline.reparse_project, script_id, request.text, request.draft)
         )
         return signed_response(result)
     except ValueError as e:
@@ -572,6 +588,83 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# New clients use short requests so an interrupted browser cannot cancel extraction.
+from .extraction_jobs import ExtractionJobs
+extraction_jobs = ExtractionJobs()
+
+
+def extraction_response(job, script_id):
+    if job['status'] == 'completed':
+        # Rehydrate the apply cache, including after a backend restart.
+        result = Script(**job['result'])
+        pipeline._extraction_cache[script_id] = (time.time(), result)
+        job = {**job, 'result': {
+            'characters': [c.dict() for c in result.characters],
+            'scenes': [s.dict() for s in result.scenes],
+            'props': [p.dict() for p in result.props],
+        }}
+    return job
+
+
+@app.post("/projects/{script_id}/extraction-jobs", status_code=202)
+def start_extraction(script_id: str, request: ReparseProjectRequest,
+                     user: UserContext = Depends(require_studio_user)):
+    import hashlib
+    script = pipeline.scripts.get(script_id)
+    if not script:
+        raise HTTPException(404, 'Script not found')
+    llm = pipeline.script_processor.llm
+    prompt = getattr(getattr(script, 'prompt_config', None), 'entity_extraction', '')
+    fingerprint = hashlib.sha256(json.dumps([request.text, prompt, llm.provider, llm._get_default_model()], ensure_ascii=False).encode()).hexdigest()
+    job = extraction_jobs.start(user.owner_profile_id, script_id, fingerprint,
+                                lambda: pipeline.script_processor.parse_novel(script.title, request.text, prompt).dict())
+    return extraction_response(job, script_id)
+
+
+@app.post("/projects/{script_id}/extraction-jobs/refine", status_code=202)
+def start_extraction_refinement(
+    script_id: str,
+    request: ExtractionRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Revise the pending extraction draft without mutating project Cast."""
+    script = pipeline.scripts.get(script_id)
+    if not script:
+        raise HTTPException(404, "Script not found")
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "scenes", "props")}
+    llm = pipeline.script_processor.llm
+    prompt = getattr(getattr(script, "prompt_config", None), "entity_extraction", "")
+    fingerprint = hashlib.sha256(json.dumps([
+        request.text,
+        draft,
+        instructions,
+        prompt,
+        llm.provider,
+        llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    job = extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        fingerprint,
+        lambda: pipeline.script_processor.refine_entity_extraction(
+            script.title,
+            request.text,
+            draft,
+            instructions,
+            prompt,
+        ).dict(),
+    )
+    return extraction_response(job, script_id)
+
+
+@app.get("/projects/{script_id}/extraction-jobs/{job_id}")
+def extraction_status(script_id: str, job_id: str, user: UserContext = Depends(require_studio_user)):
+    return extraction_response(extraction_jobs.get(user.owner_profile_id, script_id, job_id), script_id)
 
 
 @app.post("/projects/{script_id}/extract_preview")
@@ -849,12 +942,15 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.apply_style,
             request.negative_prompt,
             request.batch_size,
-            request.model_name
+            request.model_name,
+            request.reference,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
         response_data["_task_id"] = task_id
         return signed_response(response_data)
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1033,6 +1129,9 @@ class CreateLibraryAssetRequest(BaseModel):
     description: Optional[str] = ""
     persona: Optional[str] = ""        # characters only — grouping label
     image_url: Optional[str] = None    # optional pre-uploaded master image
+    image_origin: Optional[Literal["upload", "workbench"]] = None
+    source_generation_id: Optional[str] = None
+    source_output_id: Optional[str] = None
     voice_id: Optional[str] = None     # characters only — TTS voice binding
 
 
@@ -1061,6 +1160,24 @@ class ForkFromLibraryRequest(BaseModel):
     library_asset_id: str    # id of the source asset in the global library
 
 
+def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext) -> Dict[str, Any]:
+    payload = request.model_dump(exclude={"asset_type"})
+    if request.image_origin != "workbench":
+        return payload
+    if not request.source_generation_id or not request.source_output_id:
+        raise ValueError("Workbench material provenance is required")
+    generation = playground_storage_for(user).get_generation(request.source_generation_id)
+    if generation is None:
+        raise ValueError("Workbench generation not found")
+    output = next((item for item in generation.outputs if item.id == request.source_output_id), None)
+    if output is None or output.media_type != "image":
+        raise ValueError("Workbench image output not found")
+    payload["image_url"] = output.media_path
+    payload["source_generation_id"] = generation.id
+    payload["source_output_id"] = output.id
+    return payload
+
+
 @app.get("/library/assets")
 def get_library_assets():
     """List all assets in the global shared pool."""
@@ -1073,10 +1190,13 @@ def get_library_assets():
 
 
 @app.post("/library/assets")
-def create_library_asset(request: CreateLibraryAssetRequest):
+def create_library_asset(
+    request: CreateLibraryAssetRequest,
+    user: UserContext = Depends(require_studio_user),
+):
     """Create a new asset in the global shared pool."""
     try:
-        payload = request.model_dump(exclude={"asset_type"})
+        payload = _library_asset_payload(request, user)
         asset = pipeline.create_library_asset(request.asset_type, payload)
         return signed_response(asset.model_dump())
     except ValueError as e:
@@ -1200,13 +1320,57 @@ def fork_asset_from_library(script_id: str, request: ForkFromLibraryRequest):
 # File Import & Episode Splitting
 # ============================================================
 
-@app.post("/series/import/preview")
+def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
+    if not re.fullmatch(r"[a-f0-9]{32}", import_id or ""):
+        raise ValueError("Import preview not found")
+    owner_key = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()
+    root = Path(get_user_data_dir()) / "imports" / owner_key
+    root.mkdir(parents=True, exist_ok=True)
+    return root / f"{import_id}.txt"
+
+
+def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
+    target = _import_text_path(owner_profile_id, import_id)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    os.replace(temporary, target)
+
+
+def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
+    path = _import_text_path(owner_profile_id, import_id)
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
+    path = _import_text_path(owner_profile_id, import_id)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _run_import_preview(owner_profile_id: str, filename: str, text: str,
+                        suggested_episodes: int) -> Dict[str, Any]:
+    episodes = pipeline.import_file_and_split(text, suggested_episodes)
+    import_id = uuid.uuid4().hex
+    _store_import_text(owner_profile_id, import_id, text)
+    return {
+        "filename": os.path.basename(filename or "import.txt"),
+        "text_length": len(text),
+        "suggested_episodes": suggested_episodes,
+        "episodes": episodes,
+        "import_id": import_id,
+    }
+
+@app.post("/series/import/preview", status_code=202)
 async def import_file_preview(
     file: UploadFile = File(...),
     suggested_episodes: int = 3,
     user: UserContext = Depends(require_studio_user),
 ):
-    """Upload a txt/md file and get LLM episode split preview."""
+    """Upload text once and start or resume a durable episode-split job."""
     if suggested_episodes < 1 or suggested_episodes > 50:
         raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
     try:
@@ -1225,26 +1389,37 @@ async def import_file_preview(
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
-        loop = asyncio.get_event_loop()
-        episodes = await loop.run_in_executor(
-            None,
-            partial(pipeline.import_file_and_split, text, suggested_episodes)
+        llm = pipeline.script_processor.llm
+        filename = file.filename or "import.txt"
+        fingerprint = hashlib.sha256(json.dumps([
+            hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            suggested_episodes,
+            llm.provider,
+            llm._get_default_model(),
+        ], ensure_ascii=False).encode()).hexdigest()
+        return extraction_jobs.start(
+            user.owner_profile_id,
+            "series-import",
+            "series-import:" + fingerprint,
+            lambda: _run_import_preview(
+                user.owner_profile_id, filename, text, suggested_episodes
+            ),
         )
-        # Store text in pipeline cache, return import_id instead of full text
-        import_id = str(uuid.uuid4())
-        pipeline._import_cache[import_id] = (user.owner_profile_id, text)
-        return {
-            "filename": file.filename,
-            "text_length": len(text),
-            "suggested_episodes": suggested_episodes,
-            "episodes": episodes,
-            "import_id": import_id,
-        }
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("File import preview failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/series/import/preview-jobs/{job_id}")
+def import_file_preview_status(
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, "series-import", job_id)
 
 
 class ConfirmImportRequest(BaseModel):
@@ -1262,15 +1437,17 @@ async def import_file_confirm(
 ):
     """Confirm the episode split and create Series + Episodes."""
     try:
-        # Prefer import_id from cache, fallback to request.text
+        # Prefer persistent owner-scoped source, then legacy memory cache,
+        # and finally direct text for compatibility with older clients.
         text = None
         if request.import_id:
-            cached = pipeline._import_cache.pop(request.import_id, None)
+            text = _load_import_text(user.owner_profile_id, request.import_id)
+            cached = pipeline._import_cache.get(request.import_id)
             if cached:
                 cached_owner, cached_text = cached
                 if cached_owner != user.owner_profile_id:
                     raise ValueError("Import preview not found")
-                text = cached_text
+                text = text or cached_text
         if not text:
             text = request.text
         if not text:
@@ -1288,6 +1465,12 @@ async def import_file_confirm(
                 user.owner_profile_id,
             )
         )
+        if request.import_id:
+            _delete_import_text(user.owner_profile_id, request.import_id)
+            pipeline._import_cache.pop(request.import_id, None)
+            extraction_jobs.forget_result(
+                user.owner_profile_id, "series-import", "import_id", request.import_id
+            )
         return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1322,7 +1505,7 @@ def get_user_config_path() -> str:
     """
     Returns the path to the user config file.
     - Development mode: Uses .env in project root
-    - Packaged app mode: Uses ~/.lumen-x/config.json
+    - Packaged app mode: Uses ~/.iframe/config.json
     """
     from ...utils import get_user_data_dir
     
@@ -1577,17 +1760,17 @@ def get_project(script_id: str):
         seen_char_ids = {c["id"] for c in payload["characters"]}
         seen_scene_ids = {s["id"] for s in payload["scenes"]}
         seen_prop_ids = {p["id"] for p in payload["props"]}
-        for ch in lib.characters:
+        for ch in pipeline._library_list_for_type("character", script.owner_profile_id):
             if ch.id not in seen_char_ids:
                 d = ch.model_dump()
                 d["source"] = "global"
                 payload["characters"].append(d)
-        for sc in lib.scenes:
+        for sc in pipeline._library_list_for_type("scene", script.owner_profile_id):
             if sc.id not in seen_scene_ids:
                 d = sc.model_dump()
                 d["source"] = "global"
                 payload["scenes"].append(d)
-        for pr in lib.props:
+        for pr in pipeline._library_list_for_type("prop", script.owner_profile_id):
             if pr.id not in seen_prop_ids:
                 d = pr.model_dump()
                 d["source"] = "global"
@@ -2083,8 +2266,12 @@ def sync_descriptions(script_id: str):
     Note: This only syncs descriptions; generated images/videos are preserved.
     """
     try:
-        updated_script = pipeline.sync_descriptions_from_script_entities(script_id)
-        return signed_response(updated_script)
+        pipeline.sync_descriptions_from_script_entities(script_id)
+        # Project reads add series/global assets as a presentation layer. The
+        # sync response must use that same merged view; returning the raw
+        # episode Script would make the frontend replace shared assets with
+        # empty local arrays.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2230,6 +2417,104 @@ class AnalyzeToStoryboardRequest(BaseModel):
     text: str
 
 
+class StoryboardAnalysisRefineRequest(BaseModel):
+    text: str
+    draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
+    instructions: List[str] = Field(min_length=1, max_length=12)
+
+
+class StoryboardAnalysisApplyRequest(BaseModel):
+    text: str
+    draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
+
+
+def _storyboard_analysis_fingerprint(script_id: str, text: str,
+                                     draft=None, instructions=None) -> str:
+    script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    resolve_director = getattr(pipeline, "effective_director_profile", None)
+    director_profile = resolve_director(script) if resolve_director else None
+    llm = pipeline.script_processor.llm
+    return hashlib.sha256(json.dumps([
+        text,
+        entities,
+        draft,
+        instructions,
+        prompt,
+        director_profile.model_dump() if director_profile else None,
+        llm.provider,
+        llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@app.post("/projects/{script_id}/storyboard-analysis-jobs", status_code=202)
+def start_storyboard_analysis(
+    script_id: str,
+    request: AnalyzeToStoryboardRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Create or resume a durable storyboard draft without replacing frames."""
+    if not request.text.strip():
+        raise HTTPException(422, "Script text is required")
+    fingerprint = _storyboard_analysis_fingerprint(script_id, request.text)
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        "storyboard:" + fingerprint,
+        lambda: {"frames": pipeline.preview_storyboard_analysis(script_id, request.text)},
+    )
+
+
+@app.post("/projects/{script_id}/storyboard-analysis-jobs/refine", status_code=202)
+def start_storyboard_analysis_refinement(
+    script_id: str,
+    request: StoryboardAnalysisRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Revise a storyboard draft without replacing persisted frames."""
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    fingerprint = _storyboard_analysis_fingerprint(
+        script_id, request.text, request.draft, instructions
+    )
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        "storyboard:" + fingerprint,
+        lambda: {"frames": pipeline.refine_storyboard_analysis(
+            script_id, request.text, request.draft, instructions
+        )},
+    )
+
+
+@app.get("/projects/{script_id}/storyboard-analysis-jobs/{job_id}")
+def storyboard_analysis_status(
+    script_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
+
+
+@app.post("/projects/{script_id}/storyboard-analysis/apply", response_model=Script)
+def apply_storyboard_analysis(
+    script_id: str,
+    request: StoryboardAnalysisApplyRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Replace frames with the exact storyboard draft reviewed by the user."""
+    del user  # Ownership is enforced by the studio request boundary.
+    try:
+        return signed_response(
+            pipeline.analyze_text_to_frames(script_id, request.text, request.draft)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error applying storyboard analysis: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/projects/{script_id}/storyboard/analyze")
 def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     """
@@ -2369,6 +2654,8 @@ class CreateVideoTaskRequest(BaseModel):
     movement_amplitude: Optional[str] = None
     # HappyHorse params
     reference_image_urls: List[str] = []  # Reference image URLs for HH R2V (max 9)
+    pose_reference_variant_ids: Dict[str, List[str]] = {}
+    director_snapshot_media_id: Optional[str] = None
     ratio: Optional[str] = None  # Aspect ratio for HH T2V/R2V
     # Watermark toggle (wan / kling / vidu / pixverse / happyhorse video).
     # None = leave to provider default; True/False = explicit user choice.
@@ -2438,6 +2725,11 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     t2i_image_urls: Optional[List[str]] = None  # full ordered history, server caps at 10 FIFO
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
+    video_model: Optional[str] = None
+    workbench_generate_audio: Optional[bool] = None
+    workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_director_snapshot_media_id: Optional[str] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2455,6 +2747,11 @@ def update_frame_workbench(
             t2i_image_urls=request.t2i_image_urls,
             t2i_selected_index=request.t2i_selected_index,
             workbench_generate_count=request.workbench_generate_count,
+            video_model=request.video_model,
+            workbench_generate_audio=request.workbench_generate_audio,
+            workbench_reference_variant_ids=request.workbench_reference_variant_ids,
+            workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
+            workbench_director_snapshot_media_id=request.workbench_director_snapshot_media_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2509,6 +2806,8 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
+                pose_reference_variant_ids=request.pose_reference_variant_ids,
+                director_snapshot_media_id=request.director_snapshot_media_id,
                 ratio=request.ratio,
                 watermark=request.watermark,
                 mode=request.mode,
@@ -2560,6 +2859,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.aspect_ratio,
+            request.reference,
         )
         
         # Add background processing
@@ -2570,6 +2870,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         response_data["_task_id"] = task_id
         return signed_response(response_data)
 
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2578,10 +2880,15 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
 
 @app.get("/tasks/{task_id}")
 def get_task_status(task_id: str):
-    """Returns the status of an asset generation task for polling."""
+    """Returns a recoverable asset or persisted video task status."""
     status = pipeline.get_asset_generation_task_status(task_id)
     if not status:
+        status = pipeline.get_video_task_status(task_id)
+    if not status:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if status.get("video_url"):
+        return signed_response(status)
     
     # If completed, return the updated script as well
     if status["status"] == "completed":
@@ -2739,7 +3046,7 @@ class SelectVariantRequest(BaseModel):
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
 
-@app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/select")
 def select_asset_variant(script_id: str, request: SelectVariantRequest):
     """Selects a specific variant for an asset."""
     try:
@@ -2750,7 +3057,7 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
             request.variant_id,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2760,6 +3067,31 @@ class DeleteVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
     variant_id: str
+
+class UpdateVariantMetadataRequest(BaseModel):
+    asset_id: str
+    asset_type: str
+    variant_id: str
+    reference_view_role: Optional[str] = None
+    reference_distance: Optional[str] = None
+
+@app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
+def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
+    """Updates the angle/distance labels for one child reference image."""
+    try:
+        updated_script = pipeline.update_asset_variant_metadata(
+            script_id,
+            request.asset_id,
+            request.asset_type,
+            request.variant_id,
+            request.reference_view_role,
+            request.reference_distance,
+        )
+        return signed_response(updated_script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/projects/{script_id}/assets/variant/delete", response_model=Script)
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
@@ -3377,6 +3709,9 @@ class UpdateFrameRequest(BaseModel):
     shot_size: Optional[str] = None
     camera_movement_description: Optional[str] = None
     transition_hint: Optional[str] = None
+    style_prompt_override: Optional[str] = None
+    lighting_override: Optional[str] = None
+    negative_prompt_override: Optional[str] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
 def update_frame(script_id: str, request: UpdateFrameRequest):
@@ -3395,6 +3730,9 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             shot_size=request.shot_size,
             camera_movement_description=request.camera_movement_description,
             transition_hint=request.transition_hint,
+            style_prompt_override=request.style_prompt_override,
+            lighting_override=request.lighting_override,
+            negative_prompt_override=request.negative_prompt_override,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -3469,6 +3807,7 @@ class RenderFrameRequest(BaseModel):
     frame_id: str
     composition_data: Optional[Dict[str, Any]] = None
     prompt: str
+    negative_prompt: Optional[str] = None
     batch_size: int = 1
 
 
@@ -3483,7 +3822,8 @@ def render_frame(script_id: str, request: RenderFrameRequest):
             request.frame_id,
             request.composition_data,
             request.prompt,
-            request.batch_size
+            request.batch_size,
+            request.negative_prompt,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -3753,6 +4093,95 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
+class DirectorProfileRefineRequest(BaseModel):
+    draft: Dict[str, Any]
+    instructions: List[str] = Field(min_length=1, max_length=12)
+
+
+class DirectorProfileApplyRequest(BaseModel):
+    draft: Dict[str, Any]
+
+
+def _validated_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize and validate a visible Director draft before queueing work."""
+    try:
+        normalized = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized)
+    except ValidationError as exc:
+        details = []
+        for error in exc.errors():
+            location = ".".join(str(item) for item in error.get("loc", ()))
+            details.append(f"{location}: {error.get('msg', 'invalid value')}")
+        message = "; ".join(details) or "invalid profile shape"
+        raise HTTPException(422, f"Invalid director profile draft: {message}") from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"Invalid director profile draft: {exc}") from exc
+    return normalized
+
+
+def _director_profile_fingerprint(script_id: str, draft=None, instructions=None) -> str:
+    script, entities, style = pipeline.director_analysis_context(script_id)
+    llm = pipeline.script_processor.llm
+    return hashlib.sha256(json.dumps([
+        script.original_text, entities, style, draft, instructions,
+        llm.provider, llm._get_default_model(),
+    ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
+def start_director_profile_analysis(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    fingerprint = _director_profile_fingerprint(script_id)
+    return extraction_jobs.start(
+        user.owner_profile_id, script_id, "director:" + fingerprint,
+        lambda: {"profile": pipeline.preview_director_profile(script_id)},
+    )
+
+
+@app.post("/projects/{script_id}/director-profile-jobs/refine", status_code=202)
+def start_director_profile_refinement(
+    script_id: str,
+    request: DirectorProfileRefineRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    instructions = [item.strip() for item in request.instructions if item.strip()]
+    if not instructions or any(len(item) > 2000 for item in instructions):
+        raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    draft = _validated_director_profile_draft(request.draft)
+    fingerprint = _director_profile_fingerprint(script_id, draft, instructions)
+    return extraction_jobs.start(
+        user.owner_profile_id, script_id, "director:" + fingerprint,
+        lambda: {"profile": pipeline.refine_director_profile(
+            script_id, draft, instructions
+        )},
+    )
+
+
+@app.get("/projects/{script_id}/director-profile-jobs/{job_id}")
+def director_profile_status(
+    script_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
+
+
+@app.post("/projects/{script_id}/director-profile/apply", response_model=Script)
+def apply_director_profile(
+    script_id: str,
+    request: DirectorProfileApplyRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    draft = _validated_director_profile_draft(request.draft)
+    try:
+        return signed_response(pipeline.apply_director_profile(script_id, draft))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @app.post("/projects/{script_id}/art_direction/analyze")
 async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest):
     """Analyze script content and recommend visual styles using LLM"""
@@ -3893,6 +4322,13 @@ def _get_custom_prompt(script_id: str, field: str) -> str:
     return effective
 
 
+def _get_director_prompt_context(script_id: str) -> str:
+    if not script_id:
+        return ""
+    script = pipeline.get_script(script_id)
+    return pipeline.director_prompt_context(script) if script else ""
+
+
 def _get_polish_model_for_project(script_id: str) -> str:
     """Read polish_model with 3-level fallback: Episode.prompt_config → Series.prompt_config → "".
     Empty = LLMAdapter uses its default (qwen3.6-plus). The frontend's polish-model dropdown
@@ -3917,6 +4353,8 @@ def _get_polish_model_for_project(script_id: str) -> str:
 
 
 class PolishVideoPromptRequest(BaseModel):
+    generate_audio: Optional[bool] = None
+    target_duration: Optional[float] = Field(default=None, gt=0)
     draft_prompt: str
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
@@ -3928,6 +4366,9 @@ class PolishVideoPromptRequest(BaseModel):
     # 显式覆盖 polish 用的 LLM 模型；空 = 用 project / series PromptConfig
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
+    target_video_model: str = ""
+    dialogue_speaker: str = Field("", max_length=200)
+    dialogue_line: str = Field("", max_length=2000)
 
 
 def _polish_error_response(err) -> Dict[str, Any]:
@@ -3945,6 +4386,90 @@ def _polish_error_response(err) -> Dict[str, Any]:
     return body
 
 
+def _target_model_guidance(model_id: str) -> str:
+    """Load the installed provider skill for storyboard prompt polishing."""
+    value = (model_id or "").lower()
+    from ..agent_skills import catalog
+    label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
+    if not label:
+        return ""
+    packages = [p for p in catalog() if label in p.get("targets", [])]
+    text = "\n\n".join(p["instructions"] for p in packages)
+    return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="") -> str:
+    guidance = _target_model_guidance(model_id)
+    if not guidance:
+        return custom or default
+    constraints = ""
+    if generate_audio is False:
+        constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
+    elif generate_audio is True:
+        constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
+        if dialogue_line.strip():
+            speaker = dialogue_speaker.strip() or "Speaker"
+            constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
+    if target_duration is not None:
+        constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+    return guidance + "\n" + custom + constraints + """
+STORYBOARD OUTPUT CONTRACT:
+Return only JSON with string fields prompt_cn and prompt_en. Each string contains
+all fields required by the selected model skill and generation mode (H3 base:
+integrated_multimodal_description, overall_soundscape, non_diegetic_music;
+H3 reference mode: subject_definitions, summary, retention_analysis,
+detailed_description, overall_soundscape, non_diegetic_music).
+Do not replace that structure with scene/action/camera headings.
+Preserve every existing [characterN:name] editor token exactly, including its
+number and name. These are stable editor references; use them as source labels
+inside the model-specific structure. Do not invent or renumber references.
+Provider-native labels will be resolved at submission, not guessed here.
+References in order: {SLOTS}
+Preserve character/product replacement, scene, explicit dialogue and timing.
+Do not invent dialogue text, music, extra shots or replacement identities unless
+requested. Inspect all attached images, including scene, prop and storyboard
+images. Distinguish observed image content from user requirements; sampling
+cannot establish exact cut times. Missing images must not be described as seen.
+"""
+
+
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="") -> None:
+    """Reject responses that ignore the selected provider's prompt contract."""
+    if "h3" not in (model_id or "").lower():
+        return
+    fields = (
+        ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
+        if reference_mode
+        else ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
+    )
+    invalid_languages = []
+    for key in ("prompt_cn", "prompt_en"):
+        text = result.get(key, "")
+        if not isinstance(text, str) or any(
+            re.search(rf"(?im)^\s*{re.escape(field)}\s*[:：]", text) is None
+            for field in fields
+        ):
+            invalid_languages.append(key)
+    if invalid_languages:
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色模型未返回 MiniMax H3 所需的结构化提示词，请重试。本次结果未应用。",
+            message_en="The polish model did not return the structured MiniMax H3 prompt. Retry; this result was not applied.",
+        )
+    exact_dialogue = dialogue_line.strip()
+    if generate_audio is True and exact_dialogue and any(
+        exact_dialogue not in result.get(key, "") or "<d>" not in result.get(key, "")
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果遗漏或改写了镜头对白，请重试。本次结果未应用。",
+            message_en="The polished prompt omitted or rewrote the shot dialogue. Retry; this result was not applied.",
+        )
+
+
 @app.post("/video/polish_prompt")
 def polish_video_prompt(request: PolishVideoPromptRequest):
     """Polishes a video generation prompt using LLM. Returns bilingual prompts.
@@ -3960,12 +4485,17 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     成功：200 + {prompt_cn, prompt_en}
     失败：502 + {reason, message_zh, message_en, prompt_cn?, prompt_en?}
       其中 reason ∈ {is_configured_false, api_error, json_parse_error,
-                     missing_keys, model_echo}。
+                     missing_keys, model_contract_mismatch, model_echo}。
       model_echo 是 warning 性质（带原文双语），其余是 hard error。
     """
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "video_polish")
+        from .llm import DEFAULT_VIDEO_POLISH_PROMPT
+        custom = _get_custom_prompt(request.script_id, "video_polish")
+        director = _get_director_prompt_context(request.script_id)
+        if director:
+            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -3977,6 +4507,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -3994,6 +4525,8 @@ class RefSlot(BaseModel):
 
 
 class PolishR2VPromptRequest(BaseModel):
+    generate_audio: Optional[bool] = None
+    target_duration: Optional[float] = Field(default=None, gt=0)
     draft_prompt: str
     slots: List[RefSlot]
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
@@ -4003,6 +4536,9 @@ class PolishR2VPromptRequest(BaseModel):
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
     polish_model: str = ""
+    target_video_model: str = ""
+    dialogue_speaker: str = Field("", max_length=200)
+    dialogue_line: str = Field("", max_length=2000)
 
 
 @app.post("/video/polish_r2v_prompt")
@@ -4012,7 +4548,12 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     SYNC handler on purpose — see polish_video_prompt for rationale."""
     from .llm import PolishError
     try:
-        custom_prompt = _get_custom_prompt(request.script_id, "r2v_polish")
+        from .llm import DEFAULT_R2V_POLISH_PROMPT
+        custom = _get_custom_prompt(request.script_id, "r2v_polish")
+        director = _get_director_prompt_context(request.script_id)
+        if director:
+            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
         polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
@@ -4025,6 +4566,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             image_urls=request.image_urls or None,
             polish_model=polish_model,
         )
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -4155,18 +4697,14 @@ def get_uniart_models():
     """Fetch the current UniArt OpenAI-compatible model list.
 
     The upstream response is normalized into the capability vocabulary used by
-    LumenX selectors; credentials stay server-side.
+    iFrame selectors; credentials stay server-side.
     """
     runtime_config = studio_uniart_config()
     base = runtime_config["base_url"].rstrip("/")
-    key = runtime_config["api_key"]
-    req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
     try:
-        with urlopen(req, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        models = fetch_uniart_catalog(runtime_config)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    models = normalize_uniart_catalog(payload)
     return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
@@ -4241,7 +4779,9 @@ class SaveDocumentRequest(BaseModel):
 
 
 class DocumentSnapshotInfo(BaseModel):
+    project_id: str
     timestamp: str  # ISO format
+    created_at: str
     size_bytes: int
 
 
@@ -4260,15 +4800,67 @@ def _ensure_history_dir(project_dir: Path) -> Path:
     return history_dir
 
 
-def _create_snapshot(project_dir: Path) -> None:
-    """Create a timestamped snapshot of the current document.json."""
+def _snapshot_info(project_id: str, snapshot_path: Path) -> DocumentSnapshotInfo:
+    """Build the stable metadata returned to the editor for one snapshot."""
+    created_at = datetime.fromtimestamp(
+        snapshot_path.stat().st_mtime, timezone.utc
+    ).isoformat()
+    return DocumentSnapshotInfo(
+        project_id=project_id,
+        timestamp=snapshot_path.stem,
+        created_at=created_at,
+        size_bytes=snapshot_path.stat().st_size,
+    )
+
+
+def _create_snapshot(project_dir: Path, project_id: Optional[str] = None) -> Optional[DocumentSnapshotInfo]:
+    """Create a unique snapshot of the current document.json."""
     doc_path = project_dir / "document.json"
     if not doc_path.exists():
-        return
+        return None
     history_dir = _ensure_history_dir(project_dir)
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+    # Include microseconds so repeated saves in one second never overwrite a
+    # previous version. The collision loop also covers unusual filesystem clock
+    # resolution and makes the invariant explicit.
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S%fZ")
     snapshot_path = history_dir / f"{ts}.json"
+    while snapshot_path.exists():
+        ts = f"{ts}-{uuid.uuid4().hex[:8]}"
+        snapshot_path = history_dir / f"{ts}.json"
     shutil.copy2(str(doc_path), str(snapshot_path))
+    return _snapshot_info(project_id or project_dir.name, snapshot_path)
+
+
+def _document_response(project_id: str, content: dict, doc_path: Path) -> dict:
+    """Return one consistent document envelope for load and restore."""
+    updated_at = datetime.fromtimestamp(
+        doc_path.stat().st_mtime, timezone.utc
+    ).isoformat() if doc_path.exists() else None
+    return {
+        "project_id": project_id,
+        "content": content,
+        "updated_at": updated_at,
+    }
+
+
+def _legacy_script_document(project_id: str) -> dict:
+    """Convert an older project's plain script text into editor blocks."""
+    getter = getattr(pipeline, "get_script", None)
+    script = getter(project_id) if callable(getter) else None
+    text = getattr(script, "original_text", "") if script else ""
+    blocks = []
+    for line in (text or "").splitlines():
+        if line:
+            blocks.append({
+                "type": "action",
+                "content": [{"type": "text", "text": line}],
+            })
+    if not blocks and text:
+        blocks.append({
+            "type": "action",
+            "content": [{"type": "text", "text": text}],
+        })
+    return {"type": "doc", "content": blocks}
 
 
 @app.post("/projects/{project_id}/document")
@@ -4279,9 +4871,10 @@ def save_document(project_id: str, request: SaveDocumentRequest):
 
     doc_path = project_dir / "document.json"
 
+    snapshot = None
     # Optionally create a snapshot before overwriting
     if request.create_snapshot and doc_path.exists():
-        _create_snapshot(project_dir)
+        snapshot = _create_snapshot(project_dir, project_id)
 
     try:
         with open(doc_path, "w", encoding="utf-8") as f:
@@ -4289,7 +4882,18 @@ def save_document(project_id: str, request: SaveDocumentRequest):
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
 
-    return {"status": "ok", "size_bytes": doc_path.stat().st_size}
+    response = {
+        "status": "ok",
+        "project_id": project_id,
+        "size_bytes": doc_path.stat().st_size,
+        "updated_at": datetime.fromtimestamp(
+            doc_path.stat().st_mtime, timezone.utc
+        ).isoformat(),
+        "snapshot_created": snapshot is not None,
+    }
+    if snapshot is not None:
+        response["snapshot"] = snapshot.model_dump()
+    return response
 
 
 @app.get("/projects/{project_id}/document")
@@ -4299,7 +4903,10 @@ def load_document(project_id: str):
     doc_path = project_dir / "document.json"
 
     if not doc_path.exists():
-        return {"type": "doc", "content": []}
+        # Existing Studio projects predate document.json. Return their source
+        # script as an editable action document so opening the editor never
+        # silently drops the story opening.
+        return _document_response(project_id, _legacy_script_document(project_id), doc_path)
 
     try:
         with open(doc_path, "r", encoding="utf-8") as f:
@@ -4307,7 +4914,7 @@ def load_document(project_id: str):
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 @app.get("/projects/{project_id}/document/snapshots")
@@ -4323,10 +4930,7 @@ def list_document_snapshots(project_id: str):
     for f in history_dir.iterdir():
         if f.suffix == ".json" and f.is_file():
             snapshots.append(
-                DocumentSnapshotInfo(
-                    timestamp=f.stem,
-                    size_bytes=f.stat().st_size,
-                )
+                _snapshot_info(project_id, f)
             )
 
     # Sort by timestamp descending
@@ -4343,8 +4947,11 @@ def create_document_snapshot(project_id: str):
     if not doc_path.exists():
         raise HTTPException(status_code=404, detail="No document to snapshot")
 
-    _create_snapshot(project_dir)
-    return {"status": "ok"}
+    snapshot = _create_snapshot(project_dir, project_id)
+    return {
+        "status": "ok",
+        **(snapshot.model_dump() if snapshot else {}),
+    }
 
 
 @app.post("/projects/{project_id}/document/snapshots/{timestamp}/restore")
@@ -4360,13 +4967,16 @@ def restore_document_snapshot(project_id: str, timestamp: str):
     doc_path = project_dir / "document.json"
 
     try:
+        # Keep the document that is about to be replaced. This gives restore a
+        # reversible boundary and lets a user continue editing either branch.
+        _create_snapshot(project_dir, project_id)
         shutil.copy2(str(snapshot_path), str(doc_path))
         with open(doc_path, "r", encoding="utf-8") as f:
             content = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 # ═══════════════════════════════════════════════════════════════

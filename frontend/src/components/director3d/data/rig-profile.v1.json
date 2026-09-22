@@ -1,0 +1,2183 @@
+{
+  "rig_profile_id": "rig-director-humanoid-full-v1",
+  "version": "0.3.0",
+  "joint_vocabulary_version": "director-humanoid-product-joints.v1",
+  "mapping_version": "director-humanoid-product-joints.v1",
+  "limit_policy_version": "director-humanoid-joint-limits.v1",
+  "semantic_control_policy": {
+    "version": "director-humanoid-semantic-controls.v1",
+    "control_id_template": "joint.{joint_id}.{axis}",
+    "input_range": [-1, 1],
+    "neutral_value": 0,
+    "mapping_curve": "piecewise_linear_neutral",
+    "output_range_source": "joint.rotation_limits_deg",
+    "admission": "every_direct_product_joint_axis",
+    "mirror_axis_value_scale": {
+      "x": 1,
+      "y": -1,
+      "z": -1
+    }
+  },
+  "joints": [
+    {
+      "joint_id": "root",
+      "parent_joint_id": null,
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -20,
+          20
+        ],
+        "y": [
+          -20,
+          20
+        ],
+        "z": [
+          -180,
+          180
+        ]
+      },
+      "semantic_role": "root",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "pelvis",
+      "parent_joint_id": "root",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -45,
+          45
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -45,
+          45
+        ]
+      },
+      "semantic_role": "pelvis",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "spine_lower",
+      "parent_joint_id": "pelvis",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          35
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -30,
+          30
+        ]
+      },
+      "semantic_role": "spine_lower",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "spine_mid",
+      "parent_joint_id": "spine_lower",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          35
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -30,
+          30
+        ]
+      },
+      "semantic_role": "spine_mid",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "spine_chest",
+      "parent_joint_id": "spine_mid",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -45,
+          45
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -40,
+          40
+        ]
+      },
+      "semantic_role": "spine_chest",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "neck",
+      "parent_joint_id": "spine_chest",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          55
+        ],
+        "y": [
+          -45,
+          45
+        ],
+        "z": [
+          -65,
+          65
+        ]
+      },
+      "semantic_role": "neck",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "head",
+      "parent_joint_id": "neck",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          55
+        ],
+        "y": [
+          -45,
+          45
+        ],
+        "z": [
+          -70,
+          70
+        ]
+      },
+      "semantic_role": "head",
+      "side": "center",
+      "mirror_joint_id": null,
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "clavicle_l",
+      "parent_joint_id": "spine_chest",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -30,
+          30
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "clavicle",
+      "side": "left",
+      "mirror_joint_id": "clavicle_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "upper_arm_l",
+      "parent_joint_id": "clavicle_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -135,
+          135
+        ],
+        "y": [
+          -110,
+          110
+        ],
+        "z": [
+          -150,
+          150
+        ]
+      },
+      "semantic_role": "upper_arm",
+      "side": "left",
+      "mirror_joint_id": "upper_arm_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "lower_arm_l",
+      "parent_joint_id": "upper_arm_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -145,
+          145
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -145,
+          145
+        ]
+      },
+      "semantic_role": "lower_arm",
+      "side": "left",
+      "mirror_joint_id": "lower_arm_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "wrist_l",
+      "parent_joint_id": "lower_arm_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -75,
+          75
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -85,
+          85
+        ]
+      },
+      "semantic_role": "wrist",
+      "side": "left",
+      "mirror_joint_id": "wrist_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "hand_l",
+      "parent_joint_id": "wrist_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          55
+        ],
+        "y": [
+          -45,
+          45
+        ],
+        "z": [
+          -60,
+          60
+        ]
+      },
+      "semantic_role": "hand",
+      "side": "left",
+      "mirror_joint_id": "hand_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "DEF_hand_l",
+      "parent_joint_id": "hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "deformation_helper",
+      "side": "left",
+      "mirror_joint_id": "DEF_hand_r",
+      "control_class": "deformation_helper",
+      "edit_policy": "derived"
+    },
+    {
+      "joint_id": "index_01_l",
+      "parent_joint_id": "DEF_hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "index_01",
+      "side": "left",
+      "mirror_joint_id": "index_01_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_02_l",
+      "parent_joint_id": "index_01_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "index_02",
+      "side": "left",
+      "mirror_joint_id": "index_02_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_03_l",
+      "parent_joint_id": "index_02_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "index_03",
+      "side": "left",
+      "mirror_joint_id": "index_03_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_04_leaf_l",
+      "parent_joint_id": "index_03_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "index_04_leaf_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "middle_01_l",
+      "parent_joint_id": "DEF_hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "middle_01",
+      "side": "left",
+      "mirror_joint_id": "middle_01_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_02_l",
+      "parent_joint_id": "middle_01_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "middle_02",
+      "side": "left",
+      "mirror_joint_id": "middle_02_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_03_l",
+      "parent_joint_id": "middle_02_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "middle_03",
+      "side": "left",
+      "mirror_joint_id": "middle_03_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_04_leaf_l",
+      "parent_joint_id": "middle_03_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "middle_04_leaf_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "little_01_l",
+      "parent_joint_id": "DEF_hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "little_01",
+      "side": "left",
+      "mirror_joint_id": "little_01_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_02_l",
+      "parent_joint_id": "little_01_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "little_02",
+      "side": "left",
+      "mirror_joint_id": "little_02_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_03_l",
+      "parent_joint_id": "little_02_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "little_03",
+      "side": "left",
+      "mirror_joint_id": "little_03_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_04_leaf_l",
+      "parent_joint_id": "little_03_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "little_04_leaf_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "ring_01_l",
+      "parent_joint_id": "DEF_hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "ring_01",
+      "side": "left",
+      "mirror_joint_id": "ring_01_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_02_l",
+      "parent_joint_id": "ring_01_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "ring_02",
+      "side": "left",
+      "mirror_joint_id": "ring_02_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_03_l",
+      "parent_joint_id": "ring_02_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "ring_03",
+      "side": "left",
+      "mirror_joint_id": "ring_03_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_04_leaf_l",
+      "parent_joint_id": "ring_03_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "ring_04_leaf_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "thumb_01_l",
+      "parent_joint_id": "DEF_hand_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          70
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -70,
+          70
+        ]
+      },
+      "semantic_role": "thumb_01",
+      "side": "left",
+      "mirror_joint_id": "thumb_01_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_02_l",
+      "parent_joint_id": "thumb_01_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          85
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -45,
+          45
+        ]
+      },
+      "semantic_role": "thumb_02",
+      "side": "left",
+      "mirror_joint_id": "thumb_02_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_03_l",
+      "parent_joint_id": "thumb_02_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          75
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "thumb_03",
+      "side": "left",
+      "mirror_joint_id": "thumb_03_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_04_leaf_l",
+      "parent_joint_id": "thumb_03_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "thumb_04_leaf_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "clavicle_r",
+      "parent_joint_id": "spine_chest",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -30,
+          30
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "clavicle",
+      "side": "right",
+      "mirror_joint_id": "clavicle_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "upper_arm_r",
+      "parent_joint_id": "clavicle_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -135,
+          135
+        ],
+        "y": [
+          -110,
+          110
+        ],
+        "z": [
+          -150,
+          150
+        ]
+      },
+      "semantic_role": "upper_arm",
+      "side": "right",
+      "mirror_joint_id": "upper_arm_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "lower_arm_r",
+      "parent_joint_id": "upper_arm_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -145,
+          145
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -145,
+          145
+        ]
+      },
+      "semantic_role": "lower_arm",
+      "side": "right",
+      "mirror_joint_id": "lower_arm_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "wrist_r",
+      "parent_joint_id": "lower_arm_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -75,
+          75
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -85,
+          85
+        ]
+      },
+      "semantic_role": "wrist",
+      "side": "right",
+      "mirror_joint_id": "wrist_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "hand_r",
+      "parent_joint_id": "wrist_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          55
+        ],
+        "y": [
+          -45,
+          45
+        ],
+        "z": [
+          -60,
+          60
+        ]
+      },
+      "semantic_role": "hand",
+      "side": "right",
+      "mirror_joint_id": "hand_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "DEF_hand_r",
+      "parent_joint_id": "hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "deformation_helper",
+      "side": "right",
+      "mirror_joint_id": "DEF_hand_l",
+      "control_class": "deformation_helper",
+      "edit_policy": "derived"
+    },
+    {
+      "joint_id": "index_01_r",
+      "parent_joint_id": "DEF_hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "index_01",
+      "side": "right",
+      "mirror_joint_id": "index_01_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_02_r",
+      "parent_joint_id": "index_01_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "index_02",
+      "side": "right",
+      "mirror_joint_id": "index_02_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_03_r",
+      "parent_joint_id": "index_02_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "index_03",
+      "side": "right",
+      "mirror_joint_id": "index_03_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "index_04_leaf_r",
+      "parent_joint_id": "index_03_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "index_04_leaf_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "middle_01_r",
+      "parent_joint_id": "DEF_hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "middle_01",
+      "side": "right",
+      "mirror_joint_id": "middle_01_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_02_r",
+      "parent_joint_id": "middle_01_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "middle_02",
+      "side": "right",
+      "mirror_joint_id": "middle_02_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_03_r",
+      "parent_joint_id": "middle_02_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "middle_03",
+      "side": "right",
+      "mirror_joint_id": "middle_03_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "middle_04_leaf_r",
+      "parent_joint_id": "middle_03_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "middle_04_leaf_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "little_01_r",
+      "parent_joint_id": "DEF_hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "little_01",
+      "side": "right",
+      "mirror_joint_id": "little_01_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_02_r",
+      "parent_joint_id": "little_01_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "little_02",
+      "side": "right",
+      "mirror_joint_id": "little_02_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_03_r",
+      "parent_joint_id": "little_02_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "little_03",
+      "side": "right",
+      "mirror_joint_id": "little_03_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "little_04_leaf_r",
+      "parent_joint_id": "little_03_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "little_04_leaf_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "ring_01_r",
+      "parent_joint_id": "DEF_hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          105
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -25,
+          25
+        ]
+      },
+      "semantic_role": "ring_01",
+      "side": "right",
+      "mirror_joint_id": "ring_01_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_02_r",
+      "parent_joint_id": "ring_01_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          120
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "ring_02",
+      "side": "right",
+      "mirror_joint_id": "ring_02_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_03_r",
+      "parent_joint_id": "ring_02_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -15,
+          95
+        ],
+        "y": [
+          -12,
+          12
+        ],
+        "z": [
+          -12,
+          12
+        ]
+      },
+      "semantic_role": "ring_03",
+      "side": "right",
+      "mirror_joint_id": "ring_03_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ring_04_leaf_r",
+      "parent_joint_id": "ring_03_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "ring_04_leaf_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "thumb_01_r",
+      "parent_joint_id": "DEF_hand_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -55,
+          70
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -70,
+          70
+        ]
+      },
+      "semantic_role": "thumb_01",
+      "side": "right",
+      "mirror_joint_id": "thumb_01_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_02_r",
+      "parent_joint_id": "thumb_01_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          85
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -45,
+          45
+        ]
+      },
+      "semantic_role": "thumb_02",
+      "side": "right",
+      "mirror_joint_id": "thumb_02_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_03_r",
+      "parent_joint_id": "thumb_02_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -25,
+          75
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "thumb_03",
+      "side": "right",
+      "mirror_joint_id": "thumb_03_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "thumb_04_leaf_r",
+      "parent_joint_id": "thumb_03_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "thumb_04_leaf_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "upper_leg_l",
+      "parent_joint_id": "pelvis",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -125,
+          85
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -75,
+          75
+        ]
+      },
+      "semantic_role": "upper_leg",
+      "side": "left",
+      "mirror_joint_id": "upper_leg_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "lower_leg_l",
+      "parent_joint_id": "upper_leg_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -150,
+          150
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -150,
+          150
+        ]
+      },
+      "semantic_role": "lower_leg",
+      "side": "left",
+      "mirror_joint_id": "lower_leg_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ankle_l",
+      "parent_joint_id": "lower_leg_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -50,
+          50
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -40,
+          40
+        ]
+      },
+      "semantic_role": "ankle",
+      "side": "left",
+      "mirror_joint_id": "ankle_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "foot_l",
+      "parent_joint_id": "ankle_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -40,
+          40
+        ],
+        "y": [
+          -30,
+          30
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "foot",
+      "side": "left",
+      "mirror_joint_id": "foot_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "DEF_foot_l",
+      "parent_joint_id": "foot_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "deformation_helper",
+      "side": "left",
+      "mirror_joint_id": "DEF_foot_r",
+      "control_class": "deformation_helper",
+      "edit_policy": "derived"
+    },
+    {
+      "joint_id": "toe_l",
+      "parent_joint_id": "DEF_foot_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          65
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "toe",
+      "side": "left",
+      "mirror_joint_id": "toe_r",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "toe_attachment_l",
+      "parent_joint_id": "toe_l",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "left",
+      "mirror_joint_id": "toe_attachment_r",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    },
+    {
+      "joint_id": "upper_leg_r",
+      "parent_joint_id": "pelvis",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -125,
+          85
+        ],
+        "y": [
+          -55,
+          55
+        ],
+        "z": [
+          -75,
+          75
+        ]
+      },
+      "semantic_role": "upper_leg",
+      "side": "right",
+      "mirror_joint_id": "upper_leg_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "lower_leg_r",
+      "parent_joint_id": "upper_leg_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -150,
+          150
+        ],
+        "y": [
+          -25,
+          25
+        ],
+        "z": [
+          -150,
+          150
+        ]
+      },
+      "semantic_role": "lower_leg",
+      "side": "right",
+      "mirror_joint_id": "lower_leg_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "ankle_r",
+      "parent_joint_id": "lower_leg_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -50,
+          50
+        ],
+        "y": [
+          -35,
+          35
+        ],
+        "z": [
+          -40,
+          40
+        ]
+      },
+      "semantic_role": "ankle",
+      "side": "right",
+      "mirror_joint_id": "ankle_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "foot_r",
+      "parent_joint_id": "ankle_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -40,
+          40
+        ],
+        "y": [
+          -30,
+          30
+        ],
+        "z": [
+          -35,
+          35
+        ]
+      },
+      "semantic_role": "foot",
+      "side": "right",
+      "mirror_joint_id": "foot_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "DEF_foot_r",
+      "parent_joint_id": "foot_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "deformation_helper",
+      "side": "right",
+      "mirror_joint_id": "DEF_foot_l",
+      "control_class": "deformation_helper",
+      "edit_policy": "derived"
+    },
+    {
+      "joint_id": "toe_r",
+      "parent_joint_id": "DEF_foot_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [
+        "x",
+        "y",
+        "z"
+      ],
+      "rotation_limits_deg": {
+        "x": [
+          -35,
+          65
+        ],
+        "y": [
+          -15,
+          15
+        ],
+        "z": [
+          -15,
+          15
+        ]
+      },
+      "semantic_role": "toe",
+      "side": "right",
+      "mirror_joint_id": "toe_l",
+      "control_class": "product_joint",
+      "edit_policy": "direct"
+    },
+    {
+      "joint_id": "toe_attachment_r",
+      "parent_joint_id": "toe_r",
+      "rest_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "supported_axes": [],
+      "rotation_limits_deg": {},
+      "semantic_role": "attachment",
+      "side": "right",
+      "mirror_joint_id": "toe_attachment_l",
+      "control_class": "attachment",
+      "edit_policy": "read_only"
+    }
+  ],
+  "pose_preset_ids": [
+    "pose.neutral",
+    "pose.t_pose",
+    "standing.relaxed",
+    "standing.contrapposto",
+    "standing.hands_on_hips",
+    "standing.lean",
+    "standing.bow",
+    "locomotion.walk_contact",
+    "locomotion.run_stride",
+    "seated.sit",
+    "seated.squat",
+    "kneeling.single_knee",
+    "interaction.push",
+    "interaction.phone_use",
+    "action.guard",
+    "action.kick",
+    "action.throw",
+    "gesture.wave",
+    "gesture.reach",
+    "gesture.arms_crossed",
+    "gesture.thinking"
+  ]
+}

@@ -43,8 +43,8 @@
 - [x] SSR/client 首屏统一 `atelier-dark` 防 hydration mismatch（`mounted` gate，L30-32）
 
 ### C. 引用清理
-- [x] 全仓库无 `LumenX-cybr.png` / `LumenX_亮色.png` / `LumenX.png` 旧引用残留（grep 零命中）
-- [ ] 🟡 `public/` 下旧资产 `LumenX-cybr.png` / `LumenX-cybr-transparent.png` / `LumenX.png` / `LumenX_亮色.png` 已无人引用，建议确认无其它用途后清理（**非阻塞，删前 grep 全仓**）。
+- [x] 全仓库无 `iFrame-cybr.png` / `iFrame_亮色.png` / `iFrame.png` 旧引用残留（grep 零命中）
+- [ ] 🟡 `public/` 下旧资产 `iFrame-cybr.png` / `iFrame-cybr-transparent.png` / `iFrame.png` / `iFrame_亮色.png` 已无人引用，建议确认无其它用途后清理（**非阻塞，删前 grep 全仓**）。
 
 ### D. 视觉巡检（gstack headless，落地 Agent 执行）
 - [ ] 🟡 5 主题逐一截图侧栏 Logo 区，验：

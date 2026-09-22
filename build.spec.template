@@ -93,7 +93,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='云创AI漫剧',
+    name='iFrame Studio',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -114,7 +114,7 @@ exe = EXE(
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
-        name='云创AI漫剧.app',
+        name='iFrame Studio.app',
         icon='icon.icns',
         bundle_identifier='com.tron.comic',
         info_plist={

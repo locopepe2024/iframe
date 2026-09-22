@@ -39,6 +39,7 @@ models:
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 20, recommended: true, badges: [UniArt]}
     duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
     params:
+      audio: true
       resolution: {options: [480p, 720p], default: 720p}
       ratio: {options: ["16:9", "9:16"], default: "16:9"}
 
@@ -53,6 +54,8 @@ models:
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 25, badges: [UniArt]}
     duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
     params:
+      audio: true
+      seed: true
       resolution: {options: [720p, 2k], default: 2k}
       ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
 
@@ -67,6 +70,7 @@ models:
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 30, badges: [UniArt]}
     duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
     params:
+      audio: true
       resolution: {options: [480p, 720p, 1080p], default: 720p}
       ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
   - id: uniart/seedance-2.5-special
@@ -80,5 +84,6 @@ models:
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 35, badges: [UniArt]}
     duration: {type: slider, min: 4, max: 30, step: 1, default: 5}
     params:
+      audio: true
       resolution: {options: [480p, 720p], default: 720p}
       ratio: {options: ["16:9", "9:16"], default: "16:9"}

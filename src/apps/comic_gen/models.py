@@ -1,5 +1,6 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
+import json
 import time
 from pydantic import BaseModel, Field
 
@@ -132,6 +133,31 @@ class ImageVariant(BaseModel):
     # NEW: 上传来源标记
     is_uploaded_source: bool = Field(False, description="Whether this is a user-uploaded source file")
     upload_type: Optional[str] = Field(None, description="Upload type if is_uploaded_source: full_body/head_shot/three_views/image")
+    source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
+    source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
+    source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
+    reference_asset_type: Optional[Literal["character", "scene", "prop"]] = Field(
+        None,
+        description="Asset-library reference type used to generate this variant",
+    )
+    reference_asset_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference asset ID used to generate this variant",
+    )
+    reference_variant_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference variant ID used to generate this variant",
+    )
+    reference_view_role: Optional[str] = Field(
+        None,
+        description="Optional product view role such as front, right, three_quarter_right, or detail",
+    )
+    reference_distance: Optional[str] = Field(
+        None,
+        description="Optional framing distance: macro, close, medium, or full",
+    )
+    camera_yaw: Optional[float] = Field(None, description="Optional camera yaw in degrees")
+    camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
 
 # Maximum variants to keep per asset (excluding favorited ones)
 MAX_VARIANTS_PER_ASSET = 10
@@ -168,6 +194,30 @@ class AssetUnit(BaseModel):
     image_updated_at: float = Field(default_factory=time.time, description="Timestamp of last image update")
     video_updated_at: float = Field(0.0, description="Timestamp of last motion ref update")
 
+
+class PoseReferenceSelection(BaseModel):
+    """Durable pose evidence selected for one storyboard shot.
+
+    This is intentionally provider-neutral. It identifies project-owned
+    variants and a director snapshot without pretending either is ControlNet.
+    """
+
+    variant_ids: List[str] = Field(default_factory=list, description="Ordered pose/reference variant IDs")
+    director_snapshot_media_id: Optional[str] = Field(None, description="Durable media ID for a director-desk snapshot")
+
+
+class AssetLibraryReference(BaseModel):
+    """Stable identity of one reusable image variant from the asset library.
+
+    The browser submits only these IDs. The pipeline resolves the image
+    material against the current owner's project/series/global asset pools at
+    task execution time, so delivery URLs never become durable request state.
+    """
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str = Field(..., min_length=1)
+    variant_id: str = Field(..., min_length=1)
+
 class VideoTask(BaseModel):
     id: str
     project_id: str
@@ -200,6 +250,14 @@ class VideoTask(BaseModel):
     movement_amplitude: Optional[str] = Field(None, description="Vidu movement amplitude: auto/small/medium/large")
     # HappyHorse params
     reference_image_urls: List[str] = Field(default_factory=list, description="Reference image URLs for HappyHorse R2V (max 9)")
+    pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Immutable semantic pose-reference selections used for this task",
+    )
+    director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable director-desk snapshot media ID used for this task",
+    )
     ratio: Optional[str] = Field(None, description="Aspect ratio for HappyHorse T2V/R2V: 16:9, 9:16, 1:1, 4:3, 3:4")
     audio_setting: Optional[str] = Field(None, description="Audio setting for HappyHorse V2V: auto/origin")
     # Watermark toggle — supported by wan/kling/vidu/pixverse/happyhorse video models.
@@ -262,6 +320,14 @@ class Character(BaseModel):
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
     )
+    makeup_reference: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Virtual actor identity/makeup reference images",
+    )
+    pose_references: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Reusable pose and gesture reference images for this actor",
+    )
 
     # === LEGACY (pre R2V v2): Asset Activation v2 — three separate units ===
     # Frontend now collapses to reference_sheet; legacy fields are read
@@ -315,6 +381,9 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
@@ -335,6 +404,9 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
@@ -356,11 +428,17 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    director_review_required: bool = False
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
     owner_profile_id: Optional[str] = Field(None, description="Authenticated profile owner")
+    director_review_required: bool = Field(False, description="Frame predates the confirmed director profile")
+    director_profile_revision: Optional[int] = None
+    director_profile_hash: Optional[str] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
@@ -398,6 +476,21 @@ class StoryboardFrame(BaseModel):
     assembled_prompt: Optional[str] = Field(None, description="由 visual_description + 结构化字段自动拼装的最终 prompt（只读）")
 
     # === Prompts ===
+    # Per-shot art-direction overrides.  Empty values inherit the project's
+    # global style configuration; populated values replace the corresponding
+    # global positive/negative prompt or add scene-specific lighting.
+    style_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头风格覆盖；为空时继承项目全局正向风格提示词",
+    )
+    lighting_override: Optional[str] = Field(
+        None,
+        description="本镜头光线覆盖；为空时使用全局风格的场景自适应光线",
+    )
+    negative_prompt_override: Optional[str] = Field(
+        None,
+        description="本镜头负向约束覆盖；为空时继承项目全局负向提示词",
+    )
     image_prompt: Optional[str] = Field(None, description="Optimized prompt for T2I/I2I (Legacy)")
     image_prompt_cn: Optional[str] = Field(None, description="Polished Chinese prompt for user confirmation")
     image_prompt_en: Optional[str] = Field(None, description="Polished English prompt for Wan model generation")
@@ -458,6 +551,23 @@ class StoryboardFrame(BaseModel):
         1,
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
+    video_model: Optional[str] = Field(None, description="Per-shot video model override")
+    workbench_generate_audio: Optional[bool] = Field(
+        None,
+        description="Per-shot generated-audio choice; None inherits the current project/UI default",
+    )
+    workbench_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Explicit per-shot image variant selections keyed by semantic asset ID",
+    )
+    workbench_pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Ordered per-shot pose reference variant IDs keyed by semantic asset ID",
+    )
+    workbench_director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable media ID for the shot's 3D director snapshot",
+    )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"
@@ -499,7 +609,7 @@ class ModelSettings(BaseModel):
     image_model: str = Field(_DEFAULT_MODEL_SETTINGS.image_model, description="Image generation model (T2I+I2I unified)")
     i2v_model: str = Field(_DEFAULT_MODEL_SETTINGS.i2v_model, description="Image-to-Video model for Motion")
     r2v_model: str = Field(
-        "wan2.7-r2v",
+        _DEFAULT_MODEL_SETTINGS.r2v_model,
         description="Reference-to-Video default for the project. Used by Storyboard's R2V tab as the initial picker value; per-storyboard override still wins.",
     )
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
@@ -508,12 +618,121 @@ class ModelSettings(BaseModel):
     storyboard_aspect_ratio: str = Field("16:9", description="Aspect ratio for Storyboard (9:16, 16:9, 1:1)")
 
 
+class DirectorProfile(BaseModel):
+    """Confirmed narrative direction carried into downstream generation."""
+    setting: Dict[str, Any] = Field(default_factory=dict)
+    timeline: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    key_events: List[Dict[str, Any]] = Field(default_factory=list)
+    emotional_arc: str = ""
+    pacing: str = ""
+    visual_language: str = ""
+    performance_direction: str = ""
+    dialogue_direction: str = ""
+    sound_direction: str = ""
+    continuity_constraints: List[str] = Field(default_factory=list)
+    prohibitions: List[str] = Field(default_factory=list)
+    unresolved_questions: List[str] = Field(default_factory=list)
+    sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
+    revision: int = Field(1, ge=1)
+    content_hash: str = ""
+    confirmed_at: float = 0.0
+
+
+_DIRECTOR_TEXT_FIELDS = (
+    "emotional_arc",
+    "pacing",
+    "visual_language",
+    "performance_direction",
+    "dialogue_direction",
+    "sound_direction",
+)
+_DIRECTOR_OBJECT_LIST_FIELDS = (
+    "timeline",
+    "relationships",
+    "key_events",
+    "sample_plan",
+)
+_DIRECTOR_STRING_LIST_FIELDS = (
+    "continuity_constraints",
+    "prohibitions",
+    "unresolved_questions",
+)
+
+
+def _director_value_as_text(value: Any) -> str:
+    """Represent a JSON value as readable text without dropping structure."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        # Drafts normally come from JSON, but keep validation deterministic if
+        # an in-process caller passes a non-JSON value.
+        return str(value)
+
+
+def _normalize_director_object_list(value: Any) -> Any:
+    """Keep object-list shape while preserving scalar model output as data."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    normalized = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append(item)
+        else:
+            normalized.append({"value": _director_value_as_text(item)})
+    return normalized
+
+
+def _normalize_director_string_list(value: Any) -> Any:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    return [_director_value_as_text(item) for item in value]
+
+
+def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize an AI/user draft at the Director profile boundary.
+
+    The model prompt asks for six natural-language fields, but some model
+    responses express those fields as nested JSON objects or arrays.  Keeping
+    their JSON representation in the string fields makes the draft valid for
+    the existing schema without discarding details.  Incompatible top-level
+    shapes are intentionally left untouched so the caller can return a useful
+    validation error instead of silently accepting malformed input.
+    """
+    normalized = dict(draft)
+    for field in _DIRECTOR_TEXT_FIELDS:
+        if field in normalized:
+            normalized[field] = _director_value_as_text(normalized[field])
+
+    if "setting" in normalized and normalized["setting"] is None:
+        normalized["setting"] = {}
+
+    for field in _DIRECTOR_OBJECT_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+
+    for field in _DIRECTOR_STRING_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_string_list(normalized[field])
+
+    return normalized
+
+
 class ArtDirection(BaseModel):
     """Art Direction configuration for global visual style"""
     selected_style_id: str = Field(..., description="ID of the selected style")
     style_config: Dict[str, Any] = Field(..., description="Complete style configuration")
     custom_styles: List[Dict[str, Any]] = Field(default_factory=list, description="User-created custom styles")
     ai_recommendations: List[Dict[str, Any]] = Field(default_factory=list, description="AI recommended styles")
+    director_profile: Optional[DirectorProfile] = Field(None, description="Confirmed narrative and directorial constraints")
 
 class PromptConfig(BaseModel):
     """Custom system prompts for polish/refine stages. Empty string = use system default."""
@@ -546,6 +765,7 @@ class Script(BaseModel):
     
     # Art Direction configuration (new approach)
     art_direction: Optional[ArtDirection] = Field(None, description="Global visual style configuration")
+    director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage
     model_settings: ModelSettings = Field(default_factory=ModelSettings, description="Model selection for T2I/I2I/I2V")
@@ -664,7 +884,7 @@ class Series(BaseModel):
 
 
 class GlobalAssetLibrary(BaseModel):
-    """Project-independent global asset pool (LumenX Core shared library).
+    """Project-independent global asset pool (iFrame Core shared library).
 
     A single top-level curated container of reusable assets that any
     project may reference by id. It is the *lowest* layer in the

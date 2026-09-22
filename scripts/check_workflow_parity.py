@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check behavioral parity between the Claude/Codex mirrored workflow docs.
 
-`.claude/commands/lumenx-*.md` (zh) and `.codex/workflows/lumenx-*.md` (en)
+`.claude/commands/iframe-*.md` (zh) and `.codex/workflows/iframe-*.md` (en)
 are intentionally written in different languages, so prose is expected to
 differ. What must NOT drift silently is the behavioral surface:
 
@@ -29,9 +29,9 @@ CLAUDE_DIR = REPO_ROOT / ".claude" / "commands"
 CODEX_DIR = REPO_ROOT / ".codex" / "workflows"
 
 PAIR_NAMES = [
-    "lumenx-build",
-    "lumenx-git-publish",
-    "lumenx-model-onboarding",
+    "iframe-build",
+    "iframe-git-publish",
+    "iframe-model-onboarding",
 ]
 
 # Confirmed intentional divergences. Keyed by pair name; each entry maps an

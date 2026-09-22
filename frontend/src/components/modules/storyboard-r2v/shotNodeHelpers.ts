@@ -202,6 +202,19 @@ export function frameToShotNode(
         id: frame.id,
         prompt: frame.visual_description || frame.action_description || "",
         tabMode: (frame.workbench_tab_mode as "t2i_i2v" | "direct_r2v" | undefined) ?? defaultTabMode,
+        videoModel: typeof frame.video_model === "string" ? frame.video_model : undefined,
+        generateAudio: typeof frame.workbench_generate_audio === "boolean"
+            ? frame.workbench_generate_audio
+            : undefined,
+        referenceVariantIds: frame.workbench_reference_variant_ids && typeof frame.workbench_reference_variant_ids === "object"
+            ? frame.workbench_reference_variant_ids
+            : {},
+        poseReferenceVariantIds: frame.workbench_pose_reference_variant_ids && typeof frame.workbench_pose_reference_variant_ids === "object"
+            ? frame.workbench_pose_reference_variant_ids
+            : {},
+        directorSnapshotMediaId: typeof frame.workbench_director_snapshot_media_id === "string"
+            ? frame.workbench_director_snapshot_media_id
+            : null,
         videoUrl,
         videoStatus,
         videoTaskId,
@@ -218,6 +231,9 @@ export function frameToShotNode(
         shotSize: frame.shot_size ?? null,
         cameraAngle: frame.camera_angle ?? null,
         transitionHint: frame.transition_hint ?? null,
+        stylePromptOverride: frame.style_prompt_override ?? null,
+        lightingOverride: frame.lighting_override ?? null,
+        negativePromptOverride: frame.negative_prompt_override ?? null,
         isVideoPinned: Boolean(frame.is_video_pinned),
     });
 }

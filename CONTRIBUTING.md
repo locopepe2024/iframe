@@ -1,10 +1,10 @@
-# Contributing to LumenX Studio
+# Contributing to iFrame Studio
 
-Thank you for your interest in contributing to LumenX Studio! We welcome contributions from the community.
+Thank you for your interest in contributing to iFrame Studio! We welcome contributions from the community.
 
 ## 🌟 Ways to Contribute
 
-- **Bug Reports**: Submit detailed bug reports via [GitHub Issues](https://github.com/alibaba/lumenx/issues)
+- **Bug Reports**: Submit detailed bug reports via [GitHub Issues](https://github.com/locopepe2024/iframe/issues)
 - **Feature Requests**: Propose new features through GitHub Issues
 - **Code Contributions**: Submit pull requests for bug fixes or new features
 - **Documentation**: Improve documentation, tutorials, or examples
@@ -17,10 +17,10 @@ Thank you for your interest in contributing to LumenX Studio! We welcome contrib
 ```bash
 # Fork the repository on GitHub, then clone your fork
 git clone https://github.com/YOUR_USERNAME/lumenx.git
-cd lumenx
+cd iframe
 
 # Add upstream remote
-git remote add upstream https://github.com/alibaba/lumenx.git
+git remote add upstream https://github.com/locopepe2024/iframe.git
 ```
 
 ### 2. Set Up Development Environment
@@ -67,8 +67,8 @@ When your change touches model support, do not treat it as an ordinary string-re
 
 - textual alias: `/lumenx-model-onboarding`
 - workflow docs:
-  - `.codex/workflows/lumenx-model-onboarding.md`
-  - `.claude/commands/lumenx-model-onboarding.md`
+  - `.codex/workflows/iframe-model-onboarding.md`
+  - `.claude/commands/iframe-model-onboarding.md`
 
 Typical use cases:
 
@@ -324,13 +324,13 @@ For feature requests, please describe:
 
 ## 📞 Questions?
 
-- **Technical Questions**: [GitHub Discussions](https://github.com/alibaba/lumenx/discussions)
+- **Technical Questions**: [GitHub Discussions](https://github.com/locopepe2024/iframe/discussions)
 - **Security Issues**: Email security@alibaba-inc.com (do not file public issues)
 
 ## 📄 License
 
-By contributing to LumenX Studio, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing to iFrame Studio, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
 ---
 
-Thank you for contributing to LumenX Studio! 🎉
+Thank you for contributing to iFrame Studio! 🎉

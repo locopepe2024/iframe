@@ -24,7 +24,7 @@ describe('playground composer catalog controls', () => {
 
   it('only exposes audio when the active adapter consumes the catalog parameter', () => {
     expect(getModelAudioControl('kling-v3-i2v')).toBe('sound');
-    expect(getModelAudioControl('uniart/minimax-h3-vip')).toBeNull();
+    expect(getModelAudioControl('uniart/minimax-h3-vip')).toBe('audio');
     expect(getModelAudioControl('pixverse-c1-i2v')).toBeNull();
   });
 

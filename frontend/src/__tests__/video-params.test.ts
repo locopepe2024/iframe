@@ -116,9 +116,10 @@ describe('Wan 2.2 模型参数', () => {
 // ── Kling v3 参数 ──────────────────────────────────────────────────────
 
 describe('Kling v3 模型参数', () => {
-    // Phase 2 split kling-v3 → kling-v3-i2v / kling-v3-r2v.
-    const kling = I2V_MODELS.find(m => m.id === 'kling-v3-i2v')!;
-    const p = kling.params;
+    // Kling is retained as a hidden legacy entry in the catalog. Read its
+    // params directly so the adapter contract remains covered even though it
+    // is no longer offered in the active UniArt selector.
+    const p = (rawCatalog as any).models['kling-v3-i2v']?.params as ModelParamSupport;
 
     it('支持 negativePrompt, mode, sound, cfgScale', () => {
         expect(p.negativePrompt).toBe(true);
@@ -160,15 +161,17 @@ describe('Kling v3 模型参数', () => {
 // ── Vidu Q3 参数 ───────────────────────────────────────────────────────
 
 describe('Vidu Q3 模型参数', () => {
-    // Phase 2 split viduq3-pro / viduq3-turbo by modality suffix.
-    const viduPro = I2V_MODELS.find(m => m.id === 'viduq3-pro-i2v')!;
-    const viduTurbo = I2V_MODELS.find(m => m.id === 'viduq3-turbo-i2v')!;
+    // Vidu remains as hidden legacy entries in the catalog. Read the raw
+    // entries so their adapter contract stays covered outside the active
+    // UniArt selector.
+    const viduPro = (rawCatalog as any).models['viduq3-pro-i2v'];
+    const viduTurbo = (rawCatalog as any).models['viduq3-turbo-i2v'];
 
     it('Pro 和 Turbo 使用相同的参数配置', () => {
         expect(viduPro.params).toEqual(viduTurbo.params);
     });
 
-    const p = viduPro.params;
+    const p = viduPro.params as ModelParamSupport;
 
     it('支持 resolution, seed, viduAudio, movementAmplitude', () => {
         expect(p.resolution).toBeDefined();
@@ -267,12 +270,10 @@ describe('模型切换参数重置逻辑', () => {
         expect(result.viduAudio).toBe(true);
     });
 
-    it('切换到 Wan 2.7 → promptExtend 默认 true', () => {
-        // wan2.6 was deprecated/hidden (524f3a1); wan2.7-i2v is the current
-        // visible Wan I2V model. Its resolution default is 1080p.
-        const result = simulateModelSwitch('wan2.7-i2v');
-        expect(result.promptExtend).toBe(true);
-        expect(result.resolution).toBe('1080p');
+    it('切换到 UniArt H3 → 使用目录声明的默认参数', () => {
+        const result = simulateModelSwitch('uniart/minimax-h3-vip');
+        expect(result.promptExtend).toBe(false);
+        expect(result.resolution).toBe('2k');
     });
 
     it('切换到 Wan 2.2 → 无 promptExtend', () => {

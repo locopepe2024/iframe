@@ -27,17 +27,60 @@ class LLMAdapter:
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
         self._client = None
+        self._client_config_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
+
+    def _runtime_credentials(self) -> tuple[str | None, str | None]:
+        """Resolve credentials for the current request context.
+
+        Studio requests are owner-scoped.  Their UniArt credential must win
+        over the process environment, otherwise a stale shared token can be
+        used after login (and two users can accidentally share one client).
+        Desktop/background calls without an authenticated Studio context keep
+        the environment fallback for compatibility.
+        """
+        if self.provider == "openai":
+            from ..studio_access import current_studio_user, runtime_uniart_for_owner
+
+            user = current_studio_user()
+            if user:
+                try:
+                    configured = runtime_uniart_for_owner(
+                        user.user_id, user.owner_profile_id
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "UniArt API key is not configured for the current user"
+                    ) from exc
+                api_key = (configured.get("api_key") or "").strip()
+                base_url = (configured.get("base_url") or "").strip().rstrip("/")
+                if not api_key:
+                    raise RuntimeError(
+                        "UniArt API key is not configured for the current user"
+                    )
+                return api_key, base_url or "https://uniart.fun/v1"
+            return (
+                os.getenv("OPENAI_API_KEY"),
+                os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
+            )
+        return os.getenv("DASHSCOPE_API_KEY"), None
 
     @property
     def is_configured(self) -> bool:
-        if self.provider == "openai":
-            return bool(os.getenv("OPENAI_API_KEY"))
-        return bool(os.getenv("DASHSCOPE_API_KEY"))
+        try:
+            return bool(self._runtime_credentials()[0])
+        except RuntimeError:
+            return False
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
-        if self._client is None:
+        api_key, configured_base_url = self._runtime_credentials()
+        if self.provider == "openai":
+            base_url = configured_base_url or "https://api.openai.com/v1"
+        else:
+            base_url = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
+        config_key = (self.provider, api_key, base_url)
+        if self._client is None or self._client_config_key != config_key:
             try:
                 from openai import OpenAI
             except ImportError:
@@ -45,17 +88,8 @@ class LLMAdapter:
                     "openai package not installed. Run: pip install openai>=1.0.0"
                 )
 
-            if self.provider == "openai":
-                self._client = OpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-                )
-            else:
-                # DashScope uses OpenAI-compatible endpoint
-                self._client = OpenAI(
-                    api_key=os.getenv("DASHSCOPE_API_KEY"),
-                    base_url=f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1",
-                )
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
+            self._client_config_key = config_key
         return self._client
 
     # DashScope qwen 系列：首选 qwen3.7-plus（最新），不可用时回退到 qwen3.6-plus，
@@ -73,6 +107,9 @@ class LLMAdapter:
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         response_format: Optional[Dict[str, str]] = None,
+        *,
+        timeout_seconds: Optional[float] = None,
+        max_retries: Optional[int] = None,
     ) -> str:
         """
         Send a chat completion request and return the response content.
@@ -81,6 +118,10 @@ class LLMAdapter:
             messages: List of {"role": ..., "content": ...} dicts
             model: Model name override (uses provider default if None)
             response_format: Optional {"type": "json_object"} constraint
+            timeout_seconds: Optional per-request timeout. When omitted, the
+                OpenAI client's default is used.
+            max_retries: Optional per-request retry count. When omitted, the
+                OpenAI client's default is used.
 
         Returns:
             The assistant's response content as a string.
@@ -92,16 +133,25 @@ class LLMAdapter:
 
         # 显式 model override 路径：单次尝试，失败就抛。
         if model:
-            return self._chat_once(client, model, messages, response_format)
+            return self._chat_once(
+                client, model, messages, response_format,
+                timeout_seconds=timeout_seconds, max_retries=max_retries,
+            )
 
         # Provider 默认路径：DashScope 走 fallback chain，OpenAI 单次尝试。
         if self.provider == "openai":
-            return self._chat_once(client, self._get_default_model(), messages, response_format)
+            return self._chat_once(
+                client, self._get_default_model(), messages, response_format,
+                timeout_seconds=timeout_seconds, max_retries=max_retries,
+            )
 
         last_err: Optional[Exception] = None
         for idx, candidate in enumerate(self._DASHSCOPE_MODEL_FALLBACK_CHAIN):
             try:
-                return self._chat_once(client, candidate, messages, response_format)
+                return self._chat_once(
+                    client, candidate, messages, response_format,
+                    timeout_seconds=timeout_seconds, max_retries=max_retries,
+                )
             except RuntimeError as e:
                 # 仅在 "模型不存在 / 不可用" 类错误时回退；其他错误（鉴权、限流、网络）
                 # 直接抛，不浪费第二次重试。判定关键字宽松匹配 DashScope 文案。
@@ -128,6 +178,9 @@ class LLMAdapter:
         model: str,
         messages: List[Dict[str, str]],
         response_format: Optional[Dict[str, str]],
+        *,
+        timeout_seconds: Optional[float] = None,
+        max_retries: Optional[int] = None,
     ) -> str:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -137,7 +190,15 @@ class LLMAdapter:
             kwargs["response_format"] = response_format
 
         try:
-            response = client.chat.completions.create(**kwargs)
+            request_client = client
+            options: Dict[str, Any] = {}
+            if timeout_seconds is not None:
+                options["timeout"] = timeout_seconds
+            if max_retries is not None:
+                options["max_retries"] = max_retries
+            if options and hasattr(client, "with_options"):
+                request_client = client.with_options(**options)
+            response = request_client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"

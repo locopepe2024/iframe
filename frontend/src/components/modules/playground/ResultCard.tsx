@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine, LibraryBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
 import OverflowActions from './OverflowActions';
+import { usePlaygroundImageEditor } from './PlaygroundImageEditor';
 import { useLightbox } from '@/components/shared/preview/LightboxProvider';
 import { downloadOutput } from './downloadOutput';
+import NewLibraryAssetDialog from '@/components/library/NewLibraryAssetDialog';
 
 interface ResultCardProps {
   generation: PlaygroundGeneration;
@@ -132,12 +135,15 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const { prompt, model_id, mode, outputs, created_at } = generation;
   const t = useTranslations('playground');
   const output = outputs[outputIndex];
+  const openImageEditor = usePlaygroundImageEditor();
+  const editLabel = useTranslations('imageEditor');
   const lightbox = useLightbox();
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [importAssetOpen, setImportAssetOpen] = useState(false);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
@@ -246,6 +252,11 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           </span>
         )}
 
+        {!isVideo && output && openImageEditor && <button type="button"
+          onClick={event => { event.stopPropagation(); openImageEditor(output.media_path, 'image'); }}
+          className="absolute right-2 top-10 z-[3] inline-flex min-h-11 items-center gap-1 rounded-lg bg-elevated px-3 text-sm shadow-sm hover:bg-hover-bg"
+          aria-label={editLabel('edit')}><PencilLine size={16} />{editLabel('edit')}</button>}
+
         {/* Bottom gradient toolbar — appears on hover */}
         <div className="absolute bottom-0 left-0 right-0 z-[2] h-12 bg-gradient-to-t from-black/70 to-transparent flex items-end justify-end gap-1.5 px-3 pb-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
           {mediaUrl && <button
@@ -311,6 +322,16 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           >
             <Bookmark className={`w-3.5 h-3.5 ${saved ? 'text-primary fill-current' : 'text-foreground'}`} />
           </button>
+          {!isVideo && output?.media_path && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setImportAssetOpen(true); }}
+              aria-label={t('card.importAsAsset')}
+              title={t('card.importAsAsset')}
+              className="w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center transition bg-elevated hover:bg-hover-bg"
+            >
+              <LibraryBig className="w-3.5 h-3.5 text-foreground" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -347,6 +368,17 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           )}
         </div>
       </div>
+      {importAssetOpen && output?.media_path && createPortal(
+        <NewLibraryAssetDialog
+          initialImageUrl={output.media_path}
+          initialImageOrigin="workbench"
+          initialSourceGenerationId={generation.id}
+          initialSourceOutputId={output.id}
+          onClose={() => setImportAssetOpen(false)}
+          onCreated={() => setImportAssetOpen(false)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

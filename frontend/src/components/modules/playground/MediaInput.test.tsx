@@ -58,6 +58,14 @@ it('retains one upload/library panel and appends image-edit references on upload
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png', '/new.png']));
 });
 
+it('makes an explicit image-edit mode when a reference is added from t2i', async () => {
+  usePlaygroundStore.setState({ mode: 't2i', modelId: 'test', inputMedia: [] });
+  const { container } = render(<MediaInput />);
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'new.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/new.png']));
+  expect(usePlaygroundStore.getState().mode).toBe('i2i');
+});
+
 it('appends library selections to image editing inputs', () => {
   usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: ['/old.png'] });
   render(<MediaInput />);

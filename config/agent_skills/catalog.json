@@ -61,8 +61,8 @@
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.6.0",
-      "description": "先解析分镜板与素材用途，再编写关键帧三段或全参考六段提示词；统一 LumenX 附件引用。",
+      "version": "1.7.0",
+      "description": "先解析分镜板、素材用途与人物外观语义，再编写关键帧三段或全参考六段提示词；统一 iFrame 附件引用。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
         "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md",
@@ -73,7 +73,7 @@
       "source_revision": "5a8e380b86ccbff20d29edae8e32037348adf47d",
       "license": "Apache-2.0",
       "license_file": "h3-Apache-2.0.txt",
-      "adaptation": "初版来自 Apache-2.0 的第三方 H3 Director；1.2 为 LumenX 独立编写的官方指南摘要，未打包官方模型或指南全文。参考官方 h3-prompt-writing（d21241f），官方资料许可见 MiniMax H3 Community License，不因原版 Apache-2.0 而重新授权。非托管 IR 实现，效果待评估。"
+      "adaptation": "初版来自 Apache-2.0 的第三方 H3 Director；后续由 iFrame 独立补充分镜解析、引用映射和人物外观语义约束，未打包官方模型或指南全文。参考官方 h3-prompt-writing（d21241f），官方资料许可见 MiniMax H3 Community License，不因原版 Apache-2.0 而重新授权。非托管 IR 实现，效果待评估。"
     },
     {
       "id": "h3-product-recreation",

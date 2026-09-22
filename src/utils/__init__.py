@@ -1,6 +1,8 @@
 import logging
 import sys
 import os
+import shutil
+import tempfile
 from logging.handlers import RotatingFileHandler
 
 # Per-file size + backup count for the rotating log handler. Defaults
@@ -13,16 +15,27 @@ _LOG_BACKUP_COUNT = 3
 
 # User data directory for logs, config, and data
 def get_user_data_dir() -> str:
-    """Returns the user data directory for the application.
-
-    Honors the LUMENX_DATA_DIR environment variable when set; otherwise
-    defaults to ~/.lumen-x. Kept backward-compatible so existing installs
-    are unaffected unless the env var is explicitly provided.
-    """
-    env_dir = os.environ.get("LUMENX_DATA_DIR", "").strip()
+    """Use iFrame data, preserving explicit overrides and legacy installations."""
+    env_dir = (os.environ.get("IFRAME_DATA_DIR") or os.environ.get("LUMENX_DATA_DIR", "")).strip()
     if env_dir:
         return os.path.expanduser(env_dir)
-    return os.path.join(os.path.expanduser("~"), ".lumen-x")
+    destination = os.path.expanduser("~/.iframe")
+    legacy = os.path.expanduser("~/.lumen-x")
+    if not os.path.exists(destination) and os.path.isdir(legacy):
+        staging = tempfile.mkdtemp(prefix=".iframe-migrate-", dir=os.path.dirname(destination))
+        try:
+            shutil.copytree(legacy, staging, dirs_exist_ok=True)
+            # Rename publishes a complete copy; the original remains available.
+            try:
+                os.rename(staging, destination)
+            except OSError:
+                if not os.path.isdir(destination):
+                    raise
+        finally:
+            if os.path.exists(staging):
+                shutil.rmtree(staging)
+    return destination
+
 
 
 def get_log_dir() -> str:
@@ -31,7 +44,7 @@ def get_log_dir() -> str:
     Honors the LUMENX_LOG_DIR environment variable when set; otherwise
     defaults to <user_data_dir>/logs.
     """
-    env_log_dir = os.environ.get("LUMENX_LOG_DIR", "").strip()
+    env_log_dir = (os.environ.get("IFRAME_LOG_DIR") or os.environ.get("LUMENX_LOG_DIR", "")).strip()
     log_dir = os.path.expanduser(env_log_dir) if env_log_dir else os.path.join(get_user_data_dir(), "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir

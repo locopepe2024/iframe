@@ -2,9 +2,10 @@
   "version": 2,
   "categories": [
     { "id": "live_action", "name": "Live-Action Cinema", "name_zh": "真人电影级", "sort_order": 1 },
-    { "id": "japanese_anime", "name": "Japanese Anime", "name_zh": "日式动漫", "sort_order": 2 },
-    { "id": "american_animation", "name": "American Animation & Graphic Novel", "name_zh": "美式动画 / 图像小说", "sort_order": 3 },
-    { "id": "style_lab", "name": "Style Lab", "name_zh": "风格实验室", "sort_order": 4 }
+    { "id": "commercial_ad", "name": "Commercial Advertising", "name_zh": "商业广告", "sort_order": 2 },
+    { "id": "japanese_anime", "name": "Japanese Anime", "name_zh": "日式动漫", "sort_order": 3 },
+    { "id": "american_animation", "name": "American Animation & Graphic Novel", "name_zh": "美式动画 / 图像小说", "sort_order": 4 },
+    { "id": "style_lab", "name": "Style Lab", "name_zh": "风格实验室", "sort_order": 5 }
   ],
   "presets": [
     {
@@ -20,6 +21,20 @@
       "negative_prompt": "cartoon, anime, 3d render, plastic skin, over-smoothed face, over-sharpened, low quality, blurry, watermark, logo, text, captions, deformed hands, extra fingers",
       "sample_prompt": "A young creator stands on a rain-wet train platform at dusk, holding a brass compass glowing faint blue, distant city lights behind the mist, medium-wide shot, three-quarter view, quiet emotional tension",
       "thumbnail": "/assets/styles/live_action__cinematic_realism__rooftop_sunrise__landscape.png"
+    },
+    {
+      "id": "ecommerce_product_ad",
+      "category": "commercial_ad",
+      "name": "E-commerce Product Advertisement",
+      "name_zh": "电商产品广告",
+      "subtitle_zh": "产品主视觉 · 场景自适应灯光 · 可信商业质感",
+      "description": "面向电商与品牌短片的真人商业广告风格，突出产品材质、包装轮廓和可购买的清晰展示，同时保留真实生产与生活场景。",
+      "best_for": ["电商", "产品广告", "品牌宣传", "药品包装"],
+      "avoid_for": ["霓虹赛博朋克", "过度奢华炫技", "夸张医疗承诺"],
+      "positive_prompt": "premium Chinese e-commerce product advertisement, polished live-action commercial cinematography, clean product-forward composition, scene-adaptive commercial lighting, bright soft key light for product hero shots, practical factory and location lighting preserved when the story requires it, accurate materials and packaging, controlled highlights, crisp edges, neutral clean color palette with restrained brand accents, realistic skin and hands, macro product details, smooth restrained camera movement, trustworthy high-end retail presentation, subtle depth of field, high production value",
+      "negative_prompt": "overly glossy luxury commercial, plastic CGI, sterile empty factory, neon cyberpunk, extreme bloom, oversaturated colors, dramatic horror lighting, invented medical claims, invented logo, readable text, watermark, cartoon, anime, low-poly 3d, distorted packaging, deformed hands, cluttered composition",
+      "sample_prompt": "A Chinese pharmaceutical product is presented on a clean retail tabletop while the real factory environment remains softly visible behind it, accurate packaging materials, controlled soft key light, restrained brand color accent, trustworthy commercial product close-up, no readable text or logo",
+      "thumbnail": null
     },
     {
       "id": "classic_film_noir",
@@ -44,7 +59,7 @@
       "description": "日剧/日本电影的自然主义胶片感，低饱和、自然光、留白和生活质感",
       "best_for": ["青春", "家庭", "校园", "旅行", "日常奇幻"],
       "avoid_for": ["过度戏剧化", "好莱坞大片感", "赛博朋克"],
-      "positive_prompt": "Japanese live-action film look, quiet naturalism, soft overcast daylight, muted color palette, gentle contrast, realistic everyday locations, subtle film grain, restrained composition, emotional stillness, lived-in details, seasonal atmosphere, understated cinematic framing",
+      "positive_prompt": "Japanese live-action film look, quiet naturalism, soft naturalistic lighting adapted to the scene, overcast daylight when appropriate, muted color palette, gentle contrast, realistic everyday locations, subtle film grain, restrained composition, emotional stillness, lived-in details, seasonal atmosphere, understated cinematic framing",
       "negative_prompt": "overly dramatic lighting, Hollywood blockbuster look, neon cyberpunk, high saturation, glossy commercial render, anime, cartoon, 3d, excessive bokeh, text, logo, watermark",
       "sample_prompt": "A young traveler stands at a small rural train station after rain, holding a brass compass, grey-blue sky, vending machine glow in the background, quiet emotional pause",
       "thumbnail": "/assets/styles/live_action__japanese_film_look__bookstore_cafe_couple__landscape.png"

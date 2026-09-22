@@ -1,5 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../../messages/zh.json';
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -40,6 +42,8 @@ import ImportFileDialog from '../ImportFileDialog';
 // ── Test data ──
 
 const mockPreviewResult = {
+    import_id: 'import-1',
+    text_length: 7,
     text: '完整文本内容',
     episodes: [
         { episode_number: 1, title: '第一章', summary: '故事开头', estimated_duration: '5min' },
@@ -65,7 +69,11 @@ const defaultProps = {
 };
 
 function renderDialog(props = {}) {
-    return render(<ImportFileDialog {...defaultProps} {...props} />);
+    return render(
+        <NextIntlClientProvider locale="zh" messages={messages}>
+            <ImportFileDialog {...defaultProps} {...props} />
+        </NextIntlClientProvider>
+    );
 }
 
 // ── Tests ──
@@ -233,7 +241,7 @@ describe('ImportFileDialog', () => {
                 expect(mockImportFileConfirm).toHaveBeenCalledWith({
                     title: 'story',
                     description: undefined,
-                    text: '完整文本内容',
+                    import_id: 'import-1',
                     episodes: mockPreviewResult.episodes,
                 });
             });

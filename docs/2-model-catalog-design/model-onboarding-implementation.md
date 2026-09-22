@@ -4,7 +4,7 @@
 
 如果你只想知道“以后我要接新模型时应该从哪里开始”，先看这三项：
 
-1. 入口 workflow：[`/lumenx-model-onboarding`](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/lumenx-model-onboarding.md)
+1. 入口 workflow：[`/lumenx-model-onboarding`](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/iframe-model-onboarding.md)
 2. 构建命令：`python scripts/build_model_catalog.py`
 3. 校验命令：`python scripts/validate_model_catalog.py`
 
@@ -116,15 +116,15 @@
 | 文件 | 作用 | 这次做了什么 |
 |------|------|-------------|
 | [AGENTS.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/AGENTS.md) | 告诉 Codex 这个仓库有哪些 workflow 入口，以及用户说什么话时该触发哪个 workflow | 新增了 `/lumenx-model-onboarding` 的触发规则和文件映射 |
-| [.codex/workflows/lumenx-model-onboarding.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/lumenx-model-onboarding.md) | Codex 侧的正式模型接入 workflow | 新增，定义了模型接入的步骤、范围判断、验证要求、停顿条件 |
-| [.claude/commands/lumenx-model-onboarding.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.claude/commands/lumenx-model-onboarding.md) | Claude 侧的同名流程镜像 | 新增，保持和 Codex workflow 行为一致 |
+| [.codex/workflows/iframe-model-onboarding.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.codex/workflows/iframe-model-onboarding.md) | Codex 侧的正式模型接入 workflow | 新增，定义了模型接入的步骤、范围判断、验证要求、停顿条件 |
+| [.claude/commands/iframe-model-onboarding.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/.claude/commands/iframe-model-onboarding.md) | Claude 侧的同名流程镜像 | 新增，保持和 Codex workflow 行为一致 |
 
 ### 4.2 文档证据与设计层
 
 | 文件 | 作用 | 这次做了什么 |
 |------|------|-------------|
 | [docs/2-model-catalog-design/plans/2026-04-03-model-docs-and-catalog-architecture.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/2-model-catalog-design/plans/2026-04-03-model-docs-and-catalog-architecture.md) | 最初的架构设计文档，回答“为什么要做这套系统” | 已同步到真实实现，补了前端本地 mirror 和校验入口 |
-| [docs/2-model-catalog-design/plans/2026-04-04-lumenx-model-onboarding-system.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/2-model-catalog-design/plans/2026-04-04-lumenx-model-onboarding-system.md) | 本轮实现计划文档，回答“这次具体要做哪些落地工作” | 新增 |
+| [docs/2-model-catalog-design/plans/2026-04-04-iframe-model-onboarding-system.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/2-model-catalog-design/plans/2026-04-04-iframe-model-onboarding-system.md) | 本轮实现计划文档，回答“这次具体要做哪些落地工作” | 新增 |
 | [docs/2-model-catalog-design/model-onboarding-implementation.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/2-model-catalog-design/model-onboarding-implementation.md) | 当前这份实现说明，解释系统已经怎么工作、每个文件负责什么 | 新增 |
 | [docs/1-api-reference/README.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/1-api-reference/README.md) | 解释 `docs/1-api-reference/` 的角色，避免误把它当成 canonical archive | 新增 |
 | [docs/1-api-reference/*.md](/Users/hoshinoren/Documents/code/project/video_gen/gitlab/tron-comic/docs/1-api-reference) | 仓库内的文档证据区 / 本地 staging 区 | 继续保留，用于 repo-only 模式下的文档证据 |

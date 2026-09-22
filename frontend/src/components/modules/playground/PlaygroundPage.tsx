@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import AgentComposer from './AgentComposer';
+import PlaygroundImageEditor, { ImageEditorButton } from './PlaygroundImageEditor';
 import { useAgentConversation } from './useAgentConversation';
 import { getOutputType } from './ModeSelector';
 import SessionRail from './SessionRail';
@@ -21,11 +22,15 @@ import {
 import { playgroundApi } from '@/lib/api';
 import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } from './playgroundModels';
 import { referenceKey, referenceName } from './referenceMedia';
+import { normalizePlaygroundSubmission } from './playgroundSubmission';
 
 const POLL_INTERVAL = 2000;
-const MAX_POLL_ERRORS = 4;
 
 export default function PlaygroundPage() {
+  return <PlaygroundImageEditor><PlaygroundContent /></PlaygroundImageEditor>;
+}
+
+function PlaygroundContent() {
   const t = useTranslations('playground');
   const [chatMode, setChatMode] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -70,7 +75,7 @@ export default function PlaygroundPage() {
 
   const startPolling = useCallback((generationId: string) => {
     if (pollTimers.current.has(generationId)) return;
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
         const full = toPlaygroundGeneration(await playgroundApi.getGenerationStatus(generationId));
         pollErrors.current.set(generationId, 0);
@@ -80,9 +85,10 @@ export default function PlaygroundPage() {
         const failures = (pollErrors.current.get(generationId) || 0) + 1;
         pollErrors.current.set(generationId, failures);
         console.error('[Playground] Poll failed:', generationId, error);
-        if (failures >= MAX_POLL_ERRORS) stopPolling(generationId);
+        // Observation errors never terminate a provider task; retry next tick.
       }
-    }, POLL_INTERVAL);
+    };
+    const timer = setInterval(poll, POLL_INTERVAL);
     pollTimers.current.set(generationId, timer);
   }, [stopPolling, updateGeneration]);
 
@@ -130,6 +136,28 @@ export default function PlaygroundPage() {
       .filter((item) => item.status === 'pending' || item.status === 'processing')
       .forEach((item) => startPolling(item.id));
   }, [history, startPolling]);
+
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState === "hidden") return;
+      for (const item of usePlaygroundStore.getState().history) {
+        if (item.status === "pending" || item.status === "processing") {
+          playgroundApi.getGenerationStatus(item.id).then(result => {
+            const full = toPlaygroundGeneration(result);
+            if (!full.session_id || full.session_id === activeSessionRef.current) updateGeneration(full);
+          }).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [updateGeneration]);
 
   useEffect(() => () => {
     pollTimers.current.forEach((timer) => clearInterval(timer));
@@ -182,13 +210,14 @@ export default function PlaygroundPage() {
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim() || !activeSessionId) return;
+    const submission = normalizePlaygroundSubmission(mode, inputMedia);
     enqueueRequest({
-      mode: mode === 't2i' && inputMedia.length > 0 ? 'i2i' : mode,
+      mode: submission.mode,
       modelId,
       prompt: prompt.trim(),
       negativePrompt: negativePrompt || undefined,
-      inputMedia,
-      mediaNames: Object.fromEntries(inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
+      inputMedia: submission.inputMedia,
+      mediaNames: Object.fromEntries(submission.inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
       parameters,
       batchSize,
       sessionId: activeSessionId,
@@ -247,7 +276,7 @@ export default function PlaygroundPage() {
           <span className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.2em] text-text-muted">FREEFORM STUDIO <span className="font-semibold text-primary">· {t('header.eyebrowAccent')}</span></span>
           <div className="flex items-baseline gap-2"><h1 className="truncate font-display text-[1.625rem] font-semibold tracking-tight text-foreground md:text-[2.125rem]">{t('header.title')}</h1><span className="font-mono text-[0.625rem] uppercase tracking-[0.1em] text-text-muted">{t('header.resultsCount', { count: resultCount })}</span></div>
         </div>
-        <div className="flex items-center gap-3">{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{chatMode ? 'Agent' : t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
+        <div className="flex flex-wrap items-center justify-end gap-3"><ImageEditorButton />{savingDraft && <span className="hidden text-xs text-text-muted sm:inline">{t('sessions.saving')}</span>}<span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">{chatMode ? 'Agent' : t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo')}</span></div>
       </header>
 
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />

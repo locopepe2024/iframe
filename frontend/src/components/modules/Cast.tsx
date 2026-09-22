@@ -351,7 +351,7 @@ function AddCastPlaceholderModal({
             const result = await api.uploadFile(file);
             setImageUrl(result.url || "");
         } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || "Upload failed");
+            setError(err?.response?.data?.detail || err?.message || t("uploadFailed"));
         } finally {
             setUploading(false);
         }
@@ -381,7 +381,7 @@ function AddCastPlaceholderModal({
             reset();
             onClose();
         } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || "Create failed");
+            setError(err?.response?.data?.detail || err?.message || t("createFailed"));
         } finally {
             setSubmitting(false);
         }
@@ -911,7 +911,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                         {voiceId && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleInlinePreview(); }}
-                                aria-label={playing ? "Stop preview" : "Play preview"}
+                                aria-label={playing ? t("previewStop") : t("previewPlay")}
                                 className={`shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
                                     playing
                                         ? "border-primary bg-primary/15 text-primary"
@@ -968,7 +968,7 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
         let cancelled = false;
         api.getCharacterAppearances(seriesId, characterId)
             .then(d => { if (!cancelled) setData(d); })
-            .catch(err => { if (!cancelled) setError(err?.response?.data?.detail || err?.message || "Load failed"); })
+            .catch(err => { if (!cancelled) setError(err?.response?.data?.detail || err?.message || t("loadFailed")); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [seriesId, characterId]);
@@ -988,7 +988,7 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
                             {data?.character?.name || t("loading")}
                         </h3>
                         {data?.character?.persona && (
-                            <p className="text-xs text-text-secondary mt-0.5">Persona · {data.character.persona}</p>
+                            <p className="text-xs text-text-secondary mt-0.5">{t("personaLabel")} · {data.character.persona}</p>
                         )}
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-lg text-text-muted hover:text-foreground transition-colors">
@@ -1009,7 +1009,10 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
                                 <div key={app.episode_id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-glass-border bg-glass">
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-medium text-foreground truncate">
-                                            EP{app.episode_number ?? "?"} · {app.episode_title}
+                                            {t("episodeLabel", {
+                                                number: app.episode_number ?? "?",
+                                                title: app.episode_title,
+                                            })}
                                         </p>
                                     </div>
                                     <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-pink-300">

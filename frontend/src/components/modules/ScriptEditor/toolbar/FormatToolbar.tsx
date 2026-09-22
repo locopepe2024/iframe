@@ -12,6 +12,8 @@ import {
   LayoutGrid,
   BookOpen,
   Maximize2,
+  Save,
+  History,
 } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { useFormatEngine } from '../hooks/useFormatEngine';
@@ -21,9 +23,19 @@ export interface FormatToolbarProps {
   editor: Editor | null;
   viewMode?: ViewMode;
   onViewModeChange?: (mode: ViewMode) => void;
+  onSave?: () => void;
+  onOpenHistory?: () => void;
+  canPersist?: boolean;
 }
 
-export default function FormatToolbar({ editor, viewMode = 'edit', onViewModeChange }: FormatToolbarProps) {
+export default function FormatToolbar({
+  editor,
+  viewMode = 'edit',
+  onViewModeChange,
+  onSave,
+  onOpenHistory,
+  canPersist = false,
+}: FormatToolbarProps) {
   const t = useTranslations('scriptEditor');
   const { currentFormat, currentRendering, setFormat, setRendering } = useFormatEngine();
 
@@ -130,6 +142,30 @@ export default function FormatToolbar({ editor, viewMode = 'edit', onViewModeCha
       >
         <Sparkles size={14} />
         <span>AI</span>
+      </button>
+
+      {/* Document persistence */}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={!canPersist || !editor}
+        className="flex items-center gap-1 rounded px-2 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={t('toolbar.save')}
+        title={t('toolbar.save')}
+      >
+        <Save size={14} />
+        <span>{t('toolbar.save')}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenHistory}
+        disabled={!canPersist}
+        className="flex items-center gap-1 rounded px-2 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={t('toolbar.history')}
+        title={t('toolbar.history')}
+      >
+        <History size={14} />
+        <span>{t('toolbar.history')}</span>
       </button>
 
       {/* Spacer */}

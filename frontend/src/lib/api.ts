@@ -1,13 +1,43 @@
 import axios from "axios";
+import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
+import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
+import {
+    analyzeDirectorProfile,
+    refineDirectorProfile,
+    type DirectorProfileDraft,
+    type DirectorProfileJobStatusListener,
+} from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
 // 1. Explicit override: NEXT_PUBLIC_API_URL (any env / proxy setup).
-// 2. Dev mode (`next dev`, NODE_ENV==='development'): backend runs on a separate
-//    port, so target the same host on the backend port — works for ANY dev port.
+// 2. Browser dev mode (`next dev`, NODE_ENV==='development'): use Next's
+//    same-origin proxy so anonymous identity cookies persist across requests.
 // 3. Production / packaged (Electron): frontend is served by the backend, so use
 //    the same origin.
 const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || "17177";
+
+type BrowserApiLocation = Pick<Location, "protocol" | "hostname" | "port">;
+
+export const resolveBrowserApiUrl = (
+    location: BrowserApiLocation,
+    environment: string | undefined,
+    backendPort: string,
+): string => {
+    const { protocol, hostname, port } = location;
+
+    // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
+    if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
+        return `http://127.0.0.1:${backendPort}`;
+    }
+
+    if (environment === 'development') {
+        return "/api-proxy";
+    }
+
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+};
 
 const getApiUrl = (): string => {
     // Explicit override always wins (strip any trailing slash).
@@ -17,21 +47,7 @@ const getApiUrl = (): string => {
     }
 
     if (typeof window !== 'undefined') {
-        const { protocol, hostname, port } = window.location;
-
-        // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
-        if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
-            return `http://127.0.0.1:${BACKEND_PORT}`;
-        }
-
-        // Dev server: backend lives on a different port regardless of which
-        // dev port Next.js picked (3008/3009/3018/...).
-        if (process.env.NODE_ENV === 'development') {
-            return `${protocol}//${hostname}:${BACKEND_PORT}`;
-        }
-
-        // Production / packaged: frontend is served by the backend → same origin.
-        return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+        return resolveBrowserApiUrl(window.location, process.env.NODE_ENV, BACKEND_PORT);
     }
 
     // SSR fallback
@@ -55,6 +71,12 @@ export const authenticatedFetch = (
 };
 
 export type ProviderMode = "dashscope" | "vendor";
+
+export interface AssetLibraryReference {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    variant_id: string;
+}
 
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
@@ -124,6 +146,7 @@ export interface UserConfigPayload {
     UNIART_API_KEY?: string;
     UNIART_BASE_URL?: string;
     preferences?: Record<string, unknown>;
+    runtime_uniart_available?: boolean;
     secrets_configured?: Record<string, boolean>;
     secret_prefixes?: Record<string, string>;
 }
@@ -273,15 +296,25 @@ export const api = {
         return res.data;
     },
 
-    reparseProject: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
+    reparseProject: async (
+        scriptId: string,
+        text: string,
+        draft?: { characters: any[]; scenes: any[]; props: any[] },
+    ) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, ...(draft ? { draft } : {}) });
         return { ...res.data, originalText: res.data.original_text };
     },
 
     extractPreview: async (scriptId: string, text: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/extract_preview`, { text });
-        return res.data as { characters: any[]; scenes: any[]; props: any[] };
+        return extractScriptPreview(API_URL, scriptId, text);
     },
+
+    refineExtraction: async (
+        scriptId: string,
+        text: string,
+        draft: { characters: any[]; scenes: any[]; props: any[] },
+        instructions: string[],
+    ) => refineScriptPreview(API_URL, scriptId, text, draft, instructions),
 
     /** Persist `original_text` without LLM reparse. Used for textarea
      *  blur-saves so navigation/reload doesn't drop in-progress drafts. */
@@ -334,7 +367,9 @@ export const api = {
         // Watermark toggle — supported across wan / kling / vidu / pixverse /
         // happyhorse video. undefined = leave to provider default (typically
         // off); explicit boolean is user's Advanced-section choice.
-        watermark?: boolean
+        watermark?: boolean,
+        poseReferenceVariantIds?: Record<string, string[]>,
+        directorSnapshotMediaId?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -364,6 +399,8 @@ export const api = {
             ratio,
             watermark,
             workbench_tab: workbenchTab,
+            pose_reference_variant_ids: poseReferenceVariantIds,
+            director_snapshot_media_id: directorSnapshotMediaId,
         });
         return res.data;
     },
@@ -405,6 +442,11 @@ export const api = {
             t2i_image_urls?: string[];
             t2i_selected_index?: number;
             workbench_generate_count?: number;
+            video_model?: string;
+            workbench_generate_audio?: boolean;
+            workbench_reference_variant_ids?: Record<string, string[]>;
+            workbench_pose_reference_variant_ids?: Record<string, string[]>;
+            workbench_director_snapshot_media_id?: string | null;
         },
     ) => {
         const res = await axios.patch(
@@ -536,7 +578,7 @@ export const api = {
         return response.json();
     },
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string) => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -549,6 +591,7 @@ export const api = {
             batch_size: batchSize,
             model_name: modelName,
             aspect_ratio: aspectRatio,
+            ...(reference ? { reference } : {}),
         });
         return res.data;
     },
@@ -640,6 +683,24 @@ export const api = {
             asset_id: assetId,
             asset_type: assetType,
             variant_id: variantId
+        });
+        return res.data;
+    },
+
+    updateAssetVariantMetadata: async (
+        scriptId: string,
+        assetId: string,
+        assetType: string,
+        variantId: string,
+        referenceViewRole?: string,
+        referenceDistance?: string,
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/metadata`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId,
+            reference_view_role: referenceViewRole || null,
+            reference_distance: referenceDistance || null,
         });
         return res.data;
     },
@@ -749,6 +810,21 @@ export const api = {
         return res.data;
     },
 
+    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener) =>
+        analyzeDirectorProfile(API_URL, scriptId, onStatus),
+
+    refineDirectorProfile: (
+        scriptId: string,
+        draft: DirectorProfileDraft,
+        instructions: string[],
+        onStatus?: DirectorProfileJobStatusListener,
+    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
+
+    applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
+        return res.data;
+    },
+
     getStylePresets: async () => {
         const res = await axios.get(`${API_URL}/art_direction/presets`);
         return res.data;
@@ -759,7 +835,7 @@ export const api = {
     // 后端契约（#117）：
     //   成功 → 200 + { prompt_cn, prompt_en }
     //   失败 → 502 + { detail: { reason, message_zh, message_en, prompt_cn?, prompt_en? } }
-    //     reason ∈ is_configured_false | api_error | json_parse_error | missing_keys | model_echo
+    //     reason ∈ is_configured_false | api_error | json_parse_error | missing_keys | model_contract_mismatch | model_echo
     //     model_echo 是 warning（带原文），其余是 hard error。
     //
     // prevCn（#119）：迭代时传入上一次 CN 实现双语锚点；首次留空。
@@ -776,6 +852,10 @@ export const api = {
         prevCn: string = "",
         imageUrls: string[] = [],
         polishModel: string = "",
+        targetVideoModel: string = "",
+        generateAudio?: boolean,
+        targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -784,6 +864,11 @@ export const api = {
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
+            target_video_model: targetVideoModel,
+            generate_audio: generateAudio,
+            target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },
@@ -795,6 +880,10 @@ export const api = {
         prevCn: string = "",
         imageUrls: string[] = [],
         polishModel: string = "",
+        targetVideoModel: string = "",
+        generateAudio?: boolean,
+        targetDuration?: number,
+        dialogue?: { speaker: string; line: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -804,6 +893,11 @@ export const api = {
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
+            target_video_model: targetVideoModel,
+            generate_audio: generateAudio,
+            target_duration: targetDuration,
+            dialogue_speaker: dialogue?.speaker ?? "",
+            dialogue_line: dialogue?.line ?? "",
         });
         return res.data;
     },
@@ -843,6 +937,9 @@ export const api = {
         shot_size?: string;
         camera_movement_description?: string;
         transition_hint?: string;
+        style_prompt_override?: string;
+        lighting_override?: string;
+        negative_prompt_override?: string;
     }) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/update`, {
             frame_id: frameId,
@@ -859,11 +956,19 @@ export const api = {
         return res.data;
     },
 
-    renderFrame: async (scriptId: string, frameId: string, compositionData: any, prompt: string, batchSize: number = 1) => {
+    renderFrame: async (
+        scriptId: string,
+        frameId: string,
+        compositionData: any,
+        prompt: string,
+        batchSize: number = 1,
+        negativePrompt?: string,
+    ) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render`, {
             frame_id: frameId,
             composition_data: compositionData,
             prompt: prompt,
+            negative_prompt: negativePrompt,
             batch_size: batchSize
         });
         return res.data;
@@ -879,6 +984,21 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
             text: text
         });
+        return res.data;
+    },
+
+    analyzeStoryboardPreview: async (scriptId: string, text: string) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text),
+
+    refineStoryboardPreview: async (
+        scriptId: string,
+        text: string,
+        draft: StoryboardDraftFrame[],
+        instructions: string[],
+    ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
+
+    applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
         return res.data;
     },
 
@@ -1289,7 +1409,7 @@ export const api = {
      *  assetType 为单数（"character"|"scene"|"prop"）。data 可含 name/description/persona/image_url/voice_id。 */
     createLibraryAsset: async (
         assetType: string,
-        data: { name: string; description?: string; persona?: string; image_url?: string; voice_id?: string },
+        data: { name: string; description?: string; persona?: string; image_url?: string; image_origin?: "upload" | "workbench"; source_generation_id?: string; source_output_id?: string; voice_id?: string },
     ) => {
         const res = await axios.post(`${API_URL}/library/assets`, { asset_type: assetType, ...data });
         return res.data;
@@ -1533,16 +1653,10 @@ export const api = {
     },
 
     // File Import
-    importFilePreview: async (file: File, suggestedEpisodes: number = 3) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await axios.post(`${API_URL}/series/import/preview?suggested_episodes=${suggestedEpisodes}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 300000,
-        });
-        return response.data;
+    importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
+        return runImportPreview<SeriesImportPreview>(API_URL, file, suggestedEpisodes);
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },

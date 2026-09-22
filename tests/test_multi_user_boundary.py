@@ -3,8 +3,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.apps.identity import UserContext, _extract_bearer
+from src.apps.comic_gen import api
 from src.apps.comic_gen.models import Character, GlobalAssetLibrary, Script, Series
 from src.apps.playground.storage import PlaygroundStorage
 from src.apps.studio_access import (
@@ -55,6 +57,41 @@ def test_missing_studio_context_is_rejected():
     assert getattr(exc_info.value, "status_code", None) == 401
 
 
+@pytest.mark.parametrize(
+    ("path", "payload", "method_name"),
+    [
+        ("/video/polish_prompt", {"draft_prompt": "镜头推进"}, "polish_video_prompt"),
+        ("/video/polish_r2v_prompt", {"draft_prompt": "镜头推进", "slots": []}, "polish_r2v_prompt"),
+    ],
+)
+def test_prompt_polish_routes_set_studio_identity(monkeypatch, path, payload, method_name):
+    """Owner-scoped UniArt credentials must be visible to prompt polishing."""
+    owner = identity("user-a", "profile-a")
+    monkeypatch.setattr(api, "_resolve_request_context", lambda *_args: (owner, False))
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *_args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *_args: "")
+    monkeypatch.setattr(api, "_get_polish_model_for_project", lambda *_args: "")
+
+    class Processor:
+        def __getattribute__(self, name):
+            if name == method_name:
+                from src.apps.studio_access import current_studio_user
+
+                assert current_studio_user() == owner
+            return object.__getattribute__(self, name)
+
+        def polish_video_prompt(self, *_args, **_kwargs):
+            return {"prompt_cn": "润色结果", "prompt_en": "polished result"}
+
+        def polish_r2v_prompt(self, *_args, **_kwargs):
+            return {"prompt_cn": "润色结果", "prompt_en": "polished result"}
+
+    monkeypatch.setattr(api, "ScriptProcessor", Processor)
+    with TestClient(api.app) as client:
+        response = client.post(path, json=payload)
+    assert response.status_code == 200
+
+
 def test_playground_sessions_are_profile_scoped(tmp_path: Path):
     user_a = storage(tmp_path, "user-a", "profile-a")
     user_b = storage(tmp_path, "user-b", "profile-b")
@@ -95,6 +132,31 @@ def test_user_configs_are_separate_and_secret_is_not_returned(tmp_path: Path):
             ("profile-a",),
         ).fetchone()[0]
     assert "sk-user-a-secret" not in raw
+
+
+def test_user_config_reports_runtime_uniart_availability_without_exposing_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = UserConfigStore(str(tmp_path / "users.db"), master_key="test-master-key")
+    user = identity("user-a", "profile-a")
+
+    monkeypatch.setenv("UNIART_API_KEY", "sk-shared-secret")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false")
+    unavailable = store.get_public(user)
+    assert unavailable["runtime_uniart_available"] is False
+
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "true")
+    shared = store.get_public(user)
+    assert shared["runtime_uniart_available"] is True
+    assert "sk-shared-secret" not in json.dumps(shared)
+
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false")
+    personal = store.update(user, UserConfigUpdate(UNIART_API_KEY="sk-personal-secret"))
+    assert personal["runtime_uniart_available"] is True
+    assert personal["secrets_configured"]["UNIART_API_KEY"] is True
+    assert "sk-personal-secret" not in json.dumps(personal)
 
 
 def test_user_config_uses_identity_scoped_key_without_master(tmp_path: Path):

@@ -16,6 +16,12 @@ interface NewLibraryAssetDialogProps {
   onClose: () => void;
   /** 创建成功后回调（父层刷新库以显示新资产）。 */
   onCreated: () => void;
+  /** Optional existing material to register as the first asset variant. */
+  initialImageUrl?: string;
+  initialName?: string;
+  initialImageOrigin?: "upload" | "workbench";
+  initialSourceGenerationId?: string;
+  initialSourceOutputId?: string;
 }
 
 /**
@@ -23,15 +29,16 @@ interface NewLibraryAssetDialogProps {
  * 选类型(角色/场景/道具) + 名称 + 描述 +（可选）图片（上传本地文件或填 URL）→ POST /library/assets。
  * 本地上传走 POST /library/assets/upload（multipart 字段 "file" → { image_url }），结果写入 imageUrl。
  */
-export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibraryAssetDialogProps) {
+export default function NewLibraryAssetDialog({ onClose, onCreated, initialImageUrl = "", initialName = "", initialImageOrigin, initialSourceGenerationId, initialSourceOutputId }: NewLibraryAssetDialogProps) {
   const t = useTranslations("library");
   const tc = useTranslations("common");
   const [assetType, setAssetType] = useState<AssetTab>("characters");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState(initialImageUrl);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [imageOrigin, setImageOrigin] = useState<"upload" | "workbench" | undefined>(initialImageOrigin);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +75,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
     try {
       const { image_url } = await api.uploadLibraryImage(file);
       setImageUrl(image_url);
+      setImageOrigin("upload");
       toast.success(t("uploadSuccess"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -92,6 +100,9 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
         name: trimmed,
         description: description.trim() || undefined,
         image_url: imageUrl.trim() || undefined,
+        image_origin: imageUrl.trim() ? imageOrigin : undefined,
+        source_generation_id: imageOrigin === "workbench" ? initialSourceGenerationId : undefined,
+        source_output_id: imageOrigin === "workbench" ? initialSourceOutputId : undefined,
       });
       toast.success(t("createSuccess"), { body: trimmed });
       onCreated();
@@ -104,7 +115,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={(event) => event.stopPropagation()}>
       {/* 点外关闭遮罩 */}
       <button
         type="button"
@@ -254,7 +265,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
               id="lib-asset-image"
               type="text"
               value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
+              onChange={(e) => { setImageUrl(e.target.value); setImageOrigin(undefined); }}
               placeholder={t("imageUrlPlaceholder")}
               className="mt-2 w-full bg-surface-inset border border-glass-border rounded-lg px-3.5 py-2.5 text-[0.8125rem] text-foreground placeholder-text-muted focus:outline-none focus:border-primary/60"
             />

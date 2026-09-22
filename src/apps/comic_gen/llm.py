@@ -20,6 +20,21 @@ def _strip_markdown_json(content: str) -> str:
     return content.strip()
 
 
+def _prompt_json(value: Any) -> str:
+    """Serialize structured context without indentation overhead.
+
+    Director prompts can contain the full script, all shared entities, and a
+    previous profile. Pretty-printed JSON adds thousands of whitespace tokens
+    without adding facts and can push an OpenAI-compatible gateway over its
+    input/output context budget.
+    """
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
+DIRECTOR_PROFILE_MAX_RETRIES = 0
+
+
 class PolishError(Exception):
     """提示词润色失败的结构化异常。
     旧实现遇到任何问题都静默返回原文（fallback），导致前端无法判断
@@ -50,6 +65,26 @@ class PolishError(Exception):
         self.prompt_cn = prompt_cn
         self.prompt_en = prompt_en
         super().__init__(f"[{reason}] {message_en}")
+
+
+_CHARACTER_VARIANT_RE = re.compile(
+    r"^\s*(?P<base>.+?)\s*[\(（](?P<variant>[^()（）]+)[\)）]\s*$"
+)
+
+
+def _character_variant_base_name(name: str) -> Optional[str]:
+    """Return the shared persona name from an explicitly labelled variant.
+
+    LLM output commonly uses either ASCII parentheses (``Name (young)``) or
+    full-width Chinese parentheses (``名字（大学时期）``).  Both forms are
+    presentation-compatible, so they must resolve to the same base character.
+    """
+    match = _CHARACTER_VARIANT_RE.match((name or "").strip())
+    if not match:
+        return None
+    base = match.group("base").strip()
+    variant = match.group("variant").strip()
+    return base if base and variant else None
 
 
 def _is_echo(result_en: str, draft_en: str, threshold: float = 0.95) -> bool:
@@ -243,18 +278,21 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
 重要：
 - 所有描述性内容（名称、描述）必须使用中文（简体中文）。
 - 只提取角色（characters）、场景（scenes）和道具（props）。
+- 角色的 description 同时记录稳定的视觉特征和稳定的性格信息，使用“外观：”与“性格：”分隔。
+- 肤色、肤质、体型和性格只能依据原文明确描述，或由多处一致的行为、对白和叙述直接支持；未提及时省略，不要根据姓名、国籍、身份或单一情绪自行推断。
+- 同一人物在时间、年龄、身份、服装或外形发生显著变化时，必须为每个视觉状态建立独立角色条目；名称使用“主名（阶段/身份）”，例如“周涵（大学时期）”“周涵（职场时期）”。这些条目仍属于同一人物，但可以分别生成和绑定不同的角色设计。
 
 严格按以下结构输出合法 JSON：
 {
     "characters": [
         {
             "id": "char_001",
-            "name": "角色名（如 '叶墨'、'叶墨 (古装)'）",
-            "description": "外观描述（发型、眼睛、体型、显著特征）。不要包含具体的面部表情（如 悲伤、愤怒）或临时动作（如 奔跑、哭泣）。聚焦于长期固定的外形特征。",
+            "name": "角色名（如 '叶墨'、'叶墨（古装）'、'周涵（大学时期）'）",
+            "description": "角色档案，格式建议为‘外观：肤色/肤质、脸型、发型、眼睛、体型、显著特征；性格：稳定性格关键词’。不要包含具体的面部表情（如 悲伤、愤怒）、单场景情绪、临时动作或姿势。未被文本说明的内容省略。",
             "age": "年龄估计（如 '25'）",
             "gender": "性别",
-            "clothing": "默认服装描述。若某角色服装有显著变化（如 从便装换成婚纱），为每个服装变体单独创建一个角色条目，并取一个有区分度的名字（如 '名字 (服装)'）。",
-            "visual_weight": 5  // 1-5 重要度
+            "clothing": "该时间/身份变体的默认服装描述。若角色在不同时间、年龄、身份或服装下会有显著视觉变化，为每个变体单独创建角色条目，并保持相同主名加括号标签（如 '周涵（大学时期）'、'周涵（职场时期）'）。",
+            "visual_weight": 5
         }
     ],
     "scenes": [
@@ -324,6 +362,7 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 1. **视觉节拍拆解**: 一行包含多个动作时，拆为多帧。每帧仅含一个主要动作。
 2. **角色可见性**: character_ref_names 只列画面中可见的角色。
 3. **实体约束**: 场景名、角色名、道具名严格匹配已提取实体。
+   同一人物存在多个时间/身份/服装变体时，必须使用完整变体名（例如“周涵（大学时期）”），不要简化为基础名“周涵”；这样每个分镜才能绑定正确的角色设计。
 4. **语言**: 简体中文。
 5. **景别枚举**: 必须从以下选项中选择: 大特写 | 特写 | 近景 | 中景 | 全景 | 远景 | 大远景
 6. **角度枚举**: 必须从以下选项中选择: 平视 | 俯视 | 仰视 | 鸟瞰 | 蚁视 | 过肩 | 荷兰角 | 主观视角
@@ -431,6 +470,46 @@ class ScriptProcessor:
             error_msg = f"LLM 返回的数据格式错误，无法解析 JSON: {e}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    def refine_entity_extraction(
+        self,
+        title: str,
+        text: str,
+        draft: Dict[str, Any],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+    ) -> Script:
+        """Revise an extraction draft using accumulated user instructions."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        baseline = self._construct_prompt(text, custom_extraction_prompt)
+        numbered = "\n".join(f"{index}. {instruction}" for index, instruction in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮实体提取草稿：
+<current_draft>
+{json.dumps(draft, ensure_ascii=False, indent=2)}
+</current_draft>
+
+用户累计提出的修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本修订 current_draft。保留未被要求改变的正确内容，不要把修订要求当作剧本事实。
+仍然只返回合法 JSON，顶层只能包含 characters、scenes、props；不要返回解释、Markdown 或其他字段。"""
+        try:
+            content = self.llm.chat(messages=[{"role": "user", "content": prompt}])
+            data = json.loads(_strip_markdown_json(content))
+            if not isinstance(data, dict) or not all(key in data for key in ("characters", "scenes", "props")):
+                raise ValueError("修订结果缺少 characters、scenes 或 props")
+            return self._create_script_from_data(title, text, data)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"实体修订失败: {exc}") from exc
         except ValueError:
             # Re-raise ValueError (e.g., API key not set)
             raise
@@ -457,6 +536,7 @@ class ScriptProcessor:
                 id=char_uuid,
                 name=char_data.get("name", "Unknown"),
                 description=char_data.get("description", ""),
+                persona=char_data.get("persona", ""),
                 age=char_data.get("age"),
                 gender=char_data.get("gender"),
                 clothing=char_data.get("clothing"), # Might be merged into description in new prompt, but keeping for compatibility
@@ -466,12 +546,21 @@ class ScriptProcessor:
             characters.append(char)
             name_to_char[char.name] = char
             
-        # Pass 2: Link variants to base characters (Logic remains valid even with new prompt if naming convention holds)
+        # Pass 2: Link temporal / identity variants to their shared persona.
+        # Models use both ASCII and full-width parentheses in Chinese output,
+        # so normalize both forms before assigning the base-character link.
         for char in characters:
-            if "(" in char.name and ")" in char.name:
-                base_name = char.name.split("(")[0].strip()
-                if base_name in name_to_char and name_to_char[base_name].id != char.id:
-                    char.base_character_id = name_to_char[base_name].id
+            base_name = _character_variant_base_name(char.name)
+            if not base_name:
+                continue
+            base_character = name_to_char.get(base_name)
+            if not base_character or base_character.id == char.id:
+                continue
+            char.base_character_id = base_character.id
+            if not char.persona:
+                char.persona = base_name
+            if not base_character.persona:
+                base_character.persona = base_name
             
         scenes = []
         for scene_data in data.get("scenes", []):
@@ -929,7 +1018,75 @@ class ScriptProcessor:
             }
         ]
     
-    def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "") -> List[Dict[str, Any]]:
+    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a reviewable director draft without mutating project data."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
+
+原始剧本：
+<script>{text}</script>
+
+已确认实体（名称和关系不得擅自替换）：
+<entities>{_prompt_json(entities_json)}</entities>
+
+用户选择的视觉风格：
+<visual_style>{_prompt_json(style_config)}</visual_style>
+
+视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
+剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
+梳理人物关系变化、因果链、关键事件的叙事功能与权重、情绪弧线、节奏、连续性和禁用项。
+不得发明对白、剧情、文化符号或人物动机。
+
+只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
+emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
+sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan。
+setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。"""
+        content = self.llm.chat(
+            messages=[{"role": "system", "content": prompt},
+                      {"role": "user", "content": "生成完整导演设定草稿。"}],
+            response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+        ).strip()
+        result = json.loads(_strip_markdown_json(content))
+        if not isinstance(result, dict):
+            raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        return result
+
+    def refine_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                style_config: Dict[str, Any], draft: Dict[str, Any],
+                                instructions: List[str]) -> Dict[str, Any]:
+        """Revise a director draft while preserving source-grounded facts."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
+视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
+
+<script>{text}</script>
+<entities>{_prompt_json(entities_json)}</entities>
+<visual_style>{_prompt_json(style_config)}</visual_style>
+<current_director_profile>{_prompt_json(draft)}</current_director_profile>
+<revision_instructions>{numbered}</revision_instructions>
+
+后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
+保留未要求改变的正确内容。只返回与 current_director_profile 同结构的完整 JSON，不要解释。"""
+        content = self.llm.chat(
+            messages=[{"role": "system", "content": prompt},
+                      {"role": "user", "content": "返回修订后的完整导演设定。"}],
+            response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+        ).strip()
+        result = json.loads(_strip_markdown_json(content))
+        if not isinstance(result, dict):
+            raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        return result
+
+    def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
+                              director_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -961,6 +1118,15 @@ class ScriptProcessor:
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        if director_profile:
+            system_prompt += """
+
+以下是用户在第二步明确确认的导演设定。它约束镜头选择、表演、节奏、声音和连续性；
+不得把 unresolved_questions 补写成事实，也不得违反 prohibitions：
+<confirmed_director_profile>
+%s
+</confirmed_director_profile>
+""" % json.dumps(director_profile, ensure_ascii=False, indent=2)
 
         try:
             content = self.llm.chat(
@@ -1014,6 +1180,56 @@ class ScriptProcessor:
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse storyboard analysis JSON: {e}")
             return None
+
+    def refine_storyboard_analysis(
+        self,
+        text: str,
+        entities_json: Dict[str, Any],
+        draft: List[Dict[str, Any]],
+        instructions: List[str],
+        custom_extraction_prompt: str = "",
+        director_profile: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Revise a storyboard draft using the source and accumulated direction."""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        entities_str = json.dumps(entities_json, ensure_ascii=False, indent=2)
+        template = (
+            custom_extraction_prompt.strip()
+            if custom_extraction_prompt and custom_extraction_prompt.strip()
+            else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+        )
+        baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        if director_profile:
+            baseline += "\n\n<confirmed_director_profile>\n" + json.dumps(
+                director_profile, ensure_ascii=False, indent=2
+            ) + "\n</confirmed_director_profile>"
+        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        prompt = f"""{baseline}
+
+下面是上一轮分镜草稿：
+<current_storyboard>
+{json.dumps({"frames": draft}, ensure_ascii=False, indent=2)}
+</current_storyboard>
+
+用户累计提出的导演修订要求（后面的要求在冲突时优先）：
+<revision_instructions>
+{numbered}
+</revision_instructions>
+
+请基于原始剧本和实体表修订 current_storyboard。保留未被要求改变的正确镜头，
+不要把修订要求当作剧本事实。只返回合法 JSON，顶层只能包含 frames；不要返回解释或 Markdown。"""
+        content = self.llm.chat(
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "请返回修订后的完整分镜列表。"},
+            ],
+            response_format={"type": "json_object"},
+        ).strip()
+        frames = self._parse_storyboard_json(content)
+        if frames is None:
+            raise RuntimeError("AI 模型输出的分镜修订 JSON 格式不合规，请重试。")
+        return frames
 
     def _mock_storyboard_frames(self, text: str) -> List[Dict[str, Any]]:
         """Returns mock storyboard frames for testing when API is unavailable."""
@@ -1292,8 +1508,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
                 resolved = _resolve_image_for_vision(url)
-                if resolved:
-                    parts.append({"type": "image_url", "image_url": {"url": resolved}})
+                if not resolved:
+                    raise PolishError(reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。", message_en="Reference image could not be read; reselect it before polishing.")
+                parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
                 # All image URLs failed to resolve → fall back to text-only
                 # rather than crashing. log so users can diagnose later.
@@ -1436,8 +1653,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
                 resolved = _resolve_image_for_vision(url)
-                if resolved:
-                    parts.append({"type": "image_url", "image_url": {"url": resolved}})
+                if not resolved:
+                    raise PolishError(reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。", message_en="Reference image could not be read; reselect it before polishing.")
+                parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
                 # All image URLs failed to resolve → fall back to text-only
                 # rather than crashing. log so users can diagnose later.

@@ -1,4 +1,4 @@
-"""Minimal Tencent COS adapter shared by LumenX asset/media upload paths.
+"""Minimal Tencent COS adapter shared by iFrame asset/media upload paths.
 
 Credentials are read only from the server environment.  Objects remain private;
 callers receive an object key and short lived presigned GET URLs.

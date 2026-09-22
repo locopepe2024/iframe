@@ -11,7 +11,7 @@ Hermetic, mirroring test_shared_asset_pool.py: a bare ComicGenPipeline via
 object.__new__ with only the attributes the exercised methods touch — no
 real output/*.json is read or written (temp paths + a fake processor).
 
-Design RFC: docs/plans/2026-06-18-lumenx-core-shared-asset-pool.md
+Design RFC: docs/plans/2026-06-18-iframe-core-shared-asset-pool.md
 """
 
 import os

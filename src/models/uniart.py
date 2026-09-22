@@ -51,23 +51,34 @@ def _media(value: Optional[str]) -> Optional[str]:
 
 
 def _image_reference_url(value: str) -> str:
-    """Publish image references through managed storage; never inline bytes."""
+    """Publish image/video/audio references through managed storage.
+
+    The historical helper name is retained for callers, but every UniArt
+    reference modality uses the same URL-only boundary.  Local bytes and
+    filesystem paths never reach the provider request body.
+    """
     if value.startswith(("https://", "http://")):
         return value
     if value.startswith(("data:", "blob:")):
-        raise ValueError("UniArt image references require HTTP(S) material URLs")
-    from ..utils.oss_utils import OSSImageUploader
+        raise ValueError("UniArt media references require HTTP(S) material URLs")
+    from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:
-        raise RuntimeError("Image reference material storage is not configured")
-    path = value if os.path.isfile(value) else os.path.join("output", value)
-    if not os.path.isfile(path):
-        raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
-    key = uploader.upload_file(path, sub_path="image-edit-inputs")
-    if not key:
-        raise RuntimeError("Could not upload image edit material")
+        raise RuntimeError("Media reference material storage is not configured")
+    if is_object_key(value):
+        key = value
+    else:
+        path = value if os.path.isfile(value) else os.path.join("output", value)
+        if not os.path.isfile(path):
+            raise ValueError("Media material is not a resolved local file or HTTP(S) URL")
+        key = uploader.upload_file(path, sub_path="image-edit-inputs")
+        if not key:
+            raise RuntimeError("Could not upload image edit material")
     url = uploader.sign_url_for_api(key)
     if not url or not url.startswith(("https://", "http://")):
+        # Keep the historical error text for image-edit callers; the helper is
+        # shared with video/audio references but this remains a stable API
+        # diagnostic consumed by the Studio image path.
         raise RuntimeError("Could not create image edit material URL")
     return url
 
@@ -80,6 +91,10 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
         # Preserve the provider's actionable error without logging the request
         # body (which may contain prompts or media references) or credentials.
         detail = _provider_error_detail(resp)
+        if resp.status_code in {400, 403} and _is_moderation_rejection(detail):
+            context = _moderation_context(path, body)
+            logger.warning("UniArt image request rejected by content moderation (%s)", context)
+            detail = f"{detail} [{context}]"
         raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
@@ -123,14 +138,54 @@ def _provider_error_detail(resp: requests.Response) -> str:
     return f"UniArt request failed ({status}{code_part}): {message}{suffix}"
 
 
-def _poll(config: Dict[str, Any], task_id: str, max_wait: int = 900, endpoint: str = "videos") -> Dict[str, Any]:
+def _image_reference_count(body: Dict[str, Any]) -> int:
+    """Count image inputs without exposing their URLs or request payload."""
+    images = body.get("images")
+    if isinstance(images, list):
+        return len(images)
+    count = 1 if body.get("image") else 0
+    references = body.get("reference_images")
+    if isinstance(references, list):
+        count += len(references)
+    return count
+
+
+def _is_moderation_rejection(detail: str) -> bool:
+    text = detail.lower()
+    return any(marker in text for marker in ("content moderation", "moderation", "safety policy", "content policy"))
+
+
+def _moderation_context(endpoint: str, body: Dict[str, Any]) -> str:
+    """Return safe diagnostic context for a provider moderation rejection."""
+    model = str(body.get("model") or "unknown")
+    references = _image_reference_count(body)
+    mode = "edit" if endpoint.rstrip("/").endswith("/edits") else "generation"
+    return f"model={model}, mode={mode}, reference_images={references}"
+
+
+def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, endpoint: str = "videos") -> Dict[str, Any]:
+    """Observe an upstream task until it reaches a terminal state.
+
+    A provider task is not failed merely because our worker has been waiting;
+    ``max_wait`` remains available for bounded tests/callers, but production
+    polling is unbounded and ends only on provider success/failure/cancel.
+    """
     started = time.time()
-    while time.time() - started < max_wait:
-        resp = requests.get(
-            f"{_base_url(config)}/{endpoint}/{task_id}",
-            headers=_headers(config),
-            timeout=30,
-        )
+    while max_wait is None or time.time() - started < max_wait:
+        try:
+            resp = requests.get(
+                f"{_base_url(config)}/{endpoint}/{task_id}",
+                headers=_headers(config),
+                timeout=30,
+            )
+        except (requests.Timeout, requests.ConnectionError):
+            time.sleep(10)
+            continue
+        if resp.status_code in {408, 429} or resp.status_code >= 500:
+            time.sleep(10)
+            continue
+        if resp.status_code >= 400:
+            raise RuntimeError(_provider_error_detail(resp))
         resp.raise_for_status()
         data = resp.json()
         status = str(data.get("status") or "").lower()
@@ -277,6 +332,21 @@ class UniArtImageModel(ImageGenModel):
         if isinstance(size, str) and size.lower() in {"1k", "2k", "4k"}:
             body.pop("size", None)
             body["resolution"] = size.lower()
+        elif model.startswith("gpt-image-") and isinstance(size, str) and "*" in size:
+            # Studio legacy dimensions express its aspect preset. UniArt's
+            # managed GPT route accepts semantic resolution + aspect_ratio,
+            # not DashScope's W*H syntax. Keep explicit WxH callers unchanged.
+            from math import gcd
+            try:
+                width, height = (int(part) for part in size.split("*"))
+            except ValueError as exc:
+                raise ValueError(f"Invalid Studio image size: {size}") from exc
+            if min(width, height) <= 0 or max(width, height) > 4096:
+                raise ValueError(f"Invalid Studio image size: {size}")
+            divisor = gcd(width, height)
+            body.pop("size", None)
+            body["resolution"] = "1k" if max(width, height) <= 1024 else "2k" if max(width, height) <= 2048 else "4k"
+            body["aspect_ratio"] = f"{width // divisor}:{height // divisor}"
         if kwargs.get("aspect_ratio"):
             body["aspect_ratio"] = kwargs["aspect_ratio"]
         refs = list(kwargs.get("ref_image_paths") or [])
@@ -318,7 +388,7 @@ class UniArtVideoModel(VideoGenModel):
             return output_path, time.time() - started
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
         body: Dict[str, Any] = {"model": model}
-        for key in ("mode", "duration", "resolution", "size", "ratio", "watermark", "generate_audio"):
+        for key in ("mode", "duration", "resolution", "size", "ratio", "watermark", "generate_audio", "seed"):
             if kwargs.get(key) is not None:
                 body[key] = kwargs[key]
         if kwargs.get("aspect_ratio") and not body.get("ratio"):

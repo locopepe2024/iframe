@@ -1,4 +1,5 @@
 import "./globals.css";
+import "@/components/director3d/styles.css";
 import EnvConfigChecker from "@/components/EnvConfigChecker";
 import { Providers } from "@/components/Providers";
 import TauriDragBar from "@/components/layout/TauriDragBar";
@@ -11,7 +12,7 @@ export default function RootLayout({
   return (
     <html lang="zh" className="atelier-dark" suppressHydrationWarning>
       <head>
-        <title>LumenX Studio</title>
+        <title>iFrame Studio</title>
         <meta name="description" content="AI-Native Motion Comic Creation Platform" />
         <script
           dangerouslySetInnerHTML={{

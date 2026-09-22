@@ -16,10 +16,11 @@ import {
 } from "@/lib/modelCatalog";
 import { useSettingsStore, type Locale, type ThemePreset } from "@/store/settingsStore";
 import { toast } from "@/store/toastStore";
+import { extractErrorDetail } from "@/lib/utils";
 import { rovingKeyDown } from "@/lib/a11y";
 import { Image, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
-import LumenXBranding from "@/components/layout/LumenXBranding";
+import IFrameBranding from "@/components/layout/IFrameBranding";
 import UpdateChecker from "./UpdateChecker";
 import SkillsSettings from "./SkillsSettings";
 type SettingsCategory = "general" | "models" | "prompts" | "skills" | "apikeys" | "storage" | "about";
@@ -32,7 +33,7 @@ import {
   settingsInputClass,
 } from "./SettingsControls";
 
-const APP_VERSION = "v0.2.0";
+const APP_VERSION = "V0.1.0";
 
 type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   DASHSCOPE_API_KEY: string;
@@ -223,6 +224,7 @@ export default function SettingsPage() {
   const [catalogModelCount, setCatalogModelCount] = useState<number | null>(null);
   const [skuDialogOpen, setSkuDialogOpen] = useState(false);
   const [skuLoading, setSkuLoading] = useState(false);
+  const [skuError, setSkuError] = useState("");
   const [skuModels, setSkuModels] = useState<Awaited<ReturnType<typeof playgroundApi.getUniArtModels>>['models']>([]);
   const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([]);
 
@@ -444,6 +446,7 @@ export default function SettingsPage() {
   const handleRefreshCatalog = async () => {
     setSkuDialogOpen(true);
     setSkuLoading(true);
+    setSkuError("");
     try {
       const payload = await playgroundApi.getUniArtModels();
       const count = payload.models.length;
@@ -451,8 +454,14 @@ export default function SettingsPage() {
       setCatalogModelCount(count);
       const stored = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null;
       setSelectedSkuIds(stored || payload.models.map((model) => model.id));
-    } catch {
-      toast.error("获取 UniArt 模型失败");
+    } catch (error) {
+      const detail = extractErrorDetail(error, "获取 UniArt 模型失败");
+      const message = detail === "UniArt API key is not configured for this user"
+        ? "当前浏览器尚未配置 UniArt API Key，请在设置的 API 密钥中保存后重试。电脑端配置不会自动同步到手机。"
+        : `获取 UniArt 模型失败：${detail}`;
+      setSkuModels([]);
+      setSkuError(message);
+      toast.error(message);
     } finally {
       setSkuLoading(false);
     }
@@ -602,7 +611,8 @@ export default function SettingsPage() {
                 <input type="checkbox" checked={selectedSkuIds.includes(model.id)} onChange={() => setSelectedSkuIds((ids) => ids.includes(model.id) ? ids.filter((id) => id !== model.id) : [...ids, model.id])} className="mt-1 accent-[var(--color-primary)]" />
                 <span className="min-w-0"><span className="block text-sm font-medium text-foreground">{model.display_name}</span><span className="mt-1 block font-mono text-[0.625rem] text-text-muted">{model.id} · {model.capabilities.join(' / ')}</span></span>
               </label>)}
-              {!skuLoading && skuModels.length === 0 && <p className="py-8 text-center text-sm text-text-muted">暂无可用 UniArt 模型</p>}
+              {skuError && <p role="alert" className="py-4 text-sm text-status-failed-fg break-words">{skuError}</p>}
+              {!skuLoading && !skuError && skuModels.length === 0 && <p className="py-8 text-center text-sm text-text-muted">暂无可用 UniArt 模型</p>}
             </div>
             <div className="flex items-center justify-between border-t border-glass-border px-5 py-4"><span className="text-xs text-text-muted">已选择 {selectedSkuIds.length} 个 SKU</span><button type="button" onClick={saveSkuSelection} disabled={skuLoading || selectedSkuIds.length === 0} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-accent disabled:opacity-50"><Save size={15} />保存</button></div>
           </div>
@@ -860,7 +870,7 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <input type="text" value={config.OSS_BUCKET_NAME} onChange={(e) => handleChange("OSS_BUCKET_NAME", e.target.value)} placeholder="Bucket" className={settingsInputClass} />
               <input type="text" value={config.OSS_ENDPOINT} onChange={(e) => handleChange("OSS_ENDPOINT", e.target.value)} placeholder="Endpoint" className={settingsInputClass} />
-              <input type="text" value={config.OSS_BASE_PATH} onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)} placeholder="lumenx" className={settingsInputClass} />
+              <input type="text" value={config.OSS_BASE_PATH} onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)} placeholder="iframe" className={settingsInputClass} />
             </div>
           </FormRow>
         </>
@@ -872,7 +882,7 @@ export default function SettingsPage() {
   const renderAbout = () => {
     const ff = system?.ffmpeg;
     const aboutRows: { k: string; v: string; tone?: "ok" | "warn" }[] = [
-      { k: t("aboutAppVersion"), v: `LumenX Studio ${APP_VERSION}` },
+      { k: t("aboutAppVersion"), v: `iFrame Studio ${APP_VERSION}` },
       { k: t("aboutBackendApi"), v: API_URL },
       { k: t("aboutDataDir"), v: dataDir || "—" },
       { k: t("logDirLabel"), v: logDir || "—" },
@@ -881,12 +891,12 @@ export default function SettingsPage() {
       <Section id="about" title={t("secAboutTitle")}>
         {/* Line B brand signature block — teal-glow logo, serif name, amber tagline */}
         <div className="flex flex-col items-start gap-3 pb-6 mb-6 border-b border-glass-border">
-          <LumenXBranding size="md" showSlogan={false} />
+          <IFrameBranding size="md" showSlogan={false} />
           <p className="font-display atelier-display text-base italic text-accent leading-snug">
-            “Powered by Lumenx”
+            “Powered by Lumenx & Uniart”
           </p>
           <div className="font-mono text-[0.625rem] tracking-[0.08em] text-text-muted uppercase">
-            VERSION {APP_VERSION.replace(/^v/, "")} · BUILD 20260613
+            VERSION {APP_VERSION.replace(/^[vV]/, "")}
           </div>
           <p className="text-[0.78125rem] text-text-secondary leading-relaxed max-w-md">
             {t("aboutTagline")}

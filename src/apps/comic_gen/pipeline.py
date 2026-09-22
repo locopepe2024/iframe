@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
+import hashlib
 import json
 import os
 import re
@@ -8,7 +9,21 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ArtDirection, GlobalAssetLibrary
+from .models import (
+    Script,
+    GenerationStatus,
+    VideoTask,
+    Character,
+    Scene,
+    StoryboardFrame,
+    Series,
+    PromptConfig,
+    ArtDirection,
+    DirectorProfile,
+    GlobalAssetLibrary,
+    AssetLibraryReference,
+    normalize_director_profile_draft,
+)
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -78,6 +93,10 @@ class LibraryAssetInUseError(Exception):
         )
 
 
+class InvalidAssetReference(ValueError):
+    """Raised when a requested asset-library reference cannot be resolved."""
+
+
 class ComicGenPipeline(StudioOwnerMixin):
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
@@ -98,6 +117,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self.library_store: GlobalAssetLibrary = self._load_library_data()
         self._migrate_legacy_studio_owners()
         self._repair_series_bindings()
+        self._migrate_uploaded_asset_statuses()
 
         # Extraction preview cache: {project_id: (timestamp, Script)}
         self._extraction_cache: Dict[str, tuple] = {}
@@ -240,6 +260,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         t2i_image_urls: Optional[List[str]] = None,
         t2i_selected_index: Optional[int] = None,
         workbench_generate_count: Optional[int] = None,
+        video_model: Optional[str] = None,
+        workbench_generate_audio: Optional[bool] = None,
+        workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
+        workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
+        workbench_director_snapshot_media_id: Optional[str] = None,
     ) -> Optional["StoryboardFrame"]:
         """Persist Storyboard R2V workbench state onto a frame.
 
@@ -292,6 +317,38 @@ class ComicGenPipeline(StudioOwnerMixin):
             if workbench_generate_count is not None:
                 frame.workbench_generate_count = max(
                     1, min(int(workbench_generate_count), self._MAX_GENERATE_COUNT)
+                )
+            if video_model is not None:
+                frame.video_model = video_model.strip() or None
+            if workbench_generate_audio is not None:
+                frame.workbench_generate_audio = bool(workbench_generate_audio)
+            if workbench_reference_variant_ids is not None:
+                cleaned_selections: Dict[str, List[str]] = {}
+                for asset_id, variant_ids in workbench_reference_variant_ids.items():
+                    if not isinstance(asset_id, str) or not asset_id.strip() or not isinstance(variant_ids, list):
+                        continue
+                    unique_ids: List[str] = []
+                    for variant_id in variant_ids:
+                        if isinstance(variant_id, str) and variant_id.strip() and variant_id not in unique_ids:
+                            unique_ids.append(variant_id)
+                    if unique_ids:
+                        cleaned_selections[asset_id] = unique_ids
+                frame.workbench_reference_variant_ids = cleaned_selections
+            if workbench_pose_reference_variant_ids is not None:
+                cleaned_pose_selections: Dict[str, List[str]] = {}
+                for asset_id, variant_ids in workbench_pose_reference_variant_ids.items():
+                    if not isinstance(asset_id, str) or not asset_id.strip() or not isinstance(variant_ids, list):
+                        continue
+                    unique_ids: List[str] = []
+                    for variant_id in variant_ids:
+                        if isinstance(variant_id, str) and variant_id.strip() and variant_id not in unique_ids:
+                            unique_ids.append(variant_id)
+                    if unique_ids:
+                        cleaned_pose_selections[asset_id] = unique_ids
+                frame.workbench_pose_reference_variant_ids = cleaned_pose_selections
+            if workbench_director_snapshot_media_id is not None:
+                frame.workbench_director_snapshot_media_id = (
+                    workbench_director_snapshot_media_id.strip() or None
                 )
             frame.updated_at = time.time()
             try:
@@ -442,6 +499,68 @@ class ComicGenPipeline(StudioOwnerMixin):
         if repaired:
             self._save_data()
 
+    @staticmethod
+    def _asset_has_uploaded_image(asset: Any) -> bool:
+        """Return whether an asset already has a usable uploaded image.
+
+        The canonical character reference lives in ``reference_sheet`` while
+        older records may still use one of the legacy image containers.  The
+        helper intentionally checks the explicit upload provenance flag so a
+        partially generated asset is not mistaken for a completed upload.
+        """
+        if asset is None:
+            return False
+        containers = (
+            [
+                getattr(asset, "reference_sheet", None),
+                getattr(asset, "full_body_asset", None),
+                getattr(asset, "three_view_asset", None),
+                getattr(asset, "headshot_asset", None),
+            ]
+            if hasattr(asset, "reference_sheet")
+            else [getattr(asset, "image_asset", None)]
+        )
+        for container in containers:
+            if container is None:
+                continue
+            variants = getattr(container, "image_variants", None)
+            if variants is None:
+                variants = getattr(container, "variants", None)
+            if any(
+                getattr(variant, "is_uploaded_source", False)
+                and bool(getattr(variant, "url", None))
+                for variant in (variants or [])
+            ):
+                return True
+        return False
+
+    def _migrate_uploaded_asset_statuses(self) -> None:
+        """Mark upload-only assets ready when older records still say pending.
+
+        Uploads predating the status fix already contain a selected reference
+        image but remain ``pending`` because no generation task ran.  Repair
+        only that safe, explicit state at startup; failed/processing
+        generations remain untouched.
+        """
+        def repair_assets(resources: Any) -> bool:
+            changed = False
+            containers = resources.values() if isinstance(resources, dict) else [resources]
+            for resource in containers:
+                for collection_name in ("characters", "scenes", "props"):
+                    for asset in getattr(resource, collection_name, []) or []:
+                        status = getattr(asset, "status", None)
+                        if status in (GenerationStatus.PENDING, GenerationStatus.PENDING.value) and self._asset_has_uploaded_image(asset):
+                            asset.status = GenerationStatus.COMPLETED
+                            changed = True
+            return changed
+
+        if repair_assets(self.scripts):
+            self._save_data()
+        if repair_assets(self.series_store):
+            self._save_series_data()
+        if repair_assets(self.library_store):
+            self._save_library_data()
+
     def create_project(
         self,
         title: str,
@@ -502,15 +621,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._extraction_cache[script_id] = (time.time(), new_script)
         return new_script
 
-    def reparse_project(self, script_id: str, text: str) -> Script:
+    def reparse_project(self, script_id: str, text: str,
+                        draft: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Script:
         """Re-parse the text for an existing project, replacing all entities."""
         existing_script = self.scripts.get(script_id)
         if not existing_script:
             raise ValueError("Script not found")
 
-        # Use cached extraction if available (from extract_preview)
+        # Applying an explicit draft must persist exactly what the user reviewed,
+        # even when the short-lived preview cache has expired.
         cached = self._extraction_cache.pop(script_id, None)
-        if cached and (time.time() - cached[0]) < 300:
+        if draft is not None:
+            normalized = {key: list(draft.get(key, [])) for key in ("characters", "scenes", "props")}
+            new_script = self.script_processor._create_script_from_data(
+                existing_script.title, text, normalized
+            )
+        elif cached and (time.time() - cached[0]) < 300 and cached[1].original_text == text:
             new_script = cached[1]
         else:
             custom_extraction = getattr(getattr(existing_script, "prompt_config", None), "entity_extraction", "")
@@ -520,6 +646,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.id = existing_script.id
         new_script.created_at = existing_script.created_at
         new_script.updated_at = time.time()
+
+        # Extraction creates a new Script, but ownership belongs to the
+        # existing project, never to the parser or its cached result.
+        new_script.owner_user_id = existing_script.owner_user_id
+        new_script.owner_profile_id = existing_script.owner_profile_id
+        self.stamp_owned_children(new_script)
         
         # Preserve project-level settings
         new_script.art_direction = existing_script.art_direction
@@ -571,12 +703,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+
+        reference_provenance = None
+        if reference is not None:
+            # Structured identity always wins over the legacy URL. Resolve it
+            # again during execution so a queued task cannot use a deleted or
+            # cross-owner variant.
+            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+                script,
+                reference,
+            )
+            use_reference_image = True
         
         # Get effective model names from project settings if not overridden
         t2i_model = model_name or script.model_settings.t2i_model
@@ -631,36 +774,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 effective_positive_prompt = f"{script.style_preset} style"
                 if script.style_prompt:
                     effective_positive_prompt += f", {script.style_prompt}"
+
+            director_context = self.director_prompt_context(script)
+            if director_context:
+                effective_positive_prompt = ". ".join(filter(None, [
+                    effective_positive_prompt, director_context,
+                ]))
         
-        asset_list = []
-        target_asset = None
-
-        if asset_type == "character":
-            asset_list = script.characters
-        elif asset_type == "scene":
-            asset_list = script.scenes
-        elif asset_type == "prop":
-            asset_list = script.props
-        else:
+        if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
-
-        target_asset = next((a for a in asset_list if a.id == asset_id), None)
-        # Fallback: /projects/{id} returns merged characters (episode +
-        # series + library, see get_project), so the frontend can pass a
-        # series-level asset id for an episode-scoped request. Look it up
-        # on the parent series if not on the episode itself.
-        asset_is_series_level = False
-        if not target_asset and script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series:
-                series_list = (
-                    series.characters if asset_type == "character"
-                    else series.scenes if asset_type == "scene"
-                    else series.props
-                )
-                target_asset = next((a for a in series_list if a.id == asset_id), None)
-                if target_asset:
-                    asset_is_series_level = True
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
@@ -669,9 +792,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.owner_user_id = script.owner_user_id
         if not target_asset.owner_profile_id:
             target_asset.owner_profile_id = script.owner_profile_id
-        self._save_data()
-        if asset_is_series_level:
-            self._save_series_data()
+        self._save_after_asset_mutation(source)
         
         try:
             # Generate with Art Direction style injected
@@ -688,30 +809,52 @@ class ComicGenPipeline(StudioOwnerMixin):
                     target_asset, 
                     generation_type=generation_type, 
                     prompt=prompt, 
+                    reference_image_url=reference_image_url,
+                    use_reference_image=use_reference_image,
                     positive_prompt=effective_positive_prompt, # Used as style suffix if prompt is auto-generated
                     negative_prompt=effective_negative_prompt,
                     batch_size=batch_size,
                     model_name=t2i_model,
                     i2i_model_name=i2i_model,
-                    size=effective_size
+                    size=effective_size,
+                    reference_provenance=reference_provenance,
                 )
             elif asset_type == "scene":
-                self.asset_generator.generate_scene(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_scene(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt,
+                    reference_image_url=reference_image_url,
+                    reference_provenance=reference_provenance,
+                )
             elif asset_type == "prop":
-                self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_prop(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt,
+                    reference_image_url=reference_image_url,
+                    reference_provenance=reference_provenance,
+                )
                 
             target_asset.status = GenerationStatus.COMPLETED
+            director_profile = self.effective_director_profile(script)
+            if director_profile:
+                target_asset.director_profile_revision = director_profile.revision
+                target_asset.director_profile_hash = director_profile.content_hash
+                target_asset.director_review_required = False
         except Exception as e:
             target_asset.status = GenerationStatus.FAILED
             raise e
         finally:
-            self._save_data()
-            # If the asset lives on the parent series (not the episode),
-            # _save_data() (which persists scripts/episodes) won't capture
-            # the variant changes — persist the series too, otherwise the
-            # generated image disappears on the next reload.
-            if asset_is_series_level:
-                self._save_series_data()
+            self._save_after_asset_mutation(source)
 
         return script
 
@@ -720,44 +863,34 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       style_prompt: str = None, generation_type: str = "all",
                                       prompt: str = None, apply_style: bool = True,
                                       negative_prompt: str = None, batch_size: int = 1,
-                                      model_name: str = None, aspect_ratio: str = None) -> Tuple[Script, str]:
+                                      model_name: str = None, aspect_ratio: str = None,
+                                      reference: Any = None) -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
         
-        # Find the asset and set to PROCESSING
-        asset_list = []
-        if asset_type == "character":
-            asset_list = script.characters
-        elif asset_type == "scene":
-            asset_list = script.scenes
-        elif asset_type == "prop":
-            asset_list = script.props
-        else:
+        if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
-
-        target_asset = next((a for a in asset_list if a.id == asset_id), None)
-        # Fallback to parent series for series-level assets (see generate_asset
-        # for rationale — /projects returns merged characters).
-        asset_is_series_level = False
-        if not target_asset and script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series:
-                series_list = (
-                    series.characters if asset_type == "character"
-                    else series.scenes if asset_type == "scene"
-                    else series.props
-                )
-                target_asset = next((a for a in series_list if a.id == asset_id), None)
-                if target_asset:
-                    asset_is_series_level = True
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
+        normalized_reference = None
+        if reference is not None:
+            # Validate both identity and media before creating the task. The
+            # same IDs are resolved again when the background task executes.
+            _resolved_reference, normalized_reference = self._resolve_asset_library_reference(
+                script,
+                reference,
+            )
+            # A structured library reference is the durable source of truth.
+            # Do not retain a browser/provider URL alongside it in the async
+            # snapshot; this also guarantees the structured reference wins if
+            # an older client sends both fields.
+            reference_image_url = None
+
         target_asset.status = GenerationStatus.PROCESSING
-        if asset_is_series_level:
-            self._save_series_data()
         
         # Create task
         task_id = str(uuid.uuid4())
@@ -775,6 +908,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "params": {
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
+                "reference": normalized_reference,
                 "style_prompt": style_prompt,
                 "generation_type": generation_type,
                 "prompt": prompt,
@@ -783,10 +917,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "batch_size": batch_size,
                 "model_name": model_name,
                 "aspect_ratio": aspect_ratio,
+                # Cast generation must not silently turn an already-uploaded
+                # asset into provider input.  ``reference_image_url`` is the
+                # explicit opt-in for an image-edit request; legacy internal
+                # callers that invoke generate_asset directly keep their
+                # reference behavior through its default.
+                "use_reference_image": bool(reference_image_url),
             }
         }
         
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script, task_id
 
     def process_asset_generation_task(self, task_id: str):
@@ -826,6 +966,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params["batch_size"],
                     params["model_name"],
                     params.get("aspect_ratio"),
+                    params.get("use_reference_image", False),
+                    params.get("reference"),
                 )
             task["status"] = "completed"
             task["progress"] = 100
@@ -855,6 +997,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         generation_type = params.get("generation_type", "all")
         prompt = params.get("prompt")
         reference_image_url = params.get("reference_image_url")
+        reference_provenance = None
+        if params.get("reference") is not None:
+            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+                series,
+                params["reference"],
+            )
 
         if asset_type == "character":
             target = next((c for c in series.characters if c.id == asset_id), None)
@@ -864,6 +1012,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 target, generation_type=generation_type, prompt=prompt or "",
                 positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         elif asset_type == "scene":
             target = next((s for s in series.scenes if s.id == asset_id), None)
@@ -872,6 +1022,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             self.asset_generator.generate_scene(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                prompt=prompt,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -880,6 +1033,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             self.asset_generator.generate_prop(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                prompt=prompt,
+                reference_image_url=reference_image_url,
+                reference_provenance=reference_provenance,
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
@@ -911,6 +1067,28 @@ class ComicGenPipeline(StudioOwnerMixin):
             "script_id": task.get("script_id"),
             "created_at": task.get("created_at")
         }
+
+    def get_video_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Return a persisted storyboard video task for the active owner."""
+        requested_owner = self._requested_owner_profile_id()
+        if not requested_owner:
+            return None
+        for script in self.scripts.values():
+            if not owned_by(script, requested_owner):
+                continue
+            task = next((item for item in script.video_tasks if item.id == task_id), None)
+            if not task:
+                continue
+            return {
+                "task_id": task.id,
+                "status": task.status,
+                "error": task.error,
+                "video_url": task.video_url,
+                "result_url": task.video_url,
+                "script_id": script.id,
+                "frame_id": task.frame_id,
+            }
+        return None
 
     def create_motion_ref_task(self, script_id: str, asset_id: str, asset_type: str, 
                                 prompt: Optional[str] = None, audio_url: Optional[str] = None, 
@@ -1107,6 +1285,161 @@ class ComicGenPipeline(StudioOwnerMixin):
         else:
             self._save_data()
 
+    @staticmethod
+    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, str]]:
+        """Normalize the public reference contract before resolving it.
+
+        This deliberately keeps only the three stable identifiers. Provider
+        URLs are never copied into an async task snapshot or provenance field.
+        """
+        if reference is None:
+            return None
+        if isinstance(reference, AssetLibraryReference):
+            raw = reference.model_dump()
+        elif isinstance(reference, dict):
+            raw = reference
+        else:
+            raise InvalidAssetReference("reference must be an asset-library reference object")
+
+        asset_type = raw.get("asset_type")
+        asset_id = raw.get("asset_id")
+        variant_id = raw.get("variant_id")
+        if asset_type not in ("character", "scene", "prop"):
+            raise InvalidAssetReference("reference.asset_type is invalid")
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise InvalidAssetReference("reference.asset_id is required")
+        if not isinstance(variant_id, str) or not variant_id.strip():
+            raise InvalidAssetReference("reference.variant_id is required")
+        return {
+            "asset_type": asset_type,
+            "asset_id": asset_id.strip(),
+            "variant_id": variant_id.strip(),
+        }
+
+    @staticmethod
+    def _asset_image_variants(asset: Any, asset_type: str) -> List[Any]:
+        """Return every image variant owned by an asset.
+
+        The character schema has a canonical ``reference_sheet`` plus legacy
+        containers. Scenes and props use ``image_asset``. Keeping the legacy
+        containers in the resolver allows older library records to remain
+        selectable while the UI prefers the canonical sheet when present.
+        """
+        if asset_type == "character":
+            containers = [
+                getattr(asset, "reference_sheet", None),
+                getattr(asset, "full_body_asset", None),
+                getattr(asset, "three_view_asset", None),
+                getattr(asset, "headshot_asset", None),
+            ]
+        else:
+            containers = [getattr(asset, "image_asset", None)]
+
+        variants: List[Any] = []
+        seen_ids = set()
+        for container in containers:
+            if container is None:
+                continue
+            candidates = getattr(container, "image_variants", None)
+            if candidates is None:
+                candidates = getattr(container, "variants", None)
+            for variant in candidates or []:
+                variant_id = getattr(variant, "id", None)
+                if variant_id and variant_id not in seen_ids:
+                    seen_ids.add(variant_id)
+                    variants.append(variant)
+        return variants
+
+    @staticmethod
+    def _resolve_stored_reference_value(value: str, owner_profile_id: Optional[str]) -> str:
+        """Resolve a persisted variant URL/path for a provider adapter.
+
+        HTTP URLs and OSS object keys are already provider-compatible. Local
+        material is accepted only from the managed ``output`` tree and must
+        exist at execution time; this prevents a stale or traversal path from
+        reaching an image provider.
+        """
+        if value.startswith(("https://", "http://")) or is_object_key(value):
+            return value
+
+        # A signed Studio URL can be stored by an older client. Resolve it
+        # through the owner boundary before turning it back into a local path.
+        if value.startswith("/studio/media/") or value.startswith("studio/media/"):
+            if not owner_profile_id:
+                raise InvalidAssetReference("reference media requires an authenticated owner")
+            try:
+                return resolve_studio_reference(
+                    value if value.startswith("/") else f"/{value}",
+                    owner_profile_id,
+                )
+            except Exception as exc:
+                raise InvalidAssetReference("reference variant media is invalid or expired") from exc
+
+        candidate = os.path.realpath(
+            value if value.startswith("output/") or os.path.isabs(value)
+            else os.path.join("output", value)
+        )
+        output_root = os.path.realpath("output")
+        if not candidate.startswith(output_root + os.sep) or not os.path.isfile(candidate):
+            raise InvalidAssetReference("reference variant media is missing")
+        return candidate
+
+    def _resolve_asset_library_reference(
+        self,
+        container: Any,
+        reference: Any,
+    ) -> Tuple[str, Dict[str, str]]:
+        """Resolve a reference against a project or series visible to its owner."""
+        normalized = self._normalize_asset_reference(reference)
+        if normalized is None:
+            raise InvalidAssetReference("reference is required")
+
+        asset_type = normalized["asset_type"]
+        asset_id = normalized["asset_id"]
+        if isinstance(container, Script):
+            asset, _source = self._find_asset_with_source(container, asset_id, asset_type)
+        elif isinstance(container, Series):
+            if asset_type == "character":
+                own_list = container.characters
+            elif asset_type == "scene":
+                own_list = container.scenes
+            else:
+                own_list = container.props
+            asset = next((item for item in own_list if item.id == asset_id), None)
+            if asset is None:
+                asset = next(
+                    (
+                        item
+                        for item in self._library_list_for_type(asset_type, container.owner_profile_id)
+                        if item.id == asset_id
+                    ),
+                    None,
+                )
+        else:
+            raise InvalidAssetReference("reference target container is invalid")
+
+        if asset is None:
+            raise InvalidAssetReference("reference asset is not visible to this owner")
+
+        variant = next(
+            (
+                item
+                for item in self._asset_image_variants(asset, asset_type)
+                if getattr(item, "id", None) == normalized["variant_id"]
+            ),
+            None,
+        )
+        if variant is None:
+            raise InvalidAssetReference("reference variant does not belong to the asset")
+        value = getattr(variant, "url", None)
+        if not isinstance(value, str) or not value.strip():
+            raise InvalidAssetReference("reference variant has no image material")
+        resolved = self._resolve_stored_reference_value(
+            value.strip(),
+            getattr(container, "owner_profile_id", None),
+        )
+        return resolved, normalized
+
     def toggle_asset_lock(self, script_id: str, asset_id: str, asset_type: str) -> Script:
         """Toggle the locked status of an asset. Works on both
         episode-local and series-shared assets (A2 decision: default
@@ -1244,15 +1577,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
-        # Find target asset
-        target_asset = None
-        if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-        elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-        elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-        
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         
@@ -1262,7 +1588,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             url=image_url,
             prompt_used=description or target_asset.description,
             is_uploaded_source=True,
-            upload_type=upload_type
+            upload_type=upload_type,
+            source_origin="upload",
         )
         
         # Update description if provided
@@ -1272,7 +1599,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Add variant to the appropriate asset unit
         if asset_type == "character":
             # Map upload_type to the correct asset unit
-            if upload_type == "full_body":
+            if upload_type == "reference_sheet":
+                target_unit = target_asset.reference_sheet
+            elif upload_type == "full_body":
                 target_unit = target_asset.full_body
             elif upload_type == "head_shot":
                 target_unit = target_asset.head_shot
@@ -1284,7 +1613,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Ensure AssetUnit exists
             if target_unit is None:
                 target_unit = AssetUnit()
-                if upload_type == "full_body":
+                if upload_type == "reference_sheet":
+                    target_asset.reference_sheet = target_unit
+                elif upload_type == "full_body":
                     target_asset.full_body = target_unit
                 elif upload_type == "head_shot":
                     target_asset.head_shot = target_unit
@@ -1295,6 +1626,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_unit.image_variants.append(new_variant)
             target_unit.selected_image_id = new_variant.id
             target_unit.image_updated_at = time.time()
+            if upload_type == "reference_sheet":
+                target_asset.image_url = image_url
             
             # === ALSO UPDATE LEGACY FIELDS for frontend compatibility ===
             # Create variant for legacy ImageAsset structure
@@ -1303,7 +1636,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 url=image_url,
                 prompt_used=description or target_asset.description,
                 is_uploaded_source=True,
-                upload_type=upload_type
+                upload_type=upload_type,
+                source_origin="upload",
             )
             
             if upload_type == "full_body":
@@ -1334,20 +1668,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             logger.info(f"Added uploaded variant {new_variant.id} to character {asset_id} {upload_type}")
             
         elif asset_type in ["scene", "prop"]:
-            # Scene and Prop have a single 'image' asset unit
-            if not hasattr(target_asset, 'image') or target_asset.image is None:
-                target_asset.image = AssetUnit()
-            
-            target_asset.image.image_variants.append(new_variant)
-            target_asset.image.selected_image_id = new_variant.id
-            target_asset.image.image_updated_at = time.time()
-            
+            from .models import ImageAsset
+            if target_asset.image_asset is None:
+                target_asset.image_asset = ImageAsset()
+            target_asset.image_asset.variants.append(new_variant)
+            target_asset.image_asset.selected_id = new_variant.id
+
             # Also update legacy image_url field
             target_asset.image_url = image_url
             
             logger.info(f"Added uploaded variant {new_variant.id} to {asset_type} {asset_id}")
+
+        # An uploaded, selected reference is already a usable asset.  Keep the
+        # generation status in sync with the canonical image container so
+        # callers do not require a redundant AI generation before treating the
+        # upload as ready.  This applies equally to project, series, and global
+        # assets because `_find_asset_with_source` has already resolved the
+        # owning container above.
+        target_asset.status = GenerationStatus.COMPLETED
         
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script
 
     def update_project_style(self, script_id: str, style_preset: str, style_prompt: Optional[str] = None) -> Script:
@@ -1370,12 +1710,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
+        effective_before_save = self.effective_art_direction(script)
         # Create Art Direction object
         art_direction = ArtDirection(
             selected_style_id=selected_style_id,
             style_config=style_config,
             custom_styles=custom_styles or [],
-            ai_recommendations=ai_recommendations or []
+            ai_recommendations=ai_recommendations or [],
+            director_profile=effective_before_save.director_profile if effective_before_save else None,
         )
         
         script.art_direction = art_direction
@@ -1383,17 +1725,136 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
+    def effective_art_direction(self, script: Script) -> Optional[ArtDirection]:
+        resolved = script.art_direction
+        if not resolved and script.series_id:
+            series = self.series_store.get(script.series_id)
+            resolved = series.art_direction if series else None
+        return ArtDirection(**resolved) if isinstance(resolved, dict) else resolved
+
+    def effective_director_profile(self, script: Script) -> Optional[DirectorProfile]:
+        art_direction = self.effective_art_direction(script)
+        return art_direction.director_profile if art_direction else None
+
+    def director_prompt_context(self, script: Script) -> str:
+        profile = self.effective_director_profile(script)
+        if not profile:
+            return ""
+        payload = profile.model_dump(exclude={"confirmed_at"})
+        return (
+            f"Director profile revision: {profile.revision}. Treat this as confirmed narrative "
+            "context. Do not turn unresolved questions into facts. "
+            + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+
+    def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
+        script, entities, _ = self.storyboard_analysis_context(script_id)
+        art_direction = self.effective_art_direction(script)
+        style = art_direction.style_config if art_direction else {}
+        return script, entities, style
+
+    def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
+        script, entities, style = self.director_analysis_context(script_id)
+        draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
+        normalized = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized)
+        return normalized
+
+    def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
+                                instructions: List[str]) -> Dict[str, Any]:
+        script, entities, style = self.director_analysis_context(script_id)
+        normalized_draft = normalize_director_profile_draft(draft)
+        DirectorProfile(**normalized_draft)
+        revised = self.script_processor.refine_director_profile(
+            script.original_text, entities, style, normalized_draft, instructions
+        )
+        normalized_result = normalize_director_profile_draft(revised)
+        DirectorProfile(**normalized_result)
+        return normalized_result
+
+    def apply_director_profile(self, script_id: str, draft: Dict[str, Any]) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        normalized = normalize_director_profile_draft(draft)
+        clean = DirectorProfile(**normalized).model_dump(
+            exclude={"revision", "content_hash", "confirmed_at"}
+        )
+        content_hash = hashlib.sha256(json.dumps(
+            clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        current = self.effective_director_profile(script)
+        revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
+        confirmed = DirectorProfile(
+            **clean, revision=revision, content_hash=content_hash, confirmed_at=time.time()
+        )
+        if script.art_direction:
+            script.art_direction.director_profile = confirmed
+        else:
+            inherited = self.effective_art_direction(script)
+            script.art_direction = inherited.model_copy(deep=True) if inherited else ArtDirection(
+                selected_style_id="director-profile", style_config={}
+            )
+            script.art_direction.director_profile = confirmed
+        changed = not current or current.content_hash != content_hash
+        if changed:
+            script.director_review_required = True
+            for item in [*script.characters, *script.scenes, *script.props, *script.frames]:
+                item.director_review_required = True
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
     # === STORYBOARD DRAMATIZATION v2 ===
 
-    def analyze_text_to_frames(self, script_id: str, text: str) -> Script:
+    def storyboard_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], str]:
+        """Return the stable project context used by storyboard analysis jobs."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        resolved = self.resolve_episode_assets(script)
+        entities_json = {
+            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in resolved["characters"]],
+            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
+            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
+        }
+        series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
+        prompt = self.get_effective_prompt("storyboard_extraction", script, series)
+        return script, entities_json, prompt
+
+    def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
+        """Generate a storyboard draft without mutating persisted frames."""
+        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        director_profile = self.effective_director_profile(script)
+        frames = self.script_processor.analyze_to_storyboard(
+            text, entities_json, custom_extraction_prompt=prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
+        )
+        if not frames:
+            raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
+        return frames
+
+    def refine_storyboard_analysis(self, script_id: str, text: str,
+                                    draft: List[Dict[str, Any]],
+                                    instructions: List[str]) -> List[Dict[str, Any]]:
+        """Revise a storyboard draft without changing the project's frames."""
+        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        director_profile = self.effective_director_profile(script)
+        frames = self.script_processor.refine_storyboard_analysis(
+            text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
+        )
+        if not frames:
+            raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
+        return frames
+
+    def analyze_text_to_frames(self, script_id: str, text: str,
+                               draft: Optional[List[Dict[str, Any]]] = None) -> Script:
         """
         Analyzes script text and generates storyboard frames using LLM.
         Replaces existing frames with newly generated ones.
         """
-        script = self.scripts.get(script_id)
-        if not script:
-            raise ValueError("Script not found")
-        
+        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(script_id)
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)
@@ -1402,20 +1863,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
 
-        # Build entities JSON from resolved characters, scenes, props
-        entities_json = {
-            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in all_characters],
-            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in all_scenes],
-            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in all_props],
-        }
-
-        # Resolve effective storyboard-extraction prompt (Episode → Series → built-in default).
-        series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
-        storyboard_extraction_prompt = self.get_effective_prompt("storyboard_extraction", script, series)
-
-        # Call LLM to analyze text (may raise RuntimeError on parse failure)
-        raw_frames = self.script_processor.analyze_to_storyboard(
-            text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt
+        # An explicit reviewed draft is applied exactly as shown and never
+        # triggers a second analysis call.
+        director_profile = self.effective_director_profile(script)
+        raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
+            text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
+            director_profile=director_profile.model_dump() if director_profile else None,
         )
 
         if not raw_frames:
@@ -1441,11 +1894,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             character_ids = []
             for char_name in char_ref_names:
                 cn = char_name.strip().lower()
-                for char in all_characters:
-                    cname = char.name.strip().lower()
-                    if cname == cn or cn in cname or cname in cn:
-                        character_ids.append(char.id)
-                        break
+                # Prefer an exact temporal/identity variant match.  A base
+                # name such as "周涵" is contained in "周涵（大学时期）";
+                # checking contains in list order first would silently bind a
+                # university shot to the base character's design.
+                matched = next(
+                    (char for char in all_characters if char.name.strip().lower() == cn),
+                    None,
+                )
+                if not matched:
+                    matched = next(
+                        (
+                            char
+                            for char in all_characters
+                            if cn in char.name.strip().lower()
+                            or char.name.strip().lower() in cn
+                        ),
+                        None,
+                    )
+                if matched:
+                    character_ids.append(matched.id)
 
             # Resolve prop IDs by names (case-insensitive, bidirectional contains)
             prop_ref_names = frame_data.get("prop_ref_names", [])
@@ -1473,6 +1941,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 dialogue=frame_data.get("dialogue"),
                 speaker=frame_data.get("speaker"),
                 duration=frame_data.get("duration"),
+                director_profile_revision=director_profile.revision if director_profile else None,
+                director_profile_hash=director_profile.content_hash if director_profile else None,
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)
@@ -1683,6 +2153,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .llm import DEFAULT_STORYBOARD_POLISH_PROMPT
         if custom_prompt == DEFAULT_STORYBOARD_POLISH_PROMPT:
             custom_prompt = ""
+        director_context = self.director_prompt_context(script)
+        if director_context:
+            custom_prompt = "\n\n".join(filter(None, [
+                custom_prompt, "CONFIRMED DIRECTOR PROFILE:\n" + director_context,
+            ]))
 
         # Call LLM to refine prompt
         result = self.script_processor.polish_storyboard_prompt(raw_prompt, assets, feedback, custom_prompt)
@@ -1762,6 +2237,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
         if kwargs.get('transition_hint') is not None:
             frame.transition_hint = kwargs['transition_hint']
+        if kwargs.get('style_prompt_override') is not None:
+            frame.style_prompt_override = kwargs['style_prompt_override']
+        if kwargs.get('lighting_override') is not None:
+            frame.lighting_override = kwargs['lighting_override']
+        if kwargs.get('negative_prompt_override') is not None:
+            frame.negative_prompt_override = kwargs['negative_prompt_override']
         
         self._save_data()
         return script
@@ -2015,7 +2496,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_storyboard_render(self, script_id: str, frame_id: str, composition_data: Optional[Dict[str, Any]], prompt: str, batch_size: int = 1) -> Script:
+    def generate_storyboard_render(
+        self,
+        script_id: str,
+        frame_id: str,
+        composition_data: Optional[Dict[str, Any]],
+        prompt: str,
+        batch_size: int = 1,
+        negative_prompt: Optional[str] = None,
+    ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
         if not script:
@@ -2099,6 +2588,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
                 prompt=final_prompt,
+                negative_prompt=negative_prompt,
                 batch_size=batch_size,
                 size=effective_size,
                 model_name=i2i_model
@@ -2140,7 +2630,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -2198,6 +2688,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
                 raise ValueError("Text-to-video cannot accept media references")
+            if "minimax-h3" in model.lower() and len(reference_image_urls or []) > 9:
+                raise ValueError("MiniMax H3 accepts at most 9 reference images per video request")
             reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
             reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_video_urls or []]
             if image_url:
@@ -2263,6 +2755,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             owner_user_id=script.owner_user_id,
             owner_profile_id=script.owner_profile_id,
             frame_id=frame_id,
+            pose_reference_variant_ids={
+                key: list(value)
+                for key, value in (pose_reference_variant_ids or {}).items()
+                if isinstance(key, str) and isinstance(value, list)
+            },
+            director_snapshot_media_id=(
+                director_snapshot_media_id.strip()
+                if isinstance(director_snapshot_media_id, str) and director_snapshot_media_id.strip()
+                else None
+            ),
             image_url=snapshot_url,
             prompt=prompt,
             status="pending",
@@ -2375,6 +2877,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             prompt_used="Extracted last frame from video",
             is_uploaded_source=True,
             upload_type="image",
+            source_origin="upload",
         )
 
         # Initialize rendered_image_asset if needed
@@ -2418,6 +2921,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             prompt_used="User uploaded image",
             is_uploaded_source=True,
             upload_type="image",
+            source_origin="upload",
         )
 
         if not frame.rendered_image_asset:
@@ -3397,15 +3901,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                 # Asset motion references use image_url as their sole visual input.
                 if task.generation_mode == "r2v" and task.image_url and task.image_url not in reference_images:
                     reference_images.insert(0, task.image_url)
+                from .reference_prompt import bind_storyboard_prompt
+                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, len(reference_images))
+                # Storyboard cuts can be shorter than the provider's output
+                # window. Normalize at the submission boundary as protection
+                # for mobile clients or cached frontends that predate the UI
+                # validation. The authored shot duration remains unchanged.
+                max_duration = 15 if "minimax-h3" in model_name_lower else 30
+                provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
-                    prompt=task.prompt, output_path=output_path, img_url=img_url, img_path=img_path,
-                    duration=task.duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
+                    prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model,
                     mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],
                     ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else [],
                     ref_audio_urls=[task.audio_url] if task.audio_url and task.generation_mode == "r2v" else [],
                     generate_audio=task.generate_audio,
+                    seed=task.seed,
                     on_task_submitted=save_provider_task,
                     resume_task_id=task.provider_task_id if task.provider_name == "uniart" else None,
                 )
@@ -3716,32 +4229,90 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def _select_variant_in_asset(self, image_asset: Any, variant_id: str) -> Any:
         """Helper to select a variant in an ImageAsset. Returns the selected variant if found."""
-        if not image_asset or not image_asset.variants:
+        from .models import AssetUnit
+        if image_asset is None:
             return None
-            
-        for variant in image_asset.variants:
+        variants = image_asset.image_variants if isinstance(image_asset, AssetUnit) else image_asset.variants
+        for variant in variants:
             if variant.id == variant_id:
-                image_asset.selected_id = variant_id
+                if isinstance(image_asset, AssetUnit):
+                    image_asset.selected_image_id = variant_id
+                else:
+                    image_asset.selected_id = variant_id
                 return variant
         return None
 
     def _delete_variant_in_asset(self, image_asset: Any, variant_id: str) -> bool:
-        """Helper to delete a variant in an ImageAsset. Returns True if found and deleted."""
-        if not image_asset or not image_asset.variants:
+        """Delete an image variant from either ImageAsset or AssetUnit."""
+        from .models import AssetUnit
+        if image_asset is None:
             return False
-            
-        initial_len = len(image_asset.variants)
-        image_asset.variants = [v for v in image_asset.variants if v.id != variant_id]
-        
-        if len(image_asset.variants) < initial_len:
-            # If we deleted the selected one, select the last one or None
-            if image_asset.selected_id == variant_id:
-                if image_asset.variants:
-                    image_asset.selected_id = image_asset.variants[-1].id
-                else:
-                    image_asset.selected_id = None
+        variants_attr = "image_variants" if isinstance(image_asset, AssetUnit) else "variants"
+        selected_attr = "selected_image_id" if isinstance(image_asset, AssetUnit) else "selected_id"
+        variants = getattr(image_asset, variants_attr, [])
+        if not variants:
+            return False
+
+        remaining = [variant for variant in variants if variant.id != variant_id]
+        if len(remaining) < len(variants):
+            setattr(image_asset, variants_attr, remaining)
+            if getattr(image_asset, selected_attr, None) == variant_id:
+                setattr(image_asset, selected_attr, remaining[-1].id if remaining else None)
             return True
         return False
+
+    @staticmethod
+    def _selected_image_variant(image_asset: Any) -> Any:
+        """Return the selected image variant for ImageAsset or AssetUnit."""
+        from .models import AssetUnit
+        if image_asset is None:
+            return None
+        variants = image_asset.image_variants if isinstance(image_asset, AssetUnit) else image_asset.variants
+        selected_id = image_asset.selected_image_id if isinstance(image_asset, AssetUnit) else image_asset.selected_id
+        return next((variant for variant in variants if variant.id == selected_id), None)
+
+    @staticmethod
+    def _asset_image_containers(target_asset: Any, asset_type: str) -> List[Any]:
+        """Return every image-variant container owned by a semantic asset."""
+        if asset_type == "character":
+            return [
+                getattr(target_asset, "reference_sheet", None),
+                getattr(target_asset, "full_body_asset", None),
+                getattr(target_asset, "three_view_asset", None),
+                getattr(target_asset, "headshot_asset", None),
+            ]
+        return [getattr(target_asset, "image_asset", None)]
+
+    def update_asset_variant_metadata(
+        self,
+        script_id: str,
+        asset_id: str,
+        asset_type: str,
+        variant_id: str,
+        reference_view_role: Optional[str] = None,
+        reference_distance: Optional[str] = None,
+    ) -> Script:
+        """Label a child reference view while preserving its semantic asset identity."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if target_asset is None:
+            raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+
+        for container in self._asset_image_containers(target_asset, asset_type):
+            if container is None:
+                continue
+            from .models import AssetUnit
+            variants = container.image_variants if isinstance(container, AssetUnit) else container.variants
+            variant = next((item for item in variants if item.id == variant_id), None)
+            if variant is None:
+                continue
+            variant.reference_view_role = reference_view_role or None
+            variant.reference_distance = reference_distance or None
+            self._save_after_asset_mutation(source)
+            return script
+        raise ValueError(f"Variant {variant_id} not found")
 
     def select_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str, generation_type: str = None) -> Script:
         """Selects a specific variant for an asset."""
@@ -3750,16 +4321,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
             
         target_asset = None
-        asset_is_series_level = False
+        source = "script"
+        if asset_type in ("character", "scene", "prop"):
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-            # Fallback to parent series for series-level characters.
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((c for c in series.characters if c.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 # If generation_type is specified, only select from that specific asset
                 if generation_type == "full_body":
@@ -3805,26 +4372,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                             target_asset.avatar_url = variant.url
                         
         elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((s for s in series.scenes if s.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
                 if variant:
                     target_asset.image_url = variant.url
 
         elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-            if not target_asset and script.series_id:
-                series = self.series_store.get(script.series_id)
-                if series:
-                    target_asset = next((p for p in series.props if p.id == asset_id), None)
-                    if target_asset:
-                        asset_is_series_level = True
             if target_asset:
                 variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
                 if variant:
@@ -3845,9 +4398,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     # If sketch, maybe don't update main image_url if rendered exists?
                     # For now, let's assume we only select rendered variants for frames usually.
 
-        self._save_data()
-        if asset_is_series_level:
-            self._save_series_data()
+        self._save_after_asset_mutation(source)
         return script
 
     def delete_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str) -> Script:
@@ -3855,55 +4406,41 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-            
+        source = "script"
+        deleted = False
         target_asset = None
+        if asset_type in ("character", "scene", "prop"):
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+
         if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-            if target_asset:
-                if self._delete_variant_in_asset(target_asset.full_body_asset, variant_id):
-                    # Sync legacy if needed
-                    if target_asset.full_body_asset.selected_id:
-                        selected = next((v for v in target_asset.full_body_asset.variants if v.id == target_asset.full_body_asset.selected_id), None)
-                        target_asset.image_url = selected.url if selected else None
-                    else:
-                        target_asset.image_url = None
-                
-                elif self._delete_variant_in_asset(target_asset.three_view_asset, variant_id):
-                    if target_asset.three_view_asset.selected_id:
-                        selected = next((v for v in target_asset.three_view_asset.variants if v.id == target_asset.three_view_asset.selected_id), None)
-                        target_asset.three_view_image_url = selected.url if selected else None
-                    else:
-                        target_asset.three_view_image_url = None
+            for field, legacy_url_field in (
+                ("reference_sheet", "image_url"),
+                ("full_body_asset", "image_url"),
+                ("three_view_asset", "three_view_image_url"),
+                ("headshot_asset", "headshot_image_url"),
+            ):
+                image_asset = getattr(target_asset, field, None)
+                if self._delete_variant_in_asset(image_asset, variant_id):
+                    selected = self._selected_image_variant(image_asset)
+                    setattr(target_asset, legacy_url_field, selected.url if selected else None)
+                    if field == "headshot_asset":
+                        target_asset.avatar_url = selected.url if selected else None
+                    deleted = True
+                    break
 
-                elif self._delete_variant_in_asset(target_asset.headshot_asset, variant_id):
-                    if target_asset.headshot_asset.selected_id:
-                        selected = next((v for v in target_asset.headshot_asset.variants if v.id == target_asset.headshot_asset.selected_id), None)
-                        target_asset.headshot_image_url = selected.url if selected else None
-                    else:
-                        target_asset.headshot_image_url = None
-
-        elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-            if target_asset and self._delete_variant_in_asset(target_asset.image_asset, variant_id):
-                if target_asset.image_asset.selected_id:
-                    selected = next((v for v in target_asset.image_asset.variants if v.id == target_asset.image_asset.selected_id), None)
-                    target_asset.image_url = selected.url if selected else None
-                else:
-                    target_asset.image_url = None
-
-        elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-            if target_asset and self._delete_variant_in_asset(target_asset.image_asset, variant_id):
-                if target_asset.image_asset.selected_id:
-                    selected = next((v for v in target_asset.image_asset.variants if v.id == target_asset.image_asset.selected_id), None)
-                    target_asset.image_url = selected.url if selected else None
-                else:
-                    target_asset.image_url = None
+        elif asset_type in ("scene", "prop"):
+            deleted = self._delete_variant_in_asset(target_asset.image_asset, variant_id)
+            if deleted:
+                selected = self._selected_image_variant(target_asset.image_asset)
+                target_asset.image_url = selected.url if selected else None
 
         elif asset_type == "storyboard_frame":
             target_asset = next((f for f in script.frames if f.id == asset_id), None)
             if target_asset:
                 if self._delete_variant_in_asset(target_asset.rendered_image_asset, variant_id):
+                    deleted = True
                     if target_asset.rendered_image_asset.selected_id:
                         selected = next((v for v in target_asset.rendered_image_asset.variants if v.id == target_asset.rendered_image_asset.selected_id), None)
                         target_asset.rendered_image_url = selected.url if selected else None
@@ -3914,7 +4451,26 @@ class ComicGenPipeline(StudioOwnerMixin):
                         # For now, clear it if rendered is cleared.
                         target_asset.image_url = None
 
-        self._save_data()
+        if not deleted:
+            raise ValueError(f"Variant {variant_id} not found")
+
+        cleaned_frame_selection = False
+        for frame in script.frames:
+            selection = frame.workbench_reference_variant_ids
+            if not selection:
+                continue
+            next_ids = [item for item in selection.get(asset_id, []) if item != variant_id]
+            if next_ids == selection.get(asset_id, []):
+                continue
+            if next_ids:
+                selection[asset_id] = next_ids
+            else:
+                selection.pop(asset_id, None)
+            cleaned_frame_selection = True
+
+        self._save_after_asset_mutation(source)
+        if source != "script" and cleaned_frame_selection:
+            self._save_data()
         return script
 
     def update_model_settings(self, script_id: str, t2i_model: str = None, i2i_model: str = None, i2v_model: str = None, r2v_model: str = None, character_aspect_ratio: str = None, scene_aspect_ratio: str = None, prop_aspect_ratio: str = None, storyboard_aspect_ratio: str = None, image_model: str = None) -> Script:
@@ -4058,7 +4614,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_library_data_unlocked()
 
     # ------------------------------------------------------------------
-    # Global Asset Library — CRUD + feed channels (LumenX Core shared pool)
+    # Global Asset Library — CRUD + feed channels (iFrame Core shared pool)
     # ------------------------------------------------------------------
     # These methods are the single source of truth for mutating the
     # project-independent library. Both the /library/assets endpoints and
@@ -4119,9 +4675,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         project-independent global pool. Tolerates a partial payload (used
         by the Playground录入 flow, which calls this directly rather than
         through a request model). Recognized payload keys: name,
-        description, image_url, persona (characters), voice_id
+        description, image_url, image_origin, persona (characters), voice_id
         (characters)."""
-        from .models import Character, Scene, Prop, AssetUnit, ImageVariant
+        from .models import Character, Scene, Prop, AssetUnit, ImageAsset, ImageVariant
         with self._save_lock:
             payload = dict(payload or {})
             owner_user_id = self._requested_owner_user_id()
@@ -4129,12 +4685,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             name = payload.get("name") or "未命名"
             description = payload.get("description") or ""
             image_url = payload.get("image_url")
+            image_origin = payload.get("image_origin")
+            if image_origin not in (None, "upload", "workbench"):
+                raise ValueError("Invalid image origin")
+            initial_variant = None
+            if image_url:
+                initial_variant = ImageVariant(
+                    id=f"img_{uuid.uuid4().hex[:12]}",
+                    url=image_url,
+                    is_uploaded_source=image_origin == "upload",
+                    upload_type="image" if image_origin == "upload" else None,
+                    source_origin=image_origin,
+                    source_generation_id=payload.get("source_generation_id") if image_origin == "workbench" else None,
+                    source_output_id=payload.get("source_output_id") if image_origin == "workbench" else None,
+                )
             if asset_type == "character":
                 ref_sheet = AssetUnit()
-                if image_url:
-                    variant = ImageVariant(id=f"img_{uuid.uuid4().hex[:12]}", url=image_url)
-                    ref_sheet.image_variants.append(variant)
-                    ref_sheet.selected_image_id = variant.id
+                if initial_variant:
+                    ref_sheet.image_variants.append(initial_variant)
+                    ref_sheet.selected_image_id = initial_variant.id
                 asset = Character(
                     id=f"char_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4146,6 +4715,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_sheet=ref_sheet,
                 )
             elif asset_type == "scene":
+                image_asset = ImageAsset()
+                if initial_variant:
+                    image_asset.variants.append(initial_variant)
+                    image_asset.selected_id = initial_variant.id
                 asset = Scene(
                     id=f"scene_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4153,8 +4726,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                     name=name,
                     description=description,
                     image_url=image_url,
+                    image_asset=image_asset,
                 )
             elif asset_type == "prop":
+                image_asset = ImageAsset()
+                if initial_variant:
+                    image_asset.variants.append(initial_variant)
+                    image_asset.selected_id = initial_variant.id
                 asset = Prop(
                     id=f"prop_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -4162,6 +4740,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     name=name,
                     description=description,
                     image_url=image_url,
+                    image_asset=image_asset,
                 )
             else:
                 raise ValueError(f"Invalid asset type: {asset_type}")
@@ -4482,7 +5061,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise RuntimeError("DASHSCOPE_API_KEY not configured")
 
             # Dashscope customization endpoint (Beijing region; intl uses
-            # dashscope-intl URL — TODO when LumenX supports intl deployment)
+            # dashscope-intl URL — TODO when iFrame supports intl deployment)
             url = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
             payload = {
                 "model": "voice-enrollment",
@@ -4962,12 +5541,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                               style_prompt: str = None, generation_type: str = "all",
                               prompt: str = None, apply_style: bool = True,
                               negative_prompt: str = None, batch_size: int = 1,
-                              model_name: str = None) -> tuple:
+                              model_name: str = None, reference: Any = None) -> tuple:
         """Generate a Series asset. Creates an async task like project asset generation.
         Returns (series, task_id)."""
         series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
+
+        normalized_reference = None
+        if reference is not None:
+            _resolved_reference, normalized_reference = self._resolve_asset_library_reference(
+                series,
+                reference,
+            )
+            # Keep only stable asset/variant IDs in the task snapshot when a
+            # structured reference is selected. Legacy URL-only callers still
+            # use ``reference_image_url`` below.
+            reference_image_url = None
 
         t2i_model = model_name or series.model_settings.t2i_model
 
@@ -5017,6 +5607,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "params": {
                 "style_preset": style_preset,
                 "reference_image_url": reference_image_url,
+                "reference": normalized_reference,
                 "effective_positive_prompt": effective_positive_prompt,
                 "effective_negative_prompt": effective_negative_prompt,
                 "generation_type": generation_type,

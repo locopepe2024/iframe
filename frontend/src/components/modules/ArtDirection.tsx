@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
+import DirectorProfilePanel from "./DirectorProfilePanel";
 
 export default function ArtDirection() {
     const ta = useTranslations("artDirection");
@@ -387,7 +388,7 @@ export default function ArtDirection() {
         <div className="flex flex-col h-full w-full overflow-hidden">
             <StepPageHeader
                 stepNumber={2}
-                englishName="STYLE"
+                englishName="DIRECTION"
                 title={tStep("styleTitle")}
                 subtitle={tStep("styleSubtitle")}
                 pills={projectStyle?.name ? (
@@ -397,6 +398,7 @@ export default function ArtDirection() {
 
             {/* Scrollable content — full width */}
             <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-8 bg-surface">
+                <DirectorProfilePanel />
                 {/* Series inherit/override banners */}
                 {inSeries && !seriesBaselineLoading && (
                     <>

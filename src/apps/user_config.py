@@ -1,4 +1,4 @@
-"""Owner-scoped LumenX preferences and encrypted provider credentials."""
+"""Owner-scoped iFrame preferences and encrypted provider credentials."""
 
 from __future__ import annotations
 
@@ -114,10 +114,17 @@ class UserConfigStore:
                 (owner_profile_id,),
             ).fetchone()
 
+    @staticmethod
+    def _shared_uniart_api_key() -> str | None:
+        if os.getenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false").lower() != "true":
+            return None
+        return os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY")
+
     def get_public(self, identity: UserContext) -> Dict[str, Any]:
         row = self._row(identity.owner_profile_id)
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}
+        personal_uniart_configured = bool(secret_payload.get("UNIART_API_KEY"))
         return {
             **config,
             "secrets_configured": {
@@ -127,6 +134,9 @@ class UserConfigStore:
                 field: str(secret_payload.get(field, {}).get("prefix") or "")
                 for field in SECRET_FIELDS
             },
+            "runtime_uniart_available": bool(
+                personal_uniart_configured or self._shared_uniart_api_key()
+            ),
         }
 
     def update(self, identity: UserContext, update: UserConfigUpdate) -> Dict[str, Any]:
@@ -200,15 +210,14 @@ class UserConfigStore:
                 "api_key": key,
                 "base_url": config.get("UNIART_BASE_URL") or "https://uniart.fun/v1",
             }
-        if os.getenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false").lower() == "true":
-            key = os.getenv("UNIART_API_KEY") or os.getenv("OPENAI_API_KEY")
-            if key:
-                return {
-                    "api_key": key,
-                    "base_url": os.getenv("UNIART_BASE_URL")
-                    or os.getenv("OPENAI_BASE_URL")
-                    or "https://uniart.fun/v1",
-                }
+        key = self._shared_uniart_api_key()
+        if key:
+            return {
+                "api_key": key,
+                "base_url": os.getenv("UNIART_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL")
+                or "https://uniart.fun/v1",
+            }
         raise HTTPException(status_code=409, detail="UniArt API key is not configured for this user")
 
 

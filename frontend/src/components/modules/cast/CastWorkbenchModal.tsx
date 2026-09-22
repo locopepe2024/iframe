@@ -20,10 +20,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { api } from "@/lib/api";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
+import { resolveModelId } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -94,14 +95,24 @@ interface ImageVariant {
     id: string;
     url: string;
     is_favorited?: boolean;
+    reference_view_role?: string;
+    reference_distance?: string;
 }
 
-type CharacterTemplate = "simple" | "detailed" | "design_sheet";
+interface ReferenceLibraryAsset {
+    asset_type: CastKind;
+    asset_id: string;
+    name: string;
+    source?: "episode" | "series" | "global";
+    variants: ImageVariant[];
+}
+
+type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
     descKey: string;
-    compositionEn: string;
+    composition: string;
     negativeAppend: string;
     comingSoon?: boolean;
     exampleImage?: string;
@@ -109,21 +120,28 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     simple: {
         labelKey: "tplSimpleLabel",
         descKey: "tplSimpleDesc",
-        compositionEn: "Composition: character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left half: large head close-up portrait (shoulders up, sharp facial details, front-facing, detailed skin texture). Right half: three equally-sized full-body standing poses arranged side by side (front view, side view, back view), head-to-toe fully visible, relaxed neutral pose. Consistent soft studio lighting across all views, no harsh shadows, even illumination.",
+        composition: "构图：单张统一的角色参考图，无边框或分隔框，浅灰色中性背景。左半部分为头部近景肖像（肩部以上，正面朝向，面部细节清晰）；右半部分为三个等大的全身站立姿势，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然。所有视图使用统一的柔和摄影棚光线，避免硬阴影，光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
         exampleImage: "/assets/templates/simple-triview.png",
     },
     detailed: {
         labelKey: "tplDetailedLabel",
         descKey: "tplDetailedDesc",
-        compositionEn: "Composition: detailed character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left section: three full-body standing views side by side (front / side / back), head-to-toe visible, neutral relaxed pose. Upper right: large face close-up portrait (shoulders up, detailed skin texture, sharp eyes, pores visible). Lower right: three smaller head shots showing different angles (front, three-quarter, profile). Consistent soft studio lighting, no harsh shadows, even illumination across all panels.",
+        composition: "构图：单张统一的详细角色参考图，无边框或分隔框，浅灰色中性背景。左侧为三个并排的全身站立视图，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然；右上为头部近景肖像（肩部以上，面部细节清晰）；右下为三个较小的头部角度特写，展示正面、四分之三侧面和侧面。所有视图使用统一的柔和摄影棚光线，避免硬阴影，整体光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
+        exampleImage: "/assets/templates/detailed-reference.png",
+    },
+    face_focus: {
+        labelKey: "tplFaceFocusLabel",
+        descKey: "tplFaceFocusDesc",
+        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45度、右前45度和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
+        negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images, inconsistent face, different person, deformed eyes, asymmetrical features",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
     design_sheet: {
         labelKey: "tplDesignSheetLabel",
         descKey: "tplDesignSheetDesc",
-        compositionEn: "Composition: professional character design sheet, single unified image with dark cyberpunk-themed background (deep blue-black with subtle neon circuit patterns). Layout divided into labeled panels with thin border frames: - Top left: large dramatic character portrait (bust shot, three-quarter angle, moody rim lighting, glowing blue cybernetic eye) - Center: three full-body standing views (front / side / back) with labels \"正面\" \"侧面\" \"背面\" - Top right: 4 expression close-ups in a row (neutral, smirking, intense focus, combat rage), labeled \"表情特写\" - Bottom left: 3-4 detail close-up panels showing cybernetic eye mechanism, neck circuit tattoo, armor texture, weapon holster, labeled \"细节特写\" - Bottom right: character info panel with dark translucent background containing text fields (name, age, traits, abilities). Cinematic lighting, high detail, concept art quality, game character sheet aesthetic.",
+        composition: "构图：专业角色设定图，单张统一画面，深蓝黑色赛博朋克主题背景，带有低调的霓虹电路纹理。画面分为带细边框的标注区域：左上为大幅角色肖像（半身、四分之三角度、情绪化轮廓光）；中间为正面、侧面和背面三个全身站立视图；右上为四个表情特写；左下为眼部、颈部纹身、服装材质和装备等细节特写；右下为包含姓名、年龄、特征和能力的角色信息区。电影感光线，高细节，概念设计质量。",
         negativeAppend: "watermark, UI overlay, signature, low quality, distorted anatomy, multiple separate images",
         comingSoon: true,
         exampleImage: "/assets/templates/design-sheet.png",
@@ -137,12 +155,12 @@ function buildTemplate(kind: CastKind, entity: any, template?: CharacterTemplate
 
     if (kind === "character") {
         const tpl = CHARACTER_TEMPLATES[template || "simple"];
-        return `${charDesc}\n\n${tpl.compositionEn}`;
+        return `${charDesc}\n\n${tpl.composition}`;
     }
     if (kind === "scene") {
-        return `${name}${desc ? "：" + desc : ""}\n\nComposition: wide establishing shot of the environment on neutral gray background, single unified image, no figures in foreground. Emphasize atmosphere, architecture and terrain structure. Lighting and color palette match the scene mood. Soft volumetric lighting, depth of field.`;
+        return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的环境广角定调镜头，单张统一画面，前景不出现人物。突出氛围、建筑和地形结构，光线与色调贴合场景情绪，使用柔和的体积光和适度景深。`;
     }
-    return `${name}${desc ? "：" + desc : ""}\n\nComposition: product photography style on neutral gray background, single unified image, seamless layout without borders. Main view: object centered at slight angle. Secondary views: detail close-ups of material and texture. Clean even studio lighting, subtle shadow beneath object.`;
+    return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的产品摄影风格，单张统一画面，无边框或分隔框。主体以轻微侧角居中展示，并辅以材质和纹理的细节特写。使用干净均匀的摄影棚光线，在主体下方保留轻微自然阴影。`;
 }
 
 function getTemplateNegative(kind: CastKind, template?: CharacterTemplate): string {
@@ -163,13 +181,42 @@ function readVariants(entity: any, kind: CastKind): ImageVariant[] {
     if (kind === "character") {
         const sheet = entity?.reference_sheet?.image_variants ?? [];
         if (sheet.length > 0) {
-            return sheet.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+            return sheet.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
         }
         const legacy = entity?.full_body_asset?.variants ?? [];
-        return legacy.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+        return legacy.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
     }
     const arr = entity?.image_asset?.variants ?? [];
-    return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited }));
+    return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
+}
+
+/**
+ * The Cast gallery intentionally prefers the canonical character sheet, but
+ * an asset-library picker must expose every reusable character image variant.
+ * Older records may only have a full-body, three-view, or headshot container.
+ */
+function readLibraryVariants(entity: any, kind: CastKind): ImageVariant[] {
+    if (!entity) return [];
+    if (kind !== "character") return readVariants(entity, kind);
+
+    const containers = [
+        entity?.reference_sheet?.image_variants,
+        entity?.full_body_asset?.variants,
+        entity?.three_view_asset?.variants,
+        entity?.headshot_asset?.variants,
+    ];
+    const seen = new Set<string>();
+    return containers.flatMap((items: any[] | undefined) => (items || []).flatMap((v: any) => {
+        if (!v?.id || seen.has(v.id)) return [];
+        seen.add(v.id);
+        return [{
+            id: v.id,
+            url: v.url,
+            is_favorited: v.is_favorited,
+            reference_view_role: v.reference_view_role,
+            reference_distance: v.reference_distance,
+        }];
+    }));
 }
 
 function readSelectedId(entity: any, kind: CastKind): string | null {
@@ -184,6 +231,7 @@ function readSelectedId(entity: any, kind: CastKind): string | null {
 
 export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: CastWorkbenchModalProps) {
     const t = useTranslations("castWorkbench");
+    const locale = useLocale();
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const allProjects = useProjectStore((state) => state.projects);
@@ -207,26 +255,113 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const variants = useMemo(() => readVariants(entity, kind ?? "character"), [entity, kind]);
     const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
 
+    const uploadInput = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [batchSize, setBatchSize] = useState(2);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
-    const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
+    const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
+    const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
+    const [libraryReference, setLibraryReference] = useState<AssetLibraryReference | null>(null);
+    const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
+        characters: any[];
+        scenes: any[];
+        props: any[];
+    }>({ characters: [], scenes: [], props: [] });
     const generating = generatingTasks.some((t) => t.assetId === entityId);
-    // Effective t2i model — drives the "design_sheet" template gating: that
-    // template only works with gpt-image-2, so it stays locked unless the
-    // user has selected gpt-image-2 (override or project default).
-    const selectedModelId = modelOverride || currentProject?.model_settings?.t2i_model || "wan2.1-t2i";
+    // Resolve the selected model against the current live catalog before both
+    // rendering and submitting. A project can retain a SKU that was removed
+    // upstream (for example `gpt-image-2.5-flare`); using that raw value here
+    // would bypass the refreshed selector and submit the retired SKU anyway.
+    // Keep the legacy local fallback only when the project has no model setting
+    // at all, so older projects still behave as they did before the catalog
+    // became runtime-authoritative.
+    const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
+    const selectedModelId = requestedModelId
+        ? resolveModelId("t2i", requestedModelId, "project_settings")
+        : "wan2.1-t2i";
     const isGptImage2 = selectedModelId === "gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
     const overlayMouseDown = useRef(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        // A normal GET /projects response already merges series/global assets,
+        // but a freshly-created or cached project can predate that merge. Load
+        // the global pool opportunistically so the picker remains complete;
+        // the current project/series data still renders immediately.
+        const loadGlobalAssets = api.listLibraryAssets;
+        if (typeof loadGlobalAssets !== "function") return;
+        let request: unknown;
+        try {
+            request = loadGlobalAssets();
+        } catch {
+            return;
+        }
+        void Promise.resolve(request)
+            .then((data: any) => {
+                setGlobalLibraryAssets({
+                    characters: data?.characters || [],
+                    scenes: data?.scenes || [],
+                    props: data?.props || [],
+                });
+            })
+            .catch(() => {
+                // The current project response is still a valid source when
+                // the optional global-library read is unavailable.
+            });
+    }, [isOpen]);
+
+    const referenceLibraryAssets = useMemo<ReferenceLibraryAsset[]>(() => {
+        if (!currentProject) return [];
+        const byKey = new Map<string, ReferenceLibraryAsset>();
+        const addGroup = (assetType: CastKind, assets: any[], fallbackSource?: ReferenceLibraryAsset["source"]) => {
+            for (const asset of assets || []) {
+                const variants = readLibraryVariants(asset, assetType);
+                if (!asset?.id || variants.length === 0) continue;
+                const key = `${assetType}:${asset.id}`;
+                // Episode-local/project response data has priority over the
+                // parent series and global fallback pools.
+                if (byKey.has(key)) continue;
+                byKey.set(key, {
+                    asset_type: assetType,
+                    asset_id: asset.id,
+                    name: asset.name,
+                    source: asset.source || fallbackSource,
+                    variants,
+                });
+            }
+        };
+
+        addGroup("character", currentProject.characters || [], "episode");
+        addGroup("scene", currentProject.scenes || [], "episode");
+        addGroup("prop", currentProject.props || [], "episode");
+        addGroup("character", currentSeries?.characters || [], "series");
+        addGroup("scene", currentSeries?.scenes || [], "series");
+        addGroup("prop", currentSeries?.props || [], "series");
+        addGroup("character", globalLibraryAssets.characters, "global");
+        addGroup("scene", globalLibraryAssets.scenes, "global");
+        addGroup("prop", globalLibraryAssets.props, "global");
+        return Array.from(byKey.values());
+    }, [currentProject, currentSeries, globalLibraryAssets]);
+
+    const selectedLibraryAsset = useMemo(() => {
+        if (!libraryReference) return null;
+        const asset = referenceLibraryAssets.find((item) =>
+            item.asset_type === libraryReference.asset_type && item.asset_id === libraryReference.asset_id,
+        );
+        const variant = asset?.variants.find((item) => item.id === libraryReference.variant_id);
+        return asset && variant ? { asset, variant } : null;
+    }, [libraryReference, referenceLibraryAssets]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -241,6 +376,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
     }, [isOpen, entity, kind, selectedTemplate]);
 
+    useEffect(() => {
+        setLibraryReference(null);
+        setLibraryPickerOpen(false);
+    }, [currentProject?.id, entity?.id, kind]);
+
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
         api.getStylePresets().then((res: any) => setPresets(res?.presets || res || [])).catch(() => {});
@@ -252,6 +392,15 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const styleConfig = resolvedArtDirection?.style_config;
     const styleName = styleConfig?.name || "";
     const styleNegative = styleConfig?.negative_prompt || "";
+    const matchedStyle = styleConfig?.id
+        ? presets.find((preset: any) => preset.id === styleConfig.id)
+        : undefined;
+    const styleDisplayName = locale.startsWith("zh")
+        ? matchedStyle?.name_zh || (styleConfig?.is_custom || !styleConfig?.id ? styleName : t("styleConfigured"))
+        : styleName || matchedStyle?.name || "";
+    const styleDescription = locale.startsWith("zh")
+        ? matchedStyle?.subtitle_zh || matchedStyle?.description || ""
+        : matchedStyle?.description || "";
     // Resolve positive_prompt with preset fallback (series data often omits it)
     let stylePositive = styleConfig?.positive_prompt || "";
     if (!stylePositive && styleConfig?.id && presets.length > 0) {
@@ -349,8 +498,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 applyStyle,
                 [applyStyle ? styleNegative : "", getTemplateNegative(kind, selectedTemplate)].filter(Boolean).join(", "),
                 effectiveBatchSize,
-                modelOverride || currentProject.model_settings?.t2i_model,
+                selectedModelId,
                 aspectRatioOverride || undefined,
+                libraryReference ?? undefined,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -376,6 +526,37 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
     };
 
+    const handleUpload = async (file?: File) => {
+        if (!file || uploading) return;
+        setUploading(true);
+        try {
+            const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
+                kind === "character" ? "reference_sheet" : "image");
+            updateProject(currentProject.id, updated);
+            setLibraryReference(null);
+            setLibraryPickerOpen(false);
+            setGalleryFilter("all");
+            toast.success(t("uploadSuccess"));
+        } catch (err: any) {
+            toast.error(t("uploadFailed"), { body: String(err?.message || t("toastGenErrUnknown")) });
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        setLibraryReference({
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        });
+        setLibraryPickerOpen(false);
+    };
+
+    const handleClearLibraryReference = () => {
+        setLibraryReference(null);
+    };
+
     const handleSelectVariant = async (variantId: string) => {
         try {
             const updated = await api.selectAssetVariant(
@@ -383,6 +564,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 entity.id,
                 kind,
                 variantId,
+                kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
             toast.success(t("toastSelected"), {
@@ -413,9 +595,50 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         } catch { /* silent — non-critical */ }
     };
 
+    const handleDeleteVariant = async (variantId: string) => {
+        if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
+        setDeletingVariantId(variantId);
+        try {
+            const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
+            updateProject(currentProject.id, updated);
+            toast.success(t("toastDeleted"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("toastDeleteErr"), { body: String(detail) });
+        } finally {
+            setDeletingVariantId(null);
+        }
+    };
+
+    const handleUpdateViewMetadata = async (
+        variant: ImageVariant,
+        patch: Partial<Pick<ImageVariant, "reference_view_role" | "reference_distance">>,
+    ) => {
+        try {
+            const updated = await api.updateAssetVariantMetadata(
+                currentProject.id,
+                entity.id,
+                kind,
+                variant.id,
+                patch.reference_view_role ?? variant.reference_view_role,
+                patch.reference_distance ?? variant.reference_distance,
+            );
+            updateProject(currentProject.id, updated);
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("toastMetadataErr"), { body: String(detail) });
+        }
+    };
+
     const filteredVariants = galleryFilter === "favorited"
         ? variants.filter(v => v.is_favorited)
         : variants;
+    const compositionSummary = kind === "character"
+        ? t(CHARACTER_TEMPLATES[selectedTemplate].descKey)
+        : t(kind === "scene" ? "promptHintScene" : "promptHintProp");
 
     // Per-kind accent — Tailwind JIT can't resolve dynamic `bg-${name}-500/15`,
     // so we ship full class strings per kind keyed off a static record.
@@ -528,7 +751,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <p className="flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                         <Palette size={10} /> {t("styleAppliedFrom")}
                                     </p>
-                                    {styleName && (
+                                    {styleDisplayName && (
                                         <button
                                             onClick={() => setApplyStyle(!applyStyle)}
                                             className={`relative w-7 h-4 rounded-full transition-colors ${applyStyle ? "bg-primary/60" : "bg-elevated"}`}
@@ -537,45 +760,72 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </button>
                                     )}
                                 </div>
-                                <p className="mt-1 text-[0.75rem] text-foreground">{styleName || t("styleNotSet")}</p>
-                                {!applyStyle && styleName && (
+                                <p className="mt-1 text-[0.75rem] text-foreground">{styleDisplayName || t("styleNotSet")}</p>
+                                {styleDescription && styleDisplayName && (
+                                    <p className="mt-0.5 text-[0.625rem] leading-relaxed text-text-secondary">
+                                        {styleDescription}
+                                    </p>
+                                )}
+                                {!applyStyle && styleDisplayName && (
                                     <p className="text-[0.625rem] text-amber-300/70 mt-0.5">{t("styleDisabledHint")}</p>
                                 )}
 
-                                {/* Positive prompt */}
-                                {applyStyle && stylePositive && (
-                                    <div className="mt-2.5 rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
-                                            {stylePositive}
-                                        </p>
-                                        {stylePositive.length > 80 && (
-                                            <button
-                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
-                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
-                                            >
-                                                {positiveExpanded ? t("collapse") : t("expand")}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
+                                {/* Provider-facing prompts stay available for advanced users, but are
+                                    hidden from the default customer view so the same description is not
+                                    displayed a second time in English. */}
+                                {applyStyle && (stylePositive || styleNegative) && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-expanded={modelPromptExpanded}
+                                            onClick={() => setModelPromptExpanded(!modelPromptExpanded)}
+                                            className="mt-2.5 inline-flex items-center gap-1 text-[0.625rem] text-text-muted hover:text-text-secondary transition-colors"
+                                        >
+                                            <span>{modelPromptExpanded ? t("hideModelPrompts") : t("showModelPrompts")}</span>
+                                            <span aria-hidden="true">{modelPromptExpanded ? "−" : "+"}</span>
+                                        </button>
+                                        {modelPromptExpanded && (
+                                            <div className="mt-1.5 space-y-2">
+                                                {/* Positive prompt */}
+                                                {stylePositive && (
+                                                    <div className="rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
+                                                            {stylePositive}
+                                                        </p>
+                                                        {stylePositive.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
+                                                            >
+                                                                {positiveExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                                {/* Negative prompt */}
-                                {applyStyle && styleNegative && (
-                                    <div className="mt-2 rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
-                                            {styleNegative}
-                                        </p>
-                                        {styleNegative.length > 80 && (
-                                            <button
-                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
-                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
-                                            >
-                                                {negativeExpanded ? t("collapse") : t("expand")}
-                                            </button>
+                                                {/* Negative prompt */}
+                                                {styleNegative && (
+                                                    <div className="rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
+                                                            {styleNegative}
+                                                        </p>
+                                                        {styleNegative.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
+                                                            >
+                                                                {negativeExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
                             </div>
 
@@ -632,7 +882,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                         </span>
                                                     )}
                                                     {isLocked && (
-                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">Soon</span>
+                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">{t("comingSoon")}</span>
                                                     )}
                                                 </button>
                                             );
@@ -684,44 +934,73 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
                                 {(kind === "character"
-                                    ? ["full body", "close-up", "three-view", "dynamic pose", "soft lighting", "studio lighting", "white background", "detailed face"]
+                                    ? [
+                                        { key: "fullBody", value: "full body" },
+                                        { key: "closeUp", value: "close-up" },
+                                        { key: "threeView", value: "three-view" },
+                                        { key: "dynamicPose", value: "dynamic pose" },
+                                        { key: "softLighting", value: "soft lighting" },
+                                        { key: "studioLighting", value: "studio lighting" },
+                                        { key: "whiteBackground", value: "white background" },
+                                        { key: "detailedFace", value: "detailed face" },
+                                        { key: "faceDesign", value: "face design reference board" },
+                                    ]
                                     : kind === "scene"
-                                        ? ["wide angle", "establishing shot", "golden hour", "dramatic lighting", "aerial view", "depth of field", "atmospheric", "cinematic"]
-                                        : ["product shot", "white background", "multi-angle", "studio lighting", "macro detail", "floating", "transparent background", "clean"]
+                                        ? [
+                                            { key: "wideAngle", value: "wide angle" },
+                                            { key: "establishingShot", value: "establishing shot" },
+                                            { key: "goldenHour", value: "golden hour" },
+                                            { key: "dramaticLighting", value: "dramatic lighting" },
+                                            { key: "aerialView", value: "aerial view" },
+                                            { key: "depthOfField", value: "depth of field" },
+                                            { key: "atmospheric", value: "atmospheric" },
+                                            { key: "cinematic", value: "cinematic" },
+                                        ]
+                                        : [
+                                            { key: "productShot", value: "product shot" },
+                                            { key: "whiteBackground", value: "white background" },
+                                            { key: "multiAngle", value: "multi-angle" },
+                                            { key: "studioLighting", value: "studio lighting" },
+                                            { key: "macroDetail", value: "macro detail" },
+                                            { key: "floating", value: "floating" },
+                                            { key: "transparentBackground", value: "transparent background" },
+                                            { key: "clean", value: "clean" },
+                                        ]
                                 ).map((tag) => (
                                     <button
-                                        key={tag}
-                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag)}
+                                        key={tag.key}
+                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag.value)}
                                         disabled={generating}
                                         className="px-2.5 py-1 rounded border border-glass-border bg-glass text-[0.6875rem] text-text-muted hover:text-text-secondary hover:border-foreground/30 hover:bg-hover-bg transition-colors disabled:opacity-30"
                                     >
-                                        + {tag}
+                                        + {t(`quickTags.${tag.key}`)}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Final prompt preview — collapsible, scrollable */}
-                            {applyStyle && stylePositive && (
-                                <div className="mt-3 rounded-md bg-black/20 border border-glass-border">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFinalPreviewExpanded(!finalPreviewExpanded)}
-                                        className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-hover-bg transition-colors rounded-t-md"
-                                    >
-                                        <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">{t("finalPromptPreview")}</p>
-                                        <span className="text-[0.625rem] text-text-muted">{finalPreviewExpanded ? t("collapse") : t("expand")}</span>
-                                    </button>
-                                    {finalPreviewExpanded && (
-                                        <div className="px-3.5 pb-3 max-h-[200px] overflow-y-auto overscroll-contain">
-                                            <p className="text-[0.75rem] leading-relaxed">
-                                                <span className="text-foreground">{prompt.trim()}</span>
-                                                {prompt.trim() && <span className="text-text-muted">{", "}</span>}
-                                                <span className="text-primary/60">{stylePositive}</span>
-                                            </p>
-                                        </div>
+                            {/* Customer-facing summary: keep it short and readable. The full
+                                provider prompt remains in the editable field above and the
+                                style details are available only through the advanced disclosure. */}
+                            <div
+                                data-testid="cast-generation-summary"
+                                className="mt-3 rounded-md border border-glass-border bg-black/20 px-3.5 py-2.5"
+                            >
+                                <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
+                                    {t("customerSummaryTitle")}
+                                </p>
+                                <div className="mt-1.5 space-y-1 text-[0.75rem] leading-relaxed">
+                                    <p>
+                                        <span className="text-text-muted">{t("customerSummaryComposition")}：</span>
+                                        <span className="text-text-secondary">{compositionSummary}</span>
+                                    </p>
+                                    {applyStyle && styleDisplayName && (
+                                        <p>
+                                            <span className="text-text-muted">{t("customerSummaryStyle")}：</span>
+                                            <span className="text-primary/80">{styleDisplayName}</span>
+                                        </p>
                                     )}
                                 </div>
-                            )}
+                            </div>
 
                             {/* Generation config — unified section */}
                             <div className="mt-5 pt-4 border-t border-glass-border space-y-4">
@@ -782,8 +1061,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </label>
                                     <GroupedModelGrid
                                         models={IMAGE_MODELS}
-                                        selectedId={modelOverride || currentProject.model_settings?.t2i_model || "wan2.1-t2i"}
-                                        onSelect={(id) => setModelOverride(id === (currentProject.model_settings?.t2i_model || "wan2.1-t2i") ? null : id)}
+                                        selectedId={selectedModelId}
+                                        onSelect={(id) => setModelOverride(id === selectedModelId ? null : id)}
                                     />
                                 </div>
                             </div>
@@ -805,6 +1084,91 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
                         {/* RIGHT — variants gallery */}
                         <div className="flex flex-col p-5 overflow-y-auto custom-scrollbar bg-surface">
+                            <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
+                                onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
+                            <div className="flex gap-2 mb-3">
+                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
+                                    className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    {t(uploading ? "uploading" : "uploadReference")}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={generating || referenceLibraryAssets.length === 0}
+                                    onClick={() => setLibraryPickerOpen((open) => !open)}
+                                    className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
+                                >
+                                    <Library size={16} />
+                                    {t("chooseFromLibrary")}
+                                </button>
+                            </div>
+                            {selectedLibraryAsset && (
+                                <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/35 bg-primary/5 p-2">
+                                    <PreviewImage
+                                        src={getAssetUrl(selectedLibraryAsset.variant.url)}
+                                        alt={`${selectedLibraryAsset.asset.name} ${selectedLibraryAsset.variant.id}`}
+                                        className="h-12 w-12 rounded object-cover"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
+                                        <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearLibraryReference}
+                                        aria-label={t("clearLibraryReference")}
+                                        className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )}
+                            {libraryPickerOpen && (
+                                <div data-testid="cast-library-reference-picker" className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div>
+                                            <p className="text-[0.75rem] font-medium text-foreground">{t("libraryReferenceTitle")}</p>
+                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("libraryReferenceHint")}</p>
+                                        </div>
+                                        <button type="button" onClick={() => setLibraryPickerOpen(false)} aria-label={t("closeLibraryReferencePicker")} className="p-1 text-text-muted hover:text-foreground">
+                                            <X size={13} />
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {referenceLibraryAssets.map((asset) => (
+                                            <div key={`${asset.asset_type}:${asset.asset_id}`}>
+                                                <div className="mb-1 flex items-center gap-1.5">
+                                                    <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
+                                                    {asset.source && <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source}`)}</span>}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {asset.variants.map((variant) => {
+                                                        const active = libraryReference?.asset_type === asset.asset_type
+                                                            && libraryReference.asset_id === asset.asset_id
+                                                            && libraryReference.variant_id === variant.id;
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={variant.id}
+                                                                aria-label={t("useLibraryVariant", { name: asset.name })}
+                                                                onClick={() => handleChooseLibraryVariant(asset, variant)}
+                                                                className={`relative overflow-hidden rounded border text-left ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
+                                                            >
+                                                                <PreviewImage
+                                                                    src={getAssetUrl(variant.url)}
+                                                                    alt={`${asset.name} ${variant.id}`}
+                                                                    className="h-20 w-full object-cover"
+                                                                />
+                                                                {active && <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-white"><Check size={11} /></span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {/* Gallery header with filter tabs */}
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -838,7 +1202,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <div className="flex-1 grid place-items-center text-center text-text-muted">
+                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />
@@ -846,7 +1210,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         <p className="text-[0.875rem] text-foreground">{t("emptyVariantsTitle")}</p>
                                         <p className="text-[0.75rem] text-text-secondary mt-1">{t("emptyVariantsBody")}</p>
                                     </div>
-                                </div>
+                                </button>
                             ) : filteredVariants.length === 0 ? (
                                 <div className="flex-1 grid place-items-center text-center text-text-muted">
                                     <p className="text-[0.75rem]">{t("noFavoritedYet")}</p>
@@ -869,12 +1233,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                         src={getAssetUrl(v.url)}
                                                         alt={`${entity.name} ${v.id}`}
                                                         className="w-full h-auto max-h-[280px] object-contain"
-                                                        clickToLightbox
                                                     />
                                                 </div>
                                                 {/* Favorite star */}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleToggleFavorite(v.id, !!v.is_favorited); }}
+                                                    aria-label={v.is_favorited ? t("unfavoriteVariant") : t("favoriteVariant")}
                                                     className={`absolute top-1.5 left-1.5 p-1 rounded-full transition-all ${
                                                         v.is_favorited
                                                             ? "bg-amber-500/30 text-amber-300"
@@ -882,6 +1246,16 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                     }`}
                                                 >
                                                     <Star size={12} className={v.is_favorited ? "fill-amber-300" : ""} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={deletingVariantId !== null}
+                                                    onClick={(e) => { e.stopPropagation(); void handleDeleteVariant(v.id); }}
+                                                    aria-label={t("deleteVariant")}
+                                                    title={t("deleteVariant")}
+                                                    className="absolute bottom-[68px] right-1.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-red-500/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                >
+                                                    {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
                                                 {/* Selected badge */}
                                                 {isSelected && (
@@ -893,13 +1267,37 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 {!isSelected && (
                                                     <div
                                                         onClick={() => handleSelectVariant(v.id)}
-                                                        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pt-6 pb-1.5"
+                                                        className="absolute inset-x-0 bottom-[60px] bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pt-6 pb-1.5"
                                                     >
                                                         <p className="w-full text-center text-[0.625rem] uppercase tracking-[0.16em] text-foreground font-mono">
                                                             {t("clickToSelect")}
                                                         </p>
                                                     </div>
                                                 )}
+                                                <div className="grid grid-cols-2 gap-1.5 border-t border-glass-border bg-surface-inset p-1.5" onClick={(event) => event.stopPropagation()}>
+                                                    <select
+                                                        aria-label={t("viewRoleFor", { name: entity.name })}
+                                                        value={v.reference_view_role ?? ""}
+                                                        onChange={(event) => void handleUpdateViewMetadata(v, { reference_view_role: event.target.value })}
+                                                        className="min-w-0 rounded border border-glass-border bg-surface px-1.5 py-1 text-[0.6875rem] text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                                                    >
+                                                        <option value="">{t("viewRole")}</option>
+                                                        {(["front", "left", "right", "back", "three_quarter_left", "three_quarter_right", "top", "bottom", "detail"] as const).map((value) => (
+                                                            <option key={value} value={value}>{t(`viewRoleOptions.${value}`)}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        aria-label={t("viewDistanceFor", { name: entity.name })}
+                                                        value={v.reference_distance ?? ""}
+                                                        onChange={(event) => void handleUpdateViewMetadata(v, { reference_distance: event.target.value })}
+                                                        className="min-w-0 rounded border border-glass-border bg-surface px-1.5 py-1 text-[0.6875rem] text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                                                    >
+                                                        <option value="">{t("viewDistance")}</option>
+                                                        {(["full", "medium", "close", "macro"] as const).map((value) => (
+                                                            <option key={value} value={value}>{t(`viewDistanceOptions.${value}`)}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
                                         );
                                     })}

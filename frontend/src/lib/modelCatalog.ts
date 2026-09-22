@@ -147,11 +147,22 @@ interface ModelCatalog {
 
 const MODEL_CATALOG = rawCatalog as ModelCatalog;
 let UNIART_RUNTIME_ACTIVE = false;
+// When the live UniArt catalog is available it is the authority for UniArt
+// SKU visibility. Keep the IDs that came from that live snapshot separate
+// from the static compatibility catalog so a removed SKU cannot remain
+// selectable just because it was present in an older localStorage snapshot.
+let RUNTIME_UNIART_MODEL_IDS = new Set<string>();
 if (typeof window !== 'undefined') {
     try {
         const snapshot = JSON.parse(localStorage.getItem('lumenx_uniart_model_snapshot') || '{}');
-        UNIART_RUNTIME_ACTIVE = Array.isArray(snapshot.models) && snapshot.models.length > 0;
-        for (const entry of (snapshot.models || [])) {
+        const snapshotModels = Array.isArray(snapshot.models) ? snapshot.models : [];
+        UNIART_RUNTIME_ACTIVE = snapshotModels.length > 0;
+        RUNTIME_UNIART_MODEL_IDS = new Set(
+            snapshotModels
+                .map((entry: { id?: unknown }) => String(entry?.id || ''))
+                .filter((id: string) => id.startsWith('uniart/')),
+        );
+        for (const entry of snapshotModels) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
             const caps = Array.isArray(entry.capabilities) ? entry.capabilities : [];
@@ -159,6 +170,7 @@ if (typeof window !== 'undefined') {
             MODEL_CATALOG.models[id] = {
                 ...entry,
                 id,
+                provider: 'uniart',
                 display_name: entry.display_name || id.slice(7),
                 description: entry.description || `UniArt ${id.slice(7)}`,
                 family: entry.family || (image ? 'gpt-image' : 'uniart-video'),
@@ -180,6 +192,19 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];
         UNIART_RUNTIME_ACTIVE = models.length > 0;
+        const liveIds = new Set<string>(
+            models
+                .map((entry: { id?: unknown }) => String(entry?.id || ''))
+                .filter((id: string) => id.startsWith('uniart/')),
+        );
+        // Drop runtime entries from an older snapshot before installing the
+        // current list. Without this, a SKU removed upstream (for example an
+        // unpublished Flare alias) survives in the selector and is sent to a
+        // route that no longer exists for the account.
+        for (const id of Array.from(RUNTIME_UNIART_MODEL_IDS)) {
+            if (!liveIds.has(id)) delete MODEL_CATALOG.models[id];
+        }
+        RUNTIME_UNIART_MODEL_IDS = liveIds;
         for (const entry of models) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
@@ -188,6 +213,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
             MODEL_CATALOG.models[id] = {
                 id,
                 display_name: entry.display_name || id.replace(/^uniart\//, ''),
+                provider: 'uniart',
                 description: entry.description || `UniArt ${id.replace(/^uniart\//, '')}`,
                 family: entry.family || (isImage ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
@@ -291,7 +317,7 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
         ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
         : null;
     return (
-        (!UNIART_RUNTIME_ACTIVE || model.provider === 'uniart') &&
+        (!UNIART_RUNTIME_ACTIVE || model.provider !== 'uniart' || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
         model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
         (!enabled || model.provider !== 'uniart' || enabled.includes(model.id)) &&
         model.status !== 'planned' &&
@@ -492,6 +518,9 @@ function rebuildDynamicModelLists(): void {
     refresh(GLOBAL_I2V_MODELS, getVisibleModels('i2v', 'global_settings').map(toI2VModel));
     refresh(GLOBAL_R2V_MODELS, getVisibleModels('r2v', 'global_settings').map(toI2VModel));
     refresh(VIDEO_I2V_MODELS, getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
+    refresh(VIDEO_R2V_MODELS, SORTED_MODEL_ENTRIES
+        .filter(model => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
+        .map(toI2VModel));
 }
 
 export const DEFAULT_I2V_MODEL_ID = resolveModelId('i2v', undefined, 'video_sidebar');
@@ -526,7 +555,11 @@ for (const model of SORTED_MODEL_ENTRIES) {
 }
 
 export const VIDEO_R2V_MODELS: I2VModelConfig[] = SORTED_MODEL_ENTRIES
-    .filter((model) => model.ui.selection_group === 'r2v' && isVisibleModel(model, 'video_sidebar'))
+    // R2V-capable UniArt SKUs (H3/Seedance) are intentionally grouped under
+    // i2v in the catalog because the same SKU supports both modes. The video
+    // sidebar must follow published capabilities, otherwise they disappear
+    // from the storyboard Parameters/Takes picker.
+    .filter((model) => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
     .map(toI2VModel);
 export const DEFAULT_R2V_MODEL_ID = VIDEO_R2V_MODELS[0]?.id ?? R2V_SELECTION_MODEL_ID;
 
@@ -549,5 +582,6 @@ export function isR2vImageBased(modelId: string): boolean {
     const family = model?.family;
     if (family === 'wan' && modelId === 'wan2.6-r2v') return false;
     return family === 'happyhorse' || family === 'wan' || family === 'kling'
-        || family === 'pixverse' || family === 'vidu' || family === 'seedance';
+        || family === 'pixverse' || family === 'vidu' || family === 'seedance'
+        || family === 'minimax' || modelId.startsWith('uniart/minimax-h3');
 }

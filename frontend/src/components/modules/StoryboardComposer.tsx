@@ -16,6 +16,7 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 
 export default function StoryboardComposer() {
     const t = useTranslations("storyboard");
@@ -291,6 +292,17 @@ export default function StoryboardComposer() {
             // Construct enhanced prompt using Art Direction style config.
             const artDirection = currentProject?.art_direction;
             const globalStylePrompt = artDirection?.style_config?.positive_prompt || "";
+            const globalNegativePrompt = artDirection?.style_config?.negative_prompt || "";
+            const frameStylePrompt = resolveStylePrompt(
+                globalStylePrompt,
+                frame.style_prompt_override,
+                frame.lighting_override,
+            );
+            const frameNegativePrompt = resolveNegativePrompt(
+                globalNegativePrompt,
+                "",
+                frame.negative_prompt_override,
+            );
 
             // Construct final prompt:
             // If image_prompt exists (polished or manually edited), it already contains action/dialogue,
@@ -299,20 +311,27 @@ export default function StoryboardComposer() {
 
             if (frame.image_prompt && frame.image_prompt.trim()) {
                 // User has a custom/polished prompt - only add style prefix
-                finalPrompt = globalStylePrompt
-                    ? `${globalStylePrompt} . ${frame.image_prompt}`
+                finalPrompt = frameStylePrompt
+                    ? `${frameStylePrompt} . ${frame.image_prompt}`
                     : frame.image_prompt;
             } else {
                 // No custom prompt - build from action_description and dialogue
                 const parts = [
-                    globalStylePrompt,
+                    frameStylePrompt,
                     frame.action_description,
                     frame.dialogue ? `Dialogue context: "${frame.dialogue}"` : ""
                 ].filter(Boolean);
                 finalPrompt = parts.join(" . ");
             }
 
-            await api.renderFrame(currentProject.id, frame.id, compositionData, finalPrompt, batchSize);
+            await api.renderFrame(
+                currentProject.id,
+                frame.id,
+                compositionData,
+                finalPrompt,
+                batchSize,
+                frameNegativePrompt,
+            );
 
             // Fetch updated project to get new image URL and timestamp
             const updatedProject = await api.getProject(currentProject.id);
