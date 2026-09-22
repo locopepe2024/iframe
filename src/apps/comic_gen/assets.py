@@ -134,6 +134,7 @@ class AssetGenerator:
         reference_provenance: Dict[str, str] = None,
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
+        image_generation_mode: str = "text",
     ) -> Character:
         """
         Generates character assets based on generation_type.
@@ -192,6 +193,7 @@ class AssetGenerator:
                             negative_prompt=negative_prompt,
                             model_name=model_name,
                             size=effective_size,
+                            image_generation_mode=image_generation_mode,
                             **reference_args,
                         )
 
@@ -337,7 +339,7 @@ class AssetGenerator:
                             effective_generation_prompt = bind_character_reference_prompt(generation_prompt)
                             logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
                         
-                        self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, ref_image_paths=extra_ref_image_paths, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size)
+                        self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, ref_image_paths=extra_ref_image_paths, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size, image_generation_mode=image_generation_mode)
                         
                         rel_fullbody_path = os.path.relpath(fullbody_path, "output")
                         
@@ -687,6 +689,7 @@ class AssetGenerator:
         reference_provenance: Dict[str, str] = None,
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
+        image_generation_mode: str = "text",
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
@@ -725,6 +728,7 @@ class AssetGenerator:
                     negative_prompt=negative_prompt,
                     model_name=model_name,
                     size=effective_size,
+                    image_generation_mode=image_generation_mode,
                     **reference_args,
                 )
                 
@@ -784,6 +788,7 @@ class AssetGenerator:
         reference_provenance: Dict[str, str] = None,
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
+        image_generation_mode: str = "text",
     ) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
@@ -818,6 +823,7 @@ class AssetGenerator:
                     negative_prompt=negative_prompt,
                     model_name=model_name,
                     size=effective_size,
+                    image_generation_mode=image_generation_mode,
                     **reference_args,
                 )
                 

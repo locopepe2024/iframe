@@ -20,10 +20,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil, AtSign } from "lucide-react";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { api, type AssetPromptReference } from "@/lib/api";
+import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -264,6 +264,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [batchSize, setBatchSize] = useState(2);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
     const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
@@ -271,9 +272,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
     const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
-    const [promptReferences, setPromptReferences] = useState<AssetPromptReference[]>([]);
+    const [generationReferences, setGenerationReferences] = useState<AssetLibraryReference[]>([]);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
-    const promptInput = useRef<HTMLTextAreaElement>(null);
     const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
         characters: any[];
         scenes: any[];
@@ -294,7 +294,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
-        setPromptReferences([]);
+        setGenerationReferences([]);
         setLibraryPickerOpen(false);
     }, [entityId, kind]);
 
@@ -359,14 +359,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         return Array.from(byKey.values());
     }, [currentProject, currentSeries, globalLibraryAssets]);
 
-    const visiblePromptReferences = useMemo(() => promptReferences.flatMap((reference) => {
-        if (!prompt.includes(`@{${reference.mention_id}}`)) return [];
+    const visibleGenerationReferences = useMemo(() => generationReferences.flatMap((reference) => {
         const asset = referenceLibraryAssets.find((item) =>
             item.asset_type === reference.asset_type && item.asset_id === reference.asset_id,
         );
         const variant = asset?.variants.find((item) => item.id === reference.variant_id);
         return asset && variant ? [{ reference, asset, variant }] : [];
-    }), [prompt, promptReferences, referenceLibraryAssets]);
+    }), [generationReferences, referenceLibraryAssets]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -382,7 +381,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     }, [isOpen, entity, kind, selectedTemplate]);
 
     useEffect(() => {
-        setPromptReferences([]);
+        setGenerationReferences([]);
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
 
@@ -423,53 +422,26 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
     const handleResetTemplate = () => {
         setPrompt(buildTemplate(kind, entity, selectedTemplate));
-        setPromptReferences([]);
         setPromptDirty(false);
     };
 
-    const insertPromptReference = (asset: ReferenceLibraryAsset, variant: ImageVariant, explicitInstruction?: string) => {
-        const baseId = `ref_${variant.id}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 116) || `ref_${Date.now()}`;
-        let mentionId = baseId;
-        let suffix = 2;
-        while (promptReferences.some((item) => item.mention_id === mentionId
-            && (item.asset_type !== asset.asset_type || item.asset_id !== asset.asset_id || item.variant_id !== variant.id))) {
-            mentionId = `${baseId.slice(0, 112)}_${suffix++}`;
-        }
-        const reference: AssetPromptReference = {
-            mention_id: mentionId,
+    const addGenerationReference = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        const reference: AssetLibraryReference = {
             asset_type: asset.asset_type,
             asset_id: asset.asset_id,
             variant_id: variant.id,
         };
-        setPromptReferences((current) => current.some((item) => item.mention_id === mentionId) ? current : [...current, reference]);
-
-        const token = `@{${mentionId}}`;
-        if (prompt.includes(token)) {
-            setLibraryPickerOpen(false);
-            return;
-        }
-        const input = promptInput.current;
-        const cursorStart = explicitInstruction ? prompt.length : (input?.selectionStart ?? prompt.length);
-        const start = !explicitInstruction && prompt[cursorStart - 1] === "@" ? cursorStart - 1 : cursorStart;
-        const end = explicitInstruction ? prompt.length : (input?.selectionEnd ?? cursorStart);
-        const inserted = explicitInstruction || token;
-        const separator = explicitInstruction && prompt.trim() ? "\n\n" : "";
-        const next = prompt.slice(0, start) + separator + inserted + prompt.slice(end);
-        setPrompt(next);
-        setPromptDirty(true);
-        setLibraryPickerOpen(false);
-        requestAnimationFrame(() => {
-            const caret = start + separator.length + inserted.length;
-            promptInput.current?.focus();
-            promptInput.current?.setSelectionRange(caret, caret);
+        setGenerationReferences((current) => {
+            const exists = current.some((item) => item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (exists || current.length >= 9) return current;
+            return [...current, reference];
         });
     };
 
-    const removePromptReference = (mentionId: string) => {
-        const token = `@{${mentionId}}`;
-        setPrompt((current) => current.replaceAll(token, "").replace(/ {2,}/g, " "));
-        setPromptReferences((current) => current.filter((item) => item.mention_id !== mentionId));
-        setPromptDirty(true);
+    const removeGenerationReference = (reference: AssetLibraryReference) => {
+        setGenerationReferences((current) => current.filter((item) => !(item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id)));
     };
 
     const handleTemplateSwitch = (tpl: CharacterTemplate) => {
@@ -482,7 +454,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         } else {
             setSelectedTemplate(tpl);
             setPrompt(buildTemplate(kind, entity, tpl));
-            setPromptReferences([]);
             setPromptDirty(false);
         }
     };
@@ -491,7 +462,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         if (!pendingTemplate) return;
         setSelectedTemplate(pendingTemplate);
         setPrompt(buildTemplate(kind, entity, pendingTemplate));
-        setPromptReferences([]);
         setPromptDirty(false);
         setPendingTemplate(null);
     };
@@ -503,6 +473,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        if (imageGenerationMode === "reference" && visibleGenerationReferences.length === 0) {
+            toast.warning(t("referenceModeRequiresImage"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
@@ -554,7 +531,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 selectedModelId,
                 aspectRatioOverride || undefined,
                 undefined,
-                promptReferences.filter((reference) => prompt.includes(`@{${reference.mention_id}}`)),
+                imageGenerationMode === "reference"
+                    ? visibleGenerationReferences.map(({ reference }) => reference)
+                    : [],
+                imageGenerationMode,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -596,12 +576,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const uploadedVariantId = readSelectedId(updatedEntity, kind);
             const uploadedVariant = readLibraryVariants(updatedEntity, kind).find((item) => item.id === uploadedVariantId);
             if (uploadedVariant) {
-                insertPromptReference(
+                addGenerationReference(
                     { asset_type: kind, asset_id: entity.id, name: entity.name, source: "episode", variants: [uploadedVariant] },
                     uploadedVariant,
-                    kind === "character"
-                        ? `${t("keepCharacterFromMention")} @{ref_${uploadedVariant.id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 116)}}`
-                        : undefined,
                 );
             }
             setLibraryPickerOpen(false);
@@ -630,10 +607,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const editedVariantId = readSelectedId(updatedEntity, "character");
             const editedVariant = readLibraryVariants(updatedEntity, "character").find((item) => item.id === editedVariantId);
             if (editedVariant) {
-                insertPromptReference(
+                addGenerationReference(
                     { asset_type: "character", asset_id: entity.id, name: entity.name, source: "episode", variants: [editedVariant] },
                     editedVariant,
-                    `${t("keepCharacterFromMention")} @{ref_${editedVariant.id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 116)}}`,
                 );
             }
             setEditingVariant(null);
@@ -648,7 +624,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     };
 
     const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
-        insertPromptReference(asset, variant);
+        addGenerationReference(asset, variant);
     };
 
     const handleSelectVariant = async (variantId: string) => {
@@ -695,16 +671,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         try {
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
-            const deletedMentions = promptReferences
-                .filter((item) => item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId)
-                .map((item) => item.mention_id);
-            if (deletedMentions.length) {
-                setPrompt((current) => deletedMentions.reduce(
-                    (value, mentionId) => value.replaceAll(`@{${mentionId}}`, ""),
-                    current,
-                ));
-                setPromptReferences((current) => current.filter((item) => !deletedMentions.includes(item.mention_id)));
-            }
+            setGenerationReferences((current) => current.filter((item) => !(
+                item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
+            )));
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -1013,6 +982,39 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 </div>
                             )}
 
+                            <div className="mb-4">
+                                <label className="block font-mono text-[0.625rem] uppercase tracking-[0.16em] text-text-muted mb-2">
+                                    {t("imageGenerationMode")}
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={t("imageGenerationMode")}>
+                                    {(["text", "reference"] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            aria-pressed={imageGenerationMode === mode}
+                                            disabled={generating}
+                                            onClick={() => {
+                                                setImageGenerationMode(mode);
+                                                if (mode === "text") {
+                                                    setGenerationReferences([]);
+                                                    setLibraryPickerOpen(false);
+                                                }
+                                            }}
+                                            className={`min-h-9 rounded px-3 py-2 text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                                                imageGenerationMode === mode
+                                                    ? "bg-primary/15 text-primary"
+                                                    : "text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                            } disabled:opacity-40`}
+                                        >
+                                            {t(mode === "text" ? "textGenerationMode" : "referenceGenerationMode")}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-text-muted">
+                                    {t(imageGenerationMode === "text" ? "textGenerationModeHint" : "referenceGenerationModeHint")}
+                                </p>
+                            </div>
+
                             {/* Prompt textarea */}
                             <div className="flex items-center justify-between mb-2">
                                 <label htmlFor="cast-generation-prompt" className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -1022,12 +1024,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <button
                                         type="button"
                                         onClick={() => setLibraryPickerOpen(true)}
-                                        disabled={generating || referenceLibraryAssets.length === 0}
+                                        disabled={generating || imageGenerationMode !== "reference" || referenceLibraryAssets.length === 0}
                                         aria-expanded={libraryPickerOpen}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30"
                                     >
-                                        <AtSign size={11} />
-                                        {t("insertAssetMention")}
+                                        <Library size={11} />
+                                        {t("addReferenceImages")}
                                     </button>
                                     <button
                                         onClick={handleResetTemplate}
@@ -1042,23 +1044,21 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             </div>
                             <textarea
                                 id="cast-generation-prompt"
-                                ref={promptInput}
                                 value={prompt}
                                 onChange={(e) => {
                                     setPrompt(e.target.value);
                                     setPromptDirty(true);
-                                    if (e.target.value[e.target.selectionStart - 1] === "@") setLibraryPickerOpen(true);
                                 }}
                                 disabled={generating}
                                 className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
                             />
-                            {visiblePromptReferences.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-1.5" aria-label={t("activeMentions")}>
-                                    {visiblePromptReferences.map(({ reference, asset }) => (
-                                        <span key={reference.mention_id} className="inline-flex items-center gap-1 rounded border border-primary/25 bg-primary/5 px-2 py-1 text-[0.6875rem] text-primary">
-                                            <AtSign size={11} />
+                            {visibleGenerationReferences.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5" aria-label={t("activeReferences")}>
+                                    {visibleGenerationReferences.map(({ reference, asset }) => (
+                                        <span key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} className="inline-flex items-center gap-1 rounded border border-primary/25 bg-primary/5 px-2 py-1 text-[0.6875rem] text-primary">
+                                            <Library size={11} />
                                             {asset.name}
-                                            <button type="button" onClick={() => removePromptReference(reference.mention_id)} aria-label={t("removeAssetMention", { name: asset.name })} className="ml-0.5 rounded p-1 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+                                            <button type="button" onClick={() => removeGenerationReference(reference)} aria-label={t("removeReference", { name: asset.name })} className="ml-0.5 rounded p-1 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
                                                 <X size={10} />
                                             </button>
                                         </span>
@@ -1205,7 +1205,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Generate CTA */}
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !prompt.trim()}
+                                disabled={generating || !prompt.trim() || (imageGenerationMode === "reference" && visibleGenerationReferences.length === 0)}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
                                 {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
@@ -1222,28 +1222,28 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
                                 onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
                             <div className="flex gap-2 mb-3">
-                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
+                                <button type="button" disabled={uploading || generating || imageGenerationMode !== "reference"} onClick={() => uploadInput.current?.click()}
                                     className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
                                     {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                                     {t(uploading ? "uploading" : "uploadReference")}
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={generating || referenceLibraryAssets.length === 0}
+                                    disabled={generating || imageGenerationMode !== "reference" || referenceLibraryAssets.length === 0}
                                     onClick={() => setLibraryPickerOpen((open) => !open)}
                                     aria-expanded={libraryPickerOpen}
                                     className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
                                 >
                                     <Library size={16} />
-                                    {t("insertAssetMention")}
+                                    {t("addReferenceImages")}
                                 </button>
                             </div>
                             {libraryPickerOpen && (
-                                <div data-testid="cast-library-reference-picker" role="region" aria-label={t("mentionPickerTitle")} className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
+                                <div data-testid="cast-library-reference-picker" role="region" aria-label={t("referencePickerTitle")} className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
                                     <div className="mb-2 flex items-center justify-between gap-2">
                                         <div>
-                                            <p className="text-[0.75rem] font-medium text-foreground">{t("mentionPickerTitle")}</p>
-                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("mentionPickerHint")}</p>
+                                            <p className="text-[0.75rem] font-medium text-foreground">{t("referencePickerTitle")}</p>
+                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("referencePickerHint")}</p>
                                         </div>
                                         <button type="button" onClick={() => setLibraryPickerOpen(false)} aria-label={t("closeLibraryReferencePicker")} className="p-1 text-text-muted hover:text-foreground">
                                             <X size={13} />
@@ -1258,14 +1258,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-1.5">
                                                     {asset.variants.map((variant) => {
-                                                        const active = visiblePromptReferences.some(({ reference }) => reference.asset_type === asset.asset_type
+                                                        const active = visibleGenerationReferences.some(({ reference }) => reference.asset_type === asset.asset_type
                                                             && reference.asset_id === asset.asset_id
                                                             && reference.variant_id === variant.id);
                                                         return (
                                                             <button
                                                                 type="button"
                                                                 key={variant.id}
-                                                                aria-label={t("insertLibraryVariant", { name: asset.name })}
+                                                                aria-label={t("addLibraryVariant", { name: asset.name })}
                                                                 onClick={() => handleChooseLibraryVariant(asset, variant)}
                                                                 className={`relative overflow-hidden rounded border text-left ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
                                                             >
@@ -1317,7 +1317,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary">
+                                <button type="button" disabled={uploading || generating || imageGenerationMode !== "reference"} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />

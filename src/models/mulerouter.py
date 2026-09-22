@@ -522,7 +522,13 @@ class MuleRouterImageModel(ImageGenModel):
         if ref_image_path:
             ref_image_paths = [ref_image_path] + ref_image_paths
 
-        if ref_image_paths:
+        image_generation_mode = kwargs.get("image_generation_mode")
+        if image_generation_mode == "text" and ref_image_paths:
+            raise ValueError("GPT-Image-2 text mode cannot include reference images")
+        if image_generation_mode == "reference" and not ref_image_paths:
+            raise ValueError("GPT-Image-2 reference mode requires at least one reference image")
+
+        if image_generation_mode == "reference" or (image_generation_mode is None and ref_image_paths):
             endpoint = "openai/gpt-image-2/edit"
         else:
             endpoint = "openai/gpt-image-2/generation"
@@ -534,6 +540,8 @@ class MuleRouterImageModel(ImageGenModel):
             resolved = _resolve_local_image_path(img_path=path, img_url=path)
             if resolved:
                 resolved_images.append(resolved)
+        if image_generation_mode == "reference" and not resolved_images:
+            raise ValueError("GPT-Image-2 reference mode could not resolve any reference images")
         if resolved_images:
             import json as _json
             args += ["--images", _json.dumps(resolved_images)]
@@ -567,13 +575,21 @@ class MuleRouterImageModel(ImageGenModel):
         if ref_image_path:
             ref_image_paths = [ref_image_path] + ref_image_paths
 
-        if ref_image_paths:
+        image_generation_mode = kwargs.get("image_generation_mode")
+        if image_generation_mode == "text" and ref_image_paths:
+            raise ValueError("GPT-Image-2 text mode cannot include reference images")
+        if image_generation_mode == "reference" and not ref_image_paths:
+            raise ValueError("GPT-Image-2 reference mode requires at least one reference image")
+
+        if image_generation_mode == "reference" or (image_generation_mode is None and ref_image_paths):
             api_path = GPT_IMAGE_API_PATHS["edit"]
             images = []
             for path in ref_image_paths:
                 resolved = _resolve_image_input(path)
                 if resolved:
                     images.append(resolved)
+            if not images:
+                raise ValueError("GPT-Image-2 reference mode could not resolve any reference images")
             if images:
                 body["image"] = images[0]
                 if len(images) > 1:
