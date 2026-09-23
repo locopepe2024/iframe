@@ -68,9 +68,10 @@ const HEXINGQUAN_CONTENT: ActionStructureContent = {
 };
 
 // FNV-1a over the canonical catalog content gives a stable local revision identity.
-export function actionStructureChecksum(content: ActionStructureContent): string {
+export function actionStructureChecksum(content: ActionStructureContent | ActionStructure): string {
+  const { checksum: _checksum, ...canonical } = content as ActionStructure;
   let hash = 2166136261;
-  for (const char of JSON.stringify(content)) {
+  for (const char of JSON.stringify(canonical)) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
