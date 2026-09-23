@@ -3,9 +3,10 @@ import type { Character, ImageAsset, ImageVariant, AssetUnit } from "@/store/pro
 /**
  * Character image resolution helpers.
  *
- * Characters store images in two containers from two schema eras:
+ * Characters store images in containers from multiple schema eras:
  *   - reference_sheet (new, canonical): { image_variants, selected_image_id }
- *   - full_body_asset (legacy):         { variants, selected_id }
+ *   - full_body_asset (current fallback): { variants, selected_id }
+ *   - full_body (older compatibility payload): { image_variants, selected_image_id }
  *
  * New characters are written to reference_sheet only, so every consumer must
  * read reference_sheet first and fall back to full_body_asset — otherwise newly
@@ -41,7 +42,17 @@ export function characterVariants(c: Character): ImageVariant[] {
   return characterImageAsset(c)?.variants ?? [];
 }
 
-/** A character's best display image: reference_sheet → full_body → legacy top-level urls. */
+/** Variants for reference selection: canonical containers win over stale compatibility data. */
+export function characterReferenceVariants(c: Character): ImageVariant[] {
+  const canonical = characterVariants(c);
+  if (canonical.length) return canonical;
+  return c.full_body?.image_variants ?? [];
+}
+
+/** A character's best display image, preferring the current containers over older compatibility fields. */
 export function characterImageUrl(c: Character): string | undefined {
-  return selectedVariantUrl(characterImageAsset(c)) || c.image_url || c.full_body_image_url;
+  return selectedVariantUrl(characterImageAsset(c))
+    || selectedVariantUrl(c.full_body)
+    || c.image_url
+    || c.full_body_image_url;
 }

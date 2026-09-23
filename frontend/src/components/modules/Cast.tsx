@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { characterImageUrl } from "@/lib/characterImage";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -41,27 +42,6 @@ interface CastItem {
     referenceImageUrl?: string;     // 参考图（优先 reference_sheet → full_body fallback）
     status: "ready" | "pending" | "new";
     persona?: string;               // R2V v2 P1-a — characters only; groups visual variants of same person
-}
-
-/**
- * Resolve a character's primary reference image URL with legacy fallback.
- * Per design v2 (Q12-补充 A): new schema is `reference_sheet`; old
- * schema is `full_body / three_views / head_shot`. Read with fallback
- * so existing data keeps rendering during migration.
- */
-function resolveCharacterImage(c: any): string | undefined {
-    // New unified field (v2, not yet populated)
-    const sheet = c?.reference_sheet?.image_variants?.find(
-        (v: any) => v.id === c.reference_sheet.selected_image_id,
-    )?.url;
-    if (sheet) return sheet;
-    // Legacy AssetUnit v2: full_body selected variant
-    const fullBody = c?.full_body?.image_variants?.find(
-        (v: any) => v.id === c.full_body.selected_image_id,
-    )?.url;
-    if (fullBody) return fullBody;
-    // Legacy v1 url fields
-    return c?.full_body_image_url || c?.three_view_image_url || c?.headshot_image_url || c?.image_url;
 }
 
 function resolveSceneImage(s: any): string | undefined {
@@ -126,7 +106,7 @@ export default function Cast() {
         const propPool: any[] = currentProject?.props ?? [];
 
         const characters: CastItem[] = characterPool.map((c: any) => {
-            const imageUrl = resolveCharacterImage(c);
+            const imageUrl = characterImageUrl(c);
             return {
                 id: c.id,
                 name: c.name ?? c.id,
