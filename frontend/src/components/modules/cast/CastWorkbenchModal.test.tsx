@@ -205,6 +205,29 @@ it('attaches a specific asset-library variant and submits only stable ids', asyn
  expect(JSON.stringify(args)).not.toContain('users/owner/scene.png');
 });
 
+it('does not submit a reference whose variant disappeared from the fresh index', async () => {
+ const libraryAsset = {
+  id: 'library-scene', name: 'Tea room', description: 'Quiet room',
+  image_asset: { variants: [{ id: 'deleted-variant', url: 'users/owner/scene.png' }], selected_id: 'deleted-variant' },
+ };
+ const withLibrary = { ...project, scenes: [libraryAsset] };
+ useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getAssetReferenceIndex)
+  .mockResolvedValueOnce({ schema_version: 1, project_id: 'project', assets: [{ asset_type: 'scene', asset_id: libraryAsset.id, name: libraryAsset.name, source_scope: 'global', source_container_id: null, selected_variant_id: 'deleted-variant', variants: libraryAsset.image_asset.variants }] } as any)
+  .mockResolvedValueOnce({ schema_version: 1, project_id: 'project', assets: [] } as any);
+ vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
+ show();
+ await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
+ setPromptDocument('<p>@Tea room</p>');
+ fireEvent.click(screen.getByRole('option', { name: /Tea room/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+ expect(api.generateAsset).not.toHaveBeenCalled();
+});
+
 it('removes an explicit reference image before the next text-to-image request', async () => {
  const libraryAsset = {
   id: 'library-prop',

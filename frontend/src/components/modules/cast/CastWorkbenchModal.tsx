@@ -596,8 +596,16 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             }
             updateProject(currentProject.id, fresh);
         } catch {
-            // Refresh failed — proceed with cached data; backend will reject
-            // if the entity truly is stale and the poll surfaces the error.
+            // A reference request must never fall through to submission when
+            // the fresh index could not be checked. The backend remains the
+            // final authority, but avoid sending a known potentially stale ID.
+            if (activePromptReferences.length > 0) {
+                toast.error(t("toastReferenceCheckFailed"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                return;
+            }
         }
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
         addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);

@@ -400,6 +400,7 @@
     "toastPollErr": "轮询异常",
     "toastPollErrBody": "请刷新页面查看结果",
     "toastEntityGone": "该资产已不存在（可能已被删除），请刷新页面后重试",
+    "toastReferenceCheckFailed": "无法确认所选参考图仍然有效，请重试后再生成",
     "toastReferenceStale": "参考图已被删除或更新，请重新选择后再生成"
   },
   "voiceDesign": {

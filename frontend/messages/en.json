@@ -400,6 +400,7 @@
     "toastPollErr": "Polling error",
     "toastPollErrBody": "Refresh the page to see the result",
     "toastEntityGone": "This asset no longer exists (may have been deleted). Please refresh and retry.",
+    "toastReferenceCheckFailed": "Could not verify the selected reference image. Try again before generating.",
     "toastReferenceStale": "This reference image was deleted or updated. Select it again before generating."
   },
   "voiceDesign": {
