@@ -152,6 +152,16 @@ export function evaluateDirectorFrame(input: {
   const timeSeconds = frameTimeSeconds(input.frame, input.fps, input.durationSeconds);
   const characters = structuredClone(input.characters); const cameras = structuredClone(input.cameras); const sceneObjects = structuredClone(input.sceneObjects);
   const pathProgress = new Map<string, number>();
+  // Paths provide the base spatial motion. Explicit transform tracks are
+  // applied after them so imported/local animation keyframes remain visible
+  // instead of being silently overwritten by a default actor path.
+  for (const track of input.tracks) {
+    if (track.trackKind !== "actor_path_progress" && track.trackKind !== "camera_path_progress") continue;
+    const value = evaluateKeyframes(track.keyframes, timeSeconds);
+    if (typeof value === "number") pathProgress.set(track.target.targetId, clamp01(value));
+  }
+  for (const path of Object.values(input.actorPaths)) if (characters[path.targetId]) characters[path.targetId].transform.position = evaluatePathPosition(path, timeSeconds, pathProgress.get(path.pathId));
+  for (const path of Object.values(input.cameraPaths)) if (cameras[path.targetId]) cameras[path.targetId].transform.position = evaluatePathPosition(path, timeSeconds, pathProgress.get(path.pathId));
   for (const track of input.tracks) {
     const value = evaluateKeyframes(track.keyframes, timeSeconds);
     if (value === undefined) continue;
@@ -176,8 +186,6 @@ export function evaluateDirectorFrame(input: {
     }
     if (track.trackKind === "object_visibility" && sceneObjects[track.target.targetId] && typeof value === "boolean") sceneObjects[track.target.targetId].visible = value;
   }
-  for (const path of Object.values(input.actorPaths)) if (characters[path.targetId]) characters[path.targetId].transform.position = evaluatePathPosition(path, timeSeconds, pathProgress.get(path.pathId));
-  for (const path of Object.values(input.cameraPaths)) if (cameras[path.targetId]) cameras[path.targetId].transform.position = evaluatePathPosition(path, timeSeconds, pathProgress.get(path.pathId));
   for (const camera of Object.values(cameras)) camera.focalLengthMm = cameraProjection(camera.fovDeg, camera.zoom, camera.aspectRatio).focalLengthMm;
   const requestedCameraId = activeCameraAtFrame(input.activeCameraTrackId, input.tracks, input.frame, input.fps, input.selectedCameraId);
   const activeCameraId = cameras[requestedCameraId] ? requestedCameraId : cameras[input.selectedCameraId] ? input.selectedCameraId : Object.keys(cameras)[0] ?? requestedCameraId;

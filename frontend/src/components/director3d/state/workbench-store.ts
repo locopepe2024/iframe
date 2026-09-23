@@ -4,10 +4,11 @@ import { createManualScenePlateCalibration, evaluateScenePlateCalibration, inter
 import { createManualPanoramaCalibration, evaluatePanoramaCalibration, panoramaRotationTuple } from "../calibration/panorama-calibration";
 import { createCameraPathPresetControlPoints } from "../camera/camera-path-presets";
 import { downsampleToBezierPoints, parseExternalCameraMotionManifest } from "../camera/external-camera-motion";
-import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_LABELS, rigProfile } from "../data/humanoid";
+import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID, CHARACTER_LABELS, rigProfile } from "../data/humanoid";
 import { mirrorRotation, posePresetById, type PosePresetId } from "../pose/pose-presets";
 import type { RigAdmissionIssue } from "../pose/rig-admission";
-import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, InteractionAnchorState, JointDefinition, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
+import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
+import { createIdleLocalAnimationImportState } from "./local-animation-import";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
@@ -68,7 +69,7 @@ const PRIMITIVE_LABELS: Record<PrimitiveKind, string> = {
 const PRIMITIVE_COLORS: Record<PrimitiveKind, string> = {
   cube: "#60A5FA",
   sphere: "#34D399",
-  cylinder: "#FBBF24",
+  cylinder: "#E5E7EB",
   torus: "#F472B6",
   cone: "#A78BFA",
   pyramid: "#FB7185",
@@ -357,6 +358,257 @@ export function createInitialActorPaths(characters: Record<string, CharacterAuth
   }));
 }
 
+function validationCharacter(
+  character: CharacterAuthoringState,
+  position: [number, number, number],
+  presetId: PosePresetId,
+  visible = true,
+): CharacterAuthoringState {
+  const preset = posePresetById.get(presetId);
+  return {
+    ...character,
+    transform: { ...character.transform, position, groundSnap: true },
+    poseRootOffsetM: [...(preset?.rootOffsetM ?? [0, 0, 0])],
+    jointRotations: structuredClone(preset?.rotations ?? {}),
+    activePresetId: presetId,
+    adjustedJointIds: [],
+    poseRevision: character.poseRevision + 1,
+    visible,
+  };
+}
+
+function validationCube(
+  sceneObjectId: string,
+  label: string,
+  dimensionsM: [number, number, number],
+  position: [number, number, number],
+  color: string,
+): SceneObjectAuthoringState {
+  const pivotM: [number, number, number] = [0, 0, -dimensionsM[2] / 2];
+  return {
+    sceneObjectId,
+    revision: 1,
+    label,
+    objectKind: "primitive",
+    primitiveKind: "cube",
+    proxyRepresentationType: null,
+    proxyAssetId: null,
+    modelAssetId: null,
+    inputId: null,
+    transform: { position, rotationDeg: [0, 0, 0], scale: [1, 1, 1], groundSnap: false },
+    dimensionsM,
+    pivotM,
+    boundingBoxM: boundsForDimensions(dimensionsM, pivotM),
+    scaleBasis: "declared_dimension",
+    materialHint: { color, roughness: 0.86 },
+    visible: true,
+    locked: false,
+    browserCapabilityState: "available",
+    compilerCapabilityState: "available",
+    capabilityIds: ["director.scene.inspect", "director.scene.object.transform"],
+    limitations: ["验证场景参数化白模；不包含材质、纹理、物理或可变形家具。"],
+    calibratedPlacement: null,
+  };
+}
+
+function validationTrack(
+  trackId: string,
+  trackKind: TimelineTrackKind,
+  targetId: string,
+  propertyKey: string,
+  keyframes: TimelineKeyframeState[],
+): TimelineTrackState {
+  return { trackId, trackKind, target: { targetType: trackKind.startsWith("camera_") ? "camera" : "character", targetId }, propertyKey, keyframes };
+}
+
+function poseKeyframes(
+  trackId: string,
+  characterId: string,
+  phases: Array<{ timeSeconds: number; presetId: PosePresetId }>,
+): TimelineTrackState {
+  return validationTrack(trackId, "character_pose", characterId, "pose.normalized_values", phases.map((phase, index) => {
+    const preset = posePresetById.get(phase.presetId);
+    return {
+      keyframeId: `${trackId}-key-${String(index + 1).padStart(2, "0")}`,
+      timeSeconds: phase.timeSeconds,
+      value: Object.fromEntries(Object.entries(preset?.rotations ?? {}).map(([jointId, rotation]) => [jointId, [rotation.x, rotation.y, rotation.z]])),
+      interpolation: "step" as const,
+    };
+  }));
+}
+
+function transformKeyframes(
+  trackId: string,
+  characterId: string,
+  phases: Array<{ timeSeconds: number; position: [number, number, number] }>,
+): TimelineTrackState {
+  return validationTrack(trackId, "character_transform", characterId, "transform.position_m", phases.map((phase, index) => ({
+    keyframeId: `${trackId}-key-${String(index + 1).padStart(2, "0")}`,
+    timeSeconds: phase.timeSeconds,
+    value: phase.position,
+    interpolation: "bezier" as const,
+  })));
+}
+
+function indoorSofaValidationScene() {
+  const baseCharacters = createInitialCharacters();
+  const characters = {
+    [CHARACTER_A_ID]: validationCharacter(baseCharacters[CHARACTER_A_ID], [-1.15, -0.08, 0], "seated.sit"),
+    [CHARACTER_B_ID]: validationCharacter(baseCharacters[CHARACTER_B_ID], [0, -0.08, 0], "seated.sit"),
+    [CHARACTER_C_ID]: validationCharacter(initialCharacter(CHARACTER_C_ID, 1.15), [1.15, -0.08, 0], "seated.sit"),
+  };
+  const sceneObjects = Object.fromEntries([
+    validationCube("validation-room-floor", "室内地面", [8, 6, 0.1], [0, 0, -0.05], "#1f2937"),
+    validationCube("validation-room-back-wall", "室内后墙", [8, 0.12, 4], [0, 2.65, 0], "#334155"),
+    validationCube("validation-room-left-wall", "室内左墙", [0.12, 6, 4], [-4, 0, 0], "#293548"),
+    validationCube("validation-room-right-wall", "室内右墙", [0.12, 6, 4], [4, 0, 0], "#293548"),
+    validationCube("validation-sofa-seat", "沙发座面白模", [3.8, 1.2, 0.42], [0, 0, 0.38], "#64748b"),
+    validationCube("validation-sofa-back", "沙发靠背白模", [3.8, 0.28, 1.55], [0, 0.48, 0.42], "#475569"),
+    validationCube("validation-sofa-arm-left", "沙发左扶手白模", [0.38, 1.2, 0.78], [-1.71, 0, 0.4], "#52637a"),
+    validationCube("validation-sofa-arm-right", "沙发右扶手白模", [0.38, 1.2, 0.78], [1.71, 0, 0.4], "#52637a"),
+    validationCube("validation-coffee-table", "茶几白模", [2.2, 1, 0.12], [0, -1.55, 0.48], "#6b7280"),
+  ].map((sceneObject) => [sceneObject.sceneObjectId, sceneObject]));
+  const camera = createInitialCameras()["camera-main"];
+  const cameras = {
+    "camera-main": {
+      ...camera,
+      label: "室内沙发全景",
+      transform: { ...camera.transform, position: [0, -8.4, 3.1] as [number, number, number], rotationDeg: [78, 0, 0] as [number, number, number] },
+      fovDeg: 62,
+      focalLengthMm: 30,
+      compositionPresetId: "wide" as const,
+      subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID, "validation-sofa-seat"],
+      lookAt: { targetType: "scene_object" as const, targetId: "validation-sofa-seat" },
+      framingGuides: { ruleOfThirds: true, centerCross: false, safeArea: true },
+    },
+  };
+  return {
+    characters,
+    actorMappings: createInitialActorMappingsForCharacters(characters),
+    actorPaths: createInitialActorPaths(characters),
+    sceneObjects,
+    cameras,
+    cameraPaths: {},
+    cameraSnapshots: [],
+    dialogueTimeline: { ...createInitialDialogueTimeline(), durationSeconds: 6 },
+    pathEvents: [],
+    selectedCharacterId: CHARACTER_B_ID,
+    selectedCharacterIds: [CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID],
+    selectedSceneObjectId: null,
+    selectedCameraId: "camera-main",
+    viewMode: "camera" as const,
+  };
+}
+
+function createInitialActorMappingsForCharacters(characters: Record<string, CharacterAuthoringState>): Record<string, ActorMappingState> {
+  return Object.fromEntries(Object.values(characters).map((character) => [character.actorMappingId, {
+    actorMappingId: character.actorMappingId,
+    characterId: character.characterId,
+    subjectId: null,
+    referenceSetId: null,
+    proxyAssetId: null,
+    appearanceRole: "unassigned" as const,
+  }]));
+}
+
+function fightValidationScene() {
+  const baseCharacters = createInitialCharacters();
+  const characters = {
+    [CHARACTER_A_ID]: validationCharacter(baseCharacters[CHARACTER_A_ID], [-1.25, 0, 0], "action.guard"),
+    [CHARACTER_B_ID]: validationCharacter(baseCharacters[CHARACTER_B_ID], [1.25, 0, 0], "action.guard"),
+    [CHARACTER_C_ID]: validationCharacter(initialCharacter(CHARACTER_C_ID, 4.5), [4.5, 2, 0], "pose.neutral", false),
+  };
+  const sceneObjects = Object.fromEntries([
+    validationCube("validation-fight-floor", "武打场地地面", [10, 7, 0.1], [0, 0, -0.05], "#1f2937"),
+    validationCube("validation-fight-backdrop", "武打场地背景墙", [10, 0.12, 4], [0, 3, 0], "#334155"),
+    validationCube("validation-fight-mat", "动作参考垫", [5.5, 3.2, 0.12], [0, 0, 0.02], "#475569"),
+    validationCube("validation-fight-marker", "接触定位标记", [0.35, 0.35, 0.04], [0, -0.02, 0.14], "#34d399"),
+  ].map((sceneObject) => [sceneObject.sceneObjectId, sceneObject]));
+  const baseCamera = createInitialCameras()["camera-main"];
+  const cameras = {
+    "camera-main": {
+      ...baseCamera,
+      label: "武打参考主机位",
+      transform: { ...baseCamera.transform, position: [0, -9, 3.2] as [number, number, number], rotationDeg: [78, 0, 0] as [number, number, number] },
+      fovDeg: 58,
+      focalLengthMm: 32,
+      compositionPresetId: "wide" as const,
+      subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID],
+      lookAt: { targetType: "scene_object" as const, targetId: "validation-fight-mat" },
+      framingGuides: { ruleOfThirds: true, centerCross: true, safeArea: true },
+    },
+  };
+  const tracks = [
+    poseKeyframes("validation-fight-pose-a", CHARACTER_A_ID, [
+      { timeSeconds: 0, presetId: "action.guard" },
+      { timeSeconds: 2.8, presetId: "action.throw" },
+      { timeSeconds: 5.2, presetId: "interaction.push" },
+      { timeSeconds: 8.1, presetId: "action.guard" },
+      { timeSeconds: 11.4, presetId: "action.kick" },
+      { timeSeconds: 15, presetId: "action.guard" },
+    ]),
+    poseKeyframes("validation-fight-pose-b", CHARACTER_B_ID, [
+      { timeSeconds: 0, presetId: "action.guard" },
+      { timeSeconds: 2.8, presetId: "action.guard" },
+      { timeSeconds: 5.2, presetId: "action.throw" },
+      { timeSeconds: 8.1, presetId: "action.kick" },
+      { timeSeconds: 11.4, presetId: "interaction.push" },
+      { timeSeconds: 15, presetId: "action.guard" },
+    ]),
+    transformKeyframes("validation-fight-transform-a", CHARACTER_A_ID, [
+      { timeSeconds: 0, position: [-1.25, 0, 0] },
+      { timeSeconds: 5.2, position: [-0.45, 0, 0] },
+      { timeSeconds: 9.4, position: [-1.05, 0, 0] },
+      { timeSeconds: 15, position: [-0.8, 0.1, 0] },
+    ]),
+    transformKeyframes("validation-fight-transform-b", CHARACTER_B_ID, [
+      { timeSeconds: 0, position: [1.25, 0, 0] },
+      { timeSeconds: 5.2, position: [0.45, 0, 0] },
+      { timeSeconds: 9.4, position: [1.1, 0, 0] },
+      { timeSeconds: 15, position: [0.8, 0.1, 0] },
+    ]),
+  ];
+  const timeline = {
+    ...createInitialDialogueTimeline(),
+    durationSeconds: 15,
+    tracks,
+  };
+  const actorPath = createInitialActorPaths(characters);
+  Object.values(actorPath).forEach((path) => { path.durationSeconds = 15; });
+  return {
+    characters,
+    actorMappings: createInitialActorMappingsForCharacters(characters),
+    actorPaths: actorPath,
+    sceneObjects,
+    cameras,
+    cameraPaths: {},
+    cameraSnapshots: [],
+    dialogueTimeline: timeline,
+    pathEvents: [{
+      pathEventId: "validation-fight-contact-01",
+      pathId: `path-${CHARACTER_A_ID}`,
+      actorId: CHARACTER_A_ID,
+      eventType: "contact" as const,
+      obstacleObjectId: "validation-fight-marker",
+      startSeconds: 5.05,
+      endSeconds: 5.35,
+      pathParameter: 0.35,
+      spatialAnchorM: [0, -0.02, 0.35] as [number, number, number],
+      requiredJointIds: ["wrist_r", "spine_chest"],
+      requiredContacts: [{ jointId: "wrist_r", targetObjectId: "validation-fight-marker", contactMode: "touch" as const }],
+      releasePolicy: "at_event_end" as const,
+      previewMarker: { label: "接触检查", color: "#34d399" },
+      exportMarker: true,
+      limitations: ["验证标记不等于 IK、碰撞或物理求解。"],
+    }],
+    selectedCharacterId: CHARACTER_A_ID,
+    selectedCharacterIds: [CHARACTER_A_ID, CHARACTER_B_ID],
+    selectedSceneObjectId: null,
+    selectedCameraId: "camera-main",
+    viewMode: "camera" as const,
+  };
+}
+
 function clampRotation(joint: JointDefinition, axis: Axis, value: number): number {
   const limits = joint.rotation_limits_deg[axis];
   if (!joint.supported_axes.includes(axis) || !limits) return 0;
@@ -466,6 +718,7 @@ export interface WorkbenchState {
   characters: Record<string, CharacterAuthoringState>;
   actorMappings: Record<string, ActorMappingState>;
   dialogueTimeline: DialogueTimelineState;
+  localAnimationImport: LocalAnimationImportState;
   dialogueReferenceInputs: DialogueReferenceInputState[];
   cameras: Record<string, CameraCompositionState>;
   selectedCameraId: string;
@@ -573,6 +826,9 @@ export interface WorkbenchState {
   removeCameraNoiseTrack: (cameraNoiseTrackId: string) => void;
   setTimelineDuration: (durationSeconds: number) => void;
   setTimelineFps: (fps: number) => void;
+  setLocalAnimationImportState: (state: LocalAnimationImportState) => void;
+  clearLocalAnimationImport: () => void;
+  applyLocalAnimationManifest: () => void;
   addTimelineTrack: (track: { trackKind: TimelineTrackKind; targetType: TimelineTargetType; targetId: string; propertyKey: string }) => void;
   removeTimelineTrack: (trackId: string) => void;
   upsertTimelineKeyframe: (trackId: string, keyframe: { keyframeId?: string; timeSeconds: number; value: unknown; interpolation: TimelineInterpolation }) => void;
@@ -625,6 +881,7 @@ export interface WorkbenchState {
   insertApprovedSubjectProxy: (proxyAssetId: string) => void;
   applySubjectProxyReplacement: (replacedProxyAssetId: string, proxyAssetId: string) => void;
   loadSceneObjects: (sceneObjects: Record<string, SceneObjectAuthoringState>) => void;
+  applyValidationScenePreset: (presetId: DirectorValidationPresetId) => void;
   toggleGroundVisible: () => void;
   toggleGroundLocked: () => void;
   setGroundHeightM: (heightM: number) => void;
@@ -847,6 +1104,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   characters: initialCharacters,
   actorMappings: createInitialActorMappings(),
   dialogueTimeline: createInitialDialogueTimeline(),
+  localAnimationImport: createIdleLocalAnimationImportState(),
   dialogueReferenceInputs: [],
   cameras: createInitialCameras(),
   selectedCameraId: "camera-main",
@@ -1349,6 +1607,45 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const playheadSeconds = (state.playheadFrame - 1) / state.dialogueTimeline.fps;
     return { ...mutateScene(state, "timeline.fps.set", { dialogueTimeline: { ...state.dialogueTimeline, fps } }), playheadFrame: Math.min(Math.max(1, Math.round(playheadSeconds * fps) + 1), Math.max(1, Math.round(state.dialogueTimeline.durationSeconds * fps) + 1)) };
   }),
+  setLocalAnimationImportState: (localAnimationImport) => set({ localAnimationImport: structuredClone(localAnimationImport) }),
+  clearLocalAnimationImport: () => set({ localAnimationImport: createIdleLocalAnimationImportState() }),
+  applyLocalAnimationManifest: () => set((state) => {
+    const imported = state.localAnimationImport;
+    if (imported.status !== "ready" || !imported.manifest || imported.tracks.length === 0) return state;
+    const invalidTrack = imported.tracks.find((track) => track.target.targetType !== "character" || !state.characters[track.target.targetId] || timelineTargetLocked(state, track));
+    if (invalidTrack) {
+      return {
+        localAnimationImport: {
+          ...imported,
+          status: "error" as const,
+          errors: [`轨道“${invalidTrack.trackId}”的目标人物不存在或已锁定，未应用任何改动。`],
+          appliedAt: null,
+        },
+      };
+    }
+    const importedTrackIds = new Set(imported.tracks.map((track) => track.trackId));
+    const nextTracks = [
+      ...state.dialogueTimeline.tracks.filter((track) => !importedTrackIds.has(track.trackId)),
+      ...structuredClone(imported.tracks),
+    ];
+    const dialogueTimeline = {
+      ...state.dialogueTimeline,
+      durationSeconds: Math.max(state.dialogueTimeline.durationSeconds, imported.manifest.durationSeconds),
+      fps: imported.manifest.fps,
+      tracks: nextTracks,
+    };
+    const mutation = mutateScene(state, "timeline.local_animation_import", { dialogueTimeline });
+    return {
+      ...mutation,
+      localAnimationImport: {
+        ...imported,
+        status: "applied" as const,
+        errors: [],
+        appliedAt: new Date().toISOString(),
+      },
+      playheadFrame: 1,
+    };
+  }),
   addTimelineTrack: (request) => set((state) => {
     if (!timelineTrackTargetAllowed(state, request.trackKind, request.targetType, request.targetId) || !request.propertyKey.trim()) return state;
     const nextSequence = state.dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;
@@ -1795,7 +2092,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     if (missingContactTargets.length) return { pathEventDiagnostic: `接触目标不存在：${missingContactTargets.join(", ")}` };
     const requiredJointIds = Array.from(new Set(request.requiredJointIds)).slice(0, 12);
     const requiredContacts = request.requiredContacts.slice(0, 8).map((contact) => ({ ...contact }));
-    const pathEvent: PathEventState = { pathEventId: existing?.pathEventId ?? `path-event-${String(nextSequence).padStart(4, "0")}`, pathId: request.pathId, actorId: request.actorId, eventType: request.eventType, obstacleObjectId, startSeconds, endSeconds, pathParameter: request.pathParameter === null ? null : finiteBounded(request.pathParameter, 0, 1), spatialAnchorM: request.spatialAnchorM.map((value) => finiteBounded(value, -1000, 1000)) as [number, number, number], requiredJointIds, requiredContacts, releasePolicy: request.releasePolicy, previewMarker: { label: request.previewLabel?.trim().slice(0, 80) || request.eventType, color: { approach: "#60a5fa", avoid: "#f59e0b", pass: "#34d399", vault: "#f472b6", take_cover: "#a78bfa", reveal: "#22d3ee", contact: "#fb7185", release: "#94a3b8" }[request.eventType] }, exportMarker: request.exportMarker, limitations: ["preview_marker_not_motion_solver", "contacts_require_pose_and_compiler_review"] };
+    const pathEvent: PathEventState = { pathEventId: existing?.pathEventId ?? `path-event-${String(nextSequence).padStart(4, "0")}`, pathId: request.pathId, actorId: request.actorId, eventType: request.eventType, obstacleObjectId, startSeconds, endSeconds, pathParameter: request.pathParameter === null ? null : finiteBounded(request.pathParameter, 0, 1), spatialAnchorM: request.spatialAnchorM.map((value) => finiteBounded(value, -1000, 1000)) as [number, number, number], requiredJointIds, requiredContacts, releasePolicy: request.releasePolicy, previewMarker: { label: request.previewLabel?.trim().slice(0, 80) || request.eventType, color: { approach: "#34d399", avoid: "#d1fae5", pass: "#34d399", vault: "#f472b6", take_cover: "#a78bfa", reveal: "#22d3ee", contact: "#fb7185", release: "#94a3b8" }[request.eventType] }, exportMarker: request.exportMarker, limitations: ["preview_marker_not_motion_solver", "contacts_require_pose_and_compiler_review"] };
     const pathEvents = existing ? state.pathEvents.map((event) => event.pathEventId === pathEvent.pathEventId ? pathEvent : event) : [...state.pathEvents, pathEvent];
     return { ...mutateScene(state, existing ? "path.event.update" : "path.event.add", { pathEvents }), pathEventDiagnostic: null };
   }),
@@ -1884,6 +2181,49 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     redoStack: [],
     commandHistory: [],
     unsavedChanges: false,
+  }),
+  applyValidationScenePreset: (presetId) => set((state) => {
+    const preset = presetId === "indoor-sofa-wide" ? indoorSofaValidationScene() : fightValidationScene();
+    const renderScene = createInitialRenderSceneState();
+    renderScene.labels = presetId === "indoor-sofa-wide"
+      ? ["validation:indoor", "blocking:seated-trio", "camera:wide"]
+      : ["validation:fight", "blocking:15s", "reference:pending"];
+    const mutation = mutateScene(state, `scene.validation_preset.${presetId}`, {
+      characters: preset.characters,
+      actorMappings: preset.actorMappings,
+      actorPaths: preset.actorPaths,
+      sceneObjects: preset.sceneObjects,
+      cameras: preset.cameras,
+      cameraPaths: preset.cameraPaths,
+      dialogueTimeline: preset.dialogueTimeline,
+      pathEvents: preset.pathEvents,
+      renderScene,
+    });
+    return {
+      ...mutation,
+      localAnimationImport: createIdleLocalAnimationImportState(),
+      selectedCharacterId: preset.selectedCharacterId,
+      selectedCharacterIds: preset.selectedCharacterIds,
+      selectedSceneObjectId: preset.selectedSceneObjectId,
+      selectedCameraId: preset.selectedCameraId,
+      viewMode: preset.viewMode,
+      cameraSnapshots: preset.cameraSnapshots,
+      externalCameraMotionProposals: [],
+      selectedActorPathControlPointId: null,
+      selectedActorPathVectorField: "positionM",
+      actorPathDragSnapshot: null,
+      actorPathDragTarget: null,
+      selectedCameraPathControlPointId: null,
+      selectedCameraPathVectorField: "positionM",
+      cameraPathDragSnapshot: null,
+      cameraPathDragTarget: null,
+      cameraPathDragUnsavedChanges: null,
+      pathEventDiagnostic: null,
+      transformDragging: false,
+      transformDragSnapshot: null,
+      transformDragCharacterId: null,
+      playheadFrame: 1,
+    };
   }),
   toggleGroundVisible: () => set((state) => mutateScene(state, "scene.ground.visibility", {
     renderScene: { ...state.renderScene, ground: { ...state.renderScene.ground, visible: !state.renderScene.ground.visible } },

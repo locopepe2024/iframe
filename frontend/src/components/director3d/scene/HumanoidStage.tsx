@@ -155,12 +155,12 @@ function CameraPathPreview({ path, selected }: { path: CameraPathState; selected
   }), [points]);
   if (!path.visible || samples.length < 2) return null;
   return <group>
-    <PathLine points={samples} color={selected ? "#FBBF24" : "#A16207"} opacity={selected ? 1 : 0.45}/>
+    <PathLine points={samples} color={selected ? "#34D399" : "#047857"} opacity={selected ? 1 : 0.45}/>
     {selected && points.map((point) => <group key={point.controlPointId}>
-      <PathLine points={[new THREE.Vector3(...point.handleInM), new THREE.Vector3(...point.positionM), new THREE.Vector3(...point.handleOutM)]} color="#FBBF24" opacity={0.45}/>
-      <DraggablePathControl ownerType="camera" path={path} point={point} field="handleInM" color="#FBBF24" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "handleInM"}/>
-      <DraggablePathControl ownerType="camera" path={path} point={point} field="handleOutM" color="#FBBF24" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "handleOutM"}/>
-      <DraggablePathControl ownerType="camera" path={path} point={point} field="positionM" color="#FBBF24" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "positionM"}/>
+      <PathLine points={[new THREE.Vector3(...point.handleInM), new THREE.Vector3(...point.positionM), new THREE.Vector3(...point.handleOutM)]} color="#34D399" opacity={0.45}/>
+      <DraggablePathControl ownerType="camera" path={path} point={point} field="handleInM" color="#34D399" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "handleInM"}/>
+      <DraggablePathControl ownerType="camera" path={path} point={point} field="handleOutM" color="#34D399" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "handleOutM"}/>
+      <DraggablePathControl ownerType="camera" path={path} point={point} field="positionM" color="#34D399" selected={selectedControlPointId === point.controlPointId && selectedVectorField === "positionM"}/>
     </group>)}
   </group>;
 }
@@ -200,7 +200,7 @@ function StageCameraFrustum({ composition, selected, lookAtM, followM }: { compo
   return <group>
     <primitive object={runtime.helper}/>
     <mesh position={runtimePosition} rotation={composition.transform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} onClick={(event) => { event.stopPropagation(); selectCamera(composition.cameraId, true); }} renderOrder={19}>
-      <boxGeometry args={[0.18, 0.12, 0.12]}/><meshBasicMaterial color={selected ? "#F8FAFC" : "#FBBF24"} depthTest={false}/>
+      <boxGeometry args={[0.18, 0.12, 0.12]}/><meshBasicMaterial color={selected ? "#F8FAFC" : "#34D399"} depthTest={false}/>
     </mesh>
   </group>;
 }
@@ -497,7 +497,7 @@ export function HumanoidStage() {
         gl={{ alpha: true }}
         dpr={[1, 2]}
         camera={{ fov: 42, near: 0.01, far: 100, position: [3, -4.2, 2.2], up: [0, 0, 1] }}
-        aria-label="双角色三维导演舞台。指针可直接操作；键盘用户可使用场景树、空间位置和关节数值控件完成同等编辑"
+        aria-label="多角色三维导演舞台。指针可直接操作；键盘用户可使用场景树、空间位置和关节数值控件完成同等编辑"
         aria-describedby="viewport-keyboard-help"
         role="img"
       >

@@ -1,8 +1,35 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { useWorkbenchStore } from "../state/workbench-store";
 import { selectCharactersRecord } from "../state/workbench-selectors";
+import type { DirectorValidationPresetId } from "../types";
 import { ObjectAddMenu } from "./ObjectAddMenu";
+
+const VALIDATION_PRESETS: ReadonlyArray<{ id: DirectorValidationPresetId; label: string; description: string }> = [
+  { id: "indoor-sofa-wide", label: "室内沙发三人全景", description: "室内宽景、沙发和三名坐姿白模。" },
+  { id: "fight-15s", label: "15 秒武打参考", description: "两名白模、15 秒关键帧与接触标记。" },
+];
+
+function ValidationSceneMenu() {
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const applyPreset = useWorkbenchStore((state) => state.applyValidationScenePreset);
+  const load = (presetId: DirectorValidationPresetId) => {
+    applyPreset(presetId);
+    menuRef.current?.removeAttribute("open");
+  };
+  return (
+    <details className="object-add-menu validation-scene-menu" ref={menuRef}>
+      <summary aria-label="加载验证场景"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg><span>验证场景</span></summary>
+      <div className="object-add-popover">
+        <div className="object-add-heading"><strong>浏览器白模验证</strong><small>仅装配本地导演台状态，不上传素材或调用模型。</small></div>
+        <div className="validation-scene-actions">
+          {VALIDATION_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => load(preset.id)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><span className="availability available">可用</span></button>)}
+        </div>
+        <p className="director-boundary-note">真实视频抽帧、姿态求解和 MP4 输出需另行验证。</p>
+      </div>
+    </details>
+  );
+}
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return hidden
@@ -69,7 +96,7 @@ export function SceneTree() {
 
   return (
     <section className="panel-section scene-tree" aria-labelledby="scene-tree-title">
-      <div className="section-heading"><div><p className="kicker">Scene</p><h2 id="scene-tree-title">场景对象</h2></div><div className="scene-heading-actions"><span className="count-badge">{resultCount}</span><ObjectAddMenu /></div></div>
+      <div className="section-heading"><div><p className="kicker">Scene</p><h2 id="scene-tree-title">场景对象</h2></div><div className="scene-heading-actions"><span className="count-badge">{resultCount}</span><ValidationSceneMenu /><ObjectAddMenu /></div></div>
       <div className="scene-tree-filters">
         <label className="search-field"><span className="sr-only">搜索场景对象</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input value={sceneFilter} onChange={(event) => setSceneFilter(event.target.value)} placeholder="搜索名称或 ID" /></label>
         <label><span className="sr-only">对象类型</span><select value={sceneTypeFilter} onChange={(event) => setSceneTypeFilter(event.target.value as "all" | "character" | "camera" | "object" | "environment")}><option value="all">全部类型</option><option value="character">人物</option><option value="camera">机位</option><option value="object">物体</option><option value="environment">环境</option></select></label>

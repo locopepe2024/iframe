@@ -4,9 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { X, Star, Download, Sparkles, Loader2, Globe } from "lucide-react";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
+import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
 import { api } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
 
@@ -93,6 +95,7 @@ export default function AssetInspector({
   onPromoted,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
+  const currentProject = useProjectStore((state) => state.currentProject);
   const TYPE_LABEL: Record<AssetTab, string> = {
     characters: t("characterLabel"),
     scenes: t("sceneLabel"),
@@ -221,7 +224,14 @@ export default function AssetInspector({
         "",
         true,
         "",
-        VARIANT_BATCH
+        VARIANT_BATCH,
+        sourceKind === "project"
+          ? resolveAssetGenerationModel(
+              currentProject?.id === projectId
+                ? currentProject.model_settings?.t2i_model
+                : undefined,
+            )
+          : undefined,
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
       if (taskId) {

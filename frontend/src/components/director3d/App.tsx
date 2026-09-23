@@ -9,15 +9,10 @@ import { SceneObjectInspector } from "./scene/SceneObjectInspector";
 import { SceneTree } from "./scene/SceneTree";
 import { useWorkbenchStore } from "./state/workbench-store";
 import { selectCharactersRecord } from "./state/workbench-selectors";
-import { DialogueTimelinePanel } from "./dialogue/DialogueTimelinePanel";
-import { FocusTimelinePanel } from "./focus/FocusTimelinePanel";
-import { InteractionAnchorPanel } from "./interaction/InteractionAnchorPanel";
-import { CameraNoisePanel } from "./camera/CameraNoisePanel";
-import { CameraCompositionPanel } from "./camera/CameraCompositionPanel";
-import { CameraPathPresetPanel } from "./camera/CameraPathPresetPanel";
-import { PathEventPanel } from "./path/PathEventPanel";
-import { ActorPathPanel } from "./path/ActorPathPanel";
+import { CameraToolsInspector } from "./camera/CameraToolsInspector";
 import { TimelinePanel } from "./timeline/TimelinePanel";
+import { TemporalToolsInspector } from "./TemporalToolsInspector";
+import { ConfigPanelToggle } from "./ConfigPanelToggle";
 import type { TransformMode, ViewMode } from "./types";
 import { saveLocalDirectorDraft } from "./state/local-draft";
 
@@ -54,6 +49,8 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const unsavedChanges = useWorkbenchStore((state) => state.unsavedChanges);
   const markExplicitlySaved = useWorkbenchStore((state) => state.markExplicitlySaved);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(restoredSavedAt);
+  const [leftPanelExpanded, setLeftPanelExpanded] = useState(true);
+  const [inspectorExpanded, setInspectorExpanded] = useState(true);
   const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
     ? { status: "saved", message: `本地草稿已恢复 ${formatSavedTime(restoredSavedAt)}` }
     : { status: "idle", message: "" });
@@ -123,52 +120,79 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
         </div>
       </header>
 
-      <main className="workbench-grid">
-        <aside className="left-panel">
-          <SceneTree />
-          <JointTree />
+      <main className={`workbench-grid ${viewMode === "camera" ? "camera-workspace-active" : ""}`}>
+        <aside className={`left-panel ${leftPanelExpanded ? "" : "panel-collapsed"}`} aria-label="场景配置">
+          <div className="panel-collapse-bar">
+            <span>场景配置</span>
+            <ConfigPanelToggle
+              expanded={leftPanelExpanded}
+              controls="left-panel-content"
+              expandedLabel="收起场景配置"
+              collapsedLabel="展开场景配置"
+              onToggle={() => setLeftPanelExpanded((value) => !value)}
+            />
+          </div>
+          <div id="left-panel-content" hidden={!leftPanelExpanded}>
+            <SceneTree />
+            <JointTree />
+          </div>
         </aside>
 
-        <section id="stage" className="stage-column" aria-labelledby="stage-title">
-          <div className="stage-toolbar">
-            <div><p className="kicker">Metric stage</p><h2 id="stage-title">{VIEW_LABELS[viewMode]}</h2></div>
-            <div className="view-tabs" role="tablist" aria-label="舞台视图">
-              {(Object.keys(VIEW_LABELS) as ViewMode[]).map((mode) => <button key={mode} id={`view-tab-${mode}`} data-view={mode} type="button" role="tab" aria-controls="director-viewport" aria-selected={viewMode === mode} tabIndex={viewMode === mode ? 0 : -1} className={viewMode === mode ? "active" : ""} onClick={() => setViewMode(mode)} onKeyDown={(event) => {
-                const nextMode = resolveViewTabKey(mode, event.key);
-                if (!nextMode) return;
-                event.preventDefault();
-                setViewMode(nextMode);
-                event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`[data-view="${nextMode}"]`)?.focus();
-              }}>{VIEW_LABELS[mode]}</button>)}
+        <div className="center-workspace">
+          <div className="stage-workspace">
+            <section id="stage" className="stage-column" aria-labelledby="stage-title">
+            <div className="stage-toolbar">
+              <div><p className="kicker">Metric stage</p><h2 id="stage-title">{VIEW_LABELS[viewMode]}</h2></div>
+              <div className="view-tabs" role="tablist" aria-label="舞台视图">
+                {(Object.keys(VIEW_LABELS) as ViewMode[]).map((mode) => <button key={mode} id={`view-tab-${mode}`} data-view={mode} type="button" role="tab" aria-controls="director-viewport" aria-selected={viewMode === mode} tabIndex={viewMode === mode ? 0 : -1} className={viewMode === mode ? "active" : ""} onClick={() => setViewMode(mode)} onKeyDown={(event) => {
+                  const nextMode = resolveViewTabKey(mode, event.key);
+                  if (!nextMode) return;
+                  event.preventDefault();
+                  setViewMode(nextMode);
+                  event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`[data-view="${nextMode}"]`)?.focus();
+                }}>{VIEW_LABELS[mode]}</button>)}
+              </div>
+              <div className="transform-tabs" role="group" aria-label="对象变换模式">
+                {(["translate", "rotate", "scale"] as TransformMode[]).map((mode) => <button key={mode} type="button" aria-pressed={transformMode === mode} className={transformMode === mode ? "active" : ""} onClick={() => setTransformMode(mode)}>{{ translate: "移动", rotate: "旋转", scale: "缩放" }[mode]}</button>)}
+              </div>
+              <button className={`toggle-button ${showJointHandles ? "active" : ""}`} type="button" aria-pressed={showJointHandles} onClick={toggleJointHandles}>关节控制点</button>
+              <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
             </div>
-            <div className="transform-tabs" role="group" aria-label="对象变换模式">
-              {(["translate", "rotate", "scale"] as TransformMode[]).map((mode) => <button key={mode} type="button" aria-pressed={transformMode === mode} className={transformMode === mode ? "active" : ""} onClick={() => setTransformMode(mode)}>{{ translate: "移动", rotate: "旋转", scale: "缩放" }[mode]}</button>)}
+            <HumanoidStage />
+            <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。`}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
+            </p>
+            <div className="stage-status" role="status" aria-live="polite">
+              <span><strong>{selectedSceneObject ? "物体" : "人物"}：</strong>{selectedSceneObject?.label ?? characters.find((character) => character.characterId === selectedCharacterId)?.label}</span>
+              <span><strong>骨架：</strong>{rigProfile.rig_profile_id}</span>
+              <span><strong>产品关节：</strong>{rigAdmissionStatus === "passed" ? "57 / 57" : `阻止编辑 · ${rigAdmissionIssues.length} 项`}</span>
+              <span><strong>单位：</strong>米 / 度</span>
             </div>
-            <button className={`toggle-button ${showJointHandles ? "active" : ""}`} type="button" aria-pressed={showJointHandles} onClick={toggleJointHandles}>关节控制点</button>
-            <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
-          </div>
-          <HumanoidStage />
-          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-            {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。`}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
-          </p>
-          <div className="stage-status" role="status" aria-live="polite">
-            <span><strong>{selectedSceneObject ? "物体" : "人物"}：</strong>{selectedSceneObject?.label ?? characters.find((character) => character.characterId === selectedCharacterId)?.label}</span>
-            <span><strong>骨架：</strong>{rigProfile.rig_profile_id}</span>
-            <span><strong>产品关节：</strong>{rigAdmissionStatus === "passed" ? "57 / 57" : `阻止编辑 · ${rigAdmissionIssues.length} 项`}</span>
-            <span><strong>单位：</strong>米 / 度</span>
-          </div>
-          <TimelinePanel />
-          <DialogueTimelinePanel />
-          <FocusTimelinePanel />
-          <InteractionAnchorPanel />
-          <ActorPathPanel />
-          <PathEventPanel />
-          <CameraCompositionPanel />
-          <CameraPathPresetPanel />
-          <CameraNoisePanel />
-        </section>
+            </section>
 
-        {selectedSceneObjectId ? <SceneObjectInspector /> : <JointInspector />}
+            <TemporalToolsInspector />
+          </div>
+
+          <section className="timeline-dock" aria-label="底部时间轴">
+            <TimelinePanel />
+          </section>
+        </div>
+
+        <div className={`inspector-column ${viewMode === "camera" ? "camera-inspector-column" : ""} ${inspectorExpanded ? "" : "panel-collapsed"}`} aria-label="属性配置">
+          <div className="panel-collapse-bar">
+            <span>属性配置</span>
+            <ConfigPanelToggle
+              expanded={inspectorExpanded}
+              controls="inspector-column-content"
+              expandedLabel="收起属性配置"
+              collapsedLabel="展开属性配置"
+              onToggle={() => setInspectorExpanded((value) => !value)}
+            />
+          </div>
+          <div id="inspector-column-content" hidden={!inspectorExpanded}>
+            {viewMode === "camera" ? <CameraToolsInspector /> : selectedSceneObjectId ? <SceneObjectInspector /> : <JointInspector />}
+          </div>
+        </div>
       </main>
 
       <footer className="command-bar">

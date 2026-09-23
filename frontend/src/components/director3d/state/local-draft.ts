@@ -1,4 +1,5 @@
 import { useWorkbenchStore, type WorkbenchState } from "./workbench-store";
+import { createIdleLocalAnimationImportState } from "./local-animation-import";
 
 export const DIRECTOR_DRAFT_STORAGE_KEY = "iframe.director3d.browser-draft.v1";
 
@@ -75,6 +76,7 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
     if (envelope.schemaVersion !== "iframe.director3d.browser-draft.v1" || !envelope.state || typeof envelope.savedAt !== "string") return null;
     useWorkbenchStore.setState({
       ...envelope.state,
+      localAnimationImport: createIdleLocalAnimationImportState(),
       fullscreenActive: false,
       subjectImportOpen: false,
       transformDragging: false,
