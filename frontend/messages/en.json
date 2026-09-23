@@ -399,7 +399,8 @@
     "toastVariantDoneBody": "Generated {count} variants",
     "toastPollErr": "Polling error",
     "toastPollErrBody": "Refresh the page to see the result",
-    "toastEntityGone": "This asset no longer exists (may have been deleted). Please refresh and retry.",\n    "toastReferenceStale": "This reference image was deleted or updated. Select it again before generating."
+    "toastEntityGone": "This asset no longer exists (may have been deleted). Please refresh and retry.",
+    "toastReferenceStale": "This reference image was deleted or updated. Select it again before generating."
   },
   "voiceDesign": {
     "title": "Design a new voice",
