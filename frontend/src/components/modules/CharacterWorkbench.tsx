@@ -113,7 +113,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 if (active) setAssetIndex([]);
             });
         return () => { active = false; };
-    }, [currentProject?.id]);
+    }, [currentProject]);
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });

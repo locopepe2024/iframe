@@ -12,6 +12,11 @@ const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
 }));
 
+const projectStoreMocks = vi.hoisted(() => ({
+    currentProject: { id: "project-1" } as { id: string; revision?: number },
+    updateProject: vi.fn(),
+}));
+
 vi.mock("next-intl", () => ({
     useTranslations: () => (key: string) => key,
 }));
@@ -28,10 +33,7 @@ vi.mock("../common/VideoVariantSelector", () => ({
 }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
 vi.mock("@/store/projectStore", () => ({
-    useProjectStore: (selector: (state: unknown) => unknown) => selector({
-        currentProject: { id: "project-1" },
-        updateProject: vi.fn(),
-    }),
+    useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
 
@@ -198,6 +200,61 @@ it("loads the project reference index for the character workbench", async () => 
         expect.any(String),
         1,
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
+        "reference",
+    ));
+});
+
+it("refreshes the reference index when a generated project snapshot arrives", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    projectStoreMocks.currentProject = { id: "project-1" };
+    const indexWithDeletedView = {
+        schema_version: 1,
+        project_id: "project-1",
+        assets: [{
+            asset_type: "character" as const,
+            asset_id: "character-1",
+            name: "Hero",
+            source_scope: "series" as const,
+            variants: [{ id: "deleted-view", url: "/files/deleted-view.png" }],
+        }],
+    };
+    const indexWithNewView = {
+        ...indexWithDeletedView,
+        assets: [{ ...indexWithDeletedView.assets[0], variants: [{ id: "new-view", url: "/files/new-view.png" }] }],
+    };
+    apiMocks.getAssetReferenceIndex
+        .mockResolvedValueOnce(indexWithDeletedView)
+        .mockResolvedValueOnce(indexWithNewView);
+    const onGenerate = vi.fn();
+    const workbench = (onClose: () => void) => (
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+            onClose={onClose}
+            onUpdateDescription={vi.fn()}
+            onGenerate={onGenerate}
+            generatingTypes={[]}
+        />
+    );
+    const { rerender } = render(workbench(vi.fn()));
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
+    projectStoreMocks.currentProject = { id: "project-1", revision: 2 };
+    rerender(workbench(vi.fn()));
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+
+    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { editor.editor.commands.setContent("<p>@Hero</p>"); });
+    fireEvent.click(screen.getByRole("option"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
+    fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
+        "full_body",
+        "@Hero ",
+        true,
+        expect.any(String),
+        1,
+        [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],
         "reference",
     ));
 });
