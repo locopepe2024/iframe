@@ -59,6 +59,9 @@ type ReferenceCandidate = {
 
 - Cast's "设置为参考图" / upload / library picker adds or removes candidates
   in the available pool only. It never adds provider references on its own.
+- Selecting a Cast gallery variant as the current canonical image also adds
+  that variant to the available pool, so several gallery images can be
+  prepared before writing the prompt.
 - Cast's `@` suggestion menu is anchored to the **生成描述** editor. It lists
   only candidates from the available pool and inserts a rich token with the
   stable IDs above.
