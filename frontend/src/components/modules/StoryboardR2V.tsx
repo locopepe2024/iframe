@@ -63,7 +63,7 @@ export default function StoryboardR2V() {
             .then((index) => { if (active) setAssetIndex(index.assets); })
             .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
         return () => { active = false; };
-    }, [currentProject?.id]);
+    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
     // Derive shots from project frames. Workbench state (T2I 抽卡
     // history, last-active tab, batch count) now comes from backend-

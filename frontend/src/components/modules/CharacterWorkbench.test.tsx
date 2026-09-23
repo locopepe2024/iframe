@@ -13,7 +13,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 const projectStoreMocks = vi.hoisted(() => ({
-    currentProject: { id: "project-1" } as { id: string; revision?: number },
+    currentProject: { id: "project-1" } as { id: string; revision?: number; characters?: any[]; scenes?: any[]; props?: any[] },
     updateProject: vi.fn(),
 }));
 
@@ -206,7 +206,10 @@ it("loads the project reference index for the character workbench", async () => 
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
     apiMocks.getAssetReferenceIndex.mockReset();
-    projectStoreMocks.currentProject = { id: "project-1" };
+    projectStoreMocks.currentProject = {
+        id: "project-1",
+        characters: [{ id: "character-1", full_body_asset: { selected_id: "deleted-view", variants: [{ id: "deleted-view", url: "/files/deleted-view.png" }] } }],
+    };
     const indexWithDeletedView = {
         schema_version: 1,
         project_id: "project-1",
@@ -238,7 +241,11 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     const { rerender } = render(workbench(vi.fn()));
 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
-    projectStoreMocks.currentProject = { id: "project-1", revision: 2 };
+    projectStoreMocks.currentProject = {
+        id: "project-1",
+        revision: 2,
+        characters: [{ id: "character-1", full_body_asset: { selected_id: "new-view", variants: [{ id: "new-view", url: "/files/new-view.png" }] } }],
+    };
     rerender(workbench(vi.fn()));
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
 

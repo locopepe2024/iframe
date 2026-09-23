@@ -605,7 +605,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                 if (active) setAssetIndex([]);
             });
         return () => { active = false; };
-    }, [currentProject?.id, asset.id]);
+    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props, asset.id]);
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
         const labels = new Set<string>();

@@ -377,7 +377,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 if (active) setReferenceLibraryAssets([]);
             });
         return () => { active = false; };
-    }, [isOpen, currentProject?.id]);
+    }, [isOpen, currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
     const visibleAvailableReferences = useMemo(() => availableReferences.flatMap((reference) => {
         const asset = referenceLibraryAssets.find((item) =>

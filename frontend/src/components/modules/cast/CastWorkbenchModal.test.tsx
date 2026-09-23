@@ -111,6 +111,11 @@ it('shows the Cast generation-description @ menu and submits only selected stabl
 it('selects a canonical output without silently using it as generation input', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
  useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({
+  schema_version: 1,
+  project_id: 'project',
+  assets: [{ asset_type: 'character', asset_id: 'char', name: 'Test', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'two', variants: withVariants.characters[0].reference_sheet.image_variants }],
+ });
  vi.mocked(api.selectAssetVariant).mockResolvedValue({ ...withVariants, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'one' } }] } as any);
  vi.mocked(api.generateAsset).mockResolvedValue(withVariants as any);
  show(); fireEvent.click(screen.getByText('Test one'));
@@ -315,4 +320,40 @@ it('loads a global library reference from the server asset index', async () => {
  fireEvent.click(referenceButton);
  expect(screen.getByLabelText('Available reference candidates')).toHaveTextContent('Shared tea room');
  expect(api.listLibraryAssets).not.toHaveBeenCalled();
+});
+
+it('refreshes indexed variants when project assets change while the picker is open', async () => {
+ const indexFor = (variantId: string) => ({
+  schema_version: 1,
+  project_id: 'project',
+  assets: [{
+   asset_type: 'character',
+   asset_id: 'char',
+   name: 'Test',
+   source_scope: 'episode',
+   variants: [{ id: variantId, url: `${variantId}.png` }],
+  }],
+ });
+ vi.mocked(api.getAssetReferenceIndex)
+  .mockResolvedValueOnce(indexFor('deleted-view') as any)
+  .mockResolvedValueOnce(indexFor('new-view') as any);
+ show();
+
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ expect(screen.getByText('Test deleted-view')).toBeTruthy();
+
+ const updatedProject = {
+  ...project,
+  characters: [{
+   ...character,
+   reference_sheet: { selected_image_id: 'new-view', image_variants: [{ id: 'new-view', url: 'new-view.png' }] },
+  }],
+ };
+ act(() => useProjectStore.setState({ currentProject: updatedProject, projects: [updatedProject] }));
+
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+ const picker = screen.getByTestId('cast-library-reference-picker');
+ await waitFor(() => expect(picker).toHaveTextContent('Test new-view'));
+ expect(picker).not.toHaveTextContent('Test deleted-view');
 });
