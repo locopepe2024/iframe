@@ -1658,7 +1658,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             None,
         )
         if variant is None:
-            raise InvalidAssetReference("reference variant does not belong to the asset")
+            raise InvalidAssetReference(
+                "reference variant does not belong to the asset "
+                f"(asset_type={asset_type}, asset_id={asset_id}, "
+                f"variant_id={normalized['variant_id']})"
+            )
         value = getattr(variant, "url", None)
         if not isinstance(value, str) or not value.strip():
             raise InvalidAssetReference("reference variant has no image material")

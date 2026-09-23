@@ -532,6 +532,26 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 onClose();
                 return;
             }
+            if (libraryReference) {
+                const freshAsset = (pool || []).find((item: any) => item?.id === libraryReference.asset_id);
+                const freshVariant = freshAsset
+                    ? readLibraryVariants(freshAsset, libraryReference.asset_type).find(
+                        (variant) => variant.id === libraryReference.variant_id,
+                    )
+                    : undefined;
+                // Older project responses can omit a valid shared asset. Only
+                // reject when the fresh response contains the asset and
+                // proves that this selected variant was deleted.
+                if (freshAsset && !freshVariant) {
+                    setLibraryReference(null);
+                    toast.warning(t("toastReferenceStale"), {
+                        projectId: currentProject.id,
+                        projectTitle: currentProject.title,
+                    });
+                    updateProject(currentProject.id, fresh);
+                    return;
+                }
+            }
             updateProject(currentProject.id, fresh);
         } catch {
             // Refresh failed — proceed with cached data; backend will reject

@@ -399,7 +399,7 @@
     "toastVariantDoneBody": "已生成 {count} 张变体",
     "toastPollErr": "轮询异常",
     "toastPollErrBody": "请刷新页面查看结果",
-    "toastEntityGone": "该资产已不存在（可能已被删除），请刷新页面后重试"
+    "toastEntityGone": "该资产已不存在（可能已被删除），请刷新页面后重试",\n    "toastReferenceStale": "参考图已被删除或更新，请重新选择后再生成"
   },
   "voiceDesign": {
     "title": "设计新音色",
