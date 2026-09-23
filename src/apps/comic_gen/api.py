@@ -303,6 +303,13 @@ def signed_response(data):
     return JSONResponse(content=processed_data)
 
 
+def private_no_store_signed_response(data):
+    """Return owner-scoped mutable data without allowing intermediary caching."""
+    response = signed_response(data)
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
 @app.get("/studio/media/{owner_key}/{relative_path:path}")
 def get_studio_media(
     owner_key: str,
@@ -1952,7 +1959,7 @@ def get_project_asset_index(
     if not pipeline.get_script(script_id, user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Project not found")
     try:
-        return signed_response(pipeline.get_asset_reference_index(script_id))
+        return private_no_store_signed_response(pipeline.get_asset_reference_index(script_id))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -1960,7 +1967,7 @@ def get_project_asset_index(
 @app.get("/asset-index")
 def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
     """Return the normalized cross-series/project/global asset view."""
-    return signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
+    return private_no_store_signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
 
 
 @app.get("/projects/{script_id}/assembly-plan")

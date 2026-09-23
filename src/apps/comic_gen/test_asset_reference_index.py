@@ -204,6 +204,7 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
         with TestClient(api.app) as client:
             response = client.get("/projects/owned-project/asset-index")
             assert response.status_code == 200
+            assert response.headers["cache-control"] == "private, no-store"
             assert response.json() == {
                 "schema_version": 1,
                 "project_id": "owned-project",
@@ -223,6 +224,7 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
             assert client.get("/projects/missing/asset-index").status_code == 404
             library_response = client.get("/asset-index")
             assert library_response.status_code == 200
+            assert library_response.headers["cache-control"] == "private, no-store"
             library_assets = library_response.json()["assets"]
             assert [(item["source_scope"], item["asset_id"]) for item in library_assets] == [
                 ("project", "actor"),
