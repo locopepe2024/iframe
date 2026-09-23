@@ -10,6 +10,7 @@ import { DIRECTOR_DRAFT_STORAGE_KEY } from "./state/local-draft";
 import { parseLocalAnimationManifest } from "./state/local-animation-import";
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid";
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
+import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
 
 vi.mock("./scene/HumanoidStage", () => ({
   HumanoidStage: () => <div id="director-viewport" role="tabpanel" aria-label="mock 3D stage" />,
@@ -182,6 +183,17 @@ it("validates local white-model animation manifests without network access", () 
   ]);
   expect(parsed.state.tracks[0].target.targetId).toBe(CHARACTER_A_ID);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("keeps the committed local animation example inside the V1 contract", () => {
+  const parsed = parseLocalAnimationManifest(localAnimationExample, {
+    availableCharacterIds: [CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID],
+  });
+
+  expect(parsed.ok).toBe(true);
+  expect(parsed.state.manifest?.manifestId).toBe("fight-take-15s");
+  expect(parsed.state.totalKeyframes).toBe(16);
+  expect(parsed.state.tracks).toHaveLength(4);
 });
 
 it("rejects unsupported local animation schemas and targets before mutation", () => {

@@ -38,6 +38,8 @@
 
 文件类型：`.json`，UTF-8，大小不超过 2 MiB。
 
+可直接用于验收的样例：[`docs/examples/director3d/local-animation-fight-15s.json`](../examples/director3d/local-animation-fight-15s.json)。
+
 ```json
 {
   "schemaVersion": "iframe.director3d.local-animation.v1",
