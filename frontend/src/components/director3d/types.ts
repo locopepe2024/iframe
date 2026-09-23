@@ -1,3 +1,5 @@
+import type { RecreationFrameManifest } from "@/lib/recreation";
+
 export type ControlClass = "product_joint" | "deformation_helper" | "attachment";
 export type EditPolicy = "direct" | "derived" | "read_only";
 export type Axis = "x" | "y" | "z";
@@ -525,6 +527,17 @@ export interface LocalAnimationImportState {
   warnings: string[];
   errors: string[];
   appliedAt: string | null;
+}
+
+export type FrameManifestImportStatus = "idle" | "reading" | "ready" | "error";
+
+export interface FrameManifestImportState {
+  status: FrameManifestImportStatus;
+  fileName: string | null;
+  manifest: RecreationFrameManifest | null;
+  revision: number;
+  errors: string[];
+  importedAt: string | null;
 }
 
 export interface DialogueReferenceInputState {

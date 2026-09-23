@@ -197,6 +197,15 @@ transform, contact, or export tracks.
 - The director should record the manifest checksum and revision in the local
   draft so a later re-import cannot silently replace reviewed evidence.
 
+The first H1 browser slice is deliberately narrower: `FrameManifestImporter`
+reads a local `.json` manifest, validates its versioned shape, and stores the
+manifest plus a monotonically increasing local `revision` in the director
+draft. The panel reports frame count, source/analysis identity, review state,
+and the exact source-time reference. It exposes replace/clear actions, but no
+`应用到时间线` action. Closing the panel or importing a manifest must leave
+`dialogueTimeline.tracks`, pose values, transform values, contact anchors, and
+export markers unchanged.
+
 ### Stage H2 — white-model mapping
 
 - A user or Agent may propose a mapping from selected frames to action phases,

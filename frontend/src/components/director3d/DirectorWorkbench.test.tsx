@@ -210,7 +210,7 @@ it("previews, applies, undoes, and redoes a local white-model animation", async 
   render(<App />);
   const before = useWorkbenchStore.getState().dialogueTimeline;
   fireEvent.click(screen.getByRole("button", { name: "导入白模动画" }));
-  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+  const input = screen.getByLabelText("选择本地白模动画 JSON 文件");
   const file = new File([JSON.stringify(validLocalAnimationManifest())], "fight-take-01.json", { type: "application/json" });
   fireEvent.change(input, { target: { files: [file] } });
 
@@ -246,6 +246,47 @@ it("previews, applies, undoes, and redoes a local white-model animation", async 
     cameraPaths: appliedState.cameraPaths,
   });
   expect(evaluated.characters[CHARACTER_B_ID].transform.position).toEqual([0.4, 0.1, 0]);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("imports a frame manifest as a read-only reference without touching authored tracks", async () => {
+  render(<App />);
+  const before = useWorkbenchStore.getState().dialogueTimeline;
+  fireEvent.click(screen.getByRole("tab", { name: "参考帧" }));
+  const input = screen.getByLabelText("选择历史视频帧 manifest");
+  const manifest = {
+    schema_version: "recreation.frame-manifest.v1",
+    manifest_id: "reviewed-fight-01",
+    source_media_id: "source-video-01",
+    source_checksum: "a".repeat(64),
+    analysis_id: "analysis-01",
+    time_base: "1/60000",
+    source_start_pts: 1000,
+    source_end_pts: 901000,
+    duration_seconds: 15,
+    review_state: "reviewed",
+    frames: [
+      { frame_id: "frame-a", source_pts: 242000, source_seconds: 4.016666666666667, evidence_media_id: "evidence-a", evidence_media_path: "/evidence-a.jpg", width: 1080, height: 1920, extraction_method: "manual" },
+      { frame_id: "frame-b", source_pts: 546000, source_seconds: 9.083333333333334, evidence_media_id: "evidence-b", evidence_media_path: "/evidence-b.jpg", width: 1080, height: 1920, extraction_method: "detected" },
+    ],
+  };
+  fireEvent.change(input, { target: { files: [new File([JSON.stringify(manifest)], "reviewed-fight-01.json", { type: "application/json" })] } });
+
+  await waitFor(() => expect(useWorkbenchStore.getState().frameManifestImport.status).toBe("ready"));
+  expect(useWorkbenchStore.getState().frameManifestImport.revision).toBe(1);
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
+  expect(screen.getByText("已审核参考")).toBeInTheDocument();
+  expect(screen.getByText(/2 帧/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "应用到时间线" })).not.toBeInTheDocument();
+
+  fireEvent.change(input, { target: { files: [new File(["{}"], "invalid.json", { type: "application/json" })] } });
+  await waitFor(() => expect(screen.getByText("无法导入参考帧")).toBeInTheDocument());
+  expect(useWorkbenchStore.getState().frameManifestImport.manifest?.manifest_id).toBe("reviewed-fight-01");
+  expect(useWorkbenchStore.getState().frameManifestImport.revision).toBe(1);
+
+  fireEvent.click(screen.getByRole("button", { name: "清除参考" }));
+  expect(useWorkbenchStore.getState().frameManifestImport.status).toBe("idle");
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
   expect(fetch).not.toHaveBeenCalled();
 });
 

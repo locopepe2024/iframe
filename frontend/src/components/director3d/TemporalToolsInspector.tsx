@@ -6,8 +6,9 @@ import { InteractionAnchorPanel } from "./interaction/InteractionAnchorPanel";
 import { ActorPathPanel } from "./path/ActorPathPanel";
 import { PathEventPanel } from "./path/PathEventPanel";
 import { ConfigPanelToggle } from "./ConfigPanelToggle";
+import { FrameManifestImporter } from "./reference/FrameManifestImporter";
 
-type TemporalTool = "dialogue" | "focus" | "interaction" | "actor-path" | "path-event";
+type TemporalTool = "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference";
 
 const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
   { id: "dialogue", label: "对白" },
@@ -15,6 +16,7 @@ const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
   { id: "interaction", label: "接触" },
   { id: "actor-path", label: "人物路径" },
   { id: "path-event", label: "路径事件" },
+  { id: "frame-reference", label: "参考帧" },
 ];
 
 function renderTemporalTool(tool: TemporalTool) {
@@ -22,6 +24,7 @@ function renderTemporalTool(tool: TemporalTool) {
   if (tool === "focus") return <FocusTimelinePanel />;
   if (tool === "interaction") return <InteractionAnchorPanel />;
   if (tool === "actor-path") return <ActorPathPanel />;
+  if (tool === "frame-reference") return <FrameManifestImporter />;
   return <PathEventPanel />;
 }
 

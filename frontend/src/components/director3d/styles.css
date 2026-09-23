@@ -257,6 +257,26 @@
 .director3d-root .timeline-import-limitations { color: var(--subtle); font-size: 10px; }
 .director3d-root .timeline-import-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .director3d-root .timeline-import-actions .primary { border-color: transparent; color: #052e1b; background: var(--primary); }
+.director3d-root .frame-reference-importer { display: grid; gap: 10px; padding: 10px; border: 1px solid rgba(52,211,153,.28); border-radius: 9px; background: rgba(52,211,153,.045); }
+.director3d-root .frame-reference-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.director3d-root .frame-reference-heading > div { min-width: 0; display: grid; gap: 2px; }
+.director3d-root .frame-reference-heading strong, .director3d-root .frame-reference-summary strong { color: #d1fae5; font-size: 12px; }
+.director3d-root .frame-reference-heading small, .director3d-root .frame-reference-empty small, .director3d-root .frame-reference-summary small { color: var(--subtle); font-size: 9px; }
+.director3d-root .frame-reference-clear, .director3d-root .frame-reference-select, .director3d-root .frame-reference-actions button, .director3d-root .frame-reference-result > button { min-height: 40px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: rgba(255,255,255,.035); }
+.director3d-root .frame-reference-empty { display: grid; gap: 8px; padding: 10px; border: 1px dashed rgba(52,211,153,.28); border-radius: 8px; color: var(--muted); }
+.director3d-root .frame-reference-select { justify-self: start; border-color: rgba(52,211,153,.36); color: #d1fae5; background: rgba(52,211,153,.1); }
+.director3d-root .frame-reference-result { display: grid; gap: 8px; padding: 10px; border: 1px solid rgba(52,211,153,.2); border-radius: 8px; background: rgba(3,7,18,.24); }
+.director3d-root .frame-reference-result.error { border-color: rgba(251,113,133,.35); background: rgba(127,29,29,.08); }
+.director3d-root .frame-reference-result.error strong { color: #fecdd3; }
+.director3d-root .frame-reference-result ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
+.director3d-root .frame-reference-summary { display: grid; gap: 3px; }
+.director3d-root .frame-reference-summary span { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.director3d-root .frame-reference-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 0; }
+.director3d-root .frame-reference-meta > div { min-width: 0; padding: 6px 8px; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; background: rgba(255,255,255,.025); }
+.director3d-root .frame-reference-meta dt { color: var(--subtle); font-size: 9px; }
+.director3d-root .frame-reference-meta dd { margin: 2px 0 0; overflow: hidden; color: var(--muted); font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.director3d-root .frame-reference-note { margin: 0; color: var(--subtle); font-size: 10px; }
+.director3d-root .frame-reference-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .director3d-root .timeline-settings { display: grid; grid-template-columns: 130px 100px minmax(180px, 1fr); }
 .director3d-root .timeline-settings label { display: grid; gap: 3px; color: var(--muted); font-size: 9px; }
 .director3d-root .timeline-settings input, .director3d-root .timeline-track-create select { width: 100%; padding: 0 8px; }

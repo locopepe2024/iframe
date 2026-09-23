@@ -7,8 +7,9 @@ import { downsampleToBezierPoints, parseExternalCameraMotionManifest } from "../
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID, CHARACTER_LABELS, rigProfile } from "../data/humanoid";
 import { mirrorRotation, posePresetById, type PosePresetId } from "../pose/pose-presets";
 import type { RigAdmissionIssue } from "../pose/rig-admission";
-import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
+import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, FrameManifestImportState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
+import { createIdleFrameManifestImportState } from "./frame-manifest-import";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
@@ -719,6 +720,7 @@ export interface WorkbenchState {
   actorMappings: Record<string, ActorMappingState>;
   dialogueTimeline: DialogueTimelineState;
   localAnimationImport: LocalAnimationImportState;
+  frameManifestImport: FrameManifestImportState;
   dialogueReferenceInputs: DialogueReferenceInputState[];
   cameras: Record<string, CameraCompositionState>;
   selectedCameraId: string;
@@ -829,6 +831,8 @@ export interface WorkbenchState {
   setLocalAnimationImportState: (state: LocalAnimationImportState) => void;
   clearLocalAnimationImport: () => void;
   applyLocalAnimationManifest: () => void;
+  setFrameManifestImportState: (state: FrameManifestImportState) => void;
+  clearFrameManifestImport: () => void;
   addTimelineTrack: (track: { trackKind: TimelineTrackKind; targetType: TimelineTargetType; targetId: string; propertyKey: string }) => void;
   removeTimelineTrack: (trackId: string) => void;
   upsertTimelineKeyframe: (trackId: string, keyframe: { keyframeId?: string; timeSeconds: number; value: unknown; interpolation: TimelineInterpolation }) => void;
@@ -1105,6 +1109,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   actorMappings: createInitialActorMappings(),
   dialogueTimeline: createInitialDialogueTimeline(),
   localAnimationImport: createIdleLocalAnimationImportState(),
+  frameManifestImport: createIdleFrameManifestImportState(),
   dialogueReferenceInputs: [],
   cameras: createInitialCameras(),
   selectedCameraId: "camera-main",
@@ -1646,6 +1651,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       playheadFrame: 1,
     };
   }),
+  setFrameManifestImportState: (frameManifestImport) => set((state) => ({
+    frameManifestImport: {
+      ...structuredClone(frameManifestImport),
+      revision: frameManifestImport.status === "ready" ? state.frameManifestImport.revision + 1 : state.frameManifestImport.revision,
+    },
+    unsavedChanges: frameManifestImport.status === "ready" ? true : state.unsavedChanges,
+  })),
+  clearFrameManifestImport: () => set((state) => ({
+    frameManifestImport: { ...createIdleFrameManifestImportState(), revision: state.frameManifestImport.revision + (state.frameManifestImport.manifest ? 1 : 0) },
+    unsavedChanges: state.frameManifestImport.manifest ? true : state.unsavedChanges,
+  })),
   addTimelineTrack: (request) => set((state) => {
     if (!timelineTrackTargetAllowed(state, request.trackKind, request.targetType, request.targetId) || !request.propertyKey.trim()) return state;
     const nextSequence = state.dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;
@@ -2202,6 +2218,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     return {
       ...mutation,
       localAnimationImport: createIdleLocalAnimationImportState(),
+      frameManifestImport: createIdleFrameManifestImportState(),
       selectedCharacterId: preset.selectedCharacterId,
       selectedCharacterIds: preset.selectedCharacterIds,
       selectedSceneObjectId: preset.selectedSceneObjectId,
