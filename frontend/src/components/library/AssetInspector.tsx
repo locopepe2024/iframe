@@ -204,7 +204,7 @@ export default function AssetInspector({
   };
 
   // 生成更多变体：仅 project 资产可用（series 无生成端点）。复用按项目 batch 生成管线，
-  // 完成后 re-fetch 该项目，把新变体并入本地展示并高亮最新一张。
+  // 完成后优先使用任务返回的目标资产快照，并高亮最新一张。
   const handleGenerateVariants = async () => {
     if (sourceKind !== "project" || generating) return;
     const assetId = asset.id;
@@ -235,19 +235,30 @@ export default function AssetInspector({
           : undefined,
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
+      let taskAsset: any;
       if (taskId) {
-        const done = await waitForAssetTask(
+        const completedTask = await waitForAssetTask(
           () => api.getTaskStatus(taskId),
           () => aliveRef.current && currentAssetIdRef.current === assetId,
           t("genFailed"),
         );
-        if (!done) return; // 已卸载
+        if (!completedTask) return; // 已卸载
+        if (
+          completedTask.asset_id === assetId
+          && completedTask.asset_type === SINGULAR_TYPE[type]
+          && completedTask.asset
+        ) {
+          taskAsset = completedTask.asset;
+        }
       }
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
-      const proj = await api.getProject(projectId);
-      const list: (Character | Scene | Prop)[] =
-        (type === "characters" ? proj?.characters : type === "scenes" ? proj?.scenes : proj?.props) ?? [];
-      const updated = list.find((a) => a.id === assetId);
+      let updated = taskAsset;
+      if (!updated) {
+        const proj = await api.getProject(projectId);
+        const list: (Character | Scene | Prop)[] =
+          (type === "characters" ? proj?.characters : type === "scenes" ? proj?.scenes : proj?.props) ?? [];
+        updated = list.find((a) => a.id === assetId);
+      }
       const freshVariants = (updated ? primaryImageAsset(updated, type)?.variants : undefined) ?? [];
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
       const added = freshVariants.filter((v) => !baseIds.has(v.id));

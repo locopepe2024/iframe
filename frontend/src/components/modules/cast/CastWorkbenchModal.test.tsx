@@ -4,12 +4,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
-import CastWorkbenchModal from '@/components/modules/cast/CastWorkbenchModal';
+import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -23,9 +23,38 @@ function setPromptDocument(html: string) {
 }
 beforeEach(() => {
  cleanup();
+ for (const poll of Array.from(activePolls.values())) clearInterval(poll);
+ activePolls.clear();
+ vi.useRealTimers();
  vi.clearAllMocks();
  vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] });
  useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] });
+});
+it('merges the completed target snapshot and clears its marker without fetching the project', async () => {
+ vi.useFakeTimers();
+ const completedAsset = {
+  ...character,
+  reference_sheet: { image_variants: [{ id: 'generated', url: 'generated.png' }], selected_image_id: 'generated' },
+  source: 'episode',
+ };
+ vi.mocked(api.getTaskStatus).mockResolvedValue({
+  status: 'completed', script_id: 'project', asset_id: 'char', asset_type: 'character',
+  asset_source: 'episode', asset: completedAsset,
+ } as any);
+ useProjectStore.setState({ generatingTasks: [{ assetId: 'char', generationType: 'reference_sheet', batchSize: 1 }] });
+ const store = useProjectStore.getState();
+ startAssetPoll('char', 'task', 'project', 'character', 'reference_sheet', ((key: string) => key) as any, () => ({
+  updateProject: store.updateProject,
+  removeGeneratingTask: store.removeGeneratingTask,
+ }));
+
+ await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+
+ expect(useProjectStore.getState().currentProject?.characters).toEqual([completedAsset]);
+ expect(useProjectStore.getState().generatingTasks).toEqual([]);
+ expect(api.getProject).not.toHaveBeenCalled();
+ expect(activePolls.has('char')).toBe(false);
+ vi.useRealTimers();
 });
 it('keeps an uploaded image in the candidate pool until @ explicitly binds it', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);

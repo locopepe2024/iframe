@@ -1034,6 +1034,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("references"),
                     params.get("image_generation_mode", "text"),
                 )
+            task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
             task["status"] = "completed"
             task["progress"] = 100
             logger.info(f"Task {task_id} completed successfully")
@@ -1044,6 +1045,33 @@ class ComicGenPipeline(StudioOwnerMixin):
         finally:
             if provider_token is not None:
                 reset_studio_uniart_config(provider_token)
+
+    def _asset_generation_result(self, task: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Snapshot only the generated asset for incremental task polling."""
+        asset_id = task.get("asset_id")
+        asset_type = task.get("asset_type")
+        if not asset_id or asset_type not in ("character", "scene", "prop"):
+            return None, None
+
+        if task.get("is_series"):
+            series = self.series_store.get(task.get("script_id"))
+            if not series:
+                return None, None
+            pool = getattr(series, f"{asset_type}s", [])
+            asset = next((item for item in pool if item.id == asset_id), None)
+            source = "series"
+        else:
+            script = self.scripts.get(task.get("script_id"))
+            if not script:
+                return None, None
+            asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+
+        if asset is None:
+            return None, None
+        payload = asset.model_dump() if hasattr(asset, "model_dump") else asset.dict()
+        public_source = {"script": "episode", "series": "series", "global": "global"}.get(source, source)
+        payload["source"] = public_source
+        return payload, public_source
 
     def _process_series_asset_task(self, task: Dict, params: Dict):
         """Process a Series asset generation task."""
@@ -1139,17 +1167,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         requested_owner = self._requested_owner_profile_id()
         if requested_owner and task.get("owner_profile_id") != requested_owner:
             return None
-        
-        return {
+
+        result = {
             "task_id": task_id,
             "status": task["status"],
             "progress": task.get("progress", 0),
             "error": task.get("error"),
             "asset_id": task.get("asset_id"),
-            "asset_type": task.get("asset_type"),
+            "asset_type": task.get("result_asset_type", task.get("asset_type")),
             "script_id": task.get("script_id"),
             "created_at": task.get("created_at")
         }
+        if task.get("status") == "completed" and task.get("result_asset"):
+            result["asset"] = task["result_asset"]
+            result["asset_source"] = task.get("asset_source")
+        return result
 
     def get_video_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Return a persisted storyboard video task for the active owner."""
@@ -1224,6 +1256,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 duration=params["duration"],
                 batch_size=params["batch_size"]
             )
+            result_asset_type = "character" if task["asset_type"] in ("full_body", "head_shot") else task["asset_type"]
+            result_task = {**task, "asset_type": result_asset_type}
+            task["result_asset"], task["asset_source"] = self._asset_generation_result(result_task)
+            task["result_asset_type"] = result_asset_type
             task["status"] = "completed"
             task["progress"] = 100
             logger.info(f"Video task {task_id} completed successfully")
@@ -2635,8 +2671,24 @@ class ComicGenPipeline(StudioOwnerMixin):
         if asset_type in ["full_body", "head_shot"]:
             # Handle character asset
             asset_unit = getattr(target_asset, asset_type, None)
-            # Get source image from the AssetUnit or legacy field
-            if asset_unit and asset_unit.selected_image_id:
+            # The canonical reference sheet is the master image in R2V v2.
+            # Use its selected image for full-body motion while keeping the
+            # legacy full_body container as the video-output destination.
+            reference_sheet = getattr(target_asset, "reference_sheet", None) if asset_type == "full_body" else None
+            reference_variants = getattr(reference_sheet, "image_variants", None) or []
+            reference_selected_id = getattr(reference_sheet, "selected_image_id", None)
+            if reference_selected_id and reference_variants:
+                source_img = next((v for v in reference_variants if v.id == reference_selected_id), None)
+                if source_img is None or not source_img.url:
+                    raise ValueError("Selected reference image is missing; select it again")
+                source_image_url = source_img.url
+            elif reference_selected_id and not reference_variants:
+                raise ValueError("Selected reference image is missing; select it again")
+            elif reference_variants:
+                source_image_url = reference_variants[0].url
+            # Fall back to the legacy selected image or URL when no canonical
+            # reference image exists.
+            elif asset_unit and asset_unit.selected_image_id:
                 source_img = next(
                     (v for v in asset_unit.image_variants if v.id == asset_unit.selected_image_id),
                     None
@@ -4755,9 +4807,14 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def _set_variant_favorite(self, image_asset: Any, variant_id: str, is_favorited: bool) -> bool:
         """Helper to set favorite status of a variant. Returns True if found."""
-        if not image_asset or not image_asset.variants:
+        if not image_asset:
             return False
-        for v in image_asset.variants:
+        variants = getattr(image_asset, "image_variants", None)
+        if variants is None:
+            variants = getattr(image_asset, "variants", None)
+        if not variants:
+            return False
+        for v in variants:
             if v.id == variant_id:
                 v.is_favorited = is_favorited
                 return True
@@ -4775,6 +4832,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             if target_asset:
                 if generation_type == "full_body":
                     found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited)
+                elif generation_type == "reference_sheet":
+                    found = self._set_variant_favorite(target_asset.reference_sheet, variant_id, is_favorited)
                 elif generation_type == "three_view":
                     found = self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited)
                 elif generation_type == "headshot":

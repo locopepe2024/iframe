@@ -3155,13 +3155,23 @@ def get_task_status(task_id: str):
 
     if status.get("video_url"):
         return signed_response(status)
-    
-    # If completed, return the updated script as well
-    if status["status"] == "completed":
+
+    # Asset tasks are polled frequently. Keep pending/processing responses
+    # cheap, and sign only the completed target-asset snapshot so the client
+    # can merge it without loading the full project.
+    if status.get("asset_id") and status.get("asset_type") in (
+        "character", "scene", "prop", "full_body", "head_shot"
+    ):
+        if status.get("status") == "completed" and status.get("asset"):
+            return signed_response(status)
+        return status
+
+    # Preserve the legacy completed-script payload for non-asset task callers.
+    if status.get("status") == "completed":
         script = pipeline.get_script(status["script_id"])
         if script:
-            status["script"] = signed_response(script).body.decode('utf-8')
-    
+            status["script"] = signed_response(script).body.decode("utf-8")
+
     return status
 
 

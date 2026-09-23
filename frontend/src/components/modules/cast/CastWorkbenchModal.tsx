@@ -25,6 +25,7 @@ import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
+import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -76,7 +77,7 @@ function withSelectedVariant(project: any, kind: CastKind, entityId: string, var
     };
 }
 
-function startAssetPoll(
+export function startAssetPoll(
     entityId: string,
     taskId: string,
     projectId: string,
@@ -92,29 +93,48 @@ function startAssetPoll(
     if (activePolls.has(entityId)) return;
     const interval = setInterval(async () => {
         try {
+            const key = selectionKey(projectId, kind, entityId);
+            const selectionVersionBeforeRead = selectionVersions.get(key) || 0;
             const status = await api.getTaskStatus(taskId);
             if (status?.status === "completed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const key = selectionKey(projectId, kind, entityId);
-                const version = selectionVersions.get(key) || 0;
-                const fresh = await api.getProject(projectId);
                 const { updateProject, removeGeneratingTask } = getStore();
-                const pending = pendingSelections.get(key);
-                const current = useProjectStore.getState().currentProject;
+                const state = useProjectStore.getState();
+                const current = state.projects.find((project) => project.id === projectId)
+                    || (state.currentProject?.id === projectId ? state.currentProject : null);
                 const currentEntity = current?.id === projectId
                     ? (kind === "character" ? current.characters : kind === "scene" ? current.scenes : current.props)?.find((item: any) => item.id === entityId)
                     : null;
-                const selected = pending || (version !== (selectionVersions.get(key) || 0)
+                const pending = pendingSelections.get(key);
+                const selected = pending || (selectionVersionBeforeRead !== (selectionVersions.get(key) || 0)
                     ? readSelectedId(currentEntity, kind)
                     : null);
-                updateProject(projectId, selected ? withSelectedVariant(fresh, kind, entityId, selected) : fresh);
+                const statusAssetId = status.asset_id || status.asset?.id;
+                const statusTypeMatches = kind === "character"
+                    ? ["character", "full_body", "head_shot"].includes(status.asset_type || "")
+                    : status.asset_type === kind;
+                const patch = statusAssetId === entityId && statusTypeMatches
+                    ? mergeAssetTaskResult(current, status)
+                    : null;
+                let merged = patch && current ? { ...current, ...patch } : null;
+                if (merged && selected) merged = withSelectedVariant(merged, kind, entityId, selected);
+                if (merged && patch) {
+                    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+                    updateProject(projectId, { [field]: merged[field] });
+                } else {
+                    console.error("Completed asset task did not include its target asset snapshot", taskId);
+                }
                 removeGeneratingTask(entityId, generationType);
-                const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
+                const entityPool = (kind === "character" ? merged?.characters : kind === "scene" ? merged?.scenes : merged?.props) || [];
                 const updatedEntity = entityPool.find((e: any) => e.id === entityId);
                 const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                if (updatedEntity) {
+                    toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                } else {
+                    toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
+                }
             } else if (status?.status === "failed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);

@@ -63,6 +63,33 @@ it("does not offer editing when a panel has no selected image", () => {
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
 });
 
+it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const { container } = render(
+        <CharacterWorkbench
+            asset={{
+                id: "character",
+                name: "Test",
+                description: "A character",
+                reference_sheet: {
+                    selected_image_id: "master",
+                    image_variants: [{ id: "master", url: "/files/master.png" }],
+                },
+            }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+        />,
+    );
+
+    const promptFields = Array.from(container.querySelectorAll("[contenteditable]"));
+    expect(promptFields).toHaveLength(3);
+    expect(promptFields[1]).toHaveAttribute("contenteditable", "true");
+    expect(promptFields[2]).toHaveAttribute("contenteditable", "true");
+    expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
+});
+
 it("uploads a new image directly from the static asset panel", async () => {
     const onUploadImage = vi.fn().mockResolvedValue(undefined);
     render(<WorkbenchPanel {...baseProps} onUploadImage={onUploadImage} />);
