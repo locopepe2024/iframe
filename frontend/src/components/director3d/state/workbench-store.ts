@@ -10,6 +10,7 @@ import type { RigAdmissionIssue } from "../pose/rig-admission";
 import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, FrameManifestImportState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
 import { createIdleFrameManifestImportState } from "./frame-manifest-import";
+import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
@@ -833,6 +834,7 @@ export interface WorkbenchState {
   applyLocalAnimationManifest: () => void;
   setFrameManifestImportState: (state: FrameManifestImportState) => void;
   clearFrameManifestImport: () => void;
+  applyActionStructure: (request: { actionId: string; characterId: string; opponentId: string | null; startSeconds: number; durationSeconds: number; includeContact: boolean }) => void;
   addTimelineTrack: (track: { trackKind: TimelineTrackKind; targetType: TimelineTargetType; targetId: string; propertyKey: string }) => void;
   removeTimelineTrack: (trackId: string) => void;
   upsertTimelineKeyframe: (trackId: string, keyframe: { keyframeId?: string; timeSeconds: number; value: unknown; interpolation: TimelineInterpolation }) => void;
@@ -1662,6 +1664,54 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     frameManifestImport: { ...createIdleFrameManifestImportState(), revision: state.frameManifestImport.revision + (state.frameManifestImport.manifest ? 1 : 0) },
     unsavedChanges: state.frameManifestImport.manifest ? true : state.unsavedChanges,
   })),
+  applyActionStructure: (request) => set((state) => {
+    const action = ACTION_STRUCTURES.find((entry) => entry.actionId === request.actionId);
+    const character = state.characters[request.characterId];
+    if (!action || validateActionStructure(action).length || !character || character.locked || !state.actorMappings[character.actorMappingId]) return state;
+    if (!Number.isFinite(request.startSeconds) || request.startSeconds < 0 || !Number.isFinite(request.durationSeconds) || request.durationSeconds < action.durationRangeSeconds[0] || request.durationSeconds > action.durationRangeSeconds[1]) return state;
+    const opponent = request.opponentId ? state.characters[request.opponentId] : null;
+    if (request.opponentId && (!opponent || opponent.characterId === character.characterId)) return state;
+    const startSeconds = request.startSeconds;
+    const endSeconds = startSeconds + request.durationSeconds;
+    if (!Number.isFinite(endSeconds) || endSeconds > 3600) return state;
+    const trackPrefix = `action-${action.actionId}-${character.characterId}-${Math.round(startSeconds * 1000)}`;
+    const basePosition = character.transform.position;
+    const phaseFrames = action.phases.map((phase) => {
+      const preset = posePresetById.get(phase.posePresetId)!;
+      const displacement = phase.rootDisplacementM ?? [0, 0, 0];
+      return {
+        phase,
+        timeSeconds: startSeconds + phase.startFraction * request.durationSeconds,
+        pose: Object.fromEntries(Object.entries({ ...preset.rotations, ...phase.jointOverrides }).map(([jointId, rotation]) => [jointId, [rotation.x, rotation.y, rotation.z]])),
+        position: basePosition.map((value, index) => value + displacement[index]) as [number, number, number],
+      };
+    });
+    const last = phaseFrames.at(-1)!;
+    const keyframes = [...phaseFrames, { ...last, timeSeconds: endSeconds }];
+    const tracks: TimelineTrackState[] = [
+      { trackId: `${trackPrefix}-pose`, trackKind: "character_pose", target: { targetType: "character", targetId: character.characterId }, propertyKey: "pose.normalized_values", keyframes: keyframes.map((frame, index) => ({ keyframeId: `${trackPrefix}-pose-${index}`, timeSeconds: frame.timeSeconds, value: frame.pose, interpolation: frame.phase.interpolation })) },
+      { trackId: `${trackPrefix}-transform`, trackKind: "character_transform", target: { targetType: "character", targetId: character.characterId }, propertyKey: "transform.position_m", keyframes: keyframes.map((frame, index) => ({ keyframeId: `${trackPrefix}-transform-${index}`, timeSeconds: frame.timeSeconds, value: frame.position, interpolation: frame.phase.interpolation })) },
+    ];
+    const existingIds = new Set(tracks.map((track) => track.trackId));
+    const contactPhase = action.phases.find((phase) => phase.phaseId === action.contacts[0]?.phaseId);
+    const contact = request.includeContact && opponent && contactPhase ? [{
+      interactionAnchorId: `${trackPrefix}-contact`, characterId: character.characterId, actorMappingId: character.actorMappingId,
+      jointId: action.contacts[0].sourceJointId,
+      contactTarget: { targetType: "character" as const, targetId: opponent.characterId, worldPositionM: null },
+      contactMode: "touch" as const,
+      startSeconds: startSeconds + contactPhase.startFraction * request.durationSeconds,
+      endSeconds: startSeconds + contactPhase.endFraction * request.durationSeconds,
+      offsetM: [0, 0, 0] as [number, number, number], releasePolicy: "release_at_end" as const,
+      limitation: "reference_constraint_not_physics" as const,
+    }] : [];
+    const dialogueTimeline = {
+      ...state.dialogueTimeline,
+      durationSeconds: Math.max(state.dialogueTimeline.durationSeconds, endSeconds),
+      tracks: [...state.dialogueTimeline.tracks.filter((track) => !existingIds.has(track.trackId)), ...tracks],
+      interactionAnchors: [...state.dialogueTimeline.interactionAnchors.filter((anchor) => anchor.interactionAnchorId !== `${trackPrefix}-contact`), ...contact],
+    };
+    return mutateScene(state, `timeline.action.apply.${action.actionId}.${action.catalogVersion}`, { dialogueTimeline });
+  }),
   addTimelineTrack: (request) => set((state) => {
     if (!timelineTrackTargetAllowed(state, request.trackKind, request.targetType, request.targetId) || !request.propertyKey.trim()) return state;
     const nextSequence = state.dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;

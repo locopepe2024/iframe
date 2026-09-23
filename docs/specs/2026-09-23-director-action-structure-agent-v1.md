@@ -8,6 +8,12 @@ curated, explicitly illustrative `鹤形拳` action sequence. This document does
 not claim a motion-capture solver, a physically correct martial-arts
 reconstruction, or an animation-video export path.
 
+Implementation status (2026-09-23): the local five-phase catalog, deterministic
+text matcher, proposal preview, and one-command pose/transform/contact timeline
+application are implemented. Historical-frame-to-pose H2 mapping and video
+rendering remain unimplemented. Proposal preview lists phases without changing
+authored state; it is not a rendered motion preview.
+
 ## Observed
 
 - **Code fact:** the director already has a versioned humanoid rig profile,

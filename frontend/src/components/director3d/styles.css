@@ -277,6 +277,19 @@
 .director3d-root .frame-reference-meta dd { margin: 2px 0 0; overflow: hidden; color: var(--muted); font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .director3d-root .frame-reference-note { margin: 0; color: var(--subtle); font-size: 10px; }
 .director3d-root .frame-reference-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.director3d-root .action-proposal { display: grid; gap: 9px; padding: 10px; color: var(--text); }
+.director3d-root .action-proposal-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.director3d-root .action-proposal-heading small, .director3d-root .action-proposal p, .director3d-root .action-proposal-preview small { color: var(--muted); font-size: 10px; }
+.director3d-root .action-proposal label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
+.director3d-root .action-proposal input:not([type="checkbox"]), .director3d-root .action-proposal select { width: 100%; min-width: 0; min-height: 36px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: #10191b; }
+.director3d-root .action-proposal button { min-height: 36px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: rgba(255,255,255,.05); }
+.director3d-root .action-proposal button:disabled { opacity: .45; cursor: not-allowed; }
+.director3d-root .action-proposal-detail { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.director3d-root .action-proposal-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.director3d-root .action-proposal .action-proposal-check { display: flex; align-items: center; gap: 6px; }
+.director3d-root .action-proposal-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.director3d-root .action-proposal-preview { padding: 8px; border: 1px solid rgba(52,211,153,.3); border-radius: 6px; background: rgba(52,211,153,.05); }
+.director3d-root .action-proposal-preview ol { margin: 6px 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
 .director3d-root .timeline-settings { display: grid; grid-template-columns: 130px 100px minmax(180px, 1fr); }
 .director3d-root .timeline-settings label { display: grid; gap: 3px; color: var(--muted); font-size: 9px; }
 .director3d-root .timeline-settings input, .director3d-root .timeline-track-create select { width: 100%; padding: 0 8px; }

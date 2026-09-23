@@ -54,9 +54,9 @@ const HEXINGQUAN_CONTENT: ActionStructureContent = {
   defaultFps: 24,
   phases: [
     { phaseId: "prepare", label: "预备", role: "setup", startFraction: 0, endFraction: 0.2, posePresetId: "action.guard", interpolation: "linear" },
-    { phaseId: "lift", label: "提膝展翼", role: "transfer", startFraction: 0.2, endFraction: 0.4, posePresetId: "action.kick", jointOverrides: { upper_arm_l: { x: 0, y: 0, z: 75 }, upper_arm_r: { x: 0, y: 0, z: -75 }, upper_leg_r: { x: -55, y: 0, z: 0 } }, interpolation: "bezier" },
-    { phaseId: "probe", label: "探手", role: "strike", startFraction: 0.4, endFraction: 0.6, posePresetId: "interaction.push", interpolation: "linear" },
-    { phaseId: "contact-recoil", label: "触点与回收", role: "contact", startFraction: 0.6, endFraction: 0.8, posePresetId: "action.guard", interpolation: "linear" },
+    { phaseId: "lift", label: "提膝展翼", role: "transfer", startFraction: 0.2, endFraction: 0.4, posePresetId: "action.kick", jointOverrides: { upper_arm_l: { x: 0, y: 0, z: 75 }, upper_arm_r: { x: 0, y: 0, z: -75 }, upper_leg_r: { x: -55, y: 0, z: 0 } }, rootDisplacementM: [0, 0, 0.1], interpolation: "bezier" },
+    { phaseId: "probe", label: "探手", role: "strike", startFraction: 0.4, endFraction: 0.6, posePresetId: "interaction.push", rootDisplacementM: [0.2, 0, 0], interpolation: "linear" },
+    { phaseId: "contact-recoil", label: "触点与回收", role: "contact", startFraction: 0.6, endFraction: 0.8, posePresetId: "action.guard", rootDisplacementM: [0.08, 0, 0], interpolation: "linear" },
     { phaseId: "recover", label: "收势", role: "end", startFraction: 0.8, endFraction: 1, posePresetId: "standing.relaxed", interpolation: "linear" },
   ],
   roles: { primary: "required", opponent: "optional" },
@@ -85,6 +85,7 @@ export function validateActionStructure(action: ActionStructure): string[] {
   const errors: string[] = [];
   const { checksum, ...content } = action;
   if (!action.actionId || !action.catalogVersion || !action.label || !action.source || checksum !== actionStructureChecksum(content)) errors.push("identity");
+  if (!["curated", "draft", "needs_review"].includes(action.reviewState) || !["illustrative", "reference_derived", "solver_derived"].includes(action.intent.derivation)) errors.push("review");
   if (!action.aliases.length || action.aliases.some((alias) => !alias.trim())) errors.push("aliases");
   if (action.roles.primary !== "required" || action.roles.opponent !== "optional") errors.push("roles");
   const [minimum, maximum] = action.durationRangeSeconds;
@@ -95,6 +96,7 @@ export function validateActionStructure(action: ActionStructure): string[] {
   let end = 0;
   for (const phase of action.phases) {
     if (!phase.phaseId || phaseIds.has(phase.phaseId) || phase.startFraction !== end || !Number.isFinite(phase.endFraction) || phase.endFraction <= end || phase.endFraction > 1) errors.push(`phase:${phase.phaseId}`);
+    if (!["setup", "transfer", "strike", "contact", "recovery", "end"].includes(phase.role) || !["step", "linear", "bezier"].includes(phase.interpolation)) errors.push(`phaseContract:${phase.phaseId}`);
     if (!posePresetById.has(phase.posePresetId)) errors.push(`pose:${phase.phaseId}`);
     if (phase.jointOverrides && Object.entries(phase.jointOverrides).some(([jointId, rotation]) => !joints.has(jointId) || ![rotation.x, rotation.y, rotation.z].every(Number.isFinite))) errors.push(`joints:${phase.phaseId}`);
     if (phase.rootDisplacementM && (phase.rootDisplacementM.length !== 3 || !phase.rootDisplacementM.every(Number.isFinite))) errors.push(`root:${phase.phaseId}`);
@@ -103,7 +105,7 @@ export function validateActionStructure(action: ActionStructure): string[] {
   }
   if (!action.phases.length || end !== 1) errors.push("phaseCoverage");
   for (const contact of action.contacts) {
-    if (!phaseIds.has(contact.phaseId) || !joints.has(contact.sourceJointId) || contact.targetRole !== "opponent" || !contact.targetRegion || contact.limitation !== "reference_constraint_not_physics") errors.push(`contact:${contact.phaseId}`);
+    if (!phaseIds.has(contact.phaseId) || !joints.has(contact.sourceJointId) || contact.targetRole !== "opponent" || !contact.targetRegion || contact.mode !== "touch_candidate" || contact.limitation !== "reference_constraint_not_physics") errors.push(`contact:${contact.phaseId}`);
   }
   return errors;
 }

@@ -290,6 +290,40 @@ it("imports a frame manifest as a read-only reference without touching authored 
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it("previews an illustrative action before one undoable timeline application", () => {
+  render(<App />);
+  const before = useWorkbenchStore.getState().dialogueTimeline;
+  fireEvent.click(screen.getByRole("tab", { name: "动作" }));
+  fireEvent.change(screen.getByLabelText("动作描述"), { target: { value: "让 A 做一段鹤形拳" } });
+  fireEvent.click(screen.getByRole("button", { name: "查找动作" }));
+  expect(screen.getByText("鹤形拳（示意动作结构）")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "应用到时间线" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "预览动作" }));
+  expect(screen.getByText(/待应用：5 段动作/)).toBeInTheDocument();
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
+  fireEvent.click(screen.getByRole("button", { name: "应用到时间线" }));
+  const applied = useWorkbenchStore.getState();
+  expect(applied.dialogueTimeline.tracks.filter((track) => track.trackId.startsWith("action-martial.hexingquan.blocking.v1"))).toHaveLength(2);
+  expect(applied.dialogueTimeline.tracks.at(-2)?.keyframes).toHaveLength(6);
+  expect(applied.undoStack).toHaveLength(1);
+  expect(applied.commandHistory.at(-1)).toContain("timeline.action.apply.martial.hexingquan.blocking.v1");
+  applied.undo();
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("adds an optional contact candidate only for an existing opponent", () => {
+  const before = useWorkbenchStore.getState().dialogueTimeline;
+  useWorkbenchStore.getState().applyActionStructure({ actionId: "martial.hexingquan.blocking.v1", characterId: CHARACTER_A_ID, opponentId: "missing", startSeconds: 0, durationSeconds: 15, includeContact: true });
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
+  useWorkbenchStore.getState().applyActionStructure({ actionId: "martial.hexingquan.blocking.v1", characterId: CHARACTER_A_ID, opponentId: CHARACTER_B_ID, startSeconds: 0, durationSeconds: 15, includeContact: true });
+  const applied = useWorkbenchStore.getState().dialogueTimeline;
+  expect(applied.interactionAnchors).toHaveLength(1);
+  expect(applied.interactionAnchors[0]).toMatchObject({ jointId: "wrist_r", startSeconds: 9, endSeconds: 12, contactTarget: { targetId: CHARACTER_B_ID }, limitation: "reference_constraint_not_physics" });
+  useWorkbenchStore.getState().undo();
+  expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
+});
+
 it("loads deterministic indoor and fight validation scenes without external requests", () => {
   render(<App />);
 

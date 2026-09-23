@@ -10,6 +10,7 @@ it("validates the illustrative five-phase action and its catalog identity", () =
   expect(action.intent.derivation).toBe("illustrative");
   expect(validateActionStructure({ ...action, contacts: [{ ...action.contacts[0], sourceJointId: "missing" }] })).toContain("identity");
   expect(validateActionStructure({ ...action, contacts: [{ ...action.contacts[0], sourceJointId: "missing" }] })).toContain("contact:contact-recoil");
+  expect(validateActionStructure({ ...action, phases: action.phases.map((phase, index) => index === 1 ? { ...phase, role: "invalid" as typeof phase.role } : phase) })).toContain("phaseContract:lift");
 });
 
 it("matches 鹤形拳 without treating unknown or ambiguous names as a proposal", () => {
