@@ -1,19 +1,48 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
-import CastWorkbenchModal from '@/components/modules/cast/CastWorkbenchModal';
+import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
 const project: any = { id: 'project', title: 'Project', characters: [character], scenes: [], props: [] };
 function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
-beforeEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
+beforeEach(() => { cleanup(); for (const poll of Array.from(activePolls.values())) clearInterval(poll); activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
+
+it('applies the completed asset snapshot and clears its task without fetching the project', async () => {
+ vi.useFakeTimers();
+ const completedAsset = {
+  ...character,
+  reference_sheet: { image_variants: [{ id: 'new', url: 'new.png' }], selected_image_id: 'new' },
+  source: 'episode',
+ };
+ vi.mocked(api.getTaskStatus).mockResolvedValue({
+  status: 'completed', asset_id: 'char', asset_type: 'character', asset_source: 'episode', asset: completedAsset,
+ } as any);
+ const updateProject = vi.fn();
+ const removeGeneratingTask = vi.fn();
+ const getProject = vi.fn(() => project);
+ startAssetPoll('char', 'task', 'project', 'character', 'reference_sheet', ((key: string) => key) as any, () => ({
+  updateProject,
+  removeGeneratingTask,
+  getProject,
+}));
+
+ await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+
+ expect(updateProject).toHaveBeenCalledWith('project', expect.objectContaining({ characters: [completedAsset] }));
+ expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet');
+ expect(getProject).toHaveBeenCalledWith('project');
+ expect(api.getProject).not.toHaveBeenCalled();
+ expect(activePolls.has('char')).toBe(false);
+ vi.useRealTimers();
+});
 it('opens upload from the empty gallery and appends a selected reference', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);
  show();

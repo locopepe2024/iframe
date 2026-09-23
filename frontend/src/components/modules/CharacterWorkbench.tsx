@@ -23,7 +23,7 @@ import {
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
-type CharacterEditUploadType = "full_body" | "three_views" | "head_shot";
+type CharacterEditUploadType = "reference_sheet" | "full_body" | "three_views" | "head_shot";
 
 interface CharacterEditTarget {
     source: string;
@@ -32,11 +32,26 @@ interface CharacterEditTarget {
 }
 
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
-    const variants = Array.isArray(unit?.variants) ? unit.variants : [];
+    const variants = Array.isArray(unit?.variants)
+        ? unit.variants
+        : Array.isArray(unit?.image_variants)
+            ? unit.image_variants
+            : [];
     const selectedId = unit?.selected_id || unit?.selected_image_id;
     return variants.find((variant: any) => variant?.id === selectedId)?.url
         || fallback
         || variants.at(-1)?.url;
+}
+
+function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
+    const variants = Array.isArray(referenceSheet?.image_variants)
+        ? referenceSheet.image_variants
+        : [];
+    if (variants.length === 0) return undefined;
+
+    const selectedId = referenceSheet?.selected_image_id;
+    if (selectedId) return variants.find((variant: any) => variant?.id === selectedId)?.url;
+    return variants[0]?.url;
 }
 
 
@@ -105,7 +120,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const hasUploadedFullBody = asset.full_body_asset?.variants?.some((v: any) => v.is_uploaded_source) || false;
     const hasAnyUpload = hasUploadedThreeViews || hasUploadedHeadshot || hasUploadedFullBody;
     const hasNonFullBodyUpload = hasUploadedThreeViews || hasUploadedHeadshot;
-    const hasFullBodyImage = !!(asset.full_body_image_url || (asset.full_body_asset?.variants?.length > 0));
+    // R2V v2 writes the main character image to reference_sheet. Keep the
+    // legacy full_body fields as the fallback so older projects still open.
+    const hasReferenceSheetVariants = !!asset.reference_sheet?.image_variants?.length;
+    const referenceSheetImageUrl = selectedReferenceSheetUrl(asset.reference_sheet);
+    const referenceSheetImageAsset = hasReferenceSheetVariants
+        ? {
+            selected_id: asset.reference_sheet.selected_image_id,
+            variants: asset.reference_sheet.image_variants,
+        }
+        : undefined;
+    // A present canonical pool owns selection, including a broken/missing
+    // selected ID; do not silently display an unrelated legacy image.
+    const masterImageUrl = hasReferenceSheetVariants
+        ? referenceSheetImageUrl
+        : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
+    const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
+    const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
+    const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset
+        ? "reference_sheet"
+        : "full_body";
+    const hasFullBodyImage = !!masterImageUrl;
 
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
@@ -154,7 +189,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
         // Check if source image exists
         const hasSourceImage = assetType === 'full_body'
-            ? (asset.full_body_image_url || asset.full_body_asset?.variants?.length > 0)
+            ? hasFullBodyImage
             : (asset.headshot_image_url || asset.headshot_asset?.variants?.length > 0);
 
         if (!hasSourceImage) {
@@ -275,9 +310,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
-    const handleGenerateClick = (type: "full_body" | "three_view" | "headshot", batchSize: number) => {
+    const handleGenerateClick = (type: "full_body" | "reference_sheet" | "three_view" | "headshot", batchSize: number) => {
         let prompt = "";
-        if (type === "full_body") prompt = fullBodyPrompt;
+        if (type === "full_body" || type === "reference_sheet") prompt = fullBodyPrompt;
         else if (type === "three_view") prompt = threeViewPrompt;
         else if (type === "headshot") prompt = headshotPrompt;
 
@@ -293,7 +328,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return task ? { isGenerating: true, batchSize: task.batchSize || 1 } : { isGenerating: false, batchSize: 1 };
     };
 
-    const handleSelectVariant = async (type: "full_body" | "three_view" | "headshot", variantId: string) => {
+    const handleSelectVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
 
         try {
@@ -304,7 +339,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
     };
 
-    const handleDeleteVariant = async (type: "full_body" | "three_view" | "headshot", variantId: string) => {
+    const handleDeleteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
 
         try {
@@ -315,7 +350,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
     };
 
-    const handleFavoriteVariant = async (type: "full_body" | "three_view" | "headshot", variantId: string, isFavorited: boolean) => {
+    const handleFavoriteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string, isFavorited: boolean) => {
         if (!currentProject) return;
 
         try {
@@ -355,19 +390,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
 
-                        asset={asset.full_body_asset}
-                        currentImageUrl={asset.full_body_image_url}
-                        editImageUrl={selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url)}
-                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url), tc("masterAsset"), "full_body")}
-                        onSelect={(id: string) => handleSelectVariant("full_body", id)}
-                        onDelete={(id: string) => handleDeleteVariant("full_body", id)}
-                        onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("full_body", id, isFav)}
+                        asset={masterAsset}
+                        currentImageUrl={masterImageUrl}
+                        editImageUrl={masterImageUrl}
+                        onEditImage={() => openImageEditor(masterImageUrl, tc("masterAsset"), masterImageUploadType)}
+                        onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
+                        onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
+                        onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
-                        onGenerate={(batchSize: number) => handleGenerateClick("full_body", batchSize)}
-                        isGenerating={getGeneratingInfo("full_body").isGenerating}
-                        generatingBatchSize={getGeneratingInfo("full_body").batchSize}
+                        onGenerate={(batchSize: number) => handleGenerateClick(masterGenerationType, batchSize)}
+                        isGenerating={getGeneratingInfo(masterGenerationType).isGenerating}
+                        generatingBatchSize={getGeneratingInfo(masterGenerationType).batchSize}
                         description="The primary reference for character consistency."
                         aspectRatio="9:16"
 
@@ -378,7 +413,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         supportsMotion={true}
                         mode={fullBodyMode}
                         onModeChange={setFullBodyMode}
-                        hasStaticImage={!!asset.full_body_image_url || (asset.full_body_asset?.variants?.length > 0)}
+                        hasStaticImage={hasFullBodyImage}
                         motionRefVideos={asset.full_body?.video_variants || []}
                         onGenerateMotionRef={(prompt: string, audioUrl?: string) => handleGenerateMotionRef('full_body', prompt, audioUrl)}
                         isGeneratingMotion={generatingTypes.some(t => t.type === "video_full_body")}
@@ -417,7 +452,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
                         isGenerating={getGeneratingInfo("three_view").isGenerating}
                         generatingBatchSize={getGeneratingInfo("three_view").batchSize}
-                        isLocked={!asset.full_body_image_url && !hasAnyUpload}
+                        isLocked={!hasFullBodyImage && !hasAnyUpload}
                         description="Front, side, and back views for 3D-like consistency."
                         aspectRatio="16:9"
                     />
@@ -446,7 +481,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
-                        isLocked={!asset.full_body_image_url && !hasAnyUpload}
+                        isLocked={!hasFullBodyImage && !hasAnyUpload}
                         description="Close-up facial details and expressions."
                         aspectRatio="1:1"
 

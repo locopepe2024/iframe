@@ -29,7 +29,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
+from src.apps.comic_gen.models import AssetUnit, Character, Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.identity import UserContext
 from src.apps.studio_access import reset_studio_user, set_studio_user
@@ -140,6 +140,82 @@ def test_task_status_endpoint_falls_back_to_persisted_video_task(monkeypatch):
     monkeypatch.setattr(api, "signed_response", lambda value: value)
 
     assert api.get_task_status("video-complete") == status
+
+
+def test_task_status_endpoint_returns_asset_snapshot_without_loading_project(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {
+        "task_id": "asset-complete",
+        "status": "completed",
+        "script_id": "project",
+        "asset_id": "character",
+        "asset_type": "character",
+        "asset": {"id": "character", "reference_sheet": {"selected_image_id": "v1"}},
+        "asset_source": "episode",
+    }
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api.pipeline, "get_script", lambda _script_id: pytest.fail("full project lookup is not expected"))
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+
+    result = api.get_task_status("asset-complete")
+
+    assert result == status
+    assert "script" not in result
+
+
+def test_task_status_endpoint_keeps_pending_asset_polls_unsigned(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {
+        "task_id": "asset-pending",
+        "status": "processing",
+        "asset_id": "character",
+        "asset_type": "character",
+    }
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api.pipeline, "get_script", lambda _script_id: pytest.fail("project lookup is not expected"))
+    monkeypatch.setattr(api, "signed_response", lambda _value: pytest.fail("pending status has no media to sign"))
+
+    assert api.get_task_status("asset-pending") == status
+
+
+def test_motion_reference_task_status_includes_only_target_asset_snapshot():
+    character = Character(
+        id="character",
+        name="Test",
+        description="A character",
+        full_body=AssetUnit(video_variants=[]),
+    )
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.asset_generation_tasks = {}
+    pipeline.video_generation_tasks = {
+        "motion-task": {
+            "script_id": script.id,
+            "asset_id": character.id,
+            "asset_type": "full_body",
+            "params": {
+                "prompt": "motion",
+                "audio_url": None,
+                "duration": 5,
+                "batch_size": 1,
+            },
+        },
+    }
+    pipeline.generate_motion_ref = lambda **_kwargs: script
+
+    pipeline.process_motion_ref_task(script.id, "motion-task")
+    status = pipeline.get_asset_generation_task_status("motion-task")
+
+    assert status["status"] == "completed"
+    assert status["asset_id"] == character.id
+    assert status["asset_type"] == "character"
+    assert status["asset_source"] == "episode"
+    assert status["asset"]["id"] == character.id
+    assert "script" not in status
 
 
 # ---------------------------------------------------------------------------

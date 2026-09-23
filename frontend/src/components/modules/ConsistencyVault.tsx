@@ -15,6 +15,7 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -117,18 +118,23 @@ export default function ConsistencyVault() {
 
                         if (status.status === "completed") {
                             clearInterval(pollInterval);
-                            // Refresh project data
-                            const updatedProject = await api.getProject(currentProject.id);
-                            updateProject(currentProject.id, updatedProject);
+                            const store = useProjectStore.getState();
+                            const latestProject = store.projects.find((project) => project.id === currentProject.id)
+                                || (store.currentProject?.id === currentProject.id ? store.currentProject : null);
+                            const patch = mergeAssetTaskResult(latestProject, status);
+                            if (patch) store.updateProject(currentProject.id, patch);
+                            else console.error("Completed asset task did not include its target asset snapshot", taskId);
                             console.log("Asset generated successfully (async)");
 
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
+                            store.removeGeneratingTask(assetId, generationType);
                         } else if (status.status === "failed") {
                             clearInterval(pollInterval);
                             console.error("Asset generation failed:", status.error);
                             alert(taskFailureMessage(status.error));
+
+                            if (removeGeneratingTask) {
+                                removeGeneratingTask(assetId, generationType);
+                            }
 
                             // Also refresh project to show updated status
                             try {
@@ -138,9 +144,6 @@ export default function ConsistencyVault() {
                                 console.error("Failed to refresh project:", refreshError);
                             }
 
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
                         }
                         // If status is "pending" or "processing", continue polling
                     } catch (pollError: any) {
@@ -262,9 +265,21 @@ export default function ConsistencyVault() {
 
                         if (status.status === "completed") {
                             clearInterval(pollInterval);
-                            // Refresh project data
-                            const updatedProject = await api.getProject(currentProject.id);
-                            updateProject(currentProject.id, updatedProject);
+                            const store = useProjectStore.getState();
+                            const latestProject = store.projects.find((project) => project.id === currentProject.id)
+                                || (store.currentProject?.id === currentProject.id ? store.currentProject : null);
+                            const patch = mergeAssetTaskResult(latestProject, status);
+                            if (patch) {
+                                store.updateProject(currentProject.id, patch);
+                            } else {
+                                console.error("Completed motion task did not include its target asset snapshot", taskId);
+                                // Keep the card responsive if an older server omits the snapshot.
+                                void api.getProject(currentProject.id).then((fresh) => {
+                                    useProjectStore.getState().updateProject(currentProject.id, fresh);
+                                }).catch((refreshError) => {
+                                    console.error("Failed to refresh project after motion task:", refreshError);
+                                });
+                            }
                             if (removeGeneratingTask) {
                                 removeGeneratingTask(assetId, generationType);
                             }

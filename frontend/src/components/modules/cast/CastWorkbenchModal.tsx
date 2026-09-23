@@ -24,6 +24,7 @@ import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, T
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
+import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -35,7 +36,7 @@ export type CastKind = "character" | "scene" | "prop";
 // Module-level poll registry — survives modal close/reopen.
 export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
 
-function startAssetPoll(
+export function startAssetPoll(
     entityId: string,
     taskId: string,
     projectId: string,
@@ -45,6 +46,7 @@ function startAssetPoll(
     getStore: () => {
         updateProject: (id: string, data: any) => void;
         removeGeneratingTask: (assetId: string, generationType: string) => void;
+        getProject: (id: string) => any;
     },
     progressToastId?: string,
 ) {
@@ -56,14 +58,23 @@ function startAssetPoll(
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const fresh = await api.getProject(projectId);
-                const { updateProject, removeGeneratingTask } = getStore();
-                updateProject(projectId, fresh);
+                const store = getStore();
+                const { updateProject, removeGeneratingTask } = store;
+                const current = store.getProject(projectId);
+                const patch = mergeAssetTaskResult(current, status);
+                if (patch) {
+                    updateProject(projectId, patch);
+                } else {
+                    console.error("Completed asset task did not include its target asset snapshot", taskId);
+                }
                 removeGeneratingTask(entityId, generationType);
-                const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
-                const updatedEntity = entityPool.find((e: any) => e.id === entityId);
+                const updatedEntity = status.asset?.id === entityId ? status.asset : undefined;
                 const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                if (updatedEntity) {
+                    toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                } else {
+                    toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
+                }
             } else if (status?.status === "failed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
@@ -511,6 +522,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, () => ({
                     updateProject: useProjectStore.getState().updateProject,
                     removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
+                    getProject: (projectId) => {
+                        const state = useProjectStore.getState();
+                        return state.projects.find((project) => project.id === projectId)
+                            || (state.currentProject?.id === projectId ? state.currentProject : undefined);
+                    },
                 }), progressId);
             } else if (resp) {
                 toast.dismiss(progressId);

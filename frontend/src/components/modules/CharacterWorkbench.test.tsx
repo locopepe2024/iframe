@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { WorkbenchPanel } from "./CharacterWorkbench";
+import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -52,6 +52,32 @@ it("does not offer editing when a panel has no selected image", () => {
     render(<WorkbenchPanel {...baseProps} editImageUrl={undefined} onEditImage={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
+});
+
+it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+    render(
+        <CharacterWorkbench
+            asset={{
+                id: "character",
+                name: "Test",
+                description: "A character",
+                reference_sheet: {
+                    selected_image_id: "master",
+                    image_variants: [{ id: "master", url: "/files/master.png" }],
+                },
+            }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+        />,
+    );
+
+    const promptFields = screen.getAllByPlaceholderText("Enter prompt description...");
+    expect(promptFields).toHaveLength(3);
+    expect(promptFields[1]).not.toBeDisabled();
+    expect(promptFields[2]).not.toBeDisabled();
+    expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

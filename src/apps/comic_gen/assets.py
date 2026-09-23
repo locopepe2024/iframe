@@ -109,6 +109,30 @@ class AssetGenerator:
             "reference_variant_id": reference_provenance["variant_id"],
         }
 
+    @staticmethod
+    def _selected_reference_sheet_url(character: Character) -> str:
+        """Return the selected canonical character reference, if one exists."""
+        reference_sheet = getattr(character, "reference_sheet", None)
+        variants = getattr(reference_sheet, "image_variants", None) or []
+        selected_id = getattr(reference_sheet, "selected_image_id", None)
+        if not variants:
+            if selected_id:
+                raise ValueError("Selected reference image is missing; select it again")
+            return ""
+
+        if selected_id:
+            selected = next((variant for variant in variants if variant.id == selected_id), None)
+            if selected is None:
+                raise ValueError("Selected reference image is missing; select it again")
+        else:
+            # Older records may contain a valid reference variant without a
+            # selected id. Match the gallery's first-available display rule.
+            selected = variants[0]
+
+        if not selected.url:
+            raise ValueError("Selected reference image is missing; select it again")
+        return selected.url
+
     def generate_character(
         self,
         character: Character,
@@ -393,6 +417,15 @@ class AssetGenerator:
                 selected_variant = next((v for v in character.full_body_asset.variants if v.id == character.full_body_asset.selected_id), None)
                 if selected_variant:
                     current_full_body_url = selected_variant.url
+
+            # In the canonical schema the selected reference_sheet is the
+            # character's master image. For derived-only generations it must
+            # take precedence over stale legacy full_body fields; `all`
+            # generation still uses the full body produced in that same run.
+            if generation_type in ["three_view", "headshot"]:
+                canonical_reference_url = self._selected_reference_sheet_url(character)
+                if canonical_reference_url:
+                    current_full_body_url = canonical_reference_url
 
             # === REVERSE GENERATION: Allow using uploaded images as reference if no full body ===
             # Check for uploaded images to use as reference when no full body exists

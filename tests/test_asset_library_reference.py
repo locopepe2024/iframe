@@ -109,6 +109,10 @@ def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path
     assert call.kwargs["reference_image_url"] == str(reference_path)
     assert call.kwargs["reference_provenance"] == task["params"]["reference"]
     assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
+    status = pipeline.get_asset_generation_task_status(task_id)
+    assert status["asset"]["id"] == target.id
+    assert status["asset_source"] == "episode"
+    assert "script" not in status
 
 
 def test_library_reference_rejects_foreign_asset_and_wrong_variant(tmp_path, monkeypatch):
@@ -219,6 +223,9 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
     assert call.kwargs["reference_image_url"] == str(reference_path)
     assert call.kwargs["reference_provenance"]["variant_id"] == "global-variant"
     assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
+    status = pipeline.get_asset_generation_task_status(task_id)
+    assert status["asset"]["id"] == target.id
+    assert status["asset_source"] == "series"
 
 
 def test_asset_generation_endpoint_maps_invalid_reference_to_http_400(monkeypatch):
