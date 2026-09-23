@@ -40,6 +40,16 @@ async function open() {
 }
 
 describe("recreation confirmation", () => {
+  it("navigates the six workflow stages and keeps asset management available", async () => {
+    await open();
+    const navigation = screen.getByRole("navigation", { name: "Recreation project stages" });
+    expect(navigation.querySelectorAll("button")).toHaveLength(6);
+    expect(screen.getByRole("button", { name: "Assets" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Contact sheet" })).toBeInTheDocument();
+  });
+
   it("shows a recoverable error when the project API rejects an invalid response", async () => {
     vi.mocked(recreationApi.list).mockRejectedValueOnce(new Error("Invalid recreation project list response"));
     render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);

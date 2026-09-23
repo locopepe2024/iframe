@@ -62,7 +62,7 @@ function Picker({ onSelect, onClose }: { onSelect: (item: RecreationMedia) => vo
   </section>;
 }
 
-export default function ShotReferences({ project, disabled, onSaved }: { project: RecreationProject; disabled: boolean; onSaved: (project: RecreationProject) => void }) {
+export default function ShotReferences({ project, disabled, stage, onSaved }: { project: RecreationProject; disabled: boolean; stage?: "split" | "parse" | "analyze" | "replace" | "submit" | "assemble"; onSaved: (project: RecreationProject) => void }) {
   const t = useTranslations("shotReferences");
   const recreationT = useTranslations("recreation");
   const [shotId, setShotId] = useState(project.timeline?.shots[0]?.id);
@@ -172,13 +172,16 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
     return () => { active = false; window.clearInterval(timer); };
   }, [assemblyTask?.task_id, assemblyTask?.status, t]);
   return <section className="border-t border-border py-5 space-y-4">
-    <h3 className="font-semibold">{t("title")}</h3>
+    <h3 className="font-semibold">{stage ? recreationT(`steps.${stage}`) : t("title")}</h3>
+    {(stage === "replace" || !stage) && <>
     {disabled && <p role="status">{t("confirmFirst")}</p>}
     <select aria-label={t("shot")} className="glass-input max-w-full" value={shotId || ""} onChange={e => setShotId(e.target.value)}>
       {project.timeline?.shots.map((s, i) => <option key={s.id} value={s.id}>{t("shot")} {i + 1} · {seconds(project.analysis!, s.start_pts).toFixed(6)} - {seconds(project.analysis!, s.end_pts).toFixed(6)} s</option>)}
     </select>
-    {modelLoadError && <p role="status" className="text-sm">{t("modelCatalogFallback")}</p>}
     {shot?.id && <ReferenceForm key={`${project.id}:${shot.id}`} project={project} shot={shot} disabled={disabled} imageModel={imageModel} imageModels={imageModels} onImageModelChange={setImageModel} onSaved={onSaved} />}
+    </>}
+    {(stage === "submit" || !stage) && <>
+    {modelLoadError && <p role="status" className="text-sm">{t("modelCatalogFallback")}</p>}
     <label className="block text-sm">{t("videoModel")}<select aria-label={t("videoModel")} className="glass-input block" value={videoModel} disabled={disabled || !videoModels.length} onChange={e => { setVideoModel(e.target.value); setPlan(null); setPlanError(false); }}>
       {videoModels.map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.id}</option>)}
     </select></label>
@@ -197,8 +200,6 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
     {planError && <p role="alert">{t("failed")}</p>}
     {!plan && !disabled && (generationTasks.length > 0 || assemblyTask) && <div className="border-t border-border pt-3 space-y-2 text-sm">
       {generationTasks.map(task => <p key={task.task_id}>{t("shot")} {task.shot_number} · {t(`generationStatus.${task.status}`)}</p>)}
-      {assemblyTask && <p>{t(`assemblyStatus.${assemblyTask.status}`)}</p>}
-      {assemblyTask?.output_media && <><video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" /><a className="glass-button inline-flex" href={url(assemblyTask.output_media.storage_path)} download>{recreationT("download")}</a></>}
     </div>}
     {plan && !disabled && <div className="space-y-3">
       <p role="status">{t(plan.ready ? "planReady" : "planBlocked")}</p>
@@ -220,16 +221,21 @@ export default function ShotReferences({ project, disabled, onSaved }: { project
         }}>{generationBusy ? t("submittingGeneration") : t("submitGeneration")}</button>
         {generationError && <p role="alert" className="text-sm text-red-500 break-words">{generationError}</p>}
         {generationTasks.length > 0 && <ul className="space-y-1 text-sm">{generationTasks.map(task => <li key={task.task_id} className="flex items-center gap-2"><span>{t("shot")} {task.shot_number}</span><span>{t(`generationStatus.${task.status}`)}</span>{(task.status === "pending" || task.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { const cancelled = await recreationApi.cancelGenerationTask(task.task_id); setGenerationTasks(all => all.map(item => item.task_id === cancelled.task_id ? cancelled : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("cancelGeneration")}</button>}{task.status === "failed" && <button type="button" className="glass-button" disabled={!costAccepted} onClick={async () => { try { const retried = await recreationApi.retryGenerationTask(task.task_id, costAccepted); setGenerationTasks(all => all.map(item => item.task_id === retried.task_id ? retried : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("retryGeneration")}</button>}</li>)}</ul>}
-        {generationTasks.length > 0 && generationTasks.every(task => task.status === "completed") && !assemblyTask && <button type="button" className="glass-button" disabled={assemblyBusy} onClick={async () => {
+    </div>}
+    </div>}
+    </>}
+    {(stage === "assemble" || !stage) && <div className="space-y-3">
+      {!generationTasks.length || !generationTasks.every(task => task.status === "completed")
+        ? <p role="status" className="text-sm text-text-muted">{t("assemblyNeedsGeneration")}</p>
+        : !assemblyTask && <button type="button" className="glass-button min-h-11" disabled={assemblyBusy} onClick={async () => {
           if (!generationId) return;
           setAssemblyBusy(true); setAssemblyError("");
           try { setAssemblyTask(await recreationApi.submitAssembly(project, generationId)); }
           catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); }
           finally { setAssemblyBusy(false); }
         }}>{assemblyBusy ? t("assembling") : t("assembleVideo")}</button>}
-        {assemblyError && <p role="alert" className="text-sm text-red-500 break-words">{assemblyError}</p>}
-        {assemblyTask && <div className="space-y-2 text-sm"><p role="status">{t(`assemblyStatus.${assemblyTask.status}`)}</p>{(assemblyTask.status === "pending" || assemblyTask.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { setAssemblyTask(await recreationApi.cancelAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("cancelAssembly")}</button>}{assemblyTask.status === "failed" && <button type="button" className="glass-button" onClick={async () => { try { setAssemblyTask(await recreationApi.retryAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("retryAssembly")}</button>}{assemblyTask.error && <p role="alert" className="text-red-500 break-words">{assemblyTask.error}</p>}{assemblyTask.output_media && <><video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" /><a className="glass-button inline-flex" href={url(assemblyTask.output_media.storage_path)} download>{recreationT("download")}</a></>}</div>}
-      </div>}
+      {assemblyError && <p role="alert" className="text-sm text-red-500 break-words">{assemblyError}</p>}
+      {assemblyTask && <div className="space-y-2 text-sm"><p role="status">{t(`assemblyStatus.${assemblyTask.status}`)}</p>{(assemblyTask.status === "pending" || assemblyTask.status === "processing") && <button type="button" className="glass-button min-h-11" onClick={async () => { try { setAssemblyTask(await recreationApi.cancelAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("cancelAssembly")}</button>}{assemblyTask.status === "failed" && <button type="button" className="glass-button min-h-11" onClick={async () => { try { setAssemblyTask(await recreationApi.retryAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("retryAssembly")}</button>}{assemblyTask.error && <p role="alert" className="text-red-500 break-words">{assemblyTask.error}</p>}{assemblyTask.output_media && <><video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" /><a className="glass-button inline-flex min-h-11 items-center" href={url(assemblyTask.output_media.storage_path)} download>{recreationT("download")}</a></>}</div>}
     </div>}
   </section>;
 }

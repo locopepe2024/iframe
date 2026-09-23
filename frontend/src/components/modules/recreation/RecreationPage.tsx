@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Film, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
 import { CutEvidence, importCuts, recreationApi, RecreationProject, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
+
+const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
+type WorkflowStep = typeof workflowSteps[number];
 
 const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
@@ -21,6 +24,7 @@ export default function RecreationPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [step, setStep] = useState<WorkflowStep>("split");
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const activeId = useRef<string | null>(null);
@@ -40,6 +44,7 @@ export default function RecreationPage() {
     setCuts(record.timeline?.cuts.map(c => c.pts) ?? record.analysis?.candidates.map(c => c.pts) ?? []);
     setEvidence(Object.fromEntries([...(record.analysis?.candidates ?? []), ...Object.values(record.analysis?.manual_evidence ?? {})].map(c => [c.pts, c])));
     setFrameIndex(1); setImportText(""); setError("");
+    setStep(record.status === "confirmed" ? "replace" : record.analysis ? "parse" : "split");
     setProjects(all => [record, ...all.filter(p => p.id !== record.id)]);
   }
 
@@ -83,6 +88,15 @@ export default function RecreationPage() {
     setCuts(all => [...all, pts].sort((a, b) => a - b));
   }
 
+  const stepState = (index: number) => {
+    if (!project) return "pending";
+    if (index === 0) return "complete";
+    if (index === 1) return project.status === "confirmed" ? "complete" : analysis || processing ? "active" : "pending";
+    if (index === 2) return analysis ? "active" : "pending";
+    if (index === 3) return project.status === "confirmed" ? "active" : "pending";
+    return "pending";
+  };
+
   return <div className="h-full overflow-y-auto p-4 md:p-8 text-foreground">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
       <h1 className="text-xl font-semibold flex items-center gap-2"><Film size={22} />{t("title")}</h1>
@@ -121,17 +135,43 @@ export default function RecreationPage() {
               {processing && project.analysis_id && <button className="glass-button flex items-center gap-2" disabled={busy}
                 onClick={() => void act(async () => open(await recreationApi.cancelAnalysis(project)))}>
                 <X size={16} />{t("cancelAnalysis")}</button>}
-              {!analysis && <button className="glass-button flex items-center gap-2" disabled={busy || processing}
-                onClick={() => void act(async () => open(await recreationApi.analyze(project), true))}>
-                {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{t("analyze")}</button>}
             </div>
           </div>
+          <nav aria-label={t("workflowNavigation")} className="sticky top-0 z-10 -mx-2 mb-5 overflow-x-auto border-y border-border bg-background/95 px-2 py-2 backdrop-blur">
+            <ol className="flex min-w-max items-center gap-1">
+              {workflowSteps.map((item, index) => {
+                const state = stepState(index);
+                return <li key={item} className="flex items-center gap-1">
+                  <button type="button" aria-label={t(`steps.${item}`)} aria-current={step === item ? "step" : undefined}
+                    className={`min-h-11 rounded px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${step === item ? "bg-primary/15 text-foreground" : "text-text-muted hover:bg-hover-bg"}`}
+                    onClick={() => setStep(item)}>
+                    <span className="mr-2 inline-flex w-5 justify-center font-mono text-xs">{state === "complete" ? <Check size={14} aria-label={t("complete")} /> : String(index + 1).padStart(2, "0")}</span>{t(`steps.${item}`)}
+                    <span className="sr-only">{t(`stepStatus.${state}`)}</span>
+                  </button>
+                  {index < workflowSteps.length - 1 && <span aria-hidden="true" className="text-text-muted">›</span>}
+                </li>;
+              })}
+            </ol>
+          </nav>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+            <p className="text-sm text-text-muted">{t(`stepDescriptions.${step}`)}</p>
+            <button type="button" className="glass-button inline-flex min-h-11 items-center gap-2" onClick={() => { window.location.hash = "#/library"; }}>
+              <FolderOpen size={16} />{t("openAssets")}
+            </button>
+          </div>
           <video ref={video} src={media(project.source_url)} controls preload="metadata"
-            className="w-full max-h-[420px] aspect-video bg-black object-contain" />
+            className="mb-5 w-full max-h-[420px] aspect-video bg-black object-contain" />
+          {step === "split" && <section aria-labelledby="split-title" className="space-y-3">
+            <h3 id="split-title" className="font-semibold">{t("steps.split")}</h3>
+            {analysis && <p className="text-xs text-text-muted">{analysis.width} × {analysis.height} · {analysis.duration_seconds.toFixed(6)} s · {t("audioTracks", { count: analysis.audio_streams })}</p>}
+            {!analysis && <button className="glass-button flex min-h-11 items-center gap-2" disabled={busy || processing}
+              onClick={() => void act(async () => open(await recreationApi.analyze(project), true))}>
+              {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{processing ? t("analyzing") : t("analyze")}
+            </button>}
+          </section>}
           {project.error && <p role="alert" className="text-red-400 text-sm py-3 break-words">{project.error}</p>}
           {analysis && <>
-            <p className="text-xs text-text-muted py-3">{analysis.width} × {analysis.height} · {analysis.duration_seconds.toFixed(6)} s · {t("audioTracks", { count: analysis.audio_streams })}</p>
-            <section className="border-t border-border py-5">
+            {step === "parse" && <section className="border-t border-border py-5">
               <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                 <h3 className="font-semibold">{t("timeline")} · {cuts.length + 1} {t("shots")}</h3>
                 <button className="glass-button flex items-center gap-2" disabled={busy}
@@ -180,12 +220,17 @@ export default function RecreationPage() {
                   })}>{t("evidence")}</button>}
                 </li>;
               })}</ol>
-            </section>
-            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} onSaved={record => {
+            </section>}
+            {step === "analyze" && <section className="border-t border-border py-5 space-y-3">
+              <h3 className="font-semibold">{t("steps.analyze")}</h3>
+              <p className="text-sm text-text-muted">{t("analysisScope")}</p>
+              <details><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
+                <img src={media(analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
+              </details>
+            </section>}
+            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onSaved={record => {
               setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
             }} />}
-            <details className="border-t border-border py-4"><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
-              <img src={media(analysis.contact_sheet_url)} alt={t("contactSheet")} className="w-full mt-4" /></details>
           </>}
         </>}
       </main>
