@@ -230,6 +230,7 @@
     "libraryReferenceTitle": "选择资产库参考图",
     "libraryReferenceHint": "选择一个资产和具体变体作为本次生成的参考，不会把提供方链接提交到浏览器。",
     "libraryReferenceSelected": "已使用资产库变体作为参考",
+    "selectedVariantReference": "已将所选变体设为生成参考",
     "clearLibraryReference": "清除资产库参考图",
     "closeLibraryReferencePicker": "关闭资产库参考图选择",
     "useLibraryVariant": "使用 {name} 的这张变体作为参考",

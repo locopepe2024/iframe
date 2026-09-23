@@ -24,7 +24,7 @@ import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, T
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { resolveModelId } from "@/lib/modelCatalog";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -279,19 +279,19 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
     // would bypass the refreshed selector and submit the retired SKU anyway.
-    // Keep the legacy local fallback only when the project has no model setting
-    // at all, so older projects still behave as they did before the catalog
-    // became runtime-authoritative.
     const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
-    const selectedModelId = requestedModelId
-        ? resolveModelId("t2i", requestedModelId, "project_settings")
-        : "wan2.1-t2i";
-    const isGptImage2 = selectedModelId === "gpt-image-2";
+    const selectedModelId = resolveAssetGenerationModel(requestedModelId);
+    const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
     const overlayMouseDown = useRef(false);
+
+    useEffect(() => {
+        setLibraryReference(null);
+        setLibraryPickerOpen(false);
+    }, [entityId, kind]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -533,7 +533,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
                 kind === "character" ? "reference_sheet" : "image");
             updateProject(currentProject.id, updated);
-            setLibraryReference(null);
+            const updatedPool = kind === "character"
+                ? updated.characters
+                : kind === "scene"
+                    ? updated.scenes
+                    : updated.props;
+            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id);
+            const uploadedVariantId = readSelectedId(updatedEntity, kind);
+            setLibraryReference(uploadedVariantId ? {
+                asset_type: kind,
+                asset_id: entity.id,
+                variant_id: uploadedVariantId,
+            } : null);
             setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
@@ -567,6 +578,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
+            setLibraryReference({
+                asset_type: kind,
+                asset_id: entity.id,
+                variant_id: variantId,
+            });
             toast.success(t("toastSelected"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -601,6 +617,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         try {
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
+            setLibraryReference((current) => current?.asset_type === kind
+                && current.asset_id === entity.id
+                && current.variant_id === variantId
+                ? null
+                : current);
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -1111,7 +1132,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     />
                                     <div className="min-w-0 flex-1">
                                         <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
-                                        <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
+                                        <p className="text-[0.625rem] text-primary/80">
+                                            {selectedLibraryAsset.asset.asset_id === entity.id
+                                                && selectedLibraryAsset.asset.asset_type === kind
+                                                ? t("selectedVariantReference")
+                                                : t("libraryReferenceSelected")}
+                                        </p>
                                     </div>
                                     <button
                                         type="button"

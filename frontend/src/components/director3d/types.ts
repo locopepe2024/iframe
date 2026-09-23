@@ -1,3 +1,5 @@
+import type { RecreationFrameManifest } from "@/lib/recreation";
+
 export type ControlClass = "product_joint" | "deformation_helper" | "attachment";
 export type EditPolicy = "direct" | "derived" | "read_only";
 export type Axis = "x" | "y" | "z";
@@ -38,6 +40,7 @@ export interface RigProfile {
 
 export type ViewMode = "director" | "top" | "camera";
 export type TransformMode = "translate" | "rotate" | "scale";
+export type DirectorValidationPresetId = "indoor-sofa-wide" | "fight-15s";
 export type PrimitiveKind = "cube" | "sphere" | "cylinder" | "torus" | "cone" | "pyramid";
 export type SceneObjectKind = "primitive" | "proxy" | "model_3d" | "gaussian_splat" | "empty" | "reference_board" | "reference_video";
 
@@ -480,6 +483,61 @@ export interface DialogueTimelineState {
   cameraNoiseTracks: CameraNoiseTrackState[];
   tracks: TimelineTrackState[];
   activeCameraTrackId: string | null;
+}
+
+export type LocalAnimationImportStatus = "idle" | "reading" | "ready" | "applied" | "error";
+export type LocalAnimationTrackKind = "character_pose" | "character_transform";
+
+export interface LocalAnimationTrackManifest {
+  trackId: string;
+  trackKind: LocalAnimationTrackKind;
+  target: { characterId: string };
+  propertyKey: "pose.normalized_values" | "transform.position_m";
+  keyframes: Array<{
+    keyframeId?: string;
+    timeSeconds: number;
+    value: unknown;
+    interpolation: TimelineInterpolation;
+  }>;
+}
+
+export interface LocalAnimationManifest {
+  schemaVersion: "iframe.director3d.local-animation.v1";
+  manifestId: string;
+  title: string;
+  durationSeconds: number;
+  fps: number;
+  source: { kind: "local"; label: string };
+  tracks: LocalAnimationTrackManifest[];
+  limitations: string[];
+}
+
+export interface LocalAnimationCharacterMapping {
+  requestedId: string;
+  characterId: string;
+}
+
+export interface LocalAnimationImportState {
+  status: LocalAnimationImportStatus;
+  fileName: string | null;
+  manifest: LocalAnimationManifest | null;
+  tracks: TimelineTrackState[];
+  characterMappings: LocalAnimationCharacterMapping[];
+  totalKeyframes: number;
+  warnings: string[];
+  errors: string[];
+  appliedAt: string | null;
+}
+
+export type FrameManifestImportStatus = "idle" | "reading" | "ready" | "error";
+
+export interface FrameManifestImportState {
+  status: FrameManifestImportStatus;
+  fileName: string | null;
+  manifest: RecreationFrameManifest | null;
+  revision: number;
+  errors: string[];
+  importedAt: string | null;
 }
 
 export interface DialogueReferenceInputState {
