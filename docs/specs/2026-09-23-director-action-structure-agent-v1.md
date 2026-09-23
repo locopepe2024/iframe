@@ -146,6 +146,47 @@ must not be treated as evidence for the other.
   note. A frame timestamp must resolve to an actual source frame; do not round
   to a nearby frame silently.
 
+#### V1 reviewed frame manifest contract
+
+The first implementation slice is a browser-local pure function exported by
+`frontend/src/lib/recreation.ts`. It accepts the existing `SourceAnalysis`,
+the registered source media identity, and indexed sample/evidence media rows.
+It returns a versioned `RecreationFrameManifest`; it does not call an API or
+mutate a recreation project or director timeline.
+
+The serialized shape uses the frontend's existing snake-case field convention:
+
+```text
+schema_version: "recreation.frame-manifest.v1"
+manifest_id: stable caller-provided id
+source_media_id: registered source video media id
+source_checksum: registered source video sha256
+analysis_id: reviewed source analysis id
+time_base: authoritative source PTS time base
+source_start_pts / source_end_pts / duration_seconds: copied from analysis
+review_state: "draft" | "reviewed"
+frames: ordered unique entries
+  frame_id: stable media-derived id
+  source_pts: exact member of analysis.frame_pts
+  source_seconds: derived from source_pts and time_base
+  evidence_media_id / evidence_media_path: indexed media identity
+  width / height: source analysis dimensions
+  extraction_method: indexed media role or explicit extraction method
+  note: optional review note
+```
+
+The builder must reject a source checksum or source media id that is missing,
+reject media from another project/source/analysis, require every frame PTS to
+be an exact source frame, and reject duplicate PTS. Media rows may arrive in a
+different API/index order; the builder sorts valid rows into source order for
+deterministic export. This is ordering of references only and never a silent
+timestamp snap. `source_checksum` is preserved as provenance, not treated as
+proof that a pose was reconstructed.
+
+The manifest is a read-only evidence handoff. Importing it into the director
+may create reference markers later, but this slice must not create pose,
+transform, contact, or export tracks.
+
 ### Stage H1 — director frame import
 
 - Import is read-only reference data first. It creates a reference strip or
@@ -212,6 +253,10 @@ must not be treated as evidence for the other.
 5. Tests cover exact match, ambiguous/no-match behavior, proposal preview vs
    apply, timeline phase counts, limitation text, undo, and no external
    requests.
+6. The recreation frame-manifest slice covers exact source PTS, deterministic
+   normalization of unsorted media rows, duplicate/out-of-range rejection,
+   source and analysis checksum/identity validation, and proves that it
+   remains a pure read-only export.
 
 ## Affected paths (planned)
 
