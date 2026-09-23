@@ -78,9 +78,10 @@ type ReferenceCandidate = {
 
 | Surface | Prompt control | Candidate source | Binding protocol | Status / gap |
 | --- | --- | --- | --- | --- |
-| Cast character/scene/prop | Cast 生成描述 | project/series/global asset index + uploads | structured `@` token | Cast migration required |
-| Assets character panels | each panel prompt | project asset index + panel uploads | structured `@` token | implemented; refresh uploaded candidates |
-| Assets scene/prop detail | detail prompt / generation action | current asset variants | existing direct generation path | audit before enabling refs |
+| Cast character/scene/prop | Cast 生成描述 | project/series/global asset index + uploads | structured `@` token | implemented in this slice |
+| Assets character panels | each panel prompt | project asset index + panel uploads | structured `@` token | implemented in this slice |
+| Assets scene/prop detail | image generation description | project asset index + uploaded variants | structured `@` token | implemented in this slice |
+| Asset Inspector quick-variant action | no prompt editor | selected asset is only the generation subject | text-only variant reroll | intentionally no references; add an editor before enabling refs |
 | Playground image/edit | Playground PromptInput | selected media/session | Playground media reference contract | separate contract; do not regress |
 | Storyboard R2V | shot prompt / asset drawer | selected asset variants | ordered picture/subject mapping | separate video contract |
 | Recreation | shot description | shot reference assignments | recreation shot binding | separate contract |
@@ -115,6 +116,12 @@ type ReferenceCandidate = {
 - The audit identifies every remaining image/video generation surface and
   records whether it uses this image-token contract or a separate protocol.
 
+The Asset Inspector's "generate more variants" action remains a text-only
+quick action with no reference picker or prompt editor. It does not currently
+submit a hidden provider reference; if that action later gains a prompt or
+reference control, it must adopt this contract rather than reusing a selected
+variant implicitly.
+
 ## What would verify it
 
 - Frontend request-capture tests assert the exact `generateAsset` arguments.
@@ -123,4 +130,3 @@ type ReferenceCandidate = {
 - Typecheck, UI tests, production build, targeted Python tests, and compileall
   pass. Runtime browser validation is separate and requires explicit approval
   under the repository browser-access rules.
-

@@ -1,32 +1,36 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
 import CastWorkbenchModal from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
+Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
+Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
 vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
 const project: any = { id: 'project', title: 'Project', characters: [character], scenes: [], props: [] };
 function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
+function promptEditor() {
+ return screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor };
+}
+function setPromptDocument(html: string) {
+ act(() => { promptEditor().editor.commands.focus(); promptEditor().editor.commands.setContent(html); });
+}
 beforeEach(() => {
  cleanup();
  vi.clearAllMocks();
  vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] });
  useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] });
 });
-it('attaches an uploaded reference without changing the prompt', async () => {
+it('keeps an uploaded image in the candidate pool until @ explicitly binds it', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);
  show();
- fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  const input = screen.getByLabelText('Upload reference image');
- const click = vi.spyOn(input, 'click');
- fireEvent.click(screen.getByText(messages.castWorkbench.emptyVariantsTitle));
- expect(click).toHaveBeenCalledOnce();
  const file = new File(['image'], 'reference.png', { type: 'image/png' });
  vi.mocked(api.uploadAsset).mockResolvedValue({ ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] });
  fireEvent.change(input, { target: { files: [file] } });
@@ -35,13 +39,45 @@ it('attaches an uploaded reference without changing the prompt', async () => {
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
- expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([{
-  asset_type: 'character',
-  asset_id: 'char',
-  variant_id: 'one',
- }]);
- expect(vi.mocked(api.generateAsset).mock.calls[0][14]).toBe('reference');
+ expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([]);
+ expect(vi.mocked(api.generateAsset).mock.calls[0][14]).toBe('text');
  expect(vi.mocked(api.generateAsset).mock.calls[0][6]).not.toContain('@');
+});
+
+it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {
+ const withLibrary = { ...project, scenes: [{ id: 'scene-1', name: 'Night train', description: 'Train' }], props: [{ id: 'prop-1', name: 'Pocket watch', description: 'Watch' }] };
+ useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({
+  schema_version: 1,
+  project_id: 'project',
+  assets: [
+   { asset_type: 'scene', asset_id: 'scene-1', name: 'Night train', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'scene-v1', variants: [{ id: 'scene-v1', url: 'scene.png' }] },
+   { asset_type: 'prop', asset_id: 'prop-1', name: 'Pocket watch', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'prop-v1', variants: [{ id: 'prop-v1', url: 'watch.png' }] },
+  ],
+ });
+ vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
+ show();
+ await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this Night train variant in the available reference pool' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this Pocket watch variant in the available reference pool' }));
+
+ setPromptDocument('<p>@</p>');
+ expect(screen.getByRole('listbox', { name: 'Reference index' })).toHaveTextContent('Night train');
+ fireEvent.click(screen.getByRole('option', { name: /Night train/ }));
+ act(() => { promptEditor().editor.commands.insertContent('@'); });
+ fireEvent.click(screen.getByRole('option', { name: /Pocket watch/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ const args = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(args[13]).toEqual([
+  { asset_type: 'scene', asset_id: 'scene-1', variant_id: 'scene-v1' },
+  { asset_type: 'prop', asset_id: 'prop-1', variant_id: 'prop-v1' },
+ ]);
+ expect(args[14]).toBe('reference');
+ expect(JSON.stringify(args)).not.toContain('scene.png');
 });
 it('selects a canonical output without silently using it as generation input', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
@@ -105,8 +141,8 @@ it('keeps provider prompts out of the default customer view', async () => {
  show();
 
  const promptEditor = screen.getByRole('textbox');
- expect((promptEditor as HTMLTextAreaElement).value).toContain('构图：');
- expect((promptEditor as HTMLTextAreaElement).value).not.toContain('Composition:');
+ expect(promptEditor).toHaveTextContent('构图：');
+ expect(promptEditor).not.toHaveTextContent('Composition:');
  expect(screen.queryByText(stylePrompt)).toBeNull();
  expect(screen.getByTestId('cast-generation-summary')).toHaveTextContent('E-commerce Product Advertisement');
 
@@ -133,13 +169,12 @@ it('attaches a specific asset-library variant and submits only stable ids', asyn
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
- fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
- const promptBefore = (screen.getByRole('textbox') as HTMLTextAreaElement).value;
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Add this Tea room variant as a reference image' }));
- expect(screen.getByLabelText('Reference images for this generation')).toHaveTextContent('Tea room');
- expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(promptBefore);
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
+ setPromptDocument('<p>@Tea room</p>');
+ fireEvent.click(screen.getByRole('option', { name: /Tea room/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
 
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
@@ -147,7 +182,7 @@ it('attaches a specific asset-library variant and submits only stable ids', asyn
  expect(args[12]).toBeUndefined();
  expect(args[13]).toEqual([{ asset_type: 'scene', asset_id: 'library-scene', variant_id: 'scene-variant' }]);
  expect(args[14]).toBe('reference');
- expect(args[6]).not.toContain('@');
+ expect(args[6]).toContain('@Tea room');
  expect(JSON.stringify(args)).not.toContain('users/owner/scene.png');
 });
 
@@ -170,11 +205,10 @@ it('removes an explicit reference image before the next text-to-image request', 
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
- fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Add this Tea cup variant as a reference image' }));
- fireEvent.click(screen.getByRole('button', { name: 'Remove Tea cup reference' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea cup variant in the available reference pool' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Remove Tea cup from available references' }));
  fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
@@ -204,11 +238,10 @@ it('loads a global library reference from the server asset index', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(localProject as any);
  show();
 
- fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- const referenceButton = await screen.findByRole('button', { name: 'Add this Shared tea room variant as a reference image' });
+ const referenceButton = await screen.findByRole('button', { name: 'Toggle this Shared tea room variant in the available reference pool' });
  fireEvent.click(referenceButton);
- expect(screen.getByLabelText('Reference images for this generation')).toHaveTextContent('Shared tea room');
+ expect(screen.getByLabelText('Available reference candidates')).toHaveTextContent('Shared tea room');
  expect(api.listLibraryAssets).not.toHaveBeenCalled();
 });

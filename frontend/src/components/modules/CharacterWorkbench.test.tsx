@@ -162,6 +162,7 @@ it("loads the project reference index for the character workbench", async () => 
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(screen.getByRole("option"));
     fireEvent.click(screen.getByRole("option"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",

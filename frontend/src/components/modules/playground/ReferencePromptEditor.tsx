@@ -130,12 +130,13 @@ export function referenceSelectionsFromEditor(editor: Editor): AssetLibraryRefer
   return references;
 }
 
-export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onReferencesChange, allowImplicitMentions = true, editable = true }: {
+export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false }: {
   value: string; labels?: string[]; candidates?: ReferenceCandidate[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
   onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
   onReferencesChange?: (references: AssetLibraryReference[]) => void;
   allowImplicitMentions?: boolean;
   editable?: boolean;
+  pruneUnlistedReferences?: boolean;
 }) {
   const lastLocalValue = useRef<string | null>(null);
   const currentCandidates = useRef<ReferenceCandidate[]>(candidates ?? labels.map((label) => ({ label })));
@@ -186,7 +187,27 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   useEffect(() => {
     if (!editor) return;
     const existingNames: string[] = [];
-    editor.state.doc.descendants((node) => { if (node.type.name === 'referenceToken') existingNames.push(node.attrs.label); });
+    let hasUnlistedReference = false;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name !== 'referenceToken') return;
+      existingNames.push(node.attrs.label);
+      if (pruneUnlistedReferences && node.attrs.asset_type && node.attrs.asset_id && node.attrs.variant_id) {
+        const listed = currentCandidates.current.some((candidate) => {
+          const reference = candidate.reference;
+          return reference?.asset_type === node.attrs.asset_type
+            && reference?.asset_id === node.attrs.asset_id
+            && reference?.variant_id === node.attrs.variant_id;
+        });
+        if (!listed) hasUnlistedReference = true;
+      }
+    });
+    if (hasUnlistedReference) {
+      const document = referencePromptDocument(value, currentCandidates.current, false, allowImplicitMentions);
+      if (!editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {
+        editor.commands.setContent(document, { emitUpdate: false });
+      }
+      return;
+    }
     // Character prompts use explicit selection only. Keeping the current rich
     // document when its plain text is unchanged preserves selected token
     // metadata and avoids upgrading manually typed @names into references.
@@ -202,6 +223,6 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       const end = editor.state.doc.content.size - 1;
       editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
     }
-  }, [editor, value, labels, candidates, allowImplicitMentions]);
+  }, [editor, value, labels, candidates, allowImplicitMentions, pruneUnlistedReferences]);
   return <EditorContent editor={editor} className="min-w-0 w-full" />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
@@ -15,6 +15,8 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
+import { toast } from "@/store/toastStore";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -494,7 +496,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, "all", "", applyStyle, negativePrompt, batchSize)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -540,10 +542,16 @@ export default function ConsistencyVault() {
 }
 
 function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: any) {
+    const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const [imagePrompt, setImagePrompt] = useState(asset.image_prompt || asset.description || "");
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
+    const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
+    const [assetIndex, setAssetIndex] = useState<any[]>([]);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
 
     // Style Controls
     const [applyStyle, setApplyStyle] = useState(true);
@@ -557,11 +565,54 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     // Sync local state if asset changes
     useEffect(() => {
         setDescription(asset.description);
+        setImagePrompt(asset.image_prompt || asset.description || "");
+        setPromptReferences([]);
+        setMention(null);
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
         else if (!videoPrompt) {
             setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
         }
     }, [asset]);
+
+    useEffect(() => {
+        if (!currentProject?.id) {
+            setAssetIndex([]);
+            return;
+        }
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id)
+            .then((index) => {
+                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.length));
+            })
+            .catch(() => {
+                if (active) setAssetIndex([]);
+            });
+        return () => { active = false; };
+    }, [currentProject?.id, asset.id]);
+
+    const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
+        const labels = new Set<string>();
+        return assetIndex.flatMap((entry) => (entry.variants || []).map((variant: any, index: number) => {
+            if (!variant?.id) return null;
+            const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const baseLabel = entry.variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
+            let label = baseLabel;
+            let suffix = 2;
+            while (labels.has(label)) label = `${baseLabel} ${suffix++}`;
+            labels.add(label);
+            return {
+                label,
+                previewUrl: getAssetUrl(variant.url),
+                sourceLabel: entry.source_scope,
+                variantLabel,
+                reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+            };
+        }).filter(Boolean) as ReferenceCandidate[]);
+    }, [assetIndex]);
+
+    const matchingReferenceCandidates = referenceCandidates.filter((candidate) =>
+        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+    );
 
     // Sync negative prompt if style changes
     useEffect(() => {
@@ -596,7 +647,15 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     };
 
     const handleGenerateClick = (batchSize: number) => {
-        onGenerate(applyStyle, negativePrompt, batchSize);
+        if (imageGenerationMode === "reference" && promptReferences.length === 0) {
+            toast.warning(tv("referenceModeRequiresExplicit"));
+            return;
+        }
+        if (imageGenerationMode === "text" && promptReferences.length > 0) {
+            toast.warning(tv("referenceModeSelectExplicitly"));
+            return;
+        }
+        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize, promptReferences, imageGenerationMode);
     };
 
     return (
@@ -690,6 +749,66 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 </p>
                             )}
                         </div>
+
+                        {/* Image generation description. Selecting/uploading a
+                            variant only makes it available; @ in this editor
+                            is the explicit binding sent to the provider. */}
+                        {activeTab === "image" && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-bold text-text-secondary uppercase">{tv("imagePromptLabel")}</label>
+                                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label="Image generation mode">
+                                        {(["text", "reference"] as const).map((mode) => (
+                                            <button
+                                                key={mode}
+                                                type="button"
+                                                aria-pressed={imageGenerationMode === mode}
+                                                onClick={() => setImageGenerationMode(mode)}
+                                                className={`rounded px-2 py-1 text-[0.6875rem] ${imageGenerationMode === mode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                                            >
+                                                {mode === "text" ? tv("textGenerationMode") : tv("referenceGenerationMode")}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="relative rounded-lg border border-glass-border bg-input-bg p-3 focus-within:border-primary/50">
+                                    <ReferencePromptEditor
+                                        value={imagePrompt}
+                                        candidates={referenceCandidates}
+                                        onChange={setImagePrompt}
+                                        onReferencesChange={setPromptReferences}
+                                        onMentionChange={setMention}
+                                        allowImplicitMentions={false}
+                                        pruneUnlistedReferences
+                                        editable={!isGenerating}
+                                        placeholder={tv("imagePromptPlaceholder")}
+                                    />
+                                    {mention && (
+                                        <div role="listbox" aria-label="Reference index" className="absolute bottom-full left-0 z-50 mb-2 max-h-56 w-[min(100%,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
+                                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">{tv("referenceIndex")}</div>
+                                            {matchingReferenceCandidates.length === 0 ? (
+                                                <div className="px-2 py-2 text-xs text-text-muted">{referenceCandidates.length ? tv("noMatchingReference") : tv("noAvailableReference")}</div>
+                                            ) : matchingReferenceCandidates.map((candidate) => (
+                                                <button
+                                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                                    type="button"
+                                                    role="option"
+                                                    onMouseDown={(event) => event.preventDefault()}
+                                                    onClick={() => { mention.choose(candidate); setMention(null); }}
+                                                    className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover-bg"
+                                                >
+                                                    {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={14} className="text-text-muted" />}
+                                                    <span className="truncate text-xs text-foreground">@{candidate.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                {promptReferences.length > 0 && (
+                                    <p className="text-[0.6875rem] text-primary">{tv("explicitReferenceCount", { count: promptReferences.length, suffix: promptReferences.length === 1 ? "" : "s" })}</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Video Prompt (Only visible in Video Tab) */}
                         {activeTab === "video" && (

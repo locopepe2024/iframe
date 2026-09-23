@@ -76,6 +76,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         three_view: [],
         headshot: [],
     });
+    const [promptModes, setPromptModes] = useState<Record<"full_body" | "three_view" | "headshot", "text" | "reference">>({
+        full_body: "text",
+        three_view: "text",
+        headshot: "text",
+    });
 
     useEffect(() => {
         const projectId = currentProject?.id;
@@ -96,6 +101,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
+        setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
     }, [asset.id]);
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
@@ -132,6 +138,42 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
     };
 
+    // Uploads are immediately usable in the same explicit @ index. The
+    // project asset index is fetched once per workbench session, so merge the
+    // newly created selected variant locally instead of requiring a reload.
+    const retainUploadedVariantInIndex = (updatedProject: any, uploadType: CharacterEditUploadType) => {
+        const updatedAsset = updatedProject?.characters?.find((item: any) => item.id === asset.id);
+        const unit = uploadType === "full_body"
+            ? updatedAsset?.full_body_asset
+            : uploadType === "three_views"
+                ? updatedAsset?.three_view_asset
+                : updatedAsset?.headshot_asset;
+        const variant = selectedVariant(unit);
+        if (!variant?.id) return;
+        setAssetIndex((current) => {
+            const existing = current.find((entry) => entry.asset_type === "character" && entry.asset_id === asset.id);
+            if (!existing) {
+                return [...current, {
+                    asset_type: "character",
+                    asset_id: asset.id,
+                    name: updatedAsset?.name || asset.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject?.id || null,
+                    selected_variant_id: variant.id,
+                    variants: [{ id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
+                }];
+            }
+            if (existing.variants.some((item) => item.id === variant.id)) return current;
+            return current.map((entry) => entry === existing
+                ? {
+                    ...entry,
+                    selected_variant_id: variant.id,
+                    variants: [...entry.variants, { id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
+                }
+                : entry);
+        });
+    };
+
     const uploadCharacterImage = async (file: File, uploadType: CharacterEditUploadType) => {
         if (!currentProject) throw new Error("Project is no longer available");
         const updatedProject = await api.uploadAsset(
@@ -143,6 +185,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             asset.description,
         );
         updateProject(currentProject.id, updatedProject);
+        retainUploadedVariantInIndex(updatedProject, uploadType);
         toast.success(tc("uploadRef"));
     };
 
@@ -157,6 +200,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             asset.description,
         );
         updateProject(currentProject.id, updatedProject);
+        retainUploadedVariantInIndex(updatedProject, editTarget.uploadType);
         toast.success(ti("saved"));
         setEditTarget(null);
     };
@@ -361,11 +405,24 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         else if (type === "headshot") prompt = headshotPrompt;
 
         const references = promptReferences[type];
-        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, references.length ? "reference" : "text");
+        const imageGenerationMode = promptModes[type];
+        if (imageGenerationMode === "reference" && references.length === 0) {
+            toast.warning("Add at least one explicit @ reference before generating.");
+            return;
+        }
+        if (imageGenerationMode === "text" && references.length > 0) {
+            toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
+            return;
+        }
+        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode);
     };
 
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
         setPromptReferences((current) => ({ ...current, [type]: references }));
+    };
+
+    const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
+        setPromptModes((current) => ({ ...current, [type]: mode }));
     };
 
     // Helper to check if a specific type is generating
@@ -452,6 +509,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setFullBodyPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
+                        imageGenerationMode={promptModes.full_body}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("full_body", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("full_body", batchSize)}
                         isGenerating={getGeneratingInfo("full_body").isGenerating}
                         generatingBatchSize={getGeneratingInfo("full_body").batchSize}
@@ -504,6 +563,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setThreeViewPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
+                        imageGenerationMode={promptModes.three_view}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
                         isGenerating={getGeneratingInfo("three_view").isGenerating}
                         generatingBatchSize={getGeneratingInfo("three_view").batchSize}
@@ -536,6 +597,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setHeadshotPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
+                        imageGenerationMode={promptModes.headshot}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
@@ -676,6 +739,8 @@ export function WorkbenchPanel({
     setPrompt,
     referenceCandidates = [],
     onReferencesChange,
+    imageGenerationMode = "text",
+    onImageGenerationModeChange,
     onGenerate,
     isGenerating,
     generatingBatchSize,
@@ -1011,6 +1076,19 @@ export function WorkbenchPanel({
             <div className="h-1/3 border-t border-glass-border flex flex-col bg-surface">
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
+                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
+                        {(["text", "reference"] as const).map((generationMode) => (
+                            <button
+                                key={generationMode}
+                                type="button"
+                                aria-pressed={imageGenerationMode === generationMode}
+                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
+                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                            >
+                                {generationMode === "text" ? "Text to image" : "Reference image"}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 <div className="relative min-h-0 flex-1 overflow-visible p-4">
                     <ReferencePromptEditor
@@ -1020,6 +1098,7 @@ export function WorkbenchPanel({
                         onReferencesChange={onReferencesChange}
                         onMentionChange={setMention}
                         allowImplicitMentions={false}
+                        pruneUnlistedReferences
                         editable={!isLocked}
                         placeholder="Enter prompt description..."
                     />
