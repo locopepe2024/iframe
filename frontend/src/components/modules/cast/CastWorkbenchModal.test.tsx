@@ -86,6 +86,7 @@ it('selects a canonical output without silently using it as generation input', a
  vi.mocked(api.generateAsset).mockResolvedValue(withVariants as any);
  show(); fireEvent.click(screen.getByText('Test one'));
  await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'reference_sheet'));
+ expect(screen.getByLabelText('Available reference candidates')).toHaveTextContent('Test');
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();

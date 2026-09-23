@@ -687,6 +687,26 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
+            const updatedPool = kind === "character"
+                ? updated.characters
+                : kind === "scene"
+                    ? updated.scenes
+                    : updated.props;
+            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id) || entity;
+            const selectedVariant = readLibraryVariants(updatedEntity, kind).find((variant) => variant.id === variantId);
+            if (selectedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: kind,
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: selectedVariant.id,
+                    variants: [selectedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, selectedVariant);
+                addAvailableReference(indexedAsset, selectedVariant);
+            }
             toast.success(t("toastSelected"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
