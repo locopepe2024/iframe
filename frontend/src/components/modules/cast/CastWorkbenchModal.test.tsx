@@ -93,6 +93,24 @@ it('selects a canonical output without silently using it as generation input', a
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([]);
  expect(vi.mocked(api.generateAsset).mock.calls[0][14]).toBe('text');
 });
+it('updates the selected output before a slow response and preserves the latest click', async () => {
+ const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'uploaded', url: 'uploaded.png' }, { id: 'generated', url: 'generated.png' }], selected_image_id: 'uploaded' }, image_url: 'uploaded.png' }] };
+ useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });
+ let finishFirst!: (value: any) => void;
+ vi.mocked(api.selectAssetVariant)
+  .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
+  .mockResolvedValueOnce({ ...withVariants, characters: [{ ...withVariants.characters[0], reference_sheet: { ...withVariants.characters[0].reference_sheet, selected_image_id: 'uploaded' } }] } as any);
+ show();
+ fireEvent.click(screen.getByText('Test generated'));
+ expect(useProjectStore.getState().currentProject?.characters[0].reference_sheet?.selected_image_id).toBe('generated');
+ expect(useProjectStore.getState().currentProject?.characters[0].image_url).toBe('generated.png');
+ await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledTimes(1));
+ fireEvent.click(screen.getByText('Test uploaded'));
+ expect(useProjectStore.getState().currentProject?.characters[0].reference_sheet?.selected_image_id).toBe('uploaded');
+ finishFirst({ ...withVariants, characters: [{ ...withVariants.characters[0], reference_sheet: { ...withVariants.characters[0].reference_sheet, selected_image_id: 'generated' } }] });
+ await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledTimes(2));
+ await waitFor(() => expect(useProjectStore.getState().currentProject?.characters[0].reference_sheet?.selected_image_id).toBe('uploaded'));
+});
 it('allows retrying the same file after upload fails', async () => {
  vi.mocked(api.uploadAsset).mockRejectedValue(new Error('Upload unavailable'));
  show(); fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));

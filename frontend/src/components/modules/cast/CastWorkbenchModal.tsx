@@ -41,6 +41,40 @@ export type CastKind = "character" | "scene" | "prop";
 
 // Module-level poll registry — survives modal close/reopen.
 export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
+const pendingSelections = new Map<string, string>();
+const selectionVersions = new Map<string, number>();
+
+function selectionKey(projectId: string, kind: CastKind, entityId: string) {
+    return `${projectId}:${kind}:${entityId}`;
+}
+
+function withSelectedVariant(project: any, kind: CastKind, entityId: string, variantId: string): any {
+    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+    return {
+        ...project,
+        [field]: (project[field] || []).map((asset: any) => {
+            if (asset.id !== entityId) return asset;
+            const sheetVariant = kind === "character"
+                ? asset.reference_sheet?.image_variants?.find((item: any) => item.id === variantId)
+                : null;
+            if (sheetVariant) return {
+                ...asset,
+                reference_sheet: { ...asset.reference_sheet, selected_image_id: variantId },
+                image_url: sheetVariant.url,
+            };
+            const unit = kind === "character" ? asset.full_body_asset : asset.image_asset;
+            const variant = unit?.variants?.find((item: any) => item.id === variantId);
+            if (!variant) return asset;
+            if (kind === "character") return {
+                ...asset,
+                full_body_asset: { ...unit, selected_id: variantId },
+                full_body_image_url: variant.url,
+                image_url: variant.url,
+            };
+            return { ...asset, image_asset: { ...unit, selected_id: variantId }, image_url: variant.url };
+        }),
+    };
+}
 
 function startAssetPoll(
     entityId: string,
@@ -63,9 +97,19 @@ function startAssetPoll(
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
+                const key = selectionKey(projectId, kind, entityId);
+                const version = selectionVersions.get(key) || 0;
                 const fresh = await api.getProject(projectId);
                 const { updateProject, removeGeneratingTask } = getStore();
-                updateProject(projectId, fresh);
+                const pending = pendingSelections.get(key);
+                const current = useProjectStore.getState().currentProject;
+                const currentEntity = current?.id === projectId
+                    ? (kind === "character" ? current.characters : kind === "scene" ? current.scenes : current.props)?.find((item: any) => item.id === entityId)
+                    : null;
+                const selected = pending || (version !== (selectionVersions.get(key) || 0)
+                    ? readSelectedId(currentEntity, kind)
+                    : null);
+                updateProject(projectId, selected ? withSelectedVariant(fresh, kind, entityId, selected) : fresh);
                 removeGeneratingTask(entityId, generationType);
                 const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
                 const updatedEntity = entityPool.find((e: any) => e.id === entityId);
@@ -289,6 +333,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
@@ -532,25 +577,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 onClose();
                 return;
             }
-            if (libraryReference) {
-                const freshAsset = (pool || []).find((item: any) => item?.id === libraryReference.asset_id);
-                const freshVariant = freshAsset
-                    ? readLibraryVariants(freshAsset, libraryReference.asset_type).find(
-                        (variant) => variant.id === libraryReference.variant_id,
-                    )
-                    : undefined;
-                // Older project responses can omit a valid shared asset. Only
-                // reject when the fresh response contains the asset and
-                // proves that this selected variant was deleted.
-                if (freshAsset && !freshVariant) {
-                    setLibraryReference(null);
-                    toast.warning(t("toastReferenceStale"), {
-                        projectId: currentProject.id,
-                        projectTitle: currentProject.title,
-                    });
-                    updateProject(currentProject.id, fresh);
-                    return;
-                }
+            const freshIndex = activePromptReferences.length > 0
+                ? await api.getAssetReferenceIndex(currentProject.id)
+                : null;
+            const staleReference = activePromptReferences.find((reference) => {
+                const indexedAsset = freshIndex?.assets.find((item) => item.asset_type === reference.asset_type
+                    && item.asset_id === reference.asset_id);
+                return !indexedAsset?.variants.some((variant) => variant.id === reference.variant_id);
+            });
+            if (staleReference) {
+                removeAvailableReference(staleReference);
+                toast.warning(t("toastReferenceStale"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                updateProject(currentProject.id, fresh);
+                return;
             }
             updateProject(currentProject.id, fresh);
         } catch {
@@ -697,49 +739,62 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         toggleAvailableReference(asset, variant);
     };
 
-    const handleSelectVariant = async (variantId: string) => {
-        try {
-            const updated = await api.selectAssetVariant(
-                currentProject.id,
-                entity.id,
-                kind,
-                variantId,
-                kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
-            );
-            updateProject(currentProject.id, updated);
-            const updatedPool = kind === "character"
-                ? updated.characters
-                : kind === "scene"
-                    ? updated.scenes
-                    : updated.props;
-            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id) || entity;
-            const selectedVariant = readLibraryVariants(updatedEntity, kind).find((variant) => variant.id === variantId);
-            if (selectedVariant) {
-                const indexedAsset: ReferenceLibraryAsset = {
-                    asset_type: kind,
-                    asset_id: entity.id,
-                    name: entity.name,
-                    source_scope: "episode",
-                    source_container_id: currentProject.id,
-                    selected_variant_id: selectedVariant.id,
-                    variants: [selectedVariant],
-                };
-                retainUploadedVariantInIndex(indexedAsset, selectedVariant);
-                addAvailableReference(indexedAsset, selectedVariant);
+    const handleSelectVariant = (variantId: string) => {
+        const projectId = currentProject.id;
+        const assetId = entity.id;
+        const key = selectionKey(projectId, kind, assetId);
+        const version = (selectionVersions.get(key) || 0) + 1;
+        selectionVersions.set(key, version);
+        pendingSelections.set(key, variantId);
+        const previousId = readSelectedId(entity, kind);
+        updateProject(projectId, withSelectedVariant(currentProject, kind, assetId, variantId));
+
+        // Serialize writes so a slow earlier selection cannot persist after a newer click.
+        selectionQueue.current = selectionQueue.current.then(async () => {
+            try {
+                const updated = await api.selectAssetVariant(
+                    projectId, assetId, kind, variantId,
+                    kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
+                );
+                if (selectionVersions.get(key) !== version) return;
+                updateProject(projectId, updated);
+                const updatedPool = kind === "character" ? updated.characters : kind === "scene" ? updated.scenes : updated.props;
+                const updatedEntity = updatedPool?.find((item: any) => item.id === assetId) || entity;
+                const selectedVariant = readLibraryVariants(updatedEntity, kind).find((variant) => variant.id === variantId);
+                if (selectedVariant) {
+                    const indexedAsset: ReferenceLibraryAsset = {
+                        asset_type: kind,
+                        asset_id: assetId,
+                        name: entity.name,
+                        source_scope: "episode",
+                        source_container_id: projectId,
+                        selected_variant_id: selectedVariant.id,
+                        variants: [selectedVariant],
+                    };
+                    retainUploadedVariantInIndex(indexedAsset, selectedVariant);
+                    addAvailableReference(indexedAsset, selectedVariant);
+                }
+                toast.success(t("toastSelected"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    autoCloseMs: 3000,
+                });
+            } catch (err: any) {
+                if (selectionVersions.get(key) !== version) return;
+                const latest = useProjectStore.getState().currentProject;
+                if (latest?.id === projectId && previousId) {
+                    updateProject(projectId, withSelectedVariant(latest, kind, assetId, previousId));
+                }
+                const detail = err?.response?.data?.detail || err?.message || "select failed";
+                toast.error(t("toastSelectErr"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    body: String(detail),
+                });
+            } finally {
+                if (selectionVersions.get(key) === version) pendingSelections.delete(key);
             }
-            toast.success(t("toastSelected"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                autoCloseMs: 3000,
-            });
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || "select failed";
-            toast.error(t("toastSelectErr"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                body: String(detail),
-            });
-        }
+        });
     };
 
     const handleToggleFavorite = async (variantId: string, currentFav: boolean) => {
