@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.comic_gen.assets import AssetGenerator
-from src.apps.comic_gen.models import AssetUnit, Character, ImageVariant
+from src.apps.comic_gen.models import AssetUnit, Character, ImageAsset, ImageVariant
 
 
 @pytest.mark.parametrize("reference", ["users/owner/ref.png", "https://example.test/ref.png"])
@@ -106,7 +106,35 @@ def test_unselected_uploaded_reference_is_not_sent_when_generation_opts_out(tmp_
     )
 
     assert model.generate.call_count == 1
-    assert "ref_image_path" not in model.generate.call_args.kwargs
+    assert model.generate.call_args.kwargs.get("ref_image_path") is None
+
+
+def test_text_mode_does_not_attach_uploaded_character_reference_implicitly(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_dir = "output/assets"
+    model = Mock()
+    generator._get_model_for = Mock(return_value=model)
+    character = Character(
+        id="c",
+        name="Test",
+        description="Test",
+        three_view_asset=ImageAsset(
+            variants=[ImageVariant(id="upload", url="uploaded.png", is_uploaded_source=True)]
+        ),
+    )
+
+    generator.generate_character(
+        character,
+        generation_type="full_body",
+        model_name="gpt-image-2",
+        use_reference_image=False,
+        image_generation_mode="text",
+    )
+
+    assert model.generate.call_count == 1
+    assert model.generate.call_args.kwargs.get("ref_image_path") is None
+    assert model.generate.call_args.kwargs.get("ref_image_paths") == []
 
 
 @pytest.mark.parametrize('prefix', ['comic_gen', 'lumenx'])

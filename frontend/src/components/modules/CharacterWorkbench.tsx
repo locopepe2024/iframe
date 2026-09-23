@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video, Upload, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { api } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -20,6 +20,10 @@ import {
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
     hasCharacterReferenceConstraint,
 } from "@/lib/characterPrompts";
+import ReferencePromptEditor, {
+    type ReferenceCandidate,
+    type ReferenceSuggestion,
+} from "./playground/ReferencePromptEditor";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
@@ -50,7 +54,7 @@ interface CharacterWorkbenchProps {
     asset: any;
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
-    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) => void;
+    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
     styleNegativePrompt?: string;
@@ -66,6 +70,58 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
+    const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const [promptReferences, setPromptReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
+        full_body: [],
+        three_view: [],
+        headshot: [],
+    });
+
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.getAssetReferenceIndex !== "function") {
+            setAssetIndex([]);
+            return;
+        }
+        let active = true;
+        void api.getAssetReferenceIndex(projectId)
+            .then((index) => {
+                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.some((variant) => variant.id)));
+            })
+            .catch(() => {
+                if (active) setAssetIndex([]);
+            });
+        return () => { active = false; };
+    }, [currentProject?.id]);
+
+    useEffect(() => {
+        setPromptReferences({ full_body: [], three_view: [], headshot: [] });
+    }, [asset.id]);
+
+    const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
+        const usedLabels = new Set<string>();
+        const candidates: ReferenceCandidate[] = [];
+        for (const entry of assetIndex) {
+            const variants = entry.variants || [];
+            variants.forEach((variant, index) => {
+                if (!variant.id) return;
+                const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+                const baseLabel = variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
+                let label = baseLabel;
+                let suffix = 2;
+                while (usedLabels.has(label)) label = `${baseLabel} ${suffix++}`;
+                usedLabels.add(label);
+                candidates.push({
+                    label,
+                    previewUrl: getAssetUrl(variant.url),
+                    sourceLabel: entry.source_name || entry.source_scope,
+                    variantLabel,
+                    reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+                });
+            });
+        }
+        return candidates;
+    }, [assetIndex]);
 
     const openVariantEditor = (unit: any, fallback: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
         const variant = selectedVariant(unit);
@@ -304,7 +360,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         else if (type === "three_view") prompt = threeViewPrompt;
         else if (type === "headshot") prompt = headshotPrompt;
 
-        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize);
+        const references = promptReferences[type];
+        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, references.length ? "reference" : "text");
+    };
+
+    const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
+        setPromptReferences((current) => ({ ...current, [type]: references }));
     };
 
     // Helper to check if a specific type is generating
@@ -389,6 +450,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         onGenerate={(batchSize: number) => handleGenerateClick("full_body", batchSize)}
                         isGenerating={getGeneratingInfo("full_body").isGenerating}
                         generatingBatchSize={getGeneratingInfo("full_body").batchSize}
@@ -439,6 +502,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
                         isGenerating={getGeneratingInfo("three_view").isGenerating}
                         generatingBatchSize={getGeneratingInfo("three_view").batchSize}
@@ -469,6 +534,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
@@ -607,6 +674,8 @@ export function WorkbenchPanel({
 
     prompt,
     setPrompt,
+    referenceCandidates = [],
+    onReferencesChange,
     onGenerate,
     isGenerating,
     generatingBatchSize,
@@ -643,6 +712,10 @@ export function WorkbenchPanel({
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
     const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
+        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+    );
 
     return (
         <div
@@ -939,13 +1012,56 @@ export function WorkbenchPanel({
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
                 </div>
-                <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    disabled={isLocked}
-                    className="flex-1 w-full bg-transparent p-4 text-xs text-text-secondary resize-none focus:outline-none focus:bg-glass font-mono leading-relaxed"
-                    placeholder="Enter prompt description..."
-                />
+                <div className="relative min-h-0 flex-1 overflow-visible p-4">
+                    <ReferencePromptEditor
+                        value={prompt}
+                        candidates={referenceCandidates}
+                        onChange={setPrompt}
+                        onReferencesChange={onReferencesChange}
+                        onMentionChange={setMention}
+                        allowImplicitMentions={false}
+                        editable={!isLocked}
+                        placeholder="Enter prompt description..."
+                    />
+                    {mention && (
+                        <div
+                            role="listbox"
+                            aria-label="选择参考素材"
+                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
+                        >
+                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                参考索引
+                            </div>
+                            {matchingReferenceCandidates.length === 0 ? (
+                                <div className="px-2 py-2 text-xs text-text-muted">
+                                    {referenceCandidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}
+                                </div>
+                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
+                                <button
+                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                    type="button"
+                                    role="option"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        mention.choose(candidate);
+                                        setMention(null);
+                                    }}
+                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                >
+                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                        {candidate.previewUrl ? (
+                                            <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" />
+                                        ) : <ImageIcon size={15} className="text-text-muted" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1 text-xs">
+                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
+                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

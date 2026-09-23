@@ -1,12 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { WorkbenchPanel } from "./CharacterWorkbench";
+import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
     buildCharacterVideoPrompt,
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
 } from "@/lib/characterPrompts";
+
+const apiMocks = vi.hoisted(() => ({
+    getAssetReferenceIndex: vi.fn(),
+}));
 
 vi.mock("next-intl", () => ({
     useTranslations: () => (key: string) => key,
@@ -15,14 +19,19 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: () => null,
+    VariantSelector: ({ onGenerate }: { onGenerate?: (batchSize: number) => void }) => (
+        <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
+    ),
 }));
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
-vi.mock("@/lib/api", () => ({ api: {} }));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
 vi.mock("@/store/projectStore", () => ({
-    useProjectStore: (selector: (state: unknown) => unknown) => selector({}),
+    useProjectStore: (selector: (state: unknown) => unknown) => selector({
+        currentProject: { id: "project-1" },
+        updateProject: vi.fn(),
+    }),
 }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
 
@@ -62,6 +71,107 @@ it("uploads a new image directly from the static asset panel", async () => {
     fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
 
     await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
+});
+
+it("shows indexed clips when typing @ and emits the stable selected reference", () => {
+    const setPrompt = vi.fn();
+    const onReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch",
+        previewUrl: "/files/watch.png",
+        sourceLabel: "global",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(
+        <WorkbenchPanel
+            {...baseProps}
+            prompt=""
+            setPrompt={setPrompt}
+            referenceCandidates={[candidate]}
+            onReferencesChange={onReferencesChange}
+        />,
+    );
+
+    const editor = screen.getByRole("textbox") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => {
+        editor.editor.commands.focus();
+        editor.editor.commands.setContent("<p>@wat</p>");
+    });
+    expect(editor.editor.getText()).toBe("@wat");
+
+    expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
+    fireEvent.mouseDown(screen.getByRole("option"));
+    fireEvent.click(screen.getByRole("option"));
+
+    expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
+    expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
+});
+
+it("does not turn a manually typed @name into an implicit reference", () => {
+    const setPrompt = vi.fn();
+    const onReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(
+        <WorkbenchPanel
+            {...baseProps}
+            prompt=""
+            setPrompt={setPrompt}
+            referenceCandidates={[candidate]}
+            onReferencesChange={onReferencesChange}
+        />,
+    );
+    const editor = screen.getByRole("textbox") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => {
+        editor.editor.commands.focus();
+        editor.editor.commands.setContent("<p>@Pocket watch</p>");
+    });
+    fireEvent.blur(editor);
+
+    expect(onReferencesChange).toHaveBeenLastCalledWith([]);
+});
+
+it("loads the project reference index for the character workbench", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({
+        schema_version: 1,
+        project_id: "project-1",
+        assets: [{
+            asset_type: "prop",
+            asset_id: "watch-1",
+            name: "Pocket watch",
+            source_scope: "global",
+            variants: [{ id: "watch-front", url: "/files/watch.png" }],
+        }],
+    });
+    const onGenerate = vi.fn();
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={onGenerate}
+            generatingTypes={[]}
+        />,
+    );
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
+    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor: import("@tiptap/core").Editor }>;
+    act(() => { editors[0].editor.commands.setContent("<p>@wat</p>"); });
+    expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
+    fireEvent.mouseDown(screen.getByRole("option"));
+    fireEvent.click(screen.getByRole("option"));
+    fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
+        "full_body",
+        "@Pocket watch ",
+        true,
+        expect.any(String),
+        1,
+        [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
+        "reference",
+    ));
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

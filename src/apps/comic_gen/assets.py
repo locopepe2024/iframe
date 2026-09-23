@@ -275,15 +275,22 @@ class AssetGenerator:
                 )
                 extra_ref_image_paths = [self._reference_path(item) for item in (reference_image_urls or [])]
 
+                # A queued asset request opts out of implicit character/upload
+                # references unless the caller explicitly selected reference
+                # mode (or an older direct caller still opts in via
+                # ``use_reference_image``). Explicit ``reference_image_url``
+                # and ``reference_image_urls`` above remain authoritative.
+                allow_implicit_reference = image_generation_mode == "reference" or use_reference_image
+
                 # Check for base character reference (for variants)
-                if character.base_character_id:
+                if allow_implicit_reference and character.base_character_id:
                     base_fullbody_path = os.path.join(output_dir, 'characters', f"{character.base_character_id}_fullbody.png")
                     if not ref_image_path and os.path.exists(base_fullbody_path):
                         ref_image_path = base_fullbody_path
 
                 # === REVERSE GENERATION: Check for uploaded images to use as reference ===
                 # Priority: Three Views > Headshot (uploaded images)
-                if not ref_image_path:
+                if allow_implicit_reference and not ref_image_path:
                     # Check for uploaded three_views
                     if character.three_view_asset:
                         uploaded_variant = next(

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, crudApi } from "@/lib/api";
+import { api, API_URL, crudApi, type AssetLibraryReference } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
@@ -77,7 +77,7 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1) => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text") => {
         if (!currentProject) return;
 
         // Add task with specific generation type and batch size
@@ -102,7 +102,11 @@ export default function ConsistencyVault() {
                 applyStyle,
                 negativePrompt,
                 batchSize,
-                resolveAssetGenerationModel(currentProject.model_settings?.t2i_model)
+                resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+                undefined,
+                undefined,
+                references,
+                imageGenerationMode,
             );
 
             const taskId = response._task_id;
@@ -474,7 +478,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize)}
+                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
