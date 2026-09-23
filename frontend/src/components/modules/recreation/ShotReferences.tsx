@@ -15,6 +15,8 @@ type Role = "reference" | "replacement";
 const terminalTask = (status: string) => status === "completed" || status === "failed" || status === "cancelled";
 const DEFAULT_VIDEO_MODEL = "uniart/minimax-h3-vip";
 const DEFAULT_IMAGE_MODEL = "uniart/gpt-image-2";
+type RunStatus = "pending" | "active" | "complete" | "failed";
+type RunProgress = { generation: RunStatus; assembly: RunStatus };
 const FALLBACK_VIDEO_MODEL: RecreationModelOption = {
   id: DEFAULT_VIDEO_MODEL, display_name: "UniArt Minimax H3 VIP", description: "", capabilities: ["r2v"],
 };
@@ -62,7 +64,7 @@ function Picker({ onSelect, onClose }: { onSelect: (item: RecreationMedia) => vo
   </section>;
 }
 
-export default function ShotReferences({ project, disabled, stage, onSaved }: { project: RecreationProject; disabled: boolean; stage?: "split" | "parse" | "analyze" | "replace" | "submit" | "assemble"; onSaved: (project: RecreationProject) => void }) {
+export default function ShotReferences({ project, disabled, stage, onProgress, onSaved }: { project: RecreationProject; disabled: boolean; stage?: "split" | "parse" | "analyze" | "replace" | "submit" | "assemble"; onProgress?: (progress: RunProgress) => void; onSaved: (project: RecreationProject) => void }) {
   const t = useTranslations("shotReferences");
   const recreationT = useTranslations("recreation");
   const [shotId, setShotId] = useState(project.timeline?.shots[0]?.id);
@@ -87,10 +89,28 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
   const [assemblyError, setAssemblyError] = useState("");
   const generationIdRef = useRef<string | null>(null);
   const revision = useRef(project.revision);
+  const progressCallback = useRef(onProgress);
+  progressCallback.current = onProgress;
+  const generationTasksRef = useRef(generationTasks);
+  generationTasksRef.current = generationTasks;
+  const assemblyTaskRef = useRef(assemblyTask);
+  assemblyTaskRef.current = assemblyTask;
   const planKey = JSON.stringify([project.revision, videoModel, audioPolicy, soundscape, durations]);
   const activePlan = useRef(planKey);
   activePlan.current = planKey;
   revision.current = project.revision;
+  const reportProgress = (generation: RecreationGenerationTask[], assembly: RecreationAssemblyTask | null) => {
+    const generationStatus: RunStatus = generation.some(task => task.status === "failed")
+      ? "failed"
+      : generation.length > 0 && generation.every(task => task.status === "completed")
+        ? "complete"
+        : generation.some(task => task.status === "pending" || task.status === "processing") ? "active" : "pending";
+    const assemblyStatus: RunStatus = !assembly ? "pending"
+      : assembly.status === "completed" ? "complete"
+        : assembly.status === "failed" ? "failed"
+          : assembly.status === "pending" || assembly.status === "processing" ? "active" : "pending";
+    progressCallback.current?.({ generation: generationStatus, assembly: assemblyStatus });
+  };
   useEffect(() => {
     let active = true;
     recreationApi.models().then(options => {
@@ -136,6 +156,7 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
         (b.created_at || 0) - (a.created_at || 0),
       )[0] || null;
       setAssemblyTask(latestAssembly);
+      reportProgress(latestGeneration, latestAssembly);
     }).catch(error => {
       if (active) setGenerationError(error instanceof Error ? error.message : t("generationFailed"));
     });
@@ -148,6 +169,7 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
     const poll = () => recreationApi.generationTasks(project.id, generationId).then(tasks => {
       if (!active) return;
       setGenerationTasks(tasks);
+      reportProgress(tasks, assemblyTaskRef.current);
       if (tasks.length > 0 && tasks.every(task => terminalTask(task.status)) && timer !== undefined) {
         window.clearInterval(timer);
         timer = undefined;
@@ -163,7 +185,7 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
     if (!assemblyTask?.task_id || assemblyTask.status === "completed" || assemblyTask.status === "failed" || assemblyTask.status === "cancelled") return;
     let active = true;
     const poll = () => recreationApi.assemblyTask(assemblyTask.task_id).then(task => {
-      if (active) setAssemblyTask(task);
+      if (active) { setAssemblyTask(task); reportProgress(generationTasksRef.current, task); }
     }).catch(error => {
       if (active) setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed"));
     });
@@ -216,6 +238,7 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
           try {
             const result = await recreationApi.submitGeneration(project, videoModel, { audio_policy: audioPolicy, soundscape, generation_durations: durations, accept_cost: costAccepted });
             generationIdRef.current = result.generation_id; setGenerationId(result.generation_id); setGenerationTasks(result.tasks);
+            reportProgress(result.tasks, assemblyTaskRef.current);
           } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); }
           finally { setGenerationBusy(false); }
         }}>{generationBusy ? t("submittingGeneration") : t("submitGeneration")}</button>
@@ -230,12 +253,12 @@ export default function ShotReferences({ project, disabled, stage, onSaved }: { 
         : !assemblyTask && <button type="button" className="glass-button min-h-11" disabled={assemblyBusy} onClick={async () => {
           if (!generationId) return;
           setAssemblyBusy(true); setAssemblyError("");
-          try { setAssemblyTask(await recreationApi.submitAssembly(project, generationId)); }
+          try { const task = await recreationApi.submitAssembly(project, generationId); setAssemblyTask(task); reportProgress(generationTasksRef.current, task); }
           catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); }
           finally { setAssemblyBusy(false); }
         }}>{assemblyBusy ? t("assembling") : t("assembleVideo")}</button>}
       {assemblyError && <p role="alert" className="text-sm text-red-500 break-words">{assemblyError}</p>}
-      {assemblyTask && <div className="space-y-2 text-sm"><p role="status">{t(`assemblyStatus.${assemblyTask.status}`)}</p>{(assemblyTask.status === "pending" || assemblyTask.status === "processing") && <button type="button" className="glass-button min-h-11" onClick={async () => { try { setAssemblyTask(await recreationApi.cancelAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("cancelAssembly")}</button>}{assemblyTask.status === "failed" && <button type="button" className="glass-button min-h-11" onClick={async () => { try { setAssemblyTask(await recreationApi.retryAssemblyTask(assemblyTask.task_id)); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("retryAssembly")}</button>}{assemblyTask.error && <p role="alert" className="text-red-500 break-words">{assemblyTask.error}</p>}{assemblyTask.output_media && <><video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" /><a className="glass-button inline-flex min-h-11 items-center" href={url(assemblyTask.output_media.storage_path)} download>{recreationT("download")}</a></>}</div>}
+      {assemblyTask && <div className="space-y-2 text-sm"><p role="status">{t(`assemblyStatus.${assemblyTask.status}`)}</p>{(assemblyTask.status === "pending" || assemblyTask.status === "processing") && <button type="button" className="glass-button min-h-11" onClick={async () => { try { const task = await recreationApi.cancelAssemblyTask(assemblyTask.task_id); setAssemblyTask(task); reportProgress(generationTasksRef.current, task); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("cancelAssembly")}</button>}{assemblyTask.status === "failed" && <button type="button" className="glass-button min-h-11" onClick={async () => { try { const task = await recreationApi.retryAssemblyTask(assemblyTask.task_id); setAssemblyTask(task); reportProgress(generationTasksRef.current, task); } catch (error) { setAssemblyError(error instanceof Error ? error.message : t("assemblyFailed")); } }}>{t("retryAssembly")}</button>}{assemblyTask.error && <p role="alert" className="text-red-500 break-words">{assemblyTask.error}</p>}{assemblyTask.output_media && <><video controls src={url(assemblyTask.output_media.storage_path)} className="w-full max-h-[420px] bg-black object-contain" /><a className="glass-button inline-flex min-h-11 items-center" href={url(assemblyTask.output_media.storage_path)} download>{recreationT("download")}</a></>}</div>}
     </div>}
   </section>;
 }

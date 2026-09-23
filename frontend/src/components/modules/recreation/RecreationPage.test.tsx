@@ -1,10 +1,10 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../messages/en.json";
 import RecreationPage from "./RecreationPage";
-import { recreationApi, RecreationProject } from "@/lib/recreation";
+import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, RecreationProject } from "@/lib/recreation";
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
@@ -48,6 +48,49 @@ describe("recreation confirmation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
     expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Contact sheet" })).toBeInTheDocument();
+  });
+
+  it("starts source analysis from Parse when no analysis exists", async () => {
+    const unparsed: RecreationProject = { ...project, status: "registered", analysis: null };
+    vi.mocked(recreationApi.list).mockResolvedValue([unparsed]);
+    vi.mocked(recreationApi.get).mockResolvedValue(unparsed);
+    vi.mocked(recreationApi.analyze).mockResolvedValue({ ...unparsed, status: "queued", analysis_id: "new-analysis" });
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /Original.mp4/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Parse" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Analyze source" }));
+    await waitFor(() => expect(recreationApi.analyze).toHaveBeenCalledWith(unparsed));
+  });
+
+  it("shows timeline confirmation blocks for downstream stages before analysis exists", async () => {
+    const unparsed: RecreationProject = { ...project, status: "registered", analysis: null };
+    vi.mocked(recreationApi.list).mockResolvedValue([unparsed]);
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /Original.mp4/ }));
+    const navigation = await screen.findByRole("navigation", { name: "Recreation project stages" });
+    for (const stage of ["Replace", "Submit", "Assemble"]) {
+      fireEvent.click(within(navigation).getByRole("button", { name: stage }));
+      expect(screen.getByText(messages.recreation.timelineNeedsConfirmation)).toBeInTheDocument();
+    }
+  });
+
+  it("reflects restored generation and assembly completion in the stage navigation", async () => {
+    vi.mocked(recreationApi.generationTasks).mockResolvedValue([{
+      task_id: "generation-task", generation_id: "generation", project_id: "source", shot_id: "confirmed-shot", shot_number: 1,
+      status: "completed", revision: 3, analysis_id: "analysis", model: "uniart/minimax-h3-vip", duration: 5,
+      generate_audio: false, output_media: null, error: null,
+    } satisfies RecreationGenerationTask]);
+    vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([{
+      task_id: "assembly-task", project_id: "source", generation_id: "generation", revision: 3,
+      analysis_id: "analysis", status: "completed", audio_policy: "silent", output_media: null, error: null,
+    } satisfies RecreationAssemblyTask]);
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
+    const navigation = screen.getByRole("navigation", { name: "Recreation project stages" });
+    await waitFor(() => {
+      expect(within(navigation).getByRole("button", { name: "Submit" })).toHaveTextContent("Complete");
+      expect(within(navigation).getByRole("button", { name: "Assemble" })).toHaveTextContent("Complete");
+    });
   });
 
   it("shows a recoverable error when the project API rejects an invalid response", async () => {

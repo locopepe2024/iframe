@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import axios from "axios";
@@ -10,6 +10,9 @@ import ShotReferences from "./ShotReferences";
 
 const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
 type WorkflowStep = typeof workflowSteps[number];
+type WorkflowStatus = "pending" | "active" | "complete" | "failed";
+type RunProgress = { generation: WorkflowStatus; assembly: WorkflowStatus };
+const emptyRunProgress: RunProgress = { generation: "pending", assembly: "pending" };
 
 const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
@@ -25,6 +28,7 @@ export default function RecreationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [step, setStep] = useState<WorkflowStep>("split");
+  const [runProgress, setRunProgress] = useState<RunProgress>(emptyRunProgress);
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const activeId = useRef<string | null>(null);
@@ -44,6 +48,7 @@ export default function RecreationPage() {
     setCuts(record.timeline?.cuts.map(c => c.pts) ?? record.analysis?.candidates.map(c => c.pts) ?? []);
     setEvidence(Object.fromEntries([...(record.analysis?.candidates ?? []), ...Object.values(record.analysis?.manual_evidence ?? {})].map(c => [c.pts, c])));
     setFrameIndex(1); setImportText(""); setError("");
+    setRunProgress(emptyRunProgress);
     setStep(record.status === "confirmed" ? "replace" : record.analysis ? "parse" : "split");
     setProjects(all => [record, ...all.filter(p => p.id !== record.id)]);
   }
@@ -90,12 +95,15 @@ export default function RecreationPage() {
 
   const stepState = (index: number) => {
     if (!project) return "pending";
-    if (index === 0) return "complete";
-    if (index === 1) return project.status === "confirmed" ? "complete" : analysis || processing ? "active" : "pending";
-    if (index === 2) return analysis ? "active" : "pending";
+    if (index === 0) return project ? "deferred" : "pending";
+    if (index === 1) return project.status === "failed" ? "failed" : project.status === "confirmed" ? "complete" : analysis || processing ? "active" : "pending";
+    if (index === 2) return project.status === "failed" ? "failed" : analysis ? "complete" : "pending";
     if (index === 3) return project.status === "confirmed" ? "active" : "pending";
+    if (index === 4) return runProgress.generation;
+    if (index === 5) return runProgress.assembly;
     return "pending";
   };
+  const updateRunProgress = useCallback((next: RunProgress) => setRunProgress(next), []);
 
   return <div className="h-full overflow-y-auto p-4 md:p-8 text-foreground">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -145,7 +153,7 @@ export default function RecreationPage() {
                   <button type="button" aria-label={t(`steps.${item}`)} aria-current={step === item ? "step" : undefined}
                     className={`min-h-11 rounded px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${step === item ? "bg-primary/15 text-foreground" : "text-text-muted hover:bg-hover-bg"}`}
                     onClick={() => setStep(item)}>
-                    <span className="mr-2 inline-flex w-5 justify-center font-mono text-xs">{state === "complete" ? <Check size={14} aria-label={t("complete")} /> : String(index + 1).padStart(2, "0")}</span>{t(`steps.${item}`)}
+                    <span className="mr-2 inline-flex w-5 justify-center font-mono text-xs">{state === "complete" ? <Check size={14} aria-label={t("complete")} /> : state === "failed" ? "!" : String(index + 1).padStart(2, "0")}</span>{t(`steps.${item}`)}
                     <span className="sr-only">{t(`stepStatus.${state}`)}</span>
                   </button>
                   {index < workflowSteps.length - 1 && <span aria-hidden="true" className="text-text-muted">›</span>}
@@ -164,14 +172,21 @@ export default function RecreationPage() {
           {step === "split" && <section aria-labelledby="split-title" className="space-y-3">
             <h3 id="split-title" className="font-semibold">{t("steps.split")}</h3>
             {analysis && <p className="text-xs text-text-muted">{analysis.width} × {analysis.height} · {analysis.duration_seconds.toFixed(6)} s · {t("audioTracks", { count: analysis.audio_streams })}</p>}
-            {!analysis && <button className="glass-button flex min-h-11 items-center gap-2" disabled={busy || processing}
-              onClick={() => void act(async () => open(await recreationApi.analyze(project), true))}>
-              {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{processing ? t("analyzing") : t("analyze")}
-            </button>}
+            <p role="status" className="text-sm text-text-muted">{t("splitUnavailable")}</p>
           </section>}
           {project.error && <p role="alert" className="text-red-400 text-sm py-3 break-words">{project.error}</p>}
+          {step === "parse" && !analysis && <section className="border-t border-border py-5 space-y-3">
+            <h3 className="font-semibold">{t("steps.parse")}</h3>
+            <p className="text-sm text-text-muted">{t("stepDescriptions.parse")}</p>
+            <button className="glass-button flex min-h-11 items-center gap-2" disabled={busy || processing}
+              onClick={() => void act(async () => open(await recreationApi.analyze(project), true))}>
+              {processing ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}{processing ? t("analyzing") : t("analyze")}
+            </button>
+          </section>}
+          {step === "analyze" && !analysis && <p role="status" className="border-t border-border py-5 text-sm text-text-muted">{t("analysisNeedsParsing")}</p>}
+          {["replace", "submit", "assemble"].includes(step) && project.status !== "confirmed" && <p role="status" className="border-t border-border py-5 text-sm text-text-muted">{t("timelineNeedsConfirmation")}</p>}
           {analysis && <>
-            {step === "parse" && <section className="border-t border-border py-5">
+            {step === "parse" && analysis && <section className="border-t border-border py-5">
               <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                 <h3 className="font-semibold">{t("timeline")} · {cuts.length + 1} {t("shots")}</h3>
                 <button className="glass-button flex items-center gap-2" disabled={busy}
@@ -228,7 +243,7 @@ export default function RecreationPage() {
                 <img src={media(analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
               </details>
             </section>}
-            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onSaved={record => {
+            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onProgress={updateRunProgress} onSaved={record => {
               setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
             }} />}
           </>}
