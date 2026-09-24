@@ -29,7 +29,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
-import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
+import CastWorkbenchModal, { activePolls, startAssetPoll } from "./cast/CastWorkbenchModal";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -75,6 +75,7 @@ function resolvePropImage(p: any): string | undefined {
 export default function Cast() {
     const tStep = useTranslations("stepHeader");
     const t = useTranslations("cast");
+    const tWorkbench = useTranslations("castWorkbench");
     const currentProject = useProjectStore((state) => state.currentProject);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
@@ -88,13 +89,40 @@ export default function Cast() {
     const removeGeneratingTask = useProjectStore((s) => s.removeGeneratingTask);
     const generatingTasks = useProjectStore((s) => s.generatingTasks);
     useEffect(() => {
-        if (generatingTasks.length === 0) return;
         for (const task of generatingTasks) {
-            if (!activePolls.has(task.assetId)) {
+            if (
+                !task.taskId
+                || !task.assetType
+                || !task.projectId
+                || task.projectId !== currentProject?.id
+                || activePolls.has(task.assetId)
+            ) continue;
+            startAssetPoll(
+                task.assetId,
+                task.taskId,
+                task.projectId,
+                task.assetType,
+                task.generationType,
+                tWorkbench,
+                () => ({
+                    updateProject: useProjectStore.getState().updateProject,
+                    removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
+                    getProject: (projectId) => {
+                        const state = useProjectStore.getState();
+                        return state.projects.find((project) => project.id === projectId)
+                            || (state.currentProject?.id === projectId ? state.currentProject : undefined);
+                    },
+                }),
+            );
+        }
+        // Drop records written by versions that did not persist task IDs; the
+        // backend recovery sweep has already made their asset state terminal.
+        for (const task of generatingTasks) {
+            if (!task.taskId && !task.projectId) {
                 removeGeneratingTask(task.assetId, task.generationType);
             }
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [generatingTasks, currentProject?.id, removeGeneratingTask, tWorkbench]);
 
     /**
      * Aggregate per-asset appearance counts from frame references, then

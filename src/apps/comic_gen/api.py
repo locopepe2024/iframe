@@ -40,7 +40,12 @@ import logging
 import re
 import traceback
 from ...utils.uniart_catalog import fetch_uniart_catalog
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
+from .pipeline import (
+    ComicGenPipeline,
+    LibraryAssetInUseError,
+    InvalidAssetReference,
+    ActiveAssetGenerationError,
+)
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -949,6 +954,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
         response_data = series.dict()
         response_data["_task_id"] = task_id
         return signed_response(response_data)
+    except ActiveAssetGenerationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
@@ -2870,6 +2877,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         response_data["_task_id"] = task_id
         return signed_response(response_data)
 
+    except ActiveAssetGenerationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
@@ -2890,13 +2899,13 @@ def get_task_status(task_id: str):
     if status.get("video_url"):
         return signed_response(status)
 
-    # Asset tasks are polled frequently. Keep pending/processing responses
-    # cheap, then sign only the completed target-asset snapshot so the client
-    # can merge it without loading the full project.
+    # Asset tasks are polled frequently. Return and sign only the target
+    # asset snapshot at every state, including failure, so partial variants
+    # can be merged without reloading the full project.
     if status.get("asset_id") and status.get("asset_type") in (
         "character", "scene", "prop", "full_body", "head_shot"
     ):
-        if status.get("status") == "completed" and status.get("asset"):
+        if status.get("asset"):
             return signed_response(status)
         return status
 
@@ -2907,6 +2916,21 @@ def get_task_status(task_id: str):
             status["script"] = signed_response(script).body.decode("utf-8")
 
     return status
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generation/clear")
+def clear_asset_generation_status(script_id: str, asset_type: str, asset_id: str):
+    """Clear a terminal image-generation marker while keeping all media."""
+    try:
+        result = pipeline.clear_asset_generation_status(script_id, asset_type, asset_id)
+        return signed_response(result)
+    except ActiveAssetGenerationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to clear asset generation status")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class GenerateAssetVideoRequest(BaseModel):

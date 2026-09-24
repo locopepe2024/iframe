@@ -8,7 +8,7 @@ import zhMessages from '../../../../messages/zh.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), clearAssetGenerationStatus: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -40,11 +40,64 @@ it('applies the completed asset snapshot and clears its task without fetching th
  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
  expect(updateProject).toHaveBeenCalledWith('project', expect.objectContaining({ characters: [completedAsset] }));
- expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet');
+ expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet', 'project');
  expect(getProject).toHaveBeenCalledWith('project');
  expect(api.getProject).not.toHaveBeenCalled();
  expect(activePolls.has('char')).toBe(false);
  vi.useRealTimers();
+});
+it('merges a failed task partial snapshot and continues after transient poll errors', async () => {
+ vi.useFakeTimers();
+ const partialAsset = {
+  ...character,
+  status: 'failed',
+  reference_sheet: { image_variants: [{ id: 'partial', url: 'partial.png' }], selected_image_id: 'partial' },
+ };
+ vi.mocked(api.getTaskStatus)
+  .mockRejectedValueOnce(new Error('temporary network error'))
+  .mockResolvedValueOnce({ status: 'failed', error: 'Provider timed out', asset_id: 'char', asset_type: 'character', asset: partialAsset } as any);
+ const updateProject = vi.fn();
+ const removeGeneratingTask = vi.fn();
+ startAssetPoll('char', 'task-failed', 'project', 'character', 'reference_sheet', ((key: string) => key) as any, () => ({
+  updateProject,
+  removeGeneratingTask,
+  getProject: () => project,
+ }));
+
+ await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+ expect(activePolls.has('char')).toBe(true);
+ expect(removeGeneratingTask).not.toHaveBeenCalled();
+ await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+
+ expect(updateProject).toHaveBeenCalledWith('project', expect.objectContaining({ characters: [partialAsset] }));
+ expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet', 'project');
+ expect(api.getProject).not.toHaveBeenCalled();
+ expect(activePolls.has('char')).toBe(false);
+ vi.useRealTimers();
+});
+it('clears a failed task marker from its asset snapshot and keeps the image variant', async () => {
+ const failedAsset = {
+  ...character,
+  status: 'failed',
+  generation_task: { task_id: 'failed-task', status: 'failed', error: 'Provider timed out' },
+  reference_sheet: { image_variants: [{ id: 'partial', url: 'partial.png' }], selected_image_id: 'partial' },
+ };
+ const failedProject = { ...project, characters: [failedAsset] };
+ useProjectStore.setState({ currentProject: failedProject, projects: [failedProject], generatingTasks: [] });
+ vi.mocked(api.clearAssetGenerationStatus).mockResolvedValue({
+  status: 'cleared', asset_id: 'char', asset_type: 'character',
+  asset: { ...failedAsset, status: 'completed', generation_task: { task_id: 'failed-task', status: 'cleared', error: null } },
+ } as any);
+ show();
+ fireEvent.click(screen.getByRole('button', { name: 'Clear failed status' }));
+
+ await waitFor(() => expect(api.clearAssetGenerationStatus).toHaveBeenCalledWith('project', 'character', 'char'));
+ await waitFor(() => expect(useProjectStore.getState().currentProject?.characters?.[0]).toMatchObject({
+  status: 'completed',
+  generation_task: { status: 'cleared' },
+  reference_sheet: { image_variants: [{ id: 'partial', url: 'partial.png' }] },
+ }));
+ expect(api.getProject).not.toHaveBeenCalled();
 });
 it('opens upload from the empty gallery and appends a selected reference', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);

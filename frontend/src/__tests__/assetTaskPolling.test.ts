@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { mergeAssetTaskResult, waitForAssetTask } from '../lib/assetTaskPolling';
+import { AssetTaskFailure, getAssetIndexState, mergeAssetTaskResult, waitForAssetTask } from '../lib/assetTaskPolling';
 
 it('continues beyond the old 600-poll limit and network errors until completion', async () => {
   let attempts = 0;
@@ -15,6 +15,35 @@ it('continues beyond the old 600-poll limit and network errors until completion'
 it.each(['failed', 'cancelled', 'canceled'])('preserves the terminal %s reason', async status => {
   await expect(waitForAssetTask(async () => ({ status, error: 'Provider reason' }),
     () => true, 'fallback', async () => {})).rejects.toThrow('Provider reason');
+});
+
+it('keeps the failed task snapshot available so partial variants can be merged', async () => {
+  const failed = {
+    status: 'failed',
+    error: 'Provider timed out',
+    asset_id: 'character',
+    asset_type: 'character' as const,
+    asset: { id: 'character', status: 'failed', reference_sheet: { image_variants: [{ id: 'partial', url: 'partial.png' }] } },
+    asset_index_state: 'empty' as const,
+  };
+  await expect(waitForAssetTask(async () => failed, () => true, 'fallback', async () => {}))
+    .rejects.toMatchObject({ task: failed, message: 'Provider timed out' });
+  expect(mergeAssetTaskResult({ id: 'project', characters: [{ id: 'character', name: 'A' }] } as any, failed))
+    .toEqual({ characters: [{ name: 'A', ...failed.asset }] });
+});
+
+it('stops polling when the server confirms a task ID no longer exists', async () => {
+  const read = vi.fn().mockRejectedValue({ response: { status: 404 } });
+  await expect(waitForAssetTask(read, () => true, 'fallback', async () => {}))
+    .resolves.toMatchObject({ status: 'missing' });
+  expect(read).toHaveBeenCalledOnce();
+});
+
+it('distinguishes stale image selection indexes from an empty selection', () => {
+  expect(getAssetIndexState({ image_asset: { selected_id: 'gone', variants: [] } }, 'scene')).toBe('stale');
+  expect(getAssetIndexState({ image_asset: { selected_id: 'kept', variants: [{ id: 'kept', url: 'kept.png' }] } }, 'scene')).toBe('valid');
+  expect(getAssetIndexState({ image_asset: { selected_id: null, variants: [] } }, 'scene')).toBe('empty');
+  expect(getAssetIndexState({ image_url: 'legacy.png' }, 'scene')).toBe('legacy');
 });
 
 it('stops observing on unmount without cancelling or resubmitting the task', async () => {

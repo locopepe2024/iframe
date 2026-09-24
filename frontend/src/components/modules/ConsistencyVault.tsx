@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
@@ -15,7 +15,7 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
-import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import { AssetTaskFailure, getAssetIndexState, mergeAssetTaskResult, waitForAssetTask } from "@/lib/assetTaskPolling";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -32,10 +32,75 @@ export default function ConsistencyVault() {
     const generatingTasks = useProjectStore((state) => state.generatingTasks || []); // Fallback to empty array if not defined yet
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
+    const setGeneratingTaskId = useProjectStore((state) => state.setGeneratingTaskId);
+    const assetPolls = useRef(new Map<string, { observing: boolean }>());
 
     const taskFailureMessage = (error?: unknown) => error
         ? tv("genFailedDetail", { error: String(error) })
         : tv("genFailed");
+
+    const applyTaskSnapshot = (projectId: string, status: any) => {
+        if (!status?.asset) return;
+        const store = useProjectStore.getState();
+        const latestProject = store.projects.find((project) => project.id === projectId)
+            || (store.currentProject?.id === projectId ? store.currentProject : null);
+        const patch = mergeAssetTaskResult(latestProject, status);
+        if (patch) store.updateProject(projectId, patch);
+    };
+
+    // Resume persisted task IDs after a page refresh and keep watching while
+    // this module stays mounted. The server snapshot is the source of truth;
+    // no full-project reload is needed to recover an asset task.
+    useEffect(() => {
+        const reconcile = (state: ReturnType<typeof useProjectStore.getState>) => {
+            const projectId = state.currentProject?.id;
+            if (!projectId) return;
+            for (const task of state.generatingTasks) {
+                if (!task.taskId || task.projectId !== projectId || assetPolls.current.has(task.taskId)) continue;
+                const observer = { observing: true };
+                assetPolls.current.set(task.taskId, observer);
+                void waitForAssetTask(
+                    () => api.getTaskStatus(task.taskId!),
+                    () => observer.observing,
+                    tv("genFailed"),
+                ).then((result) => {
+                    if (!result || !observer.observing) return;
+                    applyTaskSnapshot(projectId, result);
+                    if (result.status === "missing") {
+                        alert(tv("pollFailed", { error: result.error || "Task not found" }));
+                    }
+                    useProjectStore.getState().removeGeneratingTask(
+                        task.assetId,
+                        task.generationType,
+                        projectId,
+                    );
+                }).catch((error: unknown) => {
+                    if (!observer.observing) return;
+                    if (error instanceof AssetTaskFailure) {
+                        applyTaskSnapshot(projectId, error.task);
+                        alert(taskFailureMessage(error.message));
+                    } else {
+                        alert(tv("pollFailed", { error: String(error) }));
+                    }
+                    useProjectStore.getState().removeGeneratingTask(
+                        task.assetId,
+                        task.generationType,
+                        projectId,
+                    );
+                }).finally(() => {
+                    assetPolls.current.delete(task.taskId!);
+                });
+            }
+        };
+
+        const unsubscribe = useProjectStore.subscribe(reconcile);
+        reconcile(useProjectStore.getState());
+        return () => {
+            unsubscribe();
+            for (const observer of Array.from(assetPolls.current.values())) observer.observing = false;
+            assetPolls.current.clear();
+        };
+    }, [currentProject?.id]);
 
     // Store ID and Type instead of full object to ensure reactivity
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -58,11 +123,15 @@ export default function ConsistencyVault() {
     })() : null;
 
     const isAssetGenerating = (assetId: string) => {
-        return generatingTasks?.some((t: any) => t.assetId === assetId);
+        return generatingTasks?.some((t: any) =>
+            t.assetId === assetId && (!t.projectId || t.projectId === currentProject?.id)
+        );
     };
 
     const getAssetGeneratingTypes = (assetId: string) => {
-        return generatingTasks?.filter((t: any) => t.assetId === assetId).map((t: any) => ({
+        return generatingTasks?.filter((t: any) =>
+            t.assetId === assetId && (!t.projectId || t.projectId === currentProject?.id)
+        ).map((t: any) => ({
             type: t.generationType,
             batchSize: t.batchSize
         })) || [];
@@ -83,7 +152,7 @@ export default function ConsistencyVault() {
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, batchSize);
+            addGeneratingTask(assetId, generationType, batchSize, currentProject.id, type as "character" | "scene" | "prop");
         }
 
         try {
@@ -111,62 +180,43 @@ export default function ConsistencyVault() {
 
             // Start polling if we got a task_id
             if (taskId) {
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const status = await api.getTaskStatus(taskId);
-                        console.log("[Polling] Task status:", status.status);
-
-                        if (status.status === "completed") {
-                            clearInterval(pollInterval);
-                            const store = useProjectStore.getState();
-                            const latestProject = store.projects.find((project) => project.id === currentProject.id)
-                                || (store.currentProject?.id === currentProject.id ? store.currentProject : null);
-                            const patch = mergeAssetTaskResult(latestProject, status);
-                            if (patch) store.updateProject(currentProject.id, patch);
-                            else console.error("Completed asset task did not include its target asset snapshot", taskId);
-                            console.log("Asset generated successfully (async)");
-
-                            store.removeGeneratingTask(assetId, generationType);
-                        } else if (status.status === "failed") {
-                            clearInterval(pollInterval);
-                            console.error("Asset generation failed:", status.error);
-                            alert(taskFailureMessage(status.error));
-
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
-
-                            // Also refresh project to show updated status
-                            try {
-                                const updatedProject = await api.getProject(currentProject.id);
-                                updateProject(currentProject.id, updatedProject);
-                            } catch (refreshError) {
-                                console.error("Failed to refresh project:", refreshError);
-                            }
-
-                        }
-                        // If status is "pending" or "processing", continue polling
-                    } catch (pollError: any) {
-                        console.error("Polling error:", pollError);
-                        // A network failure does not cancel the backend task.
-                        // Keep polling so its final provider error is shown.
-                    }
-                }, 2000); // Poll every 2 seconds
+                setGeneratingTaskId(
+                    assetId,
+                    generationType,
+                    currentProject.id,
+                    type as "character" | "scene" | "prop",
+                    taskId,
+                );
             } else {
                 // Fallback: no task_id means sync response (shouldn't happen, but just in case)
                 console.warn("[handleGenerate] No task_id in response, falling back to sync mode");
                 updateProject(currentProject.id, response);
                 console.log("Asset generated successfully");
                 if (removeGeneratingTask) {
-                    removeGeneratingTask(assetId, generationType);
+                    removeGeneratingTask(assetId, generationType, currentProject.id);
                 }
             }
         } catch (error: any) {
             console.error("Failed to generate asset:", error);
             alert(tv('startGenFailed', { error: error.response?.data?.detail || error.message }));
             if (removeGeneratingTask) {
-                removeGeneratingTask(assetId, generationType);
+                removeGeneratingTask(assetId, generationType, currentProject.id);
             }
+        }
+    };
+
+    const handleClearGeneration = async (assetId: string, type: string) => {
+        if (!currentProject) return;
+        try {
+            const result = await api.clearAssetGenerationStatus(currentProject.id, type, assetId);
+            applyTaskSnapshot(currentProject.id, result);
+            for (const task of useProjectStore.getState().generatingTasks) {
+                if (task.assetId === assetId && task.projectId === currentProject.id) {
+                    removeGeneratingTask(assetId, task.generationType, currentProject.id);
+                }
+            }
+        } catch (error: any) {
+            alert(tv("clearGenerationFailed", { error: error.response?.data?.detail || error.message }));
         }
     };
 
@@ -459,6 +509,7 @@ export default function ConsistencyVault() {
                                 }}
                                 onDelete={() => handleDeleteAsset(asset.id, activeTab)}
                                 onUpload={() => handleOpenUploadModal(asset, activeTab)}
+                                onClearGeneration={() => handleClearGeneration(asset.id, activeTab)}
                             />
                         ))}
                         {/* Create New Asset Button */}
@@ -861,7 +912,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload }: any) {
+function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGeneration }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -888,6 +939,8 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
 
     const imageUrl = (type === 'character' ? (asset.avatar_url || asset.image_url) : asset.image_url);
     const fullImageUrl = getAssetUrl(imageUrl);
+    const generationFailed = asset.status === "failed" || asset.generation_task?.status === "failed";
+    const indexState = getAssetIndexState(asset, type);
 
     return (
         <motion.div
@@ -918,6 +971,18 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 <div className="absolute inset-0 z-20 bg-overlay backdrop-blur-sm flex items-center justify-center flex-col gap-2">
                     <RefreshCw className="animate-spin text-primary" size={32} />
                     <span className="text-xs font-mono text-primary">Generating...</span>
+                </div>
+            )}
+
+            {(generationFailed || indexState === "stale") && (
+                <div
+                    className="absolute top-2 left-2 z-30 max-w-[75%] rounded-lg border border-red-400/40 bg-black/75 px-2 py-1 text-[10px] text-red-200"
+                    title={asset.generation_task?.error || tv(generationFailed ? "generationFailedBadge" : "indexIssueBadge")}
+                >
+                    <div>{generationFailed ? tv("generationFailedBadge") : tv("indexIssueBadge")}</div>
+                    <div className={indexState === "stale" ? "text-amber-200" : "text-white/70"}>
+                        {tv(`assetIndex.${indexState}` as any)}
+                    </div>
                 </div>
             )}
 
@@ -954,7 +1019,9 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                     {asset.description || "No description"}
                 </p>
 
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
+                <div className={`flex gap-2 transition-opacity transform translate-y-2 group-hover:translate-y-0 ${
+                    generationFailed ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                }`}>
                     <WorkflowActionButton
                         onClick={(e) => {
                             e.stopPropagation();
@@ -969,6 +1036,19 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                     >
                         {isGenerating ? "Generating..." : "Generate"}
                     </WorkflowActionButton>
+                    {generationFailed && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClearGeneration?.();
+                            }}
+                            className="px-2.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-100 cursor-pointer transition-colors"
+                            title={tv("clearFailedStatus")}
+                            aria-label={tv("clearFailedStatus")}
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();

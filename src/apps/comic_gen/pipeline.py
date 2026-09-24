@@ -12,6 +12,7 @@ from urllib.parse import quote
 from .models import (
     Script,
     GenerationStatus,
+    AssetGenerationTaskState,
     VideoTask,
     Character,
     Scene,
@@ -97,6 +98,10 @@ class InvalidAssetReference(ValueError):
     """Raised when a requested asset-library reference cannot be resolved."""
 
 
+class ActiveAssetGenerationError(ValueError):
+    """Raised when clearing would race a queued or running asset worker."""
+
+
 class ComicGenPipeline(StudioOwnerMixin):
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
@@ -125,6 +130,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Task management for async asset generation
         # Format: { task_id: { status: str, progress: int, error: str, script_id: str, asset_id: str, created_at: float } }
         self.asset_generation_tasks: Dict[str, Dict[str, Any]] = {}
+        self._asset_task_lock = threading.RLock()
+        self._active_asset_generation_tasks = set()
         self.video_generation_tasks: Dict[str, Dict[str, Any]] = {}
         # Temporary cache for file import previews
         # (import_id -> (owner_profile_id, text))
@@ -164,7 +171,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     )
 
     def _recover_orphan_tasks(self) -> None:
-        """Sweep persisted state for video tasks left in pending/processing.
+        """Sweep persisted state for async tasks left in pending/processing.
 
         FastAPI's BackgroundTasks queue lives entirely in process memory:
         if uvicorn restarts (dev --reload, OOM, OS reboot, ctrl-C) every
@@ -178,12 +185,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         half-run video generation may have already incurred provider
         cost and re-running could double-charge.
 
-        Asset / motion-ref tasks live in transient in-process dicts
-        (self.asset_generation_tasks etc.) and never persist, so they
-        die naturally with the process and don't need recovery.
+        Asset task records now live on their target asset. Any asset worker
+        left pending/processing is failed on boot while its variants stay
+        untouched. Legacy assets with only status=processing are also
+        released from the spinner, although they have no recoverable task ID.
         """
         STUCK = ("pending", "processing")
         recovered = 0
+        recovered_video_tasks = 0
+        recovered_asset_containers = set()
 
         for script in self.scripts.values():
             tasks = getattr(script, "video_tasks", None) or []
@@ -196,12 +206,55 @@ class ComicGenPipeline(StudioOwnerMixin):
                         except Exception:
                             pass
                     recovered += 1
+                    recovered_video_tasks += 1
 
-        if recovered > 0:
+        asset_containers = [
+            ("script", script_id, script)
+            for script_id, script in self.scripts.items()
+        ]
+        asset_containers.extend(
+            ("series", series_id, series)
+            for series_id, series in self.series_store.items()
+        )
+        asset_containers.append(("global", None, self.library_store))
+        for source, container_id, container in asset_containers:
+            for asset_type in ("character", "scene", "prop"):
+                assets = getattr(container, f"{asset_type}s", []) or []
+                for asset in assets:
+                    task_state = getattr(asset, "generation_task", None)
+                    task_status = getattr(task_state, "status", None)
+                    if task_status in STUCK:
+                        task_state.status = "failed"
+                        if not task_state.error:
+                            task_state.error = self._ORPHAN_RECOVERY_REASON
+                        task_state.updated_at = time.time()
+                        if asset.status in STUCK:
+                            asset.status = GenerationStatus.FAILED
+                        recovered_asset_containers.add(source)
+                        recovered += 1
+                    elif asset.status == "processing" and task_state is None:
+                        # Older persisted records only had asset.status.
+                        asset.status = GenerationStatus.FAILED
+                        recovered_asset_containers.add(source)
+                        recovered += 1
+
+        if "script" in recovered_asset_containers or recovered_video_tasks:
             try:
                 self._save_data()
             except Exception:
-                logger.warning("Orphan recovery: failed to persist sweep")
+                logger.warning("Asset orphan recovery: failed to persist project sweep")
+        if "series" in recovered_asset_containers:
+            try:
+                self._save_series_data()
+            except Exception:
+                logger.warning("Asset orphan recovery: failed to persist series sweep")
+        if "global" in recovered_asset_containers:
+            try:
+                self._save_library_data()
+            except Exception:
+                logger.warning("Asset orphan recovery: failed to persist library sweep")
+
+        if recovered > 0:
             logger.warning(
                 "Orphan task recovery: marked %d stuck task(s) as failed.",
                 recovered,
@@ -890,53 +943,104 @@ class ComicGenPipeline(StudioOwnerMixin):
             # an older client sends both fields.
             reference_image_url = None
 
-        target_asset.status = GenerationStatus.PROCESSING
-        
-        # Create task
-        task_id = str(uuid.uuid4())
-        self.asset_generation_tasks[task_id] = {
-            "status": "pending",  # pending -> processing -> completed/failed
-            "progress": 0,
-            "error": None,
-            "script_id": script_id,
-            "asset_id": asset_id,
-            "asset_type": asset_type,
-            "created_at": time.time(),
-            "owner_user_id": script.owner_user_id,
-            "owner_profile_id": script.owner_profile_id,
-            # Store all params for later processing
-            "params": {
-                "style_preset": style_preset,
-                "reference_image_url": reference_image_url,
-                "reference": normalized_reference,
-                "style_prompt": style_prompt,
-                "generation_type": generation_type,
-                "prompt": prompt,
-                "apply_style": apply_style,
-                "negative_prompt": negative_prompt,
-                "batch_size": batch_size,
-                "model_name": model_name,
-                "aspect_ratio": aspect_ratio,
-                # Cast generation must not silently turn an already-uploaded
-                # asset into provider input.  ``reference_image_url`` is the
-                # explicit opt-in for an image-edit request; legacy internal
-                # callers that invoke generate_asset directly keep their
-                # reference behavior through its default.
-                "use_reference_image": bool(reference_image_url),
+        with self._asset_task_lock:
+            previous = getattr(target_asset, "generation_task", None)
+            if previous and previous.status in ("pending", "processing"):
+                raise ActiveAssetGenerationError(
+                    "An asset generation task is already active; clear it after it reaches a terminal state"
+                )
+
+            if previous and previous.task_id:
+                self.asset_generation_tasks.pop(previous.task_id, None)
+            for old_task_id, old_task in list(self.asset_generation_tasks.items()):
+                if (
+                    not old_task.get("is_series")
+                    and old_task.get("script_id") == script_id
+                    and old_task.get("asset_id") == asset_id
+                    and old_task.get("asset_type") == asset_type
+                    and old_task.get("status") in ("completed", "failed", "cleared")
+                ):
+                    self.asset_generation_tasks.pop(old_task_id, None)
+
+            now = time.time()
+            task_id = str(uuid.uuid4())
+            target_asset.status = GenerationStatus.PROCESSING
+            target_asset.generation_task = AssetGenerationTaskState(
+                task_id=task_id,
+                status="pending",
+                created_at=now,
+                updated_at=now,
+                script_id=script_id,
+                asset_id=asset_id,
+                asset_type=asset_type,
+                asset_source=source,
+            )
+            # Keep the current task in memory for execution parameters. Its
+            # durable identity/status live on the target asset.
+            self.asset_generation_tasks[task_id] = {
+                "status": "pending",  # pending -> processing -> completed/failed/cleared
+                "progress": 0,
+                "error": None,
+                "script_id": script_id,
+                "asset_id": asset_id,
+                "asset_type": asset_type,
+                "asset_source": source,
+                "created_at": now,
+                "owner_user_id": script.owner_user_id,
+                "owner_profile_id": script.owner_profile_id,
+                "params": {
+                    "style_preset": style_preset,
+                    "reference_image_url": reference_image_url,
+                    "reference": normalized_reference,
+                    "style_prompt": style_prompt,
+                    "generation_type": generation_type,
+                    "prompt": prompt,
+                    "apply_style": apply_style,
+                    "negative_prompt": negative_prompt,
+                    "batch_size": batch_size,
+                    "model_name": model_name,
+                    "aspect_ratio": aspect_ratio,
+                    # Cast generation must not silently turn an already-uploaded
+                    # asset into provider input.  ``reference_image_url`` is the
+                    # explicit opt-in for an image-edit request; legacy internal
+                    # callers that invoke generate_asset directly keep their
+                    # reference behavior through its default.
+                    "use_reference_image": bool(reference_image_url),
+                },
             }
-        }
-        
-        self._save_after_asset_mutation(source)
+            self._save_after_asset_mutation(source)
         return script, task_id
 
     def process_asset_generation_task(self, task_id: str):
         """Processes an asset generation task in the background."""
-        task = self.asset_generation_tasks.get(task_id)
-        if not task:
-            logger.error(f"Task {task_id} not found")
-            return
-
-        task["status"] = "processing"
+        with self._asset_task_lock:
+            task = self.asset_generation_tasks.get(task_id)
+            if not task:
+                logger.error(f"Task {task_id} not found")
+                return
+            if task.get("status") != "pending":
+                return
+            target_asset = None
+            if not task.get("is_series"):
+                script = self.scripts.get(task.get("script_id"))
+                if not script:
+                    task["status"] = "failed"
+                    task["error"] = "Project not found before asset task execution"
+                    return
+                target_asset, source = self._find_asset_with_source(
+                    script, task.get("asset_id"), task.get("asset_type")
+                )
+                state = getattr(target_asset, "generation_task", None)
+                if not target_asset or not state or state.task_id != task_id or state.status != "pending":
+                    # A queued task may be cleared before its worker starts.
+                    return
+                task["asset_source"] = source
+                state.status = "processing"
+                state.updated_at = time.time()
+                target_asset.status = GenerationStatus.PROCESSING
+                self._save_after_asset_mutation(source)
+            task["status"] = "processing"
+            self._active_asset_generation_tasks.add(task_id)
 
         provider_token = None
         try:
@@ -969,17 +1073,43 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("use_reference_image", False),
                     params.get("reference"),
                 )
-            task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
-            task["status"] = "completed"
-            task["progress"] = 100
+            with self._asset_task_lock:
+                task["status"] = "completed"
+                task["progress"] = 100
+                task["error"] = None
+                if not task.get("is_series"):
+                    state = getattr(target_asset, "generation_task", None)
+                    if state and state.task_id == task_id:
+                        state.status = "completed"
+                        state.error = None
+                        state.updated_at = time.time()
+                        index_state = self._asset_index_state(target_asset, task.get("asset_type", ""))
+                        target_asset.status = (
+                            GenerationStatus.COMPLETED
+                            if index_state in ("valid", "legacy")
+                            else GenerationStatus.PENDING
+                        )
+                        self._save_after_asset_mutation(task.get("asset_source", "script"))
+                task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
             logger.info(f"Task {task_id} completed successfully")
         except Exception as e:
-            task["status"] = "failed"
-            task["error"] = str(e)
+            with self._asset_task_lock:
+                task["status"] = "failed"
+                task["error"] = str(e) or type(e).__name__
+                if not task.get("is_series") and target_asset is not None:
+                    state = getattr(target_asset, "generation_task", None)
+                    if state and state.task_id == task_id:
+                        state.status = "failed"
+                        state.error = task["error"]
+                        state.updated_at = time.time()
+                        target_asset.status = GenerationStatus.FAILED
+                        self._save_after_asset_mutation(task.get("asset_source", "script"))
             logger.error(f"Task {task_id} failed: {e}")
         finally:
             if provider_token is not None:
                 reset_studio_uniart_config(provider_token)
+            with self._asset_task_lock:
+                self._active_asset_generation_tasks.discard(task_id)
 
     def _asset_generation_result(self, task: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Snapshot only the generated asset for incremental task polling."""
@@ -1008,6 +1138,46 @@ class ComicGenPipeline(StudioOwnerMixin):
         public_source = {"script": "episode", "series": "series", "global": "global"}.get(source, source)
         payload["source"] = public_source
         return payload, public_source
+
+    @staticmethod
+    def _asset_index_state(asset: Any, asset_type: str) -> str:
+        """Classify the stored image pointer without claiming that media loads."""
+        if asset_type == "character":
+            containers = [
+                getattr(asset, "reference_sheet", None),
+                getattr(asset, "full_body", None),
+                getattr(asset, "three_views", None),
+                getattr(asset, "head_shot", None),
+                getattr(asset, "full_body_asset", None),
+                getattr(asset, "three_view_asset", None),
+                getattr(asset, "headshot_asset", None),
+            ]
+            legacy_urls = (
+                getattr(asset, "full_body_image_url", None),
+                getattr(asset, "three_view_image_url", None),
+                getattr(asset, "headshot_image_url", None),
+                getattr(asset, "image_url", None),
+                getattr(asset, "avatar_url", None),
+            )
+        else:
+            containers = [getattr(asset, "image_asset", None)]
+            legacy_urls = (getattr(asset, "image_url", None),)
+
+        for container in containers:
+            if container is None:
+                continue
+            selected_id = getattr(container, "selected_image_id", None)
+            if selected_id is None:
+                selected_id = getattr(container, "selected_id", None)
+            if not selected_id:
+                continue
+            variants = getattr(container, "image_variants", None)
+            if variants is None:
+                variants = getattr(container, "variants", None)
+            selected = next((item for item in (variants or []) if item.id == selected_id), None)
+            return "valid" if selected is not None and bool(selected.url) else "stale"
+
+        return "legacy" if any(bool(url) for url in legacy_urls) else "empty"
 
     def _process_series_asset_task(self, task: Dict, params: Dict):
         """Process a Series asset generation task."""
@@ -1072,34 +1242,199 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_series_data()
 
     def get_asset_generation_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """Returns the status of an asset generation task."""
-        # Check image tasks first
+        """Return an in-memory task or rebuild the latest asset task from disk."""
         task = self.asset_generation_tasks.get(task_id)
-        if not task:
-            # Then check video tasks
-            task = self.video_generation_tasks.get(task_id)
-            
-        if not task:
-            return None
-
         requested_owner = self._requested_owner_profile_id()
-        if requested_owner and task.get("owner_profile_id") != requested_owner:
-            return None
-        
-        result = {
-            "task_id": task_id,
-            "status": task["status"],
-            "progress": task.get("progress", 0),
-            "error": task.get("error"),
-            "asset_id": task.get("asset_id"),
-            "asset_type": task.get("result_asset_type", task.get("asset_type")),
-            "script_id": task.get("script_id"),
-            "created_at": task.get("created_at")
+        if task:
+            if requested_owner and task.get("owner_profile_id") != requested_owner:
+                return None
+            result = {
+                "task_id": task_id,
+                "status": task.get("status", "failed"),
+                "progress": task.get("progress", 0),
+                "error": task.get("error"),
+                "asset_id": task.get("asset_id"),
+                "asset_type": task.get("result_asset_type", task.get("asset_type")),
+                "script_id": task.get("script_id"),
+                "created_at": task.get("created_at"),
+            }
+            if task.get("is_series"):
+                result["asset"], result["asset_source"] = self._asset_generation_result(task)
+            else:
+                asset, source = self._asset_generation_result_target(task)
+                if asset is not None:
+                    result["asset"] = self._asset_snapshot(asset, source)
+                    result["asset_source"] = self._public_asset_source(source)
+                    result["asset_index_state"] = self._asset_index_state(asset, task.get("asset_type"))
+                if task.get("status") == "completed" and task.get("result_asset"):
+                    result["asset"] = task["result_asset"]
+                    result["asset_source"] = task.get("asset_source")
+            return result
+
+        # Storyboard motion-reference tasks remain in-memory and are kept
+        # separate from durable still-image task state.
+        motion_task = self.video_generation_tasks.get(task_id)
+        if motion_task:
+            if requested_owner and motion_task.get("owner_profile_id") != requested_owner:
+                return None
+            result = {
+                "task_id": task_id,
+                "status": motion_task.get("status", "failed"),
+                "progress": motion_task.get("progress", 0),
+                "error": motion_task.get("error"),
+                "asset_id": motion_task.get("asset_id"),
+                "asset_type": motion_task.get("result_asset_type", motion_task.get("asset_type")),
+                "script_id": motion_task.get("script_id"),
+                "created_at": motion_task.get("created_at"),
+            }
+            if motion_task.get("status") == "completed" and motion_task.get("result_asset"):
+                result["asset"] = motion_task["result_asset"]
+                result["asset_source"] = motion_task.get("asset_source")
+            return result
+
+        # The durable record is nested on the target asset. Scan the loaded
+        # stores to locate exactly the current task; parameters are not
+        # restored, because orphan work is failed rather than re-submitted.
+        containers = [
+            ("script", script_id, script)
+            for script_id, script in self.scripts.items()
+        ]
+        containers.extend(
+            ("series", series_id, series)
+            for series_id, series in self.series_store.items()
+        )
+        containers.append(("global", None, self.library_store))
+        for source, container_id, container in containers:
+            for asset_type in ("character", "scene", "prop"):
+                for asset in getattr(container, f"{asset_type}s", []) or []:
+                    state = getattr(asset, "generation_task", None)
+                    if not state or state.task_id != task_id:
+                        continue
+                    if requested_owner:
+                        owner = container if source != "global" else asset
+                        if not owned_by(owner, requested_owner):
+                            return None
+                    return self._asset_generation_status_payload(asset, state, source)
+        return None
+
+    @staticmethod
+    def _public_asset_source(source: Optional[str]) -> Optional[str]:
+        return {"script": "episode", "series": "series", "global": "global"}.get(source, source)
+
+    def _asset_snapshot(self, asset: Any, source: Optional[str]) -> Dict[str, Any]:
+        payload = asset.model_dump() if hasattr(asset, "model_dump") else asset.dict()
+        payload["source"] = self._public_asset_source(source)
+        return payload
+
+    def _asset_generation_result_target(self, task: Dict[str, Any]):
+        if task.get("is_series"):
+            series = self.series_store.get(task.get("script_id"))
+            if not series:
+                return None, None
+            pool = getattr(series, f"{task.get('asset_type')}s", [])
+            return next((item for item in pool if item.id == task.get("asset_id")), None), "series"
+        script = self.scripts.get(task.get("script_id"))
+        if not script:
+            return None, None
+        return self._find_asset_with_source(script, task.get("asset_id"), task.get("asset_type"))
+
+    def _asset_generation_status_payload(self, asset: Any, state: Any, source: str) -> Dict[str, Any]:
+        return {
+            "task_id": state.task_id,
+            "status": state.status,
+            "progress": 100 if state.status == "completed" else 0,
+            "error": state.error,
+            "asset_id": state.asset_id or asset.id,
+            "asset_type": state.asset_type,
+            "script_id": state.script_id,
+            "created_at": state.created_at,
+            "updated_at": state.updated_at,
+            "asset_source": self._public_asset_source(state.asset_source or source),
+            "asset_index_state": self._asset_index_state(asset, state.asset_type or ""),
+            "asset": self._asset_snapshot(asset, state.asset_source or source),
         }
-        if task.get("status") == "completed" and task.get("result_asset"):
-            result["asset"] = task["result_asset"]
-            result["asset_source"] = task.get("asset_source")
-        return result
+
+    def clear_asset_generation_status(
+        self, script_id: str, asset_type: str, asset_id: str
+    ) -> Dict[str, Any]:
+        """Clear a terminal task marker without deleting any asset material."""
+        if asset_type not in ("character", "scene", "prop"):
+            raise ValueError(f"Invalid asset_type: {asset_type}")
+        script = self.scripts.get(script_id)
+        requested_owner = self._requested_owner_profile_id()
+        if not script or (requested_owner and not owned_by(script, requested_owner)):
+            raise ValueError("Project not found")
+        asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if asset is None:
+            raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+
+        with self._asset_task_lock:
+            state = getattr(asset, "generation_task", None)
+            task_id = state.task_id if state else None
+            matching_tasks = [
+                (candidate_id, candidate)
+                for candidate_id, candidate in self.asset_generation_tasks.items()
+                if not candidate.get("is_series")
+                and (
+                    (task_id and candidate_id == task_id)
+                    or (
+                        candidate.get("asset_id") == asset_id
+                        and candidate.get("asset_type") == asset_type
+                        and candidate.get("script_id") == script_id
+                    )
+                )
+            ]
+            if any(
+                candidate_id in self._active_asset_generation_tasks
+                or candidate.get("status") == "processing"
+                for candidate_id, candidate in matching_tasks
+            ):
+                raise ActiveAssetGenerationError("Asset generation task is active and cannot be cleared")
+            if state and state.status == "processing" and task_id in self._active_asset_generation_tasks:
+                raise ActiveAssetGenerationError("Asset generation task is active and cannot be cleared")
+
+            # A queued worker takes the same lock before it starts. Marking its
+            # task cleared here makes the worker's start check a no-op.
+            for candidate_id, candidate in matching_tasks:
+                if candidate_id == task_id or candidate.get("status") == "pending":
+                    candidate["status"] = "cleared"
+                    candidate["error"] = None
+
+            index_state = self._asset_index_state(asset, asset_type)
+            asset.status = (
+                GenerationStatus.COMPLETED
+                if index_state in ("valid", "legacy")
+                else GenerationStatus.PENDING
+            )
+            if state:
+                state.status = "cleared"
+                state.error = None
+                state.updated_at = time.time()
+            if source == "script":
+                script.updated_at = time.time()
+            elif source == "series" and script.series_id in self.series_store:
+                self.series_store[script.series_id].updated_at = time.time()
+            self._save_after_asset_mutation(source)
+
+        payload = self._asset_generation_status_payload(
+            asset,
+            state,
+            source,
+        ) if state else {
+            "task_id": None,
+            "status": "cleared",
+            "error": None,
+            "asset_id": asset_id,
+            "asset_type": asset_type,
+            "script_id": script_id,
+            "asset_source": self._public_asset_source(source),
+            "asset_index_state": index_state,
+            "asset": self._asset_snapshot(asset, source),
+        }
+        payload["status"] = "cleared"
+        payload["error"] = None
+        payload["asset_index_state"] = index_state
+        return payload
 
     def get_video_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Return a persisted storyboard video task for the active owner."""

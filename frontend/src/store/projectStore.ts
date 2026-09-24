@@ -96,6 +96,13 @@ export interface Character {
     locked?: boolean;
     starred?: boolean;
     status?: string;
+    generation_task?: {
+        task_id: string;
+        status: "pending" | "processing" | "completed" | "failed" | "cleared";
+        error?: string | null;
+        created_at?: number;
+        updated_at?: number;
+    } | null;
     is_consistent?: boolean;
     full_body_updated_at?: number;
     three_view_updated_at?: number;
@@ -120,6 +127,7 @@ export interface Scene {
     video_assets?: VideoTask[];
     video_prompt?: string;
     status?: string;
+    generation_task?: Character["generation_task"];
     locked?: boolean;
     starred?: boolean;
     time_of_day?: string;
@@ -136,6 +144,7 @@ export interface Prop {
     video_assets?: VideoTask[];
     video_prompt?: string;
     status?: string;
+    generation_task?: Character["generation_task"];
     locked?: boolean;
     starred?: boolean;
     source?: "episode" | "series" | "global";
@@ -358,9 +367,29 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number }[];
-    addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
-    removeGeneratingTask: (assetId: string, generationType: string) => void;
+    generatingTasks: {
+        assetId: string;
+        generationType: string;
+        batchSize: number;
+        projectId?: string;
+        assetType?: "character" | "scene" | "prop";
+        taskId?: string;
+    }[];
+    addGeneratingTask: (
+        assetId: string,
+        generationType: string,
+        batchSize: number,
+        projectId?: string,
+        assetType?: "character" | "scene" | "prop",
+    ) => void;
+    setGeneratingTaskId: (
+        assetId: string,
+        generationType: string,
+        projectId: string,
+        assetType: "character" | "scene" | "prop",
+        taskId: string,
+    ) => void;
+    removeGeneratingTask: (assetId: string, generationType: string, projectId?: string) => void;
 
     // Storyboard Frame Rendering State
     renderingFrames: Set<string>;  // Set of frame IDs currently being rendered
@@ -709,11 +738,42 @@ export const useProjectStore = create<ProjectStore>()(
 
             // Asset Generation State
             generatingTasks: [],
-            addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => set((state) => ({
-                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize }]
+            addGeneratingTask: (assetId, generationType, batchSize, projectId, assetType) => set((state) => ({
+                generatingTasks: [
+                    ...state.generatingTasks.filter((task) => !(
+                        task.assetId === assetId
+                        && task.generationType === generationType
+                        && (!projectId || !task.projectId || task.projectId === projectId)
+                    )),
+                    { assetId, generationType, batchSize, projectId, assetType },
+                ],
             })),
-            removeGeneratingTask: (assetId: string, generationType: string) => set((state) => ({
-                generatingTasks: state.generatingTasks.filter((t) => !(t.assetId === assetId && t.generationType === generationType))
+            setGeneratingTaskId: (assetId, generationType, projectId, assetType, taskId) => set((state) => {
+                const index = state.generatingTasks.findIndex((task) =>
+                    task.assetId === assetId
+                    && task.generationType === generationType
+                    && (!task.projectId || task.projectId === projectId)
+                );
+                if (index < 0) {
+                    return {
+                        generatingTasks: [
+                            ...state.generatingTasks,
+                            { assetId, generationType, batchSize: 1, projectId, assetType, taskId },
+                        ],
+                    };
+                }
+                return {
+                    generatingTasks: state.generatingTasks.map((task, currentIndex) => currentIndex === index
+                        ? { ...task, projectId, assetType, taskId }
+                        : task),
+                };
+            }),
+            removeGeneratingTask: (assetId, generationType, projectId) => set((state) => ({
+                generatingTasks: state.generatingTasks.filter((task) => !(
+                    task.assetId === assetId
+                    && task.generationType === generationType
+                    && (!projectId || !task.projectId || task.projectId === projectId)
+                )),
             })),
 
             // Storyboard Frame Rendering State
@@ -804,10 +864,19 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
+            version: 1,
+            migrate: (persistedState, _version) => {
+                const state = persistedState as Partial<ProjectStore> | undefined;
+                return {
+                    projects: state?.projects ?? [],
+                    generatingTasks: (state?.generatingTasks ?? []).filter((task) => Boolean(task.taskId)),
+                };
+            },
             partialize: (state) => ({
                 projects: state.projects,
-
-                generatingTasks: state.generatingTasks // Now persisting this to maintain state across refreshes
+                // A task without its server ID is only a submit-in-flight UI
+                // marker. Persisting it would restore an unpollable spinner.
+                generatingTasks: state.generatingTasks.filter((task) => Boolean(task.taskId)),
             }),
         }
     )

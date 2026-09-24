@@ -2,14 +2,26 @@ import type { Project } from "@/store/projectStore";
 
 export type TaskStatus = { status?: string; error?: string };
 
+export type AssetIndexState = "valid" | "stale" | "empty" | "legacy";
+
 export type AssetTaskResult = TaskStatus & {
+  task_id?: string;
+  script_id?: string;
   asset_id?: string;
   asset_type?: "character" | "scene" | "prop" | "full_body" | "head_shot";
   asset_source?: "episode" | "series" | "global";
+  asset_index_state?: AssetIndexState;
   asset?: Record<string, any>;
 };
 
-/** Merge one completed task's asset snapshot into the current project. */
+export class AssetTaskFailure extends Error {
+  constructor(message: string, readonly task: AssetTaskResult) {
+    super(message);
+    this.name = "AssetTaskFailure";
+  }
+}
+
+/** Merge one task's target-asset snapshot into the current project. */
 export function mergeAssetTaskResult(
   project: Project | null | undefined,
   status: AssetTaskResult,
@@ -47,7 +59,37 @@ export function mergeAssetTaskResult(
   return { [collection]: nextAssets } as Partial<Project>;
 }
 
-/** Polling observes task state; transport errors and elapsed time are not terminal states. */
+/** Inspect the selected image pointer without claiming that its file is readable. */
+export function getAssetIndexState(asset: Record<string, any> | null | undefined, type: string): AssetIndexState {
+  if (!asset) return "empty";
+  const containers = type === "character"
+    ? [
+        asset.reference_sheet,
+        asset.full_body,
+        asset.three_views,
+        asset.head_shot,
+        asset.full_body_asset,
+        asset.three_view_asset,
+        asset.headshot_asset,
+      ]
+    : [asset.image_asset];
+
+  for (const container of containers) {
+    if (!container) continue;
+    const selectedId = container.selected_image_id ?? container.selected_id;
+    if (!selectedId) continue;
+    const variants = container.image_variants ?? container.variants ?? [];
+    const selected = variants.find((variant: any) => variant.id === selectedId);
+    return selected?.url ? "valid" : "stale";
+  }
+
+  const legacyUrls = type === "character"
+    ? [asset.full_body_image_url, asset.three_view_image_url, asset.headshot_image_url, asset.image_url, asset.avatar_url]
+    : [asset.image_url];
+  return legacyUrls.some(Boolean) ? "legacy" : "empty";
+}
+
+/** Polling observes server task state; transient transport errors are not terminal. */
 export async function waitForAssetTask(
   read: () => Promise<AssetTaskResult>,
   observing: () => boolean,
@@ -60,12 +102,16 @@ export async function waitForAssetTask(
     let task: AssetTaskResult;
     try {
       task = await read();
-    } catch {
+    } catch (error: any) {
+      if (error?.response?.status === 404 || error?.status === 404) {
+        return { status: "missing", error: "Task is no longer available" };
+      }
       continue;
     }
     if (task.status === "completed") return task;
+    if (task.status === "cleared") return task;
     if (["failed", "cancelled", "canceled"].includes(task.status || "")) {
-      throw new Error(task.error || failureMessage);
+      throw new AssetTaskFailure(task.error || failureMessage, task);
     }
   }
   return null;

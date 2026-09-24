@@ -7,7 +7,7 @@ import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/p
 import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
 import { api } from "@/lib/api";
-import { waitForAssetTask } from "@/lib/assetTaskPolling";
+import { AssetTaskFailure, mergeAssetTaskResult, waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
@@ -96,6 +96,9 @@ export default function AssetInspector({
 }: AssetInspectorProps) {
   const t = useTranslations("library");
   const currentProject = useProjectStore((state) => state.currentProject);
+  const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
+  const setGeneratingTaskId = useProjectStore((state) => state.setGeneratingTaskId);
+  const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
   const TYPE_LABEL: Record<AssetTab, string> = {
     characters: t("characterLabel"),
     scenes: t("sceneLabel"),
@@ -123,6 +126,8 @@ export default function AssetInspector({
   const [activeVariantId, setActiveVariantId] = useState<string | null>(defaultId);
   const [generating, setGenerating] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [clearingGeneration, setClearingGeneration] = useState(false);
+  const generationFailed = (asset as any).status === "failed" || (asset as any).generation_task?.status === "failed";
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
   useEffect(() => {
@@ -213,6 +218,7 @@ export default function AssetInspector({
     const tid = toast.progress(t("generatingVariants"), {
       body: t("generatingVariantsBody", { name: asset.name, count: VARIANT_BATCH }),
     });
+    addGeneratingTask(assetId, "all", VARIANT_BATCH, projectId, SINGULAR_TYPE[type] as "character" | "scene" | "prop");
     try {
       const resp = await api.generateAsset(
         projectId,
@@ -236,27 +242,39 @@ export default function AssetInspector({
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
       let taskAsset: any;
       if (taskId) {
+        setGeneratingTaskId(assetId, "all", projectId, SINGULAR_TYPE[type] as "character" | "scene" | "prop", taskId);
         const completedTask = await waitForAssetTask(
           () => api.getTaskStatus(taskId),
           () => aliveRef.current && currentAssetIdRef.current === assetId,
           t("genFailed"),
         );
         if (!completedTask) return; // 已卸载
-        if (
+        if (completedTask.status === "missing") {
+          removeGeneratingTask(assetId, "all", projectId);
+          throw new Error(t("genFailed"));
+        }
+      if (
           completedTask.asset_id === assetId
           && completedTask.asset_type === SINGULAR_TYPE[type]
           && completedTask.asset
         ) {
           taskAsset = completedTask.asset;
+          const store = useProjectStore.getState();
+          const latestProject = store.projects.find((project) => project.id === projectId)
+            || (store.currentProject?.id === projectId ? store.currentProject : null);
+          const patch = mergeAssetTaskResult(latestProject, completedTask);
+          if (patch) store.updateProject(projectId, patch);
         }
+        if (!taskAsset) throw new Error(t("genFailed"));
       }
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
       let updated = taskAsset;
       if (!updated) {
-        const proj = await api.getProject(projectId);
+        const responseProject = resp as any;
         const list: (Character | Scene | Prop)[] =
-          (type === "characters" ? proj?.characters : type === "scenes" ? proj?.scenes : proj?.props) ?? [];
-        updated = list.find((a) => a.id === assetId);
+          (type === "characters" ? responseProject?.characters : type === "scenes" ? responseProject?.scenes : responseProject?.props) ?? [];
+        updated = list.find((item) => item.id === assetId);
+        if (!updated) throw new Error(t("genFailed"));
       }
       const freshVariants = (updated ? primaryImageAsset(updated, type)?.variants : undefined) ?? [];
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
@@ -269,7 +287,21 @@ export default function AssetInspector({
         body: added.length ? t("variantsAddedBody", { count: added.length }) : t("variantsRefreshed"),
         autoCloseMs: 5000,
       });
+      removeGeneratingTask(assetId, "all", projectId);
     } catch (e) {
+      if (e instanceof AssetTaskFailure) {
+        const failedAsset = e.task.asset;
+        if (failedAsset?.id === assetId) {
+          const failedVariants = primaryImageAsset(failedAsset as any, type)?.variants ?? [];
+          setExtraVariants(failedVariants);
+          const store = useProjectStore.getState();
+          const latestProject = store.projects.find((project) => project.id === projectId)
+            || (store.currentProject?.id === projectId ? store.currentProject : null);
+          const patch = mergeAssetTaskResult(latestProject, e.task);
+          if (patch) store.updateProject(projectId, patch);
+        }
+      }
+      removeGeneratingTask(assetId, "all", projectId);
       const msg = e instanceof Error ? e.message : t("genFailed");
       if (aliveRef.current) toast.update(tid, { kind: "error", title: t("variantsGenFailed"), body: msg, autoCloseMs: 0 });
     } finally {
@@ -293,6 +325,30 @@ export default function AssetInspector({
       toast.error(t("promoteFailed"), { body: msg });
     } finally {
       setPromoting(false);
+    }
+  };
+
+  const handleClearGeneration = async () => {
+    if (sourceKind !== "project" || clearingGeneration) return;
+    setClearingGeneration(true);
+    const projectId = sourceId.replace(/^project-/, "");
+    try {
+      const result = await api.clearAssetGenerationStatus(projectId, SINGULAR_TYPE[type], asset.id);
+      const store = useProjectStore.getState();
+      const latestProject = store.projects.find((project) => project.id === projectId)
+        || (store.currentProject?.id === projectId ? store.currentProject : null);
+      const patch = mergeAssetTaskResult(latestProject, result);
+      if (patch) store.updateProject(projectId, patch);
+      for (const task of store.generatingTasks) {
+        if (task.assetId === asset.id && task.projectId === projectId) {
+          store.removeGeneratingTask(asset.id, task.generationType, projectId);
+        }
+      }
+      toast.success(t("clearGenerationDone"));
+    } catch (error: any) {
+      toast.error(t("clearGenerationFailed"), { body: error?.response?.data?.detail || error?.message || t("genFailed") });
+    } finally {
+      setClearingGeneration(false);
     }
   };
 
@@ -436,6 +492,17 @@ export default function AssetInspector({
           项目内进行），故置灰并提示在剧集内生成。「用于分镜」按钮已移除（占位、无落地路径）。
         */}
         <div className="flex flex-col gap-2">
+          {sourceKind === "project" && generationFailed && (
+            <button
+              type="button"
+              onClick={handleClearGeneration}
+              disabled={clearingGeneration || generating}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-100 text-sm font-medium hover:bg-amber-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {clearingGeneration && <Loader2 size={15} className="animate-spin" />}
+              {t("clearGenerationStatus")}
+            </button>
+          )}
           {sourceKind === "project" ? (
             <button
               type="button"

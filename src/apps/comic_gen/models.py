@@ -22,6 +22,20 @@ class GenerationStatus(str, Enum):
     FAILED = "failed"
 
 
+class AssetGenerationTaskState(BaseModel):
+    """Durable pointer to the latest async image-generation task for an asset."""
+
+    task_id: str
+    status: Literal["pending", "processing", "completed", "failed", "cleared"]
+    error: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+    script_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    asset_type: Optional[Literal["character", "scene", "prop"]] = None
+    asset_source: Optional[str] = None
+
+
 # === Storyboard Schema v2: Enums ===
 
 class ShotSizeEnum(str, Enum):
@@ -381,6 +395,10 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_task: Optional[AssetGenerationTaskState] = Field(
+        None,
+        description="Durable state of the latest async image-generation task",
+    )
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -404,6 +422,10 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_task: Optional[AssetGenerationTaskState] = Field(
+        None,
+        description="Durable state of the latest async image-generation task",
+    )
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -428,6 +450,10 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_task: Optional[AssetGenerationTaskState] = Field(
+        None,
+        description="Durable state of the latest async image-generation task",
+    )
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None

@@ -24,7 +24,7 @@ import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, T
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import { getAssetIndexState, mergeAssetTaskResult } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function startAssetPoll(
     t: ReturnType<typeof useTranslations<"castWorkbench">>,
     getStore: () => {
         updateProject: (id: string, data: any) => void;
-        removeGeneratingTask: (assetId: string, generationType: string) => void;
+        removeGeneratingTask: (assetId: string, generationType: string, projectId?: string) => void;
         getProject: (id: string) => any;
     },
     progressToastId?: string,
@@ -54,7 +54,7 @@ export function startAssetPoll(
     const interval = setInterval(async () => {
         try {
             const status = await api.getTaskStatus(taskId);
-            if (status?.status === "completed") {
+            if (["completed", "cleared"].includes(status?.status)) {
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
@@ -67,7 +67,7 @@ export function startAssetPoll(
                 } else {
                     console.error("Completed asset task did not include its target asset snapshot", taskId);
                 }
-                removeGeneratingTask(entityId, generationType);
+                removeGeneratingTask(entityId, generationType, projectId);
                 const updatedEntity = status.asset?.id === entityId ? status.asset : undefined;
                 const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
                 if (updatedEntity) {
@@ -79,16 +79,23 @@ export function startAssetPoll(
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const { removeGeneratingTask } = getStore();
-                removeGeneratingTask(entityId, generationType);
+                const store = getStore();
+                const current = store.getProject(projectId);
+                const patch = mergeAssetTaskResult(current, status);
+                if (patch) store.updateProject(projectId, patch);
+                store.removeGeneratingTask(entityId, generationType, projectId);
                 toast.error(t("toastGenErr"), { body: status?.error || t("toastGenErrUnknown") });
             }
         } catch (err) {
+            if ((err as any)?.response?.status !== 404 && (err as any)?.status !== 404) {
+                // Temporary transport failures do not cancel the server task.
+                return;
+            }
             clearInterval(interval);
             activePolls.delete(entityId);
             if (progressToastId) toast.dismiss(progressToastId);
             const { removeGeneratingTask } = getStore();
-            removeGeneratingTask(entityId, generationType);
+            removeGeneratingTask(entityId, generationType, projectId);
             toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
         }
     }, 2500);
@@ -275,6 +282,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
     const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
+    const [clearingGeneration, setClearingGeneration] = useState(false);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
@@ -285,7 +293,34 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         scenes: any[];
         props: any[];
     }>({ characters: [], scenes: [], props: [] });
-    const generating = generatingTasks.some((t) => t.assetId === entityId);
+    const generating = generatingTasks.some((task) =>
+        task.assetId === entityId && (!task.projectId || task.projectId === currentProject?.id)
+    );
+    const generationFailed = entity?.status === "failed" || entity?.generation_task?.status === "failed";
+    const assetIndexState = getAssetIndexState(entity, kind ?? "character");
+
+    const handleClearGeneration = async () => {
+        if (!currentProject || !entity || !kind || clearingGeneration) return;
+        setClearingGeneration(true);
+        try {
+            const result = await api.clearAssetGenerationStatus(currentProject.id, kind, entity.id);
+            const store = useProjectStore.getState();
+            const latestProject = store.projects.find((project) => project.id === currentProject.id)
+                || (store.currentProject?.id === currentProject.id ? store.currentProject : null);
+            const patch = mergeAssetTaskResult(latestProject, result);
+            if (patch) store.updateProject(currentProject.id, patch);
+            for (const task of store.generatingTasks) {
+                if (task.assetId === entity.id && task.projectId === currentProject.id) {
+                    store.removeGeneratingTask(entity.id, task.generationType, currentProject.id);
+                }
+            }
+            toast.success(t("toastClearDone"));
+        } catch (error: any) {
+            toast.error(t("toastGenErr"), { body: error?.response?.data?.detail || error?.message || t("toastGenErrUnknown") });
+        } finally {
+            setClearingGeneration(false);
+        }
+    };
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
@@ -489,7 +524,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             // if the entity truly is stale and the poll surfaces the error.
         }
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
-        addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);
+        addGeneratingTask(
+            entity.id,
+            kind === "character" ? "reference_sheet" : "all",
+            effectiveBatchSize,
+            currentProject.id,
+            kind,
+        );
 
         const progressId = toast.progress(t("toastGenStart", { kind: t(`kind.${kind}`) }), {
             projectId: currentProject.id,
@@ -516,6 +557,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
             const taskId = (resp as any)?._task_id;
             if (taskId) {
+                useProjectStore.getState().setGeneratingTaskId(
+                    entity.id,
+                    kind === "character" ? "reference_sheet" : "all",
+                    currentProject.id,
+                    kind,
+                    taskId,
+                );
                 const capturedEntityId = entity.id;
                 const capturedKind = kind;
                 const capturedProjectId = currentProject.id;
@@ -531,12 +579,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             } else if (resp) {
                 toast.dismiss(progressId);
                 updateProject(currentProject.id, resp);
-                removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
+                removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", currentProject.id);
                 toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
             }
         } catch (err: any) {
             toast.dismiss(progressId);
-            removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
+            removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", currentProject.id);
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
             toast.error(t("toastGenErr"), { body: String(detail) });
         }
@@ -1107,18 +1155,35 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             </div>
 
                             {/* Generate CTA */}
-                            <button
-                                onClick={handleGenerate}
-                                disabled={generating || !prompt.trim()}
-                                className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
-                            >
-                                {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
-                                {generating
-                                    ? t("generating")
-                                    : variants.length === 0
-                                        ? t("generateFirst")
-                                        : t("generateMore", { count: batchSize })}
-                            </button>
+                            <div className="mt-5 self-center flex flex-col items-center gap-2">
+                                {generationFailed && (
+                                    <div className="flex flex-wrap items-center justify-center gap-2 text-[0.6875rem] text-red-200">
+                                        <span>{entity.generation_task?.error || t("generationFailed")}</span>
+                                        {assetIndexState === "stale" && <span className="text-amber-200">{t("assetIndexStale")}</span>}
+                                        <button
+                                            type="button"
+                                            onClick={handleClearGeneration}
+                                            disabled={clearingGeneration || generating}
+                                            className="inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
+                                        >
+                                            {clearingGeneration && <Loader2 size={12} className="animate-spin" />}
+                                            {t("clearFailedStatus")}
+                                        </button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleGenerate}
+                                    disabled={generating || !prompt.trim()}
+                                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
+                                >
+                                    {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
+                                    {generating
+                                        ? t("generating")
+                                        : variants.length === 0
+                                            ? t("generateFirst")
+                                            : t("generateMore", { count: batchSize })}
+                                </button>
+                            </div>
                         </div>
 
                         {/* RIGHT — variants gallery */}

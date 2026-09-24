@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+import threading
 
 import pytest
 
@@ -45,6 +46,8 @@ def _pipeline_with_assets(tmp_path: Path):
     pipeline.series_store = {}
     pipeline.library_store = GlobalAssetLibrary()
     pipeline.asset_generation_tasks = {}
+    pipeline._asset_task_lock = threading.RLock()
+    pipeline._active_asset_generation_tasks = set()
     pipeline._save_data = Mock()
     pipeline._save_library_data = Mock()
     pipeline._save_series_data = Mock()
@@ -190,6 +193,8 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
     pipeline.series_store = {series.id: series}
     pipeline.library_store = GlobalAssetLibrary(props=[reference_asset])
     pipeline.asset_generation_tasks = {}
+    pipeline._asset_task_lock = threading.RLock()
+    pipeline._active_asset_generation_tasks = set()
     pipeline.asset_generator = Mock()
     pipeline._save_series_data = Mock()
     monkeypatch.chdir(tmp_path)
