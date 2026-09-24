@@ -63,11 +63,15 @@ export default function ConsistencyVault() {
                     () => api.getTaskStatus(task.taskId!),
                     () => observer.observing,
                     tv("genFailed"),
+                    undefined,
+                    { startedAt: task.startedAt },
                 ).then((result) => {
                     if (!result || !observer.observing) return;
                     applyTaskSnapshot(projectId, result);
-                    if (result.status === "missing") {
-                        alert(tv("pollFailed", { error: result.error || "Task not found" }));
+                    if (result.status === "missing" || result.status === "timed_out") {
+                        alert(result.status === "timed_out"
+                            ? tv("pollTimedOut")
+                            : tv("pollFailed", { error: result.error || "Task not found" }));
                     }
                     useProjectStore.getState().removeGeneratingTask(
                         task.assetId,
@@ -124,13 +128,13 @@ export default function ConsistencyVault() {
 
     const isAssetGenerating = (assetId: string) => {
         return generatingTasks?.some((t: any) =>
-            t.assetId === assetId && (!t.projectId || t.projectId === currentProject?.id)
+            t.assetId === assetId && t.projectId === currentProject?.id
         );
     };
 
     const getAssetGeneratingTypes = (assetId: string) => {
         return generatingTasks?.filter((t: any) =>
-            t.assetId === assetId && (!t.projectId || t.projectId === currentProject?.id)
+            t.assetId === assetId && t.projectId === currentProject?.id
         ).map((t: any) => ({
             type: t.generationType,
             batchSize: t.batchSize
@@ -289,7 +293,7 @@ export default function ConsistencyVault() {
         const generationType = assetSubType === "head_shot" ? "video_head_shot" : "video_full_body";
 
         if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, 1);
+            addGeneratingTask(assetId, generationType, 1, currentProject.id);
         }
 
         try {

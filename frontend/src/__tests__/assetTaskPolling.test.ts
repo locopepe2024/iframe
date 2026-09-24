@@ -1,15 +1,47 @@
 import { expect, it, vi } from 'vitest';
 import { AssetTaskFailure, getAssetIndexState, mergeAssetTaskResult, waitForAssetTask } from '../lib/assetTaskPolling';
 
-it('continues beyond the old 600-poll limit and network errors until completion', async () => {
-  let attempts = 0;
-  const read = vi.fn(async () => {
-    attempts++;
-    if (attempts === 601) throw new Error('Network Error');
-    return { status: attempts > 650 ? 'completed' : 'processing' };
-  });
-  expect(await waitForAssetTask(read, () => true, 'failed', async () => {})).toEqual({ status: 'completed' });
-  expect(read).toHaveBeenCalledTimes(651);
+it('stops observation at the task deadline after processing and transport errors', async () => {
+  let now = 1_000;
+  const read = vi.fn()
+    .mockRejectedValueOnce(new Error('Network Error'))
+    .mockResolvedValue({ status: 'processing' });
+  const pause = async () => { now += 1_000; };
+
+  await expect(waitForAssetTask(
+    read,
+    () => true,
+    'failed',
+    pause,
+    { timeoutMs: 3_000, startedAt: 1_000, now: () => now },
+  )).resolves.toMatchObject({ status: 'timed_out' });
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('bounds a task status request that never resolves', async () => {
+  vi.useFakeTimers();
+  const read = vi.fn(() => new Promise<any>(() => {}));
+  const pending = waitForAssetTask(read, () => true, 'failed', async () => {}, { timeoutMs: 3_000 });
+
+  await vi.advanceTimersByTimeAsync(3_000);
+
+  await expect(pending).resolves.toMatchObject({ status: 'timed_out' });
+  expect(read).toHaveBeenCalledOnce();
+  vi.useRealTimers();
+});
+
+it('checks the server once for an aged local marker before reporting a timeout', async () => {
+  const completed = { status: 'completed', asset_id: 'character' };
+  const read = vi.fn().mockResolvedValue(completed);
+
+  await expect(waitForAssetTask(
+    read,
+    () => true,
+    'failed',
+    async () => {},
+    { timeoutMs: 1, startedAt: 0, now: () => 10 },
+  )).resolves.toEqual(completed);
+  expect(read).toHaveBeenCalledOnce();
 });
 
 it.each(['failed', 'cancelled', 'canceled'])('preserves the terminal %s reason', async status => {

@@ -113,6 +113,8 @@ export default function Cast() {
                             || (state.currentProject?.id === projectId ? state.currentProject : undefined);
                     },
                 }),
+                undefined,
+                task.startedAt,
             );
         }
         // Drop records written by versions that did not persist task IDs; the

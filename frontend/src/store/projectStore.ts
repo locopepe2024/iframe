@@ -2,6 +2,45 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
+
+type GeneratingAssetType = "character" | "scene" | "prop";
+
+type StoredGeneratingTask = {
+    assetId: string;
+    generationType: string;
+    batchSize: number;
+    projectId: string;
+    assetType: GeneratingAssetType;
+    taskId: string;
+    startedAt: number;
+};
+
+function hasRecoverableGeneratingTaskIdentity(value: unknown): value is Omit<StoredGeneratingTask, "startedAt"> & { startedAt?: number } {
+    if (!value || typeof value !== "object") return false;
+    const task = value as Record<string, unknown>;
+    return typeof task.assetId === "string" && Boolean(task.assetId.trim())
+        && typeof task.generationType === "string" && Boolean(task.generationType.trim())
+        && typeof task.projectId === "string" && Boolean(task.projectId.trim())
+        && ["character", "scene", "prop"].includes(String(task.assetType))
+        && typeof task.taskId === "string" && Boolean(task.taskId.trim());
+}
+
+function restoreGeneratingTasks(value: unknown, now = Date.now()): StoredGeneratingTask[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .filter(hasRecoverableGeneratingTaskIdentity)
+        .map((task) => ({
+            ...task,
+            batchSize: Number.isFinite(task.batchSize) && task.batchSize > 0 ? task.batchSize : 1,
+            startedAt: Number.isFinite(task.startedAt) ? task.startedAt! : now,
+        }));
+}
+
+function isPersistableGeneratingTask(value: unknown): value is StoredGeneratingTask {
+    return hasRecoverableGeneratingTaskIdentity(value)
+        && Number.isFinite(value.startedAt);
+}
+
 export {
     I2I_MODELS,
     I2V_MODELS,
@@ -372,8 +411,9 @@ interface ProjectStore {
         generationType: string;
         batchSize: number;
         projectId?: string;
-        assetType?: "character" | "scene" | "prop";
+        assetType?: GeneratingAssetType;
         taskId?: string;
+        startedAt?: number;
     }[];
     addGeneratingTask: (
         assetId: string,
@@ -745,7 +785,7 @@ export const useProjectStore = create<ProjectStore>()(
                         && task.generationType === generationType
                         && (!projectId || !task.projectId || task.projectId === projectId)
                     )),
-                    { assetId, generationType, batchSize, projectId, assetType },
+                    { assetId, generationType, batchSize, projectId, assetType, startedAt: Date.now() },
                 ],
             })),
             setGeneratingTaskId: (assetId, generationType, projectId, assetType, taskId) => set((state) => {
@@ -758,13 +798,13 @@ export const useProjectStore = create<ProjectStore>()(
                     return {
                         generatingTasks: [
                             ...state.generatingTasks,
-                            { assetId, generationType, batchSize: 1, projectId, assetType, taskId },
+                            { assetId, generationType, batchSize: 1, projectId, assetType, taskId, startedAt: Date.now() },
                         ],
                     };
                 }
                 return {
                     generatingTasks: state.generatingTasks.map((task, currentIndex) => currentIndex === index
-                        ? { ...task, projectId, assetType, taskId }
+                        ? { ...task, projectId, assetType, taskId, startedAt: task.startedAt ?? Date.now() }
                         : task),
                 };
             }),
@@ -864,21 +904,22 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
-            // Version 1 could leave project-scoped generating markers without
-            // a server task ID. Those entries cannot be polled after refresh.
-            version: 2,
+            // Old entries could retain a task ID while missing the project or
+            // asset identity required by the recovery poller. Keep only full
+            // server task references and record their local observation start.
+            version: 3,
             migrate: (persistedState, _version) => {
                 const state = persistedState as Partial<ProjectStore> | undefined;
                 return {
                     projects: state?.projects ?? [],
-                    generatingTasks: (state?.generatingTasks ?? []).filter((task) => Boolean(task.taskId)),
+                    generatingTasks: restoreGeneratingTasks(state?.generatingTasks),
                 };
             },
             partialize: (state) => ({
                 projects: state.projects,
-                // A task without its server ID is only a submit-in-flight UI
-                // marker. Persisting it would restore an unpollable spinner.
-                generatingTasks: state.generatingTasks.filter((task) => Boolean(task.taskId)),
+                // Submit-in-flight UI markers and malformed task references
+                // cannot recover after refresh, so they must remain transient.
+                generatingTasks: state.generatingTasks.filter(isPersistableGeneratingTask),
             }),
         }
     )

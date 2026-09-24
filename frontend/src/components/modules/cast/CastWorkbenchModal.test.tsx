@@ -16,7 +16,7 @@ const project: any = { id: 'project', title: 'Project', characters: [character],
 function show(locale: 'en' | 'zh' = 'en', localeMessages = locale === 'zh' ? zhMessages : messages) {
  render(<NextIntlClientProvider locale={locale} messages={localeMessages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>);
 }
-beforeEach(() => { cleanup(); for (const poll of Array.from(activePolls.values())) clearInterval(poll); activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
+beforeEach(() => { cleanup(); for (const observer of Array.from(activePolls.values())) observer.observing = false; activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
 
 it('applies the completed asset snapshot and clears its task without fetching the project', async () => {
  vi.useFakeTimers();
@@ -37,7 +37,7 @@ it('applies the completed asset snapshot and clears its task without fetching th
   getProject,
 }));
 
- await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+ await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
 
  expect(updateProject).toHaveBeenCalledWith('project', expect.objectContaining({ characters: [completedAsset] }));
  expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet', 'project');
@@ -64,10 +64,10 @@ it('merges a failed task partial snapshot and continues after transient poll err
   getProject: () => project,
  }));
 
- await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+ await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
  expect(activePolls.has('char')).toBe(true);
  expect(removeGeneratingTask).not.toHaveBeenCalled();
- await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+ await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
 
  expect(updateProject).toHaveBeenCalledWith('project', expect.objectContaining({ characters: [partialAsset] }));
  expect(removeGeneratingTask).toHaveBeenCalledWith('char', 'reference_sheet', 'project');

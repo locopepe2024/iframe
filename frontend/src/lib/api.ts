@@ -597,7 +597,7 @@ export const api = {
     },
 
     getTaskStatus: async (taskId: string) => {
-        const res = await axios.get(`${API_URL}/tasks/${taskId}`);
+        const res = await axios.get(`${API_URL}/tasks/${taskId}`, { timeout: 15_000 });
         return res.data;
     },
 

@@ -4,6 +4,9 @@ export type TaskStatus = { status?: string; error?: string };
 
 export type AssetIndexState = "valid" | "stale" | "empty" | "legacy";
 
+export const ASSET_TASK_OBSERVATION_TIMEOUT_MS = 30 * 60 * 1000;
+const EXPIRED_TASK_STATUS_CHECK_TIMEOUT_MS = 5_000;
+
 export type AssetTaskResult = TaskStatus & {
   task_id?: string;
   script_id?: string;
@@ -20,6 +23,12 @@ export class AssetTaskFailure extends Error {
     this.name = "AssetTaskFailure";
   }
 }
+
+export type AssetTaskPollingOptions = {
+  timeoutMs?: number;
+  startedAt?: number;
+  now?: () => number;
+};
 
 /** Merge one task's target-asset snapshot into the current project. */
 export function mergeAssetTaskResult(
@@ -89,30 +98,71 @@ export function getAssetIndexState(asset: Record<string, any> | null | undefined
   return legacyUrls.some(Boolean) ? "legacy" : "empty";
 }
 
-/** Polling observes server task state; transient transport errors are not terminal. */
+/** Poll server task state with transient retries bounded by one absolute deadline. */
 export async function waitForAssetTask(
   read: () => Promise<AssetTaskResult>,
   observing: () => boolean,
   failureMessage: string,
   pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 2000)),
+  options: AssetTaskPollingOptions = {},
 ): Promise<AssetTaskResult | null> {
+  const now = options.now ?? Date.now;
+  const timeoutMs = Math.max(0, options.timeoutMs ?? ASSET_TASK_OBSERVATION_TIMEOUT_MS);
+  const startedAt = Number.isFinite(options.startedAt) ? options.startedAt! : now();
+  const deadline = startedAt + timeoutMs;
+  let attemptedRead = false;
+
   while (observing()) {
-    await pause();
+    if (attemptedRead && now() >= deadline) {
+      return { status: "timed_out" };
+    }
+
+    if (now() < deadline) {
+      await pause();
+      if (!observing()) return null;
+    }
+
+    const remainingMs = deadline - now();
+    const readTimeoutMs = remainingMs > 0
+      ? remainingMs
+      : attemptedRead
+        ? 0
+        : EXPIRED_TASK_STATUS_CHECK_TIMEOUT_MS;
+    if (readTimeoutMs <= 0) return { status: "timed_out" };
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      Promise.resolve().then(read).then(
+        value => ({ kind: "value" as const, value }),
+        error => ({ kind: "error" as const, error }),
+      ),
+      new Promise<{ kind: "timeout" }>(resolve => {
+        timeoutId = setTimeout(() => resolve({ kind: "timeout" }), readTimeoutMs);
+      }),
+    ]).finally(() => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    });
+
     if (!observing()) return null;
-    let task: AssetTaskResult;
-    try {
-      task = await read();
-    } catch (error: any) {
+    attemptedRead = true;
+
+    if (outcome.kind === "timeout") return { status: "timed_out" };
+    if (outcome.kind === "error") {
+      const error = outcome.error as any;
       if (error?.response?.status === 404 || error?.status === 404) {
         return { status: "missing", error: "Task is no longer available" };
       }
+      if (now() >= deadline) return { status: "timed_out" };
       continue;
     }
+
+    const task = outcome.value;
     if (task.status === "completed") return task;
     if (task.status === "cleared") return task;
     if (["failed", "cancelled", "canceled"].includes(task.status || "")) {
       throw new AssetTaskFailure(task.error || failureMessage, task);
     }
+    if (now() >= deadline) return { status: "timed_out" };
   }
   return null;
 }

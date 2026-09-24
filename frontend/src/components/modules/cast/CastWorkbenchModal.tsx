@@ -24,7 +24,7 @@ import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, T
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { getAssetIndexState, mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import { AssetTaskFailure, getAssetIndexState, mergeAssetTaskResult, waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -33,8 +33,8 @@ import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 
 export type CastKind = "character" | "scene" | "prop";
 
-// Module-level poll registry — survives modal close/reopen.
-export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
+// Module-level observer registry — survives modal close/reopen.
+export const activePolls = new Map<string, { observing: boolean }>();
 
 export function startAssetPoll(
     entityId: string,
@@ -49,57 +49,67 @@ export function startAssetPoll(
         getProject: (id: string) => any;
     },
     progressToastId?: string,
+    startedAt?: number,
 ) {
     if (activePolls.has(entityId)) return;
-    const interval = setInterval(async () => {
-        try {
-            const status = await api.getTaskStatus(taskId);
-            if (["completed", "cleared"].includes(status?.status)) {
-                clearInterval(interval);
-                activePolls.delete(entityId);
-                if (progressToastId) toast.dismiss(progressToastId);
-                const store = getStore();
-                const { updateProject, removeGeneratingTask } = store;
-                const current = store.getProject(projectId);
-                const patch = mergeAssetTaskResult(current, status);
-                if (patch) {
-                    updateProject(projectId, patch);
-                } else {
-                    console.error("Completed asset task did not include its target asset snapshot", taskId);
-                }
-                removeGeneratingTask(entityId, generationType, projectId);
-                const updatedEntity = status.asset?.id === entityId ? status.asset : undefined;
-                const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                if (updatedEntity) {
-                    toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
-                } else {
-                    toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
-                }
-            } else if (status?.status === "failed") {
-                clearInterval(interval);
-                activePolls.delete(entityId);
-                if (progressToastId) toast.dismiss(progressToastId);
-                const store = getStore();
-                const current = store.getProject(projectId);
-                const patch = mergeAssetTaskResult(current, status);
-                if (patch) store.updateProject(projectId, patch);
-                store.removeGeneratingTask(entityId, generationType, projectId);
-                toast.error(t("toastGenErr"), { body: status?.error || t("toastGenErrUnknown") });
-            }
-        } catch (err) {
-            if ((err as any)?.response?.status !== 404 && (err as any)?.status !== 404) {
-                // Temporary transport failures do not cancel the server task.
-                return;
-            }
-            clearInterval(interval);
-            activePolls.delete(entityId);
+    const observer = { observing: true };
+    activePolls.set(entityId, observer);
+    void waitForAssetTask(
+        () => api.getTaskStatus(taskId),
+        () => observer.observing,
+        t("toastGenErrUnknown"),
+        undefined,
+        { startedAt },
+    ).then((status) => {
+        if (!status || !observer.observing) return;
+        const store = getStore();
+        if (["missing", "timed_out"].includes(status.status || "")) {
+            store.removeGeneratingTask(entityId, generationType, projectId);
             if (progressToastId) toast.dismiss(progressToastId);
-            const { removeGeneratingTask } = getStore();
-            removeGeneratingTask(entityId, generationType, projectId);
-            toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
+            toast.error(
+                status.status === "timed_out" ? t("toastPollTimedOut") : t("toastPollErr"),
+                { body: status.status === "timed_out" ? t("toastPollTimedOutBody") : t("toastPollErrBody") },
+            );
+            return;
         }
-    }, 2500);
-    activePolls.set(entityId, interval);
+
+        const current = store.getProject(projectId);
+        const patch = mergeAssetTaskResult(current, status);
+        if (patch) {
+            store.updateProject(projectId, patch);
+        } else if (status.status === "completed") {
+            console.error("Completed asset task did not include its target asset snapshot", taskId);
+        }
+        store.removeGeneratingTask(entityId, generationType, projectId);
+        if (progressToastId) toast.dismiss(progressToastId);
+
+        if (status.status === "completed") {
+            const updatedEntity = status.asset?.id === entityId ? status.asset : undefined;
+            const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
+            if (updatedEntity) {
+                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+            } else {
+                toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
+            }
+        }
+    }).catch((error: unknown) => {
+        if (!observer.observing) return;
+        if (error instanceof AssetTaskFailure) {
+            const store = getStore();
+            const patch = mergeAssetTaskResult(store.getProject(projectId), error.task);
+            if (patch) store.updateProject(projectId, patch);
+            store.removeGeneratingTask(entityId, generationType, projectId);
+            if (progressToastId) toast.dismiss(progressToastId);
+            toast.error(t("toastGenErr"), { body: error.message || t("toastGenErrUnknown") });
+            return;
+        }
+        const store = getStore();
+        store.removeGeneratingTask(entityId, generationType, projectId);
+        if (progressToastId) toast.dismiss(progressToastId);
+        toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
+    }).finally(() => {
+        if (activePolls.get(entityId) === observer) activePolls.delete(entityId);
+    });
 }
 
 interface CastWorkbenchModalProps {
@@ -294,7 +304,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         props: any[];
     }>({ characters: [], scenes: [], props: [] });
     const generating = generatingTasks.some((task) =>
-        task.assetId === entityId && (!task.projectId || task.projectId === currentProject?.id)
+        task.assetId === entityId && task.projectId === currentProject?.id
     );
     const generationFailed = entity?.status === "failed" || entity?.generation_task?.status === "failed";
     const assetIndexState = getAssetIndexState(entity, kind ?? "character");
@@ -567,6 +577,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 const capturedEntityId = entity.id;
                 const capturedKind = kind;
                 const capturedProjectId = currentProject.id;
+                const taskStartedAt = useProjectStore.getState().generatingTasks
+                    .find((task) => task.taskId === taskId)?.startedAt;
                 startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, () => ({
                     updateProject: useProjectStore.getState().updateProject,
                     removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
@@ -575,7 +587,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                         return state.projects.find((project) => project.id === projectId)
                             || (state.currentProject?.id === projectId ? state.currentProject : undefined);
                     },
-                }), progressId);
+                }), progressId, taskStartedAt);
             } else if (resp) {
                 toast.dismiss(progressId);
                 updateProject(currentProject.id, resp);

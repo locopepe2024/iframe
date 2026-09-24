@@ -247,11 +247,17 @@ export default function AssetInspector({
           () => api.getTaskStatus(taskId),
           () => aliveRef.current && currentAssetIdRef.current === assetId,
           t("genFailed"),
+          undefined,
+          { startedAt: useProjectStore.getState().generatingTasks.find((task) => task.taskId === taskId)?.startedAt },
         );
         if (!completedTask) return; // 已卸载
         if (completedTask.status === "missing") {
           removeGeneratingTask(assetId, "all", projectId);
           throw new Error(t("genFailed"));
+        }
+        if (completedTask.status === "timed_out") {
+          removeGeneratingTask(assetId, "all", projectId);
+          throw new Error(t("genTimeout"));
         }
       if (
           completedTask.asset_id === assetId

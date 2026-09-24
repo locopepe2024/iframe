@@ -26,6 +26,7 @@ it("persists task identity and ownership fields needed to resume polling", () =>
     projectId: "project-1",
     assetType: "character",
     taskId: "task-1",
+    startedAt: expect.any(Number),
   }]);
   expect(JSON.parse(localStorage.getItem("project-storage")!).state.generatingTasks[0].taskId)
     .toBe("task-1");
@@ -49,6 +50,34 @@ it("drops project-scoped version 1 task markers that have no server task ID", as
   await useProjectStore.persist.rehydrate();
 
   expect(useProjectStore.getState().generatingTasks).toEqual([]);
+});
+
+it("drops v2 task IDs that lack the identity fields required for recovery", async () => {
+  localStorage.setItem("project-storage", JSON.stringify({
+    state: {
+      projects: [],
+      generatingTasks: [
+        { assetId: "missing-project", generationType: "reference_sheet", taskId: "task-1", assetType: "character" },
+        { assetId: "missing-type", generationType: "reference_sheet", taskId: "task-2", projectId: "project-1" },
+        { assetId: " ", generationType: "reference_sheet", taskId: "task-3", projectId: "project-1", assetType: "character" },
+        { generationType: "reference_sheet", taskId: "task-4", projectId: "project-1", assetType: "character" },
+        { assetId: "valid-asset", generationType: "all", taskId: "task-5", projectId: "project-2", assetType: "scene" },
+      ],
+    },
+    version: 2,
+  }));
+
+  await useProjectStore.persist.rehydrate();
+
+  expect(useProjectStore.getState().generatingTasks).toEqual([{
+    assetId: "valid-asset",
+    generationType: "all",
+    taskId: "task-5",
+    projectId: "project-2",
+    assetType: "scene",
+    batchSize: 1,
+    startedAt: expect.any(Number),
+  }]);
 });
 
 it("removes a completed task only from its matching project", () => {
