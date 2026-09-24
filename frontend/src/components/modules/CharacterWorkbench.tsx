@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video, Upload, Loader2 } from "lucide-react";
@@ -87,6 +87,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const currentProject = useProjectStore(state => state.currentProject);
     const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+    const selectionVersion = useRef(0);
     const [promptReferences, setPromptReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
         full_body: [],
         three_view: [],
@@ -466,25 +468,30 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return task ? { isGenerating: true, batchSize: task.batchSize || 1 } : { isGenerating: false, batchSize: 1 };
     };
 
-    const handleSelectVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
+    const handleSelectVariant = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
-
-        try {
+        const version = ++selectionVersion.current;
+        const operation = selectionQueue.current.then(async () => {
             const updatedProject = await api.selectAssetVariant(currentProject.id, asset.id, "character", variantId, type);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
+            if (version === selectionVersion.current) updateProject(currentProject.id, updatedProject);
+        });
+        selectionQueue.current = operation.catch(() => {});
+        return operation.catch((error) => {
             console.error("Failed to select variant:", error);
-        }
+            throw error;
+        });
     };
 
     const handleDeleteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
 
         try {
+            await selectionQueue.current;
             const updatedProject = await api.deleteAssetVariant(currentProject.id, asset.id, "character", variantId);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            throw error;
         }
     };
 
@@ -524,6 +531,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 1: Full Body (Master) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -578,6 +586,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 2: Three View (Derived) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -612,6 +621,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 3: Headshot (Derived) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -754,6 +764,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 export function WorkbenchPanel({
     title,
+    assetScope,
     isActive,
     onClick,
 
@@ -1079,6 +1090,7 @@ export function WorkbenchPanel({
                         />
                     ) : (
                         <VariantSelector
+                            key={assetScope}
                             asset={asset}
                             currentImageUrl={currentImageUrl}
                             onSelect={onSelect}

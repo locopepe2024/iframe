@@ -167,6 +167,25 @@ it('confirms and deletes a canonical reference revision', async () => {
  await waitFor(() => expect(api.deleteAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'two'));
  await waitFor(() => expect(screen.queryByText('Test two')).toBeNull());
 });
+it('keeps a deleted view out of the gallery and reference picker while the server responds', async () => {
+ const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
+ useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [
+  { asset_type: 'character', asset_id: 'char', name: 'Test', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'two', variants: withVariants.characters[0].reference_sheet.image_variants },
+ ] } as any);
+ let finish!: (value: any) => void;
+ vi.mocked(api.deleteAssetVariant).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ show();
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalled());
+ fireEvent.click(screen.getAllByRole('button', { name: 'Delete reference image' })[1]);
+ expect(screen.queryByText('Test two')).toBeNull();
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ expect(screen.getByTestId('cast-library-reference-picker')).not.toHaveTextContent('Test two');
+ await waitFor(() => expect(api.deleteAssetVariant).toHaveBeenCalled());
+ await act(async () => finish({ ...withVariants, characters: [{ ...withVariants.characters[0], reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] }));
+ expect(screen.queryByText('Test two')).toBeNull();
+});
 it('labels a child reference by angle and framing without creating another asset', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'one' } }] };
  useProjectStore.setState({ currentProject: withVariants, projects: [withVariants] });

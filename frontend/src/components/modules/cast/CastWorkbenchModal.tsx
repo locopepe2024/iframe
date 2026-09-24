@@ -317,8 +317,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         return pool.find((e: any) => e.id === entityId) ?? null;
     }, [currentProject, entityId, kind]);
 
-    const variants = useMemo(() => readVariants(entity, kind ?? "character"), [entity, kind]);
-    const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
+    const [deletedVariantIds, setDeletedVariantIds] = useState<string[]>([]);
+    const deletedVariantIdsRef = useRef(new Set<string>());
+    const variants = useMemo(() => readVariants(entity, kind ?? "character").filter((variant) => !deletedVariantIds.includes(variant.id)), [entity, kind, deletedVariantIds]);
+    const selectedId = useMemo(() => {
+        const selected = readSelectedId(entity, kind ?? "character");
+        return deletedVariantIds.includes(selected || "") ? variants.at(-1)?.id ?? null : selected;
+    }, [entity, kind, deletedVariantIds, variants]);
 
     const uploadInput = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
@@ -357,6 +362,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
+        deletedVariantIdsRef.current.clear();
+        setDeletedVariantIds([]);
         setAvailableReferences([]);
         setPromptReferences([]);
         setMention(null);
@@ -371,7 +378,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         let active = true;
         void api.getAssetReferenceIndex(currentProject.id)
             .then((index) => {
-                if (active) setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
+                if (active) setReferenceLibraryAssets(index.assets.flatMap((asset) => {
+                    const variants = asset.variants.filter((variant) => !deletedVariantIdsRef.current.has(variant.id));
+                    return variants.length ? [{ ...asset, variants }] : [];
+                }));
             })
             .catch(() => {
                 if (active) setReferenceLibraryAssets([]);
@@ -379,19 +389,24 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         return () => { active = false; };
     }, [isOpen, currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
+    const visibleReferenceLibraryAssets = useMemo(() => referenceLibraryAssets.flatMap((asset) => {
+        const variants = asset.variants.filter((variant) => !deletedVariantIds.includes(variant.id));
+        return variants.length ? [{ ...asset, variants }] : [];
+    }), [referenceLibraryAssets, deletedVariantIds]);
+
     const visibleAvailableReferences = useMemo(() => availableReferences.flatMap((reference) => {
-        const asset = referenceLibraryAssets.find((item) =>
+        const asset = visibleReferenceLibraryAssets.find((item) =>
             item.asset_type === reference.asset_type && item.asset_id === reference.asset_id,
         );
         const variant = asset?.variants.find((item) => item.id === reference.variant_id);
         return asset && variant ? [{ reference, asset, variant }] : [];
-    }), [availableReferences, referenceLibraryAssets]);
+    }), [availableReferences, visibleReferenceLibraryAssets]);
 
     const activePromptReferences = useMemo(() => promptReferences.filter((reference) =>
-        availableReferences.some((candidate) => candidate.asset_type === reference.asset_type
+        visibleAvailableReferences.some(({ reference: candidate }) => candidate.asset_type === reference.asset_type
             && candidate.asset_id === reference.asset_id
             && candidate.variant_id === reference.variant_id),
-    ), [availableReferences, promptReferences]);
+    ), [visibleAvailableReferences, promptReferences]);
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
         const labels = new Set<string>();
@@ -841,7 +856,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleDeleteVariant = async (variantId: string) => {
         if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
         setDeletingVariantId(variantId);
+        deletedVariantIdsRef.current.add(variantId);
+        setDeletedVariantIds((current) => [...current, variantId]);
         try {
+            await selectionQueue.current;
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
             setAvailableReferences((current) => current.filter((item) => !(
@@ -860,6 +878,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 projectTitle: currentProject.title,
             });
         } catch (err: any) {
+            deletedVariantIdsRef.current.delete(variantId);
+            setDeletedVariantIds((current) => current.filter((id) => id !== variantId));
+            void api.getAssetReferenceIndex(currentProject.id).then((index) => {
+                setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
+            }).catch(() => {});
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
             toast.error(t("toastDeleteErr"), { body: String(detail) });
         } finally {
@@ -1202,7 +1225,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <button
                                         type="button"
                                         onClick={() => setLibraryPickerOpen(true)}
-                                        disabled={generating || referenceLibraryAssets.length === 0}
+                                        disabled={generating || visibleReferenceLibraryAssets.length === 0}
                                         aria-expanded={libraryPickerOpen}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30"
                                     >
@@ -1442,7 +1465,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={generating || referenceLibraryAssets.length === 0}
+                                    disabled={generating || visibleReferenceLibraryAssets.length === 0}
                                     onClick={() => setLibraryPickerOpen((open) => !open)}
                                     aria-expanded={libraryPickerOpen}
                                     className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
@@ -1463,7 +1486,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </button>
                                     </div>
                                     <div className="space-y-3">
-                                        {referenceLibraryAssets.map((asset) => (
+                                        {visibleReferenceLibraryAssets.map((asset) => (
                                             <div key={`${asset.asset_type}:${asset.asset_id}`}>
                                                 <div className="mb-1 flex items-center gap-1.5">
                                                     <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>

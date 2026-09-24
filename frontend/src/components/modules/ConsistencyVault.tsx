@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
@@ -491,6 +491,7 @@ export default function ConsistencyVault() {
                 {selectedAsset && selectedAssetId && selectedAssetType && (
                     selectedAssetType === "character" ? (
                         <CharacterWorkbench
+                            key={selectedAssetId}
                             asset={selectedAsset}
                             onClose={() => {
                                 setSelectedAssetId(null);
@@ -506,6 +507,7 @@ export default function ConsistencyVault() {
                         />
                     ) : (
                         <CharacterDetailModal
+                            key={selectedAssetId}
                             asset={selectedAsset}
                             type={selectedAssetType}
                             onClose={() => {
@@ -564,6 +566,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     const [isEditing, setIsEditing] = useState(false);
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+    const selectionVersion = useRef(0);
     const [imagePrompt, setImagePrompt] = useState(asset.image_prompt || asset.description || "");
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
@@ -643,23 +647,29 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
         setIsEditing(false);
     };
 
-    const handleSelectVariant = async (variantId: string) => {
+    const handleSelectVariant = (variantId: string) => {
         if (!currentProject) return;
-        try {
+        const version = ++selectionVersion.current;
+        const operation = selectionQueue.current.then(async () => {
             const updatedProject = await api.selectAssetVariant(currentProject.id, asset.id, type, variantId);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
+            if (version === selectionVersion.current) updateProject(currentProject.id, updatedProject);
+        });
+        selectionQueue.current = operation.catch(() => {});
+        return operation.catch((error) => {
             console.error("Failed to select variant:", error);
-        }
+            throw error;
+        });
     };
 
     const handleDeleteVariant = async (variantId: string) => {
         if (!currentProject) return;
         try {
+            await selectionQueue.current;
             const updatedProject = await api.deleteAssetVariant(currentProject.id, asset.id, type, variantId);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            throw error;
         }
     };
 
@@ -704,6 +714,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                     <div className="flex-1 p-4 overflow-hidden">
                         {activeTab === "image" ? (
                             <VariantSelector
+                                key={`${type}:${asset.id}`}
                                 asset={asset.image_asset}
                                 currentImageUrl={asset.image_url}
                                 onSelect={handleSelectVariant}
