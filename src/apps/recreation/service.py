@@ -23,11 +23,39 @@ from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
+from ...utils.model_catalog import load_generated_model_catalog
+from ...utils.uniart_catalog import fetch_uniart_catalog
 
 
 _RECOVERY_LOCK = threading.RLock()
 _RECOVERY_TASKS: set[str] = set()
 _MEDIA_COMMAND_TIMEOUT_SECONDS = 600
+
+# These defaults are part of the recreation contract, rather than a provider
+# fallback.  They are kept in one place so the API, persisted tasks, and UI
+# can agree on what a newly-created task means.
+DEFAULT_RECREATION_VIDEO_MODEL = "uniart/minimax-h3-vip"
+DEFAULT_KEYFRAME_IMAGE_MODEL = "uniart/gpt-image-2"
+VERIFIED_RECREATION_VIDEO_MODELS = frozenset({DEFAULT_RECREATION_VIDEO_MODEL})
+
+
+def _static_uniart_models():
+    """Return the generated compatibility catalog without contacting UniArt."""
+    try:
+        catalog = load_generated_model_catalog()
+    except (OSError, ValueError, TypeError):
+        return []
+    models = catalog.get("models", {})
+    return [value for value in models.values() if isinstance(value, dict)]
+
+
+def _model_option(model):
+    """Expose only non-secret model metadata to the recreation UI."""
+    return {
+        key: model[key]
+        for key in ("id", "display_name", "description", "family", "capabilities", "duration", "params", "inputs")
+        if key in model
+    }
 
 class RecreationService:
     def __init__(self, user: UserContext):
@@ -36,6 +64,101 @@ class RecreationService:
         self.user = user
         self.root = (Path(studio_owner_dir(user.owner_profile_id)) / "recreation").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+
+    def _live_uniart_models(self):
+        """Read the current owner catalog when credentials are available.
+
+        Unit tests and offline local projects may intentionally have no
+        runtime credential; those callers use the generated compatibility
+        catalog instead. Once a credential is configured, a failed catalog
+        read is surfaced as a preflight error so a paid task is not created
+        against an unverified route.
+        """
+        from ..studio_access import runtime_uniart_for_owner
+
+        try:
+            config = runtime_uniart_for_owner(self.user.user_id, self.user.owner_profile_id)
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                return None
+            raise
+        except sqlite3.OperationalError as exc:
+            # A fresh/offline test or desktop profile can have an empty legacy
+            # config database before the user-config schema is initialized.
+            # Treat that state like "no credential"; other DB failures remain
+            # visible instead of silently widening the model gate.
+            if "no such table: user_configs" in str(exc):
+                return None
+            raise HTTPException(503, "UniArt model catalog configuration is unavailable") from exc
+        try:
+            return fetch_uniart_catalog(config)
+        except Exception as exc:
+            raise HTTPException(503, "UniArt model catalog is unavailable; retry preflight before generating") from exc
+
+    def _model_for_capability(self, model, capability, label):
+        model_id = str(model or "").strip()
+        if not model_id or not model_id.startswith("uniart/"):
+            raise HTTPException(422, f"{label} model is required")
+        live_models = self._live_uniart_models()
+        candidates = live_models if live_models is not None else _static_uniart_models()
+        selected = next((item for item in candidates if item.get("id") == model_id), None)
+        if not selected or capability not in (selected.get("capabilities") or []):
+            raise HTTPException(422, f"Selected {label} model is unavailable for {capability} in the current UniArt catalog")
+        return model_id
+
+    def _recreation_video_model(self, model):
+        model_id = str(model or "").strip()
+        # The prompt compiler currently proves only the MiniMax H3 native
+        # contract. Capability metadata alone is not evidence that another
+        # video family consumes the same labels or source-video mapping.
+        if model_id not in VERIFIED_RECREATION_VIDEO_MODELS:
+            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+        self._model_for_capability(model_id, "r2v", "video")
+        return model_id
+
+    def model_options(self):
+        """Return safe, recreation-eligible model options for the UI."""
+        source = "static"
+        try:
+            models = self._live_uniart_models()
+            if models is not None:
+                source = "live"
+        except HTTPException:
+            # A picker should remain usable when the account catalog is
+            # temporarily unavailable; paid plan/submit still fail closed via
+            # ``_live_uniart_models``.
+            models = None
+        candidates = models if models is not None else _static_uniart_models()
+        image_models = [
+            _model_option(item) for item in candidates
+            if str(item.get("id") or "").startswith("uniart/")
+            and "i2i" in (item.get("capabilities") or [])
+        ]
+        video_models = [
+            _model_option(item) for item in candidates
+            if item.get("id") in VERIFIED_RECREATION_VIDEO_MODELS
+            and "r2v" in (item.get("capabilities") or [])
+        ]
+        image_default = (
+            DEFAULT_KEYFRAME_IMAGE_MODEL
+            if any(item["id"] == DEFAULT_KEYFRAME_IMAGE_MODEL for item in image_models)
+            else image_models[0]["id"] if image_models else DEFAULT_KEYFRAME_IMAGE_MODEL
+        )
+        video_default = (
+            DEFAULT_RECREATION_VIDEO_MODEL
+            if any(item["id"] == DEFAULT_RECREATION_VIDEO_MODEL for item in video_models)
+            else video_models[0]["id"] if video_models else DEFAULT_RECREATION_VIDEO_MODEL
+        )
+        return {
+            "provider": "uniart",
+            "source": source,
+            "defaults": {
+                "image_model": image_default,
+                "video_model": video_default,
+            },
+            "image_models": image_models,
+            "video_models": video_models,
+        }
 
     @contextmanager
     def db(self):
@@ -345,13 +468,15 @@ class RecreationService:
         return result
 
     def create_keyframe_task(self, project_id, shot_id, revision, analysis_id, reference_media_id,
-                             replacement_media_id, instruction, accept_cost):
+                             replacement_media_id, instruction, accept_cost,
+                             model=DEFAULT_KEYFRAME_IMAGE_MODEL):
         if not accept_cost:
             raise HTTPException(422, "Paid image generation requires explicit cost acceptance")
         if len(instruction) > 2000:
             raise HTTPException(422, "Keyframe instruction exceeds 2000 characters")
         if not TOKEN.sub("", instruction).strip():
             raise HTTPException(422, "Describe the exact object to replace before generating a corrected keyframe")
+        selected_model = self._model_for_capability(model, "i2i", "image")
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record.get("timeline"):
@@ -386,7 +511,7 @@ class RecreationService:
             task = {
                 "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
                 "revision": revision, "analysis_id": analysis_id, "status": "pending",
-                "model": "uniart/gpt-image-2.5", "reference_media_id": reference_media_id,
+                "model": selected_model, "reference_media_id": reference_media_id,
                 "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
                 "replacement_sha256": replacement["sha256"], "prompt": prompt,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -532,10 +657,8 @@ class RecreationService:
             self._save(db, record)
         return record
 
-    def generation_plan(self, project_id, revision, model="uniart/minimax-h3-vip", audio_policy="silent", soundscape="", generation_durations=None):
-        # Until its native reference contract is verified, Seedance cannot pass H3 preflight.
-        if model != "uniart/minimax-h3-vip":
-            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+    def generation_plan(self, project_id, revision, model=DEFAULT_RECREATION_VIDEO_MODEL, audio_policy="silent", soundscape="", generation_durations=None):
+        model = self._recreation_video_model(model)
         if audio_policy not in ("silent", "generated", "preserve_source"):
             raise HTTPException(422, "Unsupported audio policy")
         if audio_policy == "generated" and not soundscape.strip():

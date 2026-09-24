@@ -3,12 +3,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import ShotReferences from './ShotReferences';
 import { recreationApi, RecreationProject, RecreationMedia } from '@/lib/recreation';
 
-vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() } }));
+vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { models: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() } }));
 vi.mock('next/dynamic', () => ({ default: () => ({ onSave }: { onSave: (file: File) => Promise<void> }) => <button onClick={() => void onSave(new File(['edited'], 'edited.png', { type: 'image/png' }))}>export edit</button> }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 const image: RecreationMedia = { media_id: 'image', project_id: 'p', kind: 'evidence_frame', display_name: 'Evidence', storage_path: '/image.png', sha256: 'hash', created_at: 1, metadata: {} };
 const project = { id: 'p', revision: 4, analysis_id: 'a', status: 'confirmed', analysis: { start_pts: 0, time_base: '1/24' }, timeline: { cuts: [], shots: [{ id: 'shot', start_pts: 0, end_pts: 24 }] } } as unknown as RecreationProject;
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(recreationApi.media).mockResolvedValue(image); vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [image], next_cursor: null }); vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]); vi.mocked(recreationApi.generationTasks).mockResolvedValue([]); vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]); });
+beforeEach(() => { vi.resetAllMocks(); vi.mocked(recreationApi.models).mockResolvedValue({ provider: 'uniart', source: 'static', defaults: { image_model: 'uniart/gpt-image-2', video_model: 'uniart/minimax-h3-vip' }, image_models: [{ id: 'uniart/gpt-image-2', display_name: 'GPT Image 2', capabilities: ['i2i'] }], video_models: [{ id: 'uniart/minimax-h3-vip', display_name: 'MiniMax H3', capabilities: ['r2v'] }] }); vi.mocked(recreationApi.media).mockResolvedValue(image); vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [image], next_cursor: null }); vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]); vi.mocked(recreationApi.generationTasks).mockResolvedValue([]); vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]); });
 
 it('selects a stable media ID and saves only on explicit action, retaining draft after failure', async () => {
   const onSaved = vi.fn();
@@ -74,7 +74,7 @@ it('runs a paid keyframe task and selects its output without binding it', async 
   fireEvent.click(screen.getByRole('checkbox', { name: 'keyframeAcceptCost' }));
   fireEvent.click(screen.getByRole('button', { name: 'generateCorrected' }));
   expect(await screen.findByText('Corrected')).toBeInTheDocument();
-  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion', true);
+  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion', true, 'uniart/gpt-image-2');
   expect(recreationApi.bindShot).not.toHaveBeenCalled();
 });
 

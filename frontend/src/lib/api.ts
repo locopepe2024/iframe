@@ -78,6 +78,47 @@ export interface AssetLibraryReference {
     variant_id: string;
 }
 
+export interface AssetReferenceIndexVariant {
+    id: string;
+    url: string;
+    created_at?: number;
+    prompt_used?: string | null;
+    is_favorited?: boolean;
+    reference_view_role?: string;
+    reference_distance?: string;
+}
+
+export interface AssetReferenceIndexEntry {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    name: string;
+    description?: string;
+    starred?: boolean;
+    source_scope: "episode" | "project" | "series" | "global";
+    source_container_id?: string | null;
+    source_name?: string | null;
+    selected_variant_id?: string | null;
+    cover_variant_id?: string | null;
+    variants: AssetReferenceIndexVariant[];
+}
+
+export interface AssetCoverSelectionResult {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    cover_variant_id: string;
+    variant: {
+        id: string;
+        url: string;
+        created_at: number;
+    };
+}
+
+export interface AssetReferenceIndex {
+    schema_version: 1;
+    project_id: string;
+    assets: AssetReferenceIndexEntry[];
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -334,6 +375,20 @@ export const api = {
     getProject: async (scriptId: string) => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
         return { ...res.data, originalText: res.data.original_text };
+    },
+
+    getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getAssetLibraryIndex: async (): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/asset-index`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
     },
 
     getAssemblyPlan: async (scope: AssemblyScope, resourceId: string): Promise<AssemblyEditPlan | null> => {
@@ -664,7 +719,7 @@ export const api = {
     assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
         `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference) => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text") => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -678,12 +733,19 @@ export const api = {
             model_name: modelName,
             aspect_ratio: aspectRatio,
             ...(reference ? { reference } : {}),
+            ...(references?.length ? { references } : {}),
+            image_generation_mode: imageGenerationMode,
         });
         return res.data;
     },
 
     getTaskStatus: async (taskId: string) => {
         const res = await axios.get(`${API_URL}/tasks/${taskId}`);
+        return res.data;
+    },
+
+    clearAssetGenerationState: async (scriptId: string, assetType: string, assetId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/generation/clear`);
         return res.data;
     },
 
@@ -751,6 +813,20 @@ export const api = {
             asset_type: assetType,
             image_url: imageUrl
         });
+        return res.data;
+    },
+
+    setAssetCoverVariant: async (
+        scriptId: string,
+        assetId: string,
+        assetType: "character" | "scene" | "prop",
+        variantId: string,
+    ): Promise<AssetCoverSelectionResult> => {
+        const res = await axios.post<AssetCoverSelectionResult>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/cover`,
+            { variant_id: variantId },
+            { timeout: 15_000 },
+        );
         return res.data;
     },
 

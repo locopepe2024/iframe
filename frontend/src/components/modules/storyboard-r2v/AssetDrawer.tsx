@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, User, MapPin, Package } from "lucide-react";
 import { useTranslations } from "next-intl";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
-import { selectedVariantUrl } from "@/lib/characterImage";
+import type { AssetReferenceIndexEntry } from "@/lib/api";
+import { effectiveReferenceIndex } from "@/lib/assetReferenceIndex";
 
 interface AssetDrawerProps {
     isOpen: boolean;
@@ -12,44 +13,34 @@ interface AssetDrawerProps {
     characters: any[];
     scenes: any[];
     props: any[];
+    assetIndex?: AssetReferenceIndexEntry[];
     onSelectAsset: (type: string, name: string) => void;
     selectedVariantIds?: Record<string, string[]>;
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
 }
 
-function getAssetThumbnail(item: any, type: "character" | "scene" | "prop"): string | null {
-    if (type === "character") {
-        const refUrl = selectedVariantUrl(item.reference_sheet);
-        if (refUrl) return refUrl;
-        const asset = item.full_body_asset || item.headshot_asset;
-        if (asset?.selected_id && asset.variants?.length) {
-            const selected = asset.variants.find((v: any) => v.id === asset.selected_id);
-            if (selected) return selected.url;
-        }
-        if (asset?.variants?.[0]) return asset.variants[0].url;
-        if (item.avatar_url) return item.avatar_url;
-    } else {
-        const asset = item.image_asset;
-        if (asset?.selected_id && asset.variants?.length) {
-            const selected = asset.variants.find((v: any) => v.id === asset.selected_id);
-            if (selected) return selected.url;
-        }
-        if (asset?.variants?.[0]) return asset.variants[0].url;
-    }
-    return null;
+function getAssetThumbnail(item: AssetReferenceIndexEntry): string | null {
+    return item.variants.find((variant) => variant.id === item.selected_variant_id)?.url
+        ?? item.variants[0]?.url
+        ?? null;
 }
 
 export default function AssetDrawer({
     isOpen,
     onClose,
-    characters,
-    scenes,
-    props,
+    characters: legacyCharacters,
+    scenes: legacyScenes,
+    props: legacyProps,
+    assetIndex,
     onSelectAsset,
     selectedVariantIds = {},
     onToggleVariant,
 }: AssetDrawerProps) {
     const t = useTranslations("storyboardR2V");
+    const entries = effectiveReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
+    const characters = entries.filter((entry) => entry.asset_type === "character");
+    const scenes = entries.filter((entry) => entry.asset_type === "scene");
+    const props = entries.filter((entry) => entry.asset_type === "prop");
 
     const hasAnyAssets = characters.length > 0 || scenes.length > 0 || props.length > 0;
 
@@ -102,10 +93,10 @@ export default function AssetDrawer({
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
                                                 {characters.map((c: any, i: number) => {
-                                                    const thumb = getAssetThumbnail(c, "character");
+                                                    const thumb = getAssetThumbnail(c);
                                                     return (
                                                         <button
-                                                            key={c.id}
+                                                            key={c.asset_id}
                                                             onClick={() => {
                                                                 onSelectAsset(`character${i + 1}`, c.name);
                                                                 onClose();
@@ -136,10 +127,10 @@ export default function AssetDrawer({
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
                                                 {scenes.map((s: any) => {
-                                                    const thumb = getAssetThumbnail(s, "scene");
+                                                    const thumb = getAssetThumbnail(s);
                                                     return (
                                                         <button
-                                                            key={s.id}
+                                                            key={s.asset_id}
                                                             onClick={() => {
                                                                 onSelectAsset("scene", s.name);
                                                                 onClose();
@@ -170,13 +161,13 @@ export default function AssetDrawer({
                                             </div>
                                             <div className="space-y-2">
                                                 {props.map((p: any) => {
-                                                    const thumb = getAssetThumbnail(p, "prop");
-                                                    const variants: any[] = p.image_asset?.variants ?? [];
-                                                    const primaryId = p.image_asset?.selected_id ?? variants[0]?.id;
-                                                    const explicit = selectedVariantIds[p.id];
+                                                    const thumb = getAssetThumbnail(p);
+                                                    const variants = p.variants;
+                                                    const primaryId = p.selected_variant_id ?? variants[0]?.id;
+                                                    const explicit = selectedVariantIds[p.asset_id];
                                                     const effectiveSelected = explicit?.length ? explicit : (primaryId ? [primaryId] : []);
                                                     return (
-                                                        <div key={p.id} className="rounded-lg border border-glass-border bg-glass p-2">
+                                                        <div key={p.asset_id} className="rounded-lg border border-glass-border bg-glass p-2">
                                                             <button
                                                                 type="button"
                                                                 onClick={() => onSelectAsset("prop", p.name)}
@@ -209,7 +200,7 @@ export default function AssetDrawer({
                                                                                 type="button"
                                                                                 title={label}
                                                                                 aria-pressed={selected}
-                                                                                onClick={() => onToggleVariant(p.id, variant.id, primaryId)}
+                                                                                onClick={() => onToggleVariant(p.asset_id, variant.id, primaryId)}
                                                                                 className={`relative aspect-square overflow-hidden rounded border transition-colors ${selected ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/30"}`}
                                                                             >
                                                                                 <PreviewImage src={variant.url} alt={label} className="h-full w-full" noLightbox />

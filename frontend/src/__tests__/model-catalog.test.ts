@@ -16,6 +16,7 @@ import {
     getMaxReferenceImages,
     getModelLineEntry,
     getModeGateway,
+    resolveAssetGenerationModel,
     resolveModelSettings,
 } from '@/lib/modelCatalog';
 
@@ -67,6 +68,12 @@ describe('model catalog selectors', () => {
 });
 
 describe('model catalog fallbacks', () => {
+    it('normalizes retired project image models for legacy asset generation', () => {
+        expect(resolveAssetGenerationModel('wan2.7-image-pro')).toBe('uniart/gpt-image-2');
+        expect(resolveAssetGenerationModel(undefined)).toBe('uniart/gpt-image-2');
+        expect(resolveAssetGenerationModel('uniart/gpt-image-2')).toBe('uniart/gpt-image-2');
+    });
+
     it('falls back unknown and legacy-surface ids to catalog defaults', () => {
         expect(
             resolveModelSettings(

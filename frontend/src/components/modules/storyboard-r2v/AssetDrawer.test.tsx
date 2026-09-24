@@ -30,6 +30,14 @@ describe("AssetDrawer product references", () => {
                         ],
                     },
                 }]}
+                assetIndex={[{
+                    asset_type: "prop", asset_id: "product", name: "穿心莲",
+                    source_scope: "series", selected_variant_id: "front",
+                    variants: [
+                        { id: "front", url: "front.jpg", reference_view_role: "front" },
+                        { id: "right", url: "right.jpg", reference_view_role: "right" },
+                    ],
+                }]}
                 onSelectAsset={vi.fn()}
                 selectedVariantIds={{ product: ["front", "right"] }}
                 onToggleVariant={onToggleVariant}

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+import json
+from typing import Any, Dict, Iterable, List, Mapping
+from urllib.request import Request, urlopen
 
 
 MODE_MAP = {
@@ -134,3 +136,26 @@ def normalize_uniart_catalog(payload: Any) -> List[Dict[str, Any]]:
     if not isinstance(items, list):
         return []
     return [model for item in items if isinstance(item, dict) if (model := normalize_uniart_model(item))]
+
+
+def fetch_uniart_catalog(config: Mapping[str, Any], *, timeout: float = 15) -> List[Dict[str, Any]]:
+    """Fetch and normalize the owner-scoped UniArt model catalog.
+
+    This helper deliberately returns capability metadata only.  Credentials
+    are read from ``config`` to construct the request but are never included
+    in the returned payload or in an exception message.
+    """
+    base_url = str(config.get("base_url") or "").strip().rstrip("/")
+    api_key = str(config.get("api_key") or "").strip()
+    if not base_url:
+        raise ValueError("UniArt base URL is not configured")
+    if not api_key:
+        raise ValueError("UniArt API key is not configured")
+    request = Request(
+        f"{base_url}/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="GET",
+    )
+    with urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return normalize_uniart_catalog(payload)

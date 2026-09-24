@@ -23,13 +23,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { api, type AssetLibraryReference } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { resolveModelId } from "@/lib/modelCatalog";
+import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
+import ReferencePromptEditor, {
+    type ReferenceCandidate,
+    type ReferenceSuggestion,
+} from "@/components/modules/playground/ReferencePromptEditor";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
@@ -37,8 +42,42 @@ export type CastKind = "character" | "scene" | "prop";
 
 // Module-level poll registry — survives modal close/reopen.
 export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
+const pendingSelections = new Map<string, string>();
+const selectionVersions = new Map<string, number>();
 
-function startAssetPoll(
+function selectionKey(projectId: string, kind: CastKind, entityId: string) {
+    return `${projectId}:${kind}:${entityId}`;
+}
+
+function withSelectedVariant(project: any, kind: CastKind, entityId: string, variantId: string): any {
+    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+    return {
+        ...project,
+        [field]: (project[field] || []).map((asset: any) => {
+            if (asset.id !== entityId) return asset;
+            const sheetVariant = kind === "character"
+                ? asset.reference_sheet?.image_variants?.find((item: any) => item.id === variantId)
+                : null;
+            if (sheetVariant) return {
+                ...asset,
+                reference_sheet: { ...asset.reference_sheet, selected_image_id: variantId },
+                image_url: sheetVariant.url,
+            };
+            const unit = kind === "character" ? asset.full_body_asset : asset.image_asset;
+            const variant = unit?.variants?.find((item: any) => item.id === variantId);
+            if (!variant) return asset;
+            if (kind === "character") return {
+                ...asset,
+                full_body_asset: { ...unit, selected_id: variantId },
+                full_body_image_url: variant.url,
+                image_url: variant.url,
+            };
+            return { ...asset, image_asset: { ...unit, selected_id: variantId }, image_url: variant.url };
+        }),
+    };
+}
+
+export function startAssetPoll(
     entityId: string,
     taskId: string,
     projectId: string,
@@ -54,19 +93,48 @@ function startAssetPoll(
     if (activePolls.has(entityId)) return;
     const interval = setInterval(async () => {
         try {
+            const key = selectionKey(projectId, kind, entityId);
+            const selectionVersionBeforeRead = selectionVersions.get(key) || 0;
             const status = await api.getTaskStatus(taskId);
             if (status?.status === "completed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const fresh = await api.getProject(projectId);
                 const { updateProject, removeGeneratingTask } = getStore();
-                updateProject(projectId, fresh);
+                const state = useProjectStore.getState();
+                const current = state.projects.find((project) => project.id === projectId)
+                    || (state.currentProject?.id === projectId ? state.currentProject : null);
+                const currentEntity = current?.id === projectId
+                    ? (kind === "character" ? current.characters : kind === "scene" ? current.scenes : current.props)?.find((item: any) => item.id === entityId)
+                    : null;
+                const pending = pendingSelections.get(key);
+                const selected = pending || (selectionVersionBeforeRead !== (selectionVersions.get(key) || 0)
+                    ? readSelectedId(currentEntity, kind)
+                    : null);
+                const statusAssetId = status.asset_id || status.asset?.id;
+                const statusTypeMatches = kind === "character"
+                    ? ["character", "full_body", "head_shot"].includes(status.asset_type || "")
+                    : status.asset_type === kind;
+                const patch = statusAssetId === entityId && statusTypeMatches
+                    ? mergeAssetTaskResult(current, status)
+                    : null;
+                let merged = patch && current ? { ...current, ...patch } : null;
+                if (merged && selected) merged = withSelectedVariant(merged, kind, entityId, selected);
+                if (merged && patch) {
+                    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+                    updateProject(projectId, { [field]: merged[field] });
+                } else {
+                    console.error("Completed asset task did not include its target asset snapshot", taskId);
+                }
                 removeGeneratingTask(entityId, generationType);
-                const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
+                const entityPool = (kind === "character" ? merged?.characters : kind === "scene" ? merged?.scenes : merged?.props) || [];
                 const updatedEntity = entityPool.find((e: any) => e.id === entityId);
                 const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                if (updatedEntity) {
+                    toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                } else {
+                    toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
+                }
             } else if (status?.status === "failed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
@@ -102,15 +170,9 @@ interface ImageVariant {
     reference_distance?: string;
 }
 
-interface ReferenceLibraryAsset {
-    asset_type: CastKind;
-    asset_id: string;
-    name: string;
-    source?: "episode" | "series" | "global";
-    variants: ImageVariant[];
-}
+type ReferenceLibraryAsset = AssetReferenceIndexEntry;
 
-type CharacterTemplate = "simple" | "detailed" | "design_sheet";
+type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
@@ -132,6 +194,13 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
         descKey: "tplDetailedDesc",
         composition: "构图：单张统一的详细角色参考图，无边框或分隔框，浅灰色中性背景。左侧为三个并排的全身站立视图，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然；右上为头部近景肖像（肩部以上，面部细节清晰）；右下为三个较小的头部角度特写，展示正面、四分之三侧面和侧面。所有视图使用统一的柔和摄影棚光线，避免硬阴影，整体光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
+        exampleImage: "/assets/templates/detailed-reference.png",
+    },
+    face_focus: {
+        labelKey: "tplFaceFocusLabel",
+        descKey: "tplFaceFocusDesc",
+        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45度、右前45度和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
+        negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images, inconsistent face, different person, deformed eyes, asymmetrical features",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
     design_sheet: {
@@ -248,8 +317,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         return pool.find((e: any) => e.id === entityId) ?? null;
     }, [currentProject, entityId, kind]);
 
-    const variants = useMemo(() => readVariants(entity, kind ?? "character"), [entity, kind]);
-    const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
+    const [deletedVariantIds, setDeletedVariantIds] = useState<string[]>([]);
+    const deletedVariantIdsRef = useRef(new Set<string>());
+    const variants = useMemo(() => readVariants(entity, kind ?? "character").filter((variant) => !deletedVariantIds.includes(variant.id)), [entity, kind, deletedVariantIds]);
+    const selectedId = useMemo(() => {
+        const selected = readSelectedId(entity, kind ?? "character");
+        return deletedVariantIds.includes(selected || "") ? variants.at(-1)?.id ?? null : selected;
+    }, [entity, kind, deletedVariantIds, variants]);
 
     const uploadInput = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
@@ -257,6 +331,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [batchSize, setBatchSize] = useState(2);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
     const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
@@ -264,101 +339,97 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
     const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
-    const [libraryReference, setLibraryReference] = useState<AssetLibraryReference | null>(null);
+    // A selected/uploaded image is only an available candidate. It becomes a
+    // provider input after the user inserts its explicit @ token below.
+    const [availableReferences, setAvailableReferences] = useState<AssetLibraryReference[]>([]);
+    const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
-    const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
-        characters: any[];
-        scenes: any[];
-        props: any[];
-    }>({ characters: [], scenes: [], props: [] });
+    const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
     // would bypass the refreshed selector and submit the retired SKU anyway.
-    // Keep the legacy local fallback only when the project has no model setting
-    // at all, so older projects still behave as they did before the catalog
-    // became runtime-authoritative.
     const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
-    const selectedModelId = requestedModelId
-        ? resolveModelId("t2i", requestedModelId, "project_settings")
-        : "wan2.1-t2i";
-    const isGptImage2 = selectedModelId === "gpt-image-2";
+    const selectedModelId = resolveAssetGenerationModel(requestedModelId);
+    const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
-        if (!isOpen) return;
-        // A normal GET /projects response already merges series/global assets,
-        // but a freshly-created or cached project can predate that merge. Load
-        // the global pool opportunistically so the picker remains complete;
-        // the current project/series data still renders immediately.
-        const loadGlobalAssets = api.listLibraryAssets;
-        if (typeof loadGlobalAssets !== "function") return;
-        let request: unknown;
-        try {
-            request = loadGlobalAssets();
-        } catch {
+        deletedVariantIdsRef.current.clear();
+        setDeletedVariantIds([]);
+        setAvailableReferences([]);
+        setPromptReferences([]);
+        setMention(null);
+        setLibraryPickerOpen(false);
+    }, [entityId, kind]);
+
+    useEffect(() => {
+        if (!isOpen || !currentProject) {
+            setReferenceLibraryAssets([]);
             return;
         }
-        void Promise.resolve(request)
-            .then((data: any) => {
-                setGlobalLibraryAssets({
-                    characters: data?.characters || [],
-                    scenes: data?.scenes || [],
-                    props: data?.props || [],
-                });
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id)
+            .then((index) => {
+                if (active) setReferenceLibraryAssets(index.assets.flatMap((asset) => {
+                    const variants = asset.variants.filter((variant) => !deletedVariantIdsRef.current.has(variant.id));
+                    return variants.length ? [{ ...asset, variants }] : [];
+                }));
             })
             .catch(() => {
-                // The current project response is still a valid source when
-                // the optional global-library read is unavailable.
+                if (active) setReferenceLibraryAssets([]);
             });
-    }, [isOpen]);
+        return () => { active = false; };
+    }, [isOpen, currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
-    const referenceLibraryAssets = useMemo<ReferenceLibraryAsset[]>(() => {
-        if (!currentProject) return [];
-        const byKey = new Map<string, ReferenceLibraryAsset>();
-        const addGroup = (assetType: CastKind, assets: any[], fallbackSource?: ReferenceLibraryAsset["source"]) => {
-            for (const asset of assets || []) {
-                const variants = readLibraryVariants(asset, assetType);
-                if (!asset?.id || variants.length === 0) continue;
-                const key = `${assetType}:${asset.id}`;
-                // Episode-local/project response data has priority over the
-                // parent series and global fallback pools.
-                if (byKey.has(key)) continue;
-                byKey.set(key, {
-                    asset_type: assetType,
-                    asset_id: asset.id,
-                    name: asset.name,
-                    source: asset.source || fallbackSource,
-                    variants,
-                });
-            }
-        };
+    const visibleReferenceLibraryAssets = useMemo(() => referenceLibraryAssets.flatMap((asset) => {
+        const variants = asset.variants.filter((variant) => !deletedVariantIds.includes(variant.id));
+        return variants.length ? [{ ...asset, variants }] : [];
+    }), [referenceLibraryAssets, deletedVariantIds]);
 
-        addGroup("character", currentProject.characters || [], "episode");
-        addGroup("scene", currentProject.scenes || [], "episode");
-        addGroup("prop", currentProject.props || [], "episode");
-        addGroup("character", currentSeries?.characters || [], "series");
-        addGroup("scene", currentSeries?.scenes || [], "series");
-        addGroup("prop", currentSeries?.props || [], "series");
-        addGroup("character", globalLibraryAssets.characters, "global");
-        addGroup("scene", globalLibraryAssets.scenes, "global");
-        addGroup("prop", globalLibraryAssets.props, "global");
-        return Array.from(byKey.values());
-    }, [currentProject, currentSeries, globalLibraryAssets]);
-
-    const selectedLibraryAsset = useMemo(() => {
-        if (!libraryReference) return null;
-        const asset = referenceLibraryAssets.find((item) =>
-            item.asset_type === libraryReference.asset_type && item.asset_id === libraryReference.asset_id,
+    const visibleAvailableReferences = useMemo(() => availableReferences.flatMap((reference) => {
+        const asset = visibleReferenceLibraryAssets.find((item) =>
+            item.asset_type === reference.asset_type && item.asset_id === reference.asset_id,
         );
-        const variant = asset?.variants.find((item) => item.id === libraryReference.variant_id);
-        return asset && variant ? { asset, variant } : null;
-    }, [libraryReference, referenceLibraryAssets]);
+        const variant = asset?.variants.find((item) => item.id === reference.variant_id);
+        return asset && variant ? [{ reference, asset, variant }] : [];
+    }), [availableReferences, visibleReferenceLibraryAssets]);
+
+    const activePromptReferences = useMemo(() => promptReferences.filter((reference) =>
+        visibleAvailableReferences.some(({ reference: candidate }) => candidate.asset_type === reference.asset_type
+            && candidate.asset_id === reference.asset_id
+            && candidate.variant_id === reference.variant_id),
+    ), [visibleAvailableReferences, promptReferences]);
+
+    const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
+        const labels = new Set<string>();
+        return visibleAvailableReferences.flatMap(({ reference, asset, variant }, index) => {
+            const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const baseLabel = asset.variants.length > 1 ? `${asset.name} · ${variantLabel}` : asset.name;
+            let label = baseLabel;
+            let suffix = 2;
+            while (labels.has(label)) label = `${baseLabel} ${suffix++}`;
+            labels.add(label);
+            return [{
+                label,
+                previewUrl: getAssetUrl(variant.url),
+                sourceLabel: asset.source_scope,
+                variantLabel,
+                reference,
+            }];
+        });
+    }, [visibleAvailableReferences]);
+
+    const matchingReferenceCandidates = useMemo(() => referenceCandidates.filter((candidate) =>
+        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+    ), [mention, referenceCandidates]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -374,7 +445,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     }, [isOpen, entity, kind, selectedTemplate]);
 
     useEffect(() => {
-        setLibraryReference(null);
+        setAvailableReferences([]);
+        setPromptReferences([]);
+        setMention(null);
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
 
@@ -416,6 +489,58 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleResetTemplate = () => {
         setPrompt(buildTemplate(kind, entity, selectedTemplate));
         setPromptDirty(false);
+        setPromptReferences([]);
+        setMention(null);
+    };
+
+    const addAvailableReference = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        const reference: AssetLibraryReference = {
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        };
+        setAvailableReferences((current) => {
+            const exists = current.some((item) => item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (exists || current.length >= 9) return current;
+            return [...current, reference];
+        });
+    };
+
+    const toggleAvailableReference = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        const reference: AssetLibraryReference = {
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        };
+        setAvailableReferences((current) => {
+            const exists = current.some((item) => item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (exists) return current.filter((item) => !(item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id));
+            if (current.length >= 9) return current;
+            return [...current, reference];
+        });
+    };
+
+    const retainUploadedVariantInIndex = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        setReferenceLibraryAssets((current) => {
+            const keyMatches = (item: ReferenceLibraryAsset) => item.asset_type === asset.asset_type
+                && item.asset_id === asset.asset_id;
+            const existing = current.find(keyMatches);
+            if (!existing) return [...current, { ...asset, variants: [variant] }];
+            if (existing.variants.some((item) => item.id === variant.id)) return current;
+            return current.map((item) => keyMatches(item)
+                ? { ...item, selected_variant_id: variant.id, variants: [...item.variants, variant] }
+                : item);
+        });
+    };
+
+    const removeAvailableReference = (reference: AssetLibraryReference) => {
+        setAvailableReferences((current) => current.filter((item) => !(item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id)));
+        setPromptReferences((current) => current.filter((item) => !(item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id)));
     };
 
     const handleTemplateSwitch = (tpl: CharacterTemplate) => {
@@ -429,6 +554,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setSelectedTemplate(tpl);
             setPrompt(buildTemplate(kind, entity, tpl));
             setPromptDirty(false);
+            setPromptReferences([]);
+            setMention(null);
         }
     };
 
@@ -437,6 +564,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setSelectedTemplate(pendingTemplate);
         setPrompt(buildTemplate(kind, entity, pendingTemplate));
         setPromptDirty(false);
+        setPromptReferences([]);
+        setMention(null);
         setPendingTemplate(null);
     };
 
@@ -447,6 +576,20 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        if (imageGenerationMode === "reference" && activePromptReferences.length === 0) {
+            toast.warning(t("referenceModeRequiresImage"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        if (imageGenerationMode === "text" && activePromptReferences.length > 0) {
+            toast.warning(t("referenceModeSelectExplicitly"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
@@ -469,10 +612,35 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 onClose();
                 return;
             }
+            const freshIndex = activePromptReferences.length > 0
+                ? await api.getAssetReferenceIndex(currentProject.id)
+                : null;
+            const staleReference = activePromptReferences.find((reference) => {
+                const indexedAsset = freshIndex?.assets.find((item) => item.asset_type === reference.asset_type
+                    && item.asset_id === reference.asset_id);
+                return !indexedAsset?.variants.some((variant) => variant.id === reference.variant_id);
+            });
+            if (staleReference) {
+                removeAvailableReference(staleReference);
+                toast.warning(t("toastReferenceStale"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                updateProject(currentProject.id, fresh);
+                return;
+            }
             updateProject(currentProject.id, fresh);
         } catch {
-            // Refresh failed — proceed with cached data; backend will reject
-            // if the entity truly is stale and the poll surfaces the error.
+            // A reference request must never fall through to submission when
+            // the fresh index could not be checked. The backend remains the
+            // final authority, but avoid sending a known potentially stale ID.
+            if (activePromptReferences.length > 0) {
+                toast.error(t("toastReferenceCheckFailed"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                return;
+            }
         }
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
         addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);
@@ -497,7 +665,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 effectiveBatchSize,
                 selectedModelId,
                 aspectRatioOverride || undefined,
-                libraryReference ?? undefined,
+                undefined,
+                imageGenerationMode === "reference"
+                    ? activePromptReferences
+                    : [],
+                imageGenerationMode,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -530,7 +702,30 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
                 kind === "character" ? "reference_sheet" : "image");
             updateProject(currentProject.id, updated);
-            setLibraryReference(null);
+            const updatedPool = kind === "character"
+                ? updated.characters
+                : kind === "scene"
+                    ? updated.scenes
+                    : updated.props;
+            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id);
+            const uploadedVariantId = readSelectedId(updatedEntity, kind);
+            const uploadedVariant = readLibraryVariants(updatedEntity, kind).find((item) => item.id === uploadedVariantId);
+            if (uploadedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: kind,
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: uploadedVariant.id,
+                    variants: [uploadedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, uploadedVariant);
+                addAvailableReference(
+                    indexedAsset,
+                    uploadedVariant,
+                );
+            }
             setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
@@ -553,6 +748,25 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 "reference_sheet",
             );
             updateProject(currentProject.id, updated);
+            const updatedEntity = updated.characters?.find((item: any) => item.id === entity.id);
+            const editedVariantId = readSelectedId(updatedEntity, "character");
+            const editedVariant = readLibraryVariants(updatedEntity, "character").find((item) => item.id === editedVariantId);
+            if (editedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: "character",
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: editedVariant.id,
+                    variants: [editedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, editedVariant);
+                addAvailableReference(
+                    indexedAsset,
+                    editedVariant,
+                );
+            }
             setEditingVariant(null);
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
@@ -565,41 +779,65 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     };
 
     const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
-        setLibraryReference({
-            asset_type: asset.asset_type,
-            asset_id: asset.asset_id,
-            variant_id: variant.id,
+        toggleAvailableReference(asset, variant);
+    };
+
+    const handleSelectVariant = (variantId: string) => {
+        const projectId = currentProject.id;
+        const assetId = entity.id;
+        const key = selectionKey(projectId, kind, assetId);
+        const version = (selectionVersions.get(key) || 0) + 1;
+        selectionVersions.set(key, version);
+        pendingSelections.set(key, variantId);
+        const previousId = readSelectedId(entity, kind);
+        updateProject(projectId, withSelectedVariant(currentProject, kind, assetId, variantId));
+
+        // Serialize writes so a slow earlier selection cannot persist after a newer click.
+        selectionQueue.current = selectionQueue.current.then(async () => {
+            try {
+                const updated = await api.selectAssetVariant(
+                    projectId, assetId, kind, variantId,
+                    kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
+                );
+                if (selectionVersions.get(key) !== version) return;
+                updateProject(projectId, updated);
+                const updatedPool = kind === "character" ? updated.characters : kind === "scene" ? updated.scenes : updated.props;
+                const updatedEntity = updatedPool?.find((item: any) => item.id === assetId) || entity;
+                const selectedVariant = readLibraryVariants(updatedEntity, kind).find((variant) => variant.id === variantId);
+                if (selectedVariant) {
+                    const indexedAsset: ReferenceLibraryAsset = {
+                        asset_type: kind,
+                        asset_id: assetId,
+                        name: entity.name,
+                        source_scope: "episode",
+                        source_container_id: projectId,
+                        selected_variant_id: selectedVariant.id,
+                        variants: [selectedVariant],
+                    };
+                    retainUploadedVariantInIndex(indexedAsset, selectedVariant);
+                    addAvailableReference(indexedAsset, selectedVariant);
+                }
+                toast.success(t("toastSelected"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    autoCloseMs: 3000,
+                });
+            } catch (err: any) {
+                if (selectionVersions.get(key) !== version) return;
+                const latest = useProjectStore.getState().currentProject;
+                if (latest?.id === projectId && previousId) {
+                    updateProject(projectId, withSelectedVariant(latest, kind, assetId, previousId));
+                }
+                const detail = err?.response?.data?.detail || err?.message || "select failed";
+                toast.error(t("toastSelectErr"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    body: String(detail),
+                });
+            } finally {
+                if (selectionVersions.get(key) === version) pendingSelections.delete(key);
+            }
         });
-        setLibraryPickerOpen(false);
-    };
-
-    const handleClearLibraryReference = () => {
-        setLibraryReference(null);
-    };
-
-    const handleSelectVariant = async (variantId: string) => {
-        try {
-            const updated = await api.selectAssetVariant(
-                currentProject.id,
-                entity.id,
-                kind,
-                variantId,
-                kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
-            );
-            updateProject(currentProject.id, updated);
-            toast.success(t("toastSelected"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                autoCloseMs: 3000,
-            });
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || "select failed";
-            toast.error(t("toastSelectErr"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                body: String(detail),
-            });
-        }
     };
 
     const handleToggleFavorite = async (variantId: string, currentFav: boolean) => {
@@ -618,14 +856,33 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleDeleteVariant = async (variantId: string) => {
         if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
         setDeletingVariantId(variantId);
+        deletedVariantIdsRef.current.add(variantId);
+        setDeletedVariantIds((current) => [...current, variantId]);
         try {
+            await selectionQueue.current;
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
+            setAvailableReferences((current) => current.filter((item) => !(
+                item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
+            )));
+            setPromptReferences((current) => current.filter((item) => !(
+                item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
+            )));
+            setReferenceLibraryAssets((current) => current.flatMap((asset) => {
+                if (asset.asset_type !== kind || asset.asset_id !== entity.id) return [asset];
+                const remaining = asset.variants.filter((variant) => variant.id !== variantId);
+                return remaining.length > 0 ? [{ ...asset, variants: remaining }] : [];
+            }));
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
         } catch (err: any) {
+            deletedVariantIdsRef.current.delete(variantId);
+            setDeletedVariantIds((current) => current.filter((id) => id !== variantId));
+            void api.getAssetReferenceIndex(currentProject.id).then((index) => {
+                setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
+            }).catch(() => {});
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
             toast.error(t("toastDeleteErr"), { body: String(detail) });
         } finally {
@@ -929,27 +1186,121 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 </div>
                             )}
 
-                            {/* Prompt textarea */}
+                            <div className="mb-4">
+                                <label className="block font-mono text-[0.625rem] uppercase tracking-[0.16em] text-text-muted mb-2">
+                                    {t("imageGenerationMode")}
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={t("imageGenerationMode")}>
+                                    {(["text", "reference"] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            aria-pressed={imageGenerationMode === mode}
+                                            disabled={generating}
+                                            onClick={() => {
+                                                setImageGenerationMode(mode);
+                                            }}
+                                            className={`min-h-9 rounded px-3 py-2 text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                                                imageGenerationMode === mode
+                                                    ? "bg-primary/15 text-primary"
+                                                    : "text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                            } disabled:opacity-40`}
+                                        >
+                                            {t(mode === "text" ? "textGenerationMode" : "referenceGenerationMode")}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-text-muted">
+                                    {t(imageGenerationMode === "text" ? "textGenerationModeHint" : "referenceGenerationModeHint")}
+                                </p>
+                            </div>
+
+                            {/* Prompt editor — the only place where an available
+                                reference becomes an explicit generation input. */}
                             <div className="flex items-center justify-between mb-2">
                                 <label className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                     {t("promptLabel")}
                                 </label>
-                                <button
-                                    onClick={handleResetTemplate}
-                                    disabled={generating}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-text-muted hover:text-foreground transition-colors disabled:opacity-30"
-                                    title={t("resetTemplateHint")}
-                                >
-                                    <RefreshCw size={11} />
-                                    {t("resetTemplate")}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLibraryPickerOpen(true)}
+                                        disabled={generating || visibleReferenceLibraryAssets.length === 0}
+                                        aria-expanded={libraryPickerOpen}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30"
+                                    >
+                                        <Library size={11} />
+                                        {t("addReferenceImages")}
+                                    </button>
+                                    <button
+                                        onClick={handleResetTemplate}
+                                        disabled={generating}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-text-muted hover:text-foreground transition-colors disabled:opacity-30"
+                                        title={t("resetTemplateHint")}
+                                    >
+                                        <RefreshCw size={11} />
+                                        {t("resetTemplate")}
+                                    </button>
+                                </div>
                             </div>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => { setPrompt(e.target.value); setPromptDirty(true); }}
-                                disabled={generating}
-                                className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
-                            />
+                            {visibleAvailableReferences.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-1.5" aria-label={t("availableReferences")}>
+                                    {visibleAvailableReferences.map(({ reference, asset, variant }) => (
+                                        <span key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} className="inline-flex items-center gap-1 rounded border border-glass-border bg-black/20 px-2 py-1 text-[0.6875rem] text-text-secondary">
+                                            <Library size={11} />
+                                            {asset.name}{asset.variants.length > 1 ? ` · ${variant.reference_view_role || variant.reference_distance || variant.id}` : ""}
+                                            <button type="button" onClick={() => removeAvailableReference(reference)} aria-label={t("removeAvailableReference", { name: asset.name })} className="ml-0.5 rounded p-1 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+                                                <X size={10} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="relative rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 focus-within:border-primary/40">
+                                <ReferencePromptEditor
+                                    value={prompt}
+                                    candidates={referenceCandidates}
+                                    onChange={(value) => {
+                                        setPrompt(value);
+                                        setPromptDirty(true);
+                                    }}
+                                    onReferencesChange={setPromptReferences}
+                                    onMentionChange={setMention}
+                                    allowImplicitMentions={false}
+                                    pruneUnlistedReferences
+                                    editable={!generating}
+                                    placeholder={t("promptLabel")}
+                                />
+                                {mention && (
+                                    <div role="listbox" aria-label={t("referenceSuggestionLabel")} className="absolute bottom-full left-0 z-50 mb-2 max-h-64 w-[min(100%,28rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
+                                        <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                            {t("referenceSuggestionLabel")}
+                                        </div>
+                                        {matchingReferenceCandidates.length === 0 ? (
+                                            <div className="px-2 py-2 text-xs text-text-muted">
+                                                {referenceCandidates.length ? t("noMatchingReference") : t("noAvailableReferences")}
+                                            </div>
+                                        ) : matchingReferenceCandidates.map((candidate) => (
+                                            <button
+                                                key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                                type="button"
+                                                role="option"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => { mention.choose(candidate); setMention(null); }}
+                                                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                            >
+                                                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                                    {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" /> : <Library size={15} className="text-text-muted" />}
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-xs text-foreground">@{candidate.label}</span>
+                                                    {candidate.sourceLabel && <span className="block truncate text-[0.625rem] text-text-muted">{candidate.sourceLabel}</span>}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -963,6 +1314,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         { key: "studioLighting", value: "studio lighting" },
                                         { key: "whiteBackground", value: "white background" },
                                         { key: "detailedFace", value: "detailed face" },
+                                        { key: "faceDesign", value: "face design reference board" },
                                     ]
                                     : kind === "scene"
                                         ? [
@@ -1089,7 +1441,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Generate CTA */}
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !prompt.trim()}
+                                disabled={generating || !prompt.trim() || (imageGenerationMode === "reference" && activePromptReferences.length === 0)}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
                                 {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
@@ -1106,70 +1458,50 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
                                 onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
                             <div className="flex gap-2 mb-3">
-                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
+                                <button type="button" disabled={uploading || generating} onClick={() => uploadInput.current?.click()}
                                     className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
                                     {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                                     {t(uploading ? "uploading" : "uploadReference")}
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={generating || referenceLibraryAssets.length === 0}
+                                    disabled={generating || visibleReferenceLibraryAssets.length === 0}
                                     onClick={() => setLibraryPickerOpen((open) => !open)}
-                                    className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
+                                    aria-expanded={libraryPickerOpen}
+                                    className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
                                 >
                                     <Library size={16} />
-                                    {t("chooseFromLibrary")}
+                                    {t("addReferenceImages")}
                                 </button>
                             </div>
-                            {selectedLibraryAsset && (
-                                <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/35 bg-primary/5 p-2">
-                                    <PreviewImage
-                                        src={getAssetUrl(selectedLibraryAsset.variant.url)}
-                                        alt={`${selectedLibraryAsset.asset.name} ${selectedLibraryAsset.variant.id}`}
-                                        className="h-12 w-12 rounded object-cover"
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
-                                        <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleClearLibraryReference}
-                                        aria-label={t("clearLibraryReference")}
-                                        className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                            )}
                             {libraryPickerOpen && (
-                                <div data-testid="cast-library-reference-picker" className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
+                                <div data-testid="cast-library-reference-picker" role="region" aria-label={t("referencePickerTitle")} className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
                                     <div className="mb-2 flex items-center justify-between gap-2">
                                         <div>
-                                            <p className="text-[0.75rem] font-medium text-foreground">{t("libraryReferenceTitle")}</p>
-                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("libraryReferenceHint")}</p>
+                                            <p className="text-[0.75rem] font-medium text-foreground">{t("referencePickerTitle")}</p>
+                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("referencePickerHint")}</p>
                                         </div>
                                         <button type="button" onClick={() => setLibraryPickerOpen(false)} aria-label={t("closeLibraryReferencePicker")} className="p-1 text-text-muted hover:text-foreground">
                                             <X size={13} />
                                         </button>
                                     </div>
                                     <div className="space-y-3">
-                                        {referenceLibraryAssets.map((asset) => (
+                                        {visibleReferenceLibraryAssets.map((asset) => (
                                             <div key={`${asset.asset_type}:${asset.asset_id}`}>
                                                 <div className="mb-1 flex items-center gap-1.5">
                                                     <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
-                                                    {asset.source && <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source}`)}</span>}
+                                                    <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source_scope}`)}</span>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-1.5">
                                                     {asset.variants.map((variant) => {
-                                                        const active = libraryReference?.asset_type === asset.asset_type
-                                                            && libraryReference.asset_id === asset.asset_id
-                                                            && libraryReference.variant_id === variant.id;
+                                                        const active = visibleAvailableReferences.some(({ reference }) => reference.asset_type === asset.asset_type
+                                                            && reference.asset_id === asset.asset_id
+                                                            && reference.variant_id === variant.id);
                                                         return (
                                                             <button
                                                                 type="button"
                                                                 key={variant.id}
-                                                                aria-label={t("useLibraryVariant", { name: asset.name })}
+                                                                aria-label={t("addLibraryVariant", { name: asset.name })}
                                                                 onClick={() => handleChooseLibraryVariant(asset, variant)}
                                                                 className={`relative overflow-hidden rounded border text-left ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
                                                             >
@@ -1221,7 +1553,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary">
+                                <button type="button" disabled={uploading || generating} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />
