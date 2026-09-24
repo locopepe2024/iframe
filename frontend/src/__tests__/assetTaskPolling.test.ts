@@ -1,5 +1,63 @@
 import { expect, it, vi } from 'vitest';
-import { mergeAssetTaskResult, waitForAssetTask } from '../lib/assetTaskPolling';
+import {
+  createSingleFlightTaskStatusPoller,
+  mergeAssetTaskResult,
+  normalizeTaskFailureDetail,
+  waitForAssetTask,
+} from '../lib/assetTaskPolling';
+
+it('coalesces overlapping status reads and handles a terminal failure only once', async () => {
+  let resolveStatus!: (status: { status: string; error: string }) => void;
+  const pendingStatus = new Promise<{ status: string; error: string }>((resolve) => {
+    resolveStatus = resolve;
+  });
+  const read = vi.fn(() => pendingStatus);
+  const onStatus = vi.fn();
+  const poll = createSingleFlightTaskStatusPoller(
+    read,
+    (status) => status.status === 'completed' || status.status === 'failed',
+    onStatus,
+  );
+
+  const first = poll();
+  const overlapping = poll();
+  expect(overlapping).toBe(first);
+  await Promise.resolve();
+  expect(read).toHaveBeenCalledTimes(1);
+
+  const failed = { status: 'failed', error: 'blocked' };
+  resolveStatus(failed);
+  await first;
+  await poll();
+
+  expect(onStatus).toHaveBeenCalledTimes(1);
+  expect(onStatus).toHaveBeenCalledWith(failed);
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it('allows another status read after a transient polling error', async () => {
+  const read = vi.fn()
+    .mockRejectedValueOnce(new Error('Network error'))
+    .mockResolvedValueOnce({ status: 'processing' });
+  const onStatus = vi.fn();
+  const poll = createSingleFlightTaskStatusPoller(
+    read,
+    (status: { status: string }) => status.status === 'completed' || status.status === 'failed',
+    onStatus,
+  );
+
+  await expect(poll()).rejects.toThrow('Network error');
+  await poll();
+
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(onStatus).toHaveBeenCalledWith({ status: 'processing' });
+});
+
+it('strips repeated backend generation wrappers from failure details', () => {
+  expect(normalizeTaskFailureDetail('生成失败：生成失败：UniArt task failed')).toBe('UniArt task failed');
+  expect(normalizeTaskFailureDetail('Provider rejected the prompt')).toBe('Provider rejected the prompt');
+  expect(normalizeTaskFailureDetail(undefined)).toBe('');
+});
 
 it('continues beyond the old 600-poll limit and network errors until completion', async () => {
   let attempts = 0;

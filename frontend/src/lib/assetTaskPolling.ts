@@ -2,6 +2,39 @@ import type { Project } from "@/store/projectStore";
 
 export type TaskStatus = { status?: string; error?: string };
 
+/** Avoid duplicate terminal notifications when a slow status request overlaps the next poll tick. */
+export function createSingleFlightTaskStatusPoller<T>(
+  read: () => Promise<T>,
+  isTerminal: (status: T) => boolean,
+  onStatus: (status: T) => void | Promise<void>,
+): () => Promise<void> {
+  let inFlight: Promise<void> | null = null;
+  let terminal = false;
+
+  return () => {
+    if (inFlight) return inFlight;
+    if (terminal) return Promise.resolve();
+
+    let request: Promise<void>;
+    request = Promise.resolve()
+      .then(read)
+      .then(async (status) => {
+        terminal = isTerminal(status);
+        await onStatus(status);
+      })
+      .finally(() => {
+        if (inFlight === request) inFlight = null;
+      });
+    inFlight = request;
+    return request;
+  };
+}
+
+/** Remove the backend's Chinese failure wrapper before adding a localized UI title. */
+export function normalizeTaskFailureDetail(error: unknown): string {
+  return String(error ?? "").trim().replace(/^(?:生成失败：\s*)+/, "").trim();
+}
+
 export type AssetTaskResult = TaskStatus & {
   script_id?: string;
   asset_id?: string;
