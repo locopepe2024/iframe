@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.1.3] - 2026-09-24
+
+### Fixed
+- **生产静态资源路径** — 将 `/static/` 请求映射到静态构建目录，避免 Next.js 脚本和样式请求回退为首页 HTML。
+
 ## [0.1.2] - 2026-09-24
 
 ### Fixed

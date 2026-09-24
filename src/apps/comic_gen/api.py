@@ -70,7 +70,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="iFrame Studio API", version="0.1.2")
+app = FastAPI(title="iFrame Studio API", version="0.1.3")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
