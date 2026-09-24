@@ -15,7 +15,11 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
-import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import {
+    createSingleFlightTaskStatusPoller,
+    mergeAssetTaskResult,
+    normalizeTaskFailureDetail,
+} from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { toast } from "@/store/toastStore";
 
@@ -35,9 +39,10 @@ export default function ConsistencyVault() {
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
 
-    const taskFailureMessage = (error?: unknown) => error
-        ? tv("genFailedDetail", { error: String(error) })
-        : tv("genFailed");
+    const taskFailureMessage = (error?: unknown) => {
+        const detail = normalizeTaskFailureDetail(error);
+        return detail ? tv("genFailedDetail", { error: detail }) : tv("genFailed");
+    };
 
     // Store ID and Type instead of full object to ensure reactivity
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -127,9 +132,11 @@ export default function ConsistencyVault() {
 
             // Start polling if we got a task_id
             if (taskId) {
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const status = await api.getTaskStatus(taskId);
+                let pollInterval: ReturnType<typeof setInterval>;
+                const pollOnce = createSingleFlightTaskStatusPoller(
+                    () => api.getTaskStatus(taskId),
+                    (status) => status.status === "completed" || status.status === "failed",
+                    (status) => {
                         console.log("[Polling] Task status:", status.status);
 
                         if (status.status === "completed") {
@@ -164,12 +171,15 @@ export default function ConsistencyVault() {
                                 console.error("Failed to refresh project:", refreshError);
                             });
                         }
-                        // If status is "pending" or "processing", continue polling
-                    } catch (pollError: any) {
+                        // If status is "pending" or "processing", continue polling.
+                    },
+                );
+                pollInterval = setInterval(() => {
+                    void pollOnce().catch((pollError) => {
                         console.error("Polling error:", pollError);
                         // A network failure does not cancel the backend task.
                         // Keep polling so its final provider error is shown.
-                    }
+                    });
                 }, 2000); // Poll every 2 seconds
             } else {
                 // Fallback: no task_id means sync response (shouldn't happen, but just in case)
@@ -276,10 +286,11 @@ export default function ConsistencyVault() {
             console.log("[handleGenerateVideo] Got task_id:", taskId);
 
             if (taskId) {
-                // Polling mechanism for video task
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const status = await api.getTaskStatus(taskId);
+                let pollInterval: ReturnType<typeof setInterval>;
+                const pollOnce = createSingleFlightTaskStatusPoller(
+                    () => api.getTaskStatus(taskId),
+                    (status) => status.status === "completed" || status.status === "failed",
+                    (status) => {
                         console.log(`[Video Polling] Task ${taskId} status:`, status.status);
 
                         if (status.status === "completed") {
@@ -312,10 +323,14 @@ export default function ConsistencyVault() {
                                 console.error("Failed to refresh project:", refreshError);
                             });
                         }
-                        } catch (pollError: any) {
-                            console.error("Video polling error:", pollError);
-                            // The server task remains active; retry on the next tick.
-                    }
+                        // Pending and processing statuses keep polling.
+                    },
+                );
+                pollInterval = setInterval(() => {
+                    void pollOnce().catch((pollError) => {
+                        console.error("Video polling error:", pollError);
+                        // The server task remains active; retry on the next tick.
+                    });
                 }, 3000); // Poll every 3 seconds for video
             } else {
                 // Fallback for sync response

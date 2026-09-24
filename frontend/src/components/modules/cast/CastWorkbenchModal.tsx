@@ -25,7 +25,11 @@ import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
-import { mergeAssetTaskResult } from "@/lib/assetTaskPolling";
+import {
+    createSingleFlightTaskStatusPoller,
+    mergeAssetTaskResult,
+    normalizeTaskFailureDetail,
+} from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -92,11 +96,13 @@ export function startAssetPoll(
     progressToastId?: string,
 ) {
     if (activePolls.has(entityId)) return;
-    const interval = setInterval(async () => {
-        try {
+    let interval: ReturnType<typeof setInterval>;
+    const pollOnce = createSingleFlightTaskStatusPoller(
+        () => api.getTaskStatus(taskId),
+        (status) => status?.status === "completed" || status?.status === "failed",
+        (status) => {
             const key = selectionKey(projectId, kind, entityId);
             const selectionVersionBeforeRead = selectionVersions.get(key) || 0;
-            const status = await api.getTaskStatus(taskId);
             if (status?.status === "completed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
@@ -140,16 +146,21 @@ export function startAssetPoll(
                 if (progressToastId) toast.dismiss(progressToastId);
                 const { removeGeneratingTask } = getStore();
                 removeGeneratingTask(entityId, generationType);
-                toast.error(t("toastGenErr"), { body: status?.error || t("toastGenErrUnknown") });
+                toast.error(t("toastGenErr"), {
+                    body: normalizeTaskFailureDetail(status?.error) || t("toastGenErrUnknown"),
+                });
             }
-        } catch (err) {
+        },
+    );
+    interval = setInterval(() => {
+        void pollOnce().catch((err) => {
             clearInterval(interval);
             activePolls.delete(entityId);
             if (progressToastId) toast.dismiss(progressToastId);
             const { removeGeneratingTask } = getStore();
             removeGeneratingTask(entityId, generationType);
             toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
-        }
+        });
     }, 2500);
     activePolls.set(entityId, interval);
 }
@@ -695,7 +706,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             toast.dismiss(progressId);
             removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
-            toast.error(t("toastGenErr"), { body: String(detail) });
+            toast.error(t("toastGenErr"), { body: normalizeTaskFailureDetail(detail) || t("toastGenErrUnknown") });
         }
     };
 

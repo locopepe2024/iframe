@@ -1,4 +1,4 @@
-# iFrame Studio V0.1.3
+# iFrame Studio V0.1.4
 
 AI 影像创作工作台。Powered by Lumenx & Uniart.
 

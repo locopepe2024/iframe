@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.1.4] - 2026-09-24
+
+### Fixed
+- **资产生成失败提示可关闭** — 避免慢速任务状态请求重叠后重复提示；同时移除后端错误中的重复“生成失败”前缀。
+
 ## [0.1.3] - 2026-09-24
 
 ### Fixed

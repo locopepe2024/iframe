@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
+import { useToastStore } from '@/store/toastStore';
 import { api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
@@ -27,6 +28,7 @@ beforeEach(() => {
  activePolls.clear();
  vi.useRealTimers();
  vi.clearAllMocks();
+ useToastStore.getState().clear();
  vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] });
  useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] });
 });
@@ -54,6 +56,35 @@ it('merges the completed target snapshot and clears its marker without fetching 
  expect(useProjectStore.getState().currentProject?.characters).toEqual([completedAsset]);
  expect(useProjectStore.getState().generatingTasks).toEqual([]);
  expect(api.getProject).not.toHaveBeenCalled();
+ expect(activePolls.has('char')).toBe(false);
+ vi.useRealTimers();
+});
+it('surfaces one dismissible terminal failure when status requests overlap', async () => {
+ vi.useFakeTimers();
+ let resolveStatus!: (status: any) => void;
+ const pendingStatus = new Promise<any>((resolve) => { resolveStatus = resolve; });
+ vi.mocked(api.getTaskStatus).mockReturnValue(pendingStatus);
+ const removeGeneratingTask = vi.fn();
+ startAssetPoll('char', 'task', 'project', 'character', 'reference_sheet', ((key: string) => key) as any, () => ({
+  updateProject: vi.fn(),
+  removeGeneratingTask,
+  getProject: () => project,
+ }));
+
+ await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+ expect(api.getTaskStatus).toHaveBeenCalledTimes(1);
+
+ await act(async () => {
+  resolveStatus({ status: 'failed', error: '生成失败：UniArt task failed: content safety policy' });
+  await Promise.resolve();
+ });
+
+ expect(useToastStore.getState().toasts).toHaveLength(1);
+ expect(useToastStore.getState().toasts[0]).toMatchObject({
+  title: 'toastGenErr',
+  body: 'UniArt task failed: content safety policy',
+ });
+ expect(removeGeneratingTask).toHaveBeenCalledTimes(1);
  expect(activePolls.has('char')).toBe(false);
  vi.useRealTimers();
 });
