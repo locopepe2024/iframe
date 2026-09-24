@@ -227,7 +227,7 @@ export default function RecreationPage() {
                   </div>
                   {pair ? <div className="grid grid-cols-2 gap-3 max-w-2xl">
                     {[pair.before_url, pair.after_url].map((url, index) => <figure key={url} className="min-w-0">
-                      <img src={media(url)} alt={t(index ? "after" : "before")} className="w-full aspect-video object-contain bg-black" />
+                      <img loading="lazy" decoding="async" width={512} height={288} src={media(index ? pair.after_preview_url || url : pair.before_preview_url || url)} alt={t(index ? "after" : "before")} className="w-full aspect-video object-contain bg-black" />
                       <figcaption className="text-xs text-text-muted mt-1">{t(index ? "after" : "before")} · {seconds(analysis, index ? pts : pair.before_pts).toFixed(6)} s</figcaption>
                     </figure>)}
                   </div> : <button className="glass-button text-sm" disabled={busy} onClick={() => void act(async () => {
@@ -240,7 +240,7 @@ export default function RecreationPage() {
               <h3 className="font-semibold">{t("steps.analyze")}</h3>
               <p className="text-sm text-text-muted">{t("analysisScope")}</p>
               <details><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
-                <img src={media(analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
+                <img loading="lazy" decoding="async" width={960} height={540} src={media(analysis.contact_sheet_preview_url || analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
               </details>
             </section>}
             {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onProgress={updateRunProgress} onSaved={record => {

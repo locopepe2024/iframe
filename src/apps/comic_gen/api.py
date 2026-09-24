@@ -100,10 +100,12 @@ from ..studio_access import (
     studio_owner_dir,
     studio_uniart_config,
     verify_studio_media,
+    verify_studio_media_preview,
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
 from ..playground.api import _storage_for as playground_storage_for, router as playground_router
+from ...utils.media_thumbnails import create_media_thumbnail
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
 app.include_router(identity_router)
@@ -316,11 +318,22 @@ def get_studio_media(
     relative_path: str,
     expires: int = 0,
     signature: str = "",
+    preview: int = 0,
 ):
-    path = verify_studio_media(owner_key, relative_path, expires, signature)
+    if preview:
+        source_path = verify_studio_media_preview(owner_key, relative_path, preview, expires, signature)
+        owner_root = os.path.join("output", "users", owner_key, "studio")
+        try:
+            path = create_media_thumbnail(source_path, owner_root, preview)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=415, detail="A supported still image is required for preview") from exc
+        headers = {"Cache-Control": "private, max-age=1800"}
+    else:
+        path = verify_studio_media(owner_key, relative_path, expires, signature)
+        headers = None
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
-    return FileResponse(path)
+    return FileResponse(path, headers=headers)
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:

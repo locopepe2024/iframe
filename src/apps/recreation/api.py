@@ -3,7 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from pydantic import BaseModel, Field, StrictInt
 
 from ..identity import UserContext
-from ..studio_access import require_studio_user, sign_studio_media_paths
+from ..studio_access import require_studio_user, sign_studio_media_paths, studio_media_preview_url
 from .service import (
     DEFAULT_KEYFRAME_IMAGE_MODEL,
     DEFAULT_RECREATION_VIDEO_MODEL,
@@ -11,6 +11,28 @@ from .service import (
 )
 
 router = APIRouter(prefix="/recreation", tags=["recreation"])
+
+_IMAGE_MEDIA_KINDS = frozenset({"contact_sheet", "sample_frame", "evidence_frame", "reference_image", "replacement_image"})
+
+
+def _with_preview_urls(value, owner_profile_id):
+    if isinstance(value, list):
+        return [_with_preview_urls(item, owner_profile_id) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    result = {key: _with_preview_urls(item, owner_profile_id) for key, item in value.items()}
+    if result.get("kind") in _IMAGE_MEDIA_KINDS and isinstance(result.get("storage_path"), str):
+        result["preview_url"] = studio_media_preview_url(owner_profile_id, result["storage_path"], 320)
+    if isinstance(result.get("before_url"), str):
+        result["before_preview_url"] = studio_media_preview_url(owner_profile_id, result["before_url"], 512)
+    if isinstance(result.get("after_url"), str):
+        result["after_preview_url"] = studio_media_preview_url(owner_profile_id, result["after_url"], 512)
+    if isinstance(result.get("contact_sheet_url"), str):
+        result["contact_sheet_preview_url"] = studio_media_preview_url(owner_profile_id, result["contact_sheet_url"], 960)
+    if "pts" in result and isinstance(result.get("url"), str):
+        result["preview_url"] = studio_media_preview_url(owner_profile_id, result["url"], 320)
+    return result
 
 
 class AnalyzeRequest(BaseModel):
@@ -47,7 +69,8 @@ class EvidenceRequest(BaseModel):
 
 
 def public(record, user):
-    return sign_studio_media_paths(record, user.owner_profile_id)
+    with_previews = _with_preview_urls(record, user.owner_profile_id)
+    return sign_studio_media_paths(with_previews, user.owner_profile_id)
 
 
 @router.get("/projects")

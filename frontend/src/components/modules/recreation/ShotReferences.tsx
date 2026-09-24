@@ -54,7 +54,7 @@ function Picker({ onSelect, onClose }: { onSelect: (item: RecreationMedia) => vo
       : busy ? <p role="status">{t("loading")}</p> : <>
         {!page.items.length && <p>{t("empty")}</p>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{page.items.map(item => <button type="button" key={item.media_id} className="min-w-0 rounded-lg border border-border overflow-hidden text-left" onClick={() => onSelect(item)}>
-          <img loading="lazy" src={url(item.storage_path)} alt="" className="aspect-video w-full object-contain" /><span className="block p-2 text-sm truncate">{item.display_name}</span>
+          <img loading="lazy" decoding="async" width={320} height={180} src={url(item.preview_url || item.storage_path)} alt="" className="aspect-video w-full object-contain" /><span className="block p-2 text-sm truncate">{item.display_name}</span>
         </button>)}</div>
       </>}
     <div className="flex gap-2">
