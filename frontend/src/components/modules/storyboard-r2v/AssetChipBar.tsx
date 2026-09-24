@@ -41,6 +41,7 @@ export default function AssetChipBar({
                 const explicit = selectedVariantIds[asset.asset_id];
                 const selected = explicit?.length ? explicit : (primaryId ? [primaryId] : []);
                 const expanded = expandedAssetId === asset.asset_id;
+                const supportsMultipleViews = asset.asset_type === "prop";
                 return (
                     <div key={`${asset.asset_type}:${asset.asset_id}`} className="relative">
                         <div className="inline-flex min-h-9 max-w-[240px] items-stretch overflow-hidden rounded-md border border-glass-border bg-surface-inset">
@@ -52,7 +53,7 @@ export default function AssetChipBar({
                                 <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${colors[asset.asset_type]}`} />
                                 <span className="truncate">{asset.name}</span>
                             </button>
-                            {variants.length > 1 && onToggleVariant ? (
+                            {supportsMultipleViews && variants.length > 1 && onToggleVariant ? (
                                 <button
                                     type="button"
                                     aria-label={t("selectAssetViews", { name: asset.name })}
@@ -66,7 +67,7 @@ export default function AssetChipBar({
                                 </button>
                             ) : null}
                         </div>
-                        {expanded && variants.length > 1 && onToggleVariant ? (
+                        {expanded && supportsMultipleViews && variants.length > 1 && onToggleVariant ? (
                             <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-glass-border bg-surface p-2 shadow-xl">
                                 <p className="mb-2 text-[0.6875rem] text-text-muted">{t("assetViewsForShot")}</p>
                                 <div className="grid grid-cols-4 gap-2" role="group" aria-label={t("selectAssetViews", { name: asset.name })}>

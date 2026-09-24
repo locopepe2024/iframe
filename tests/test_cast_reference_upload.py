@@ -134,6 +134,7 @@ def test_library_asset_rejects_unknown_material_origin():
 
 def pipeline(kind):
     p = ComicGenPipeline.__new__(ComicGenPipeline)
+    p._save_lock = threading.RLock()
     cls = {'character': Character, 'scene': Scene, 'prop': Prop}[kind]
     entity = cls(id='asset', name='Test', description='test', owner_user_id='owner', owner_profile_id='owner')
     script = Script(id='project', title='Test', original_text='test', created_at=1, updated_at=1,

@@ -5,7 +5,7 @@
 
 <div align="center">
 
-# iFrame Studio V0.1.4
+# iFrame Studio V0.1.5
 
 ### AI-Native Motion Comic & Video Creation Platform
 **Render Noise into Narrative**
@@ -65,7 +65,7 @@ iFrame currently includes two core modules:
 
 ---
 
-## 🎨 iFrame Studio V0.1.4
+## 🎨 iFrame Studio V0.1.5
 
 <div align="center">
 

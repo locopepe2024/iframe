@@ -48,3 +48,33 @@ it("inserts one semantic asset while selecting multiple child views", () => {
     fireEvent.click(screen.getByRole("button", { name: "close" }));
     expect(toggle).toHaveBeenCalledWith("product", "close", "front");
 });
+
+it("does not offer historical character variants as multiple storyboard references", () => {
+    const toggle = vi.fn();
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <AssetChipBar
+                characters={[{ id: "character", name: "谭瑞齐（归国时期）" }]}
+                scenes={[]}
+                props={[]}
+                assetIndex={[{
+                    asset_type: "character", asset_id: "character", name: "谭瑞齐（归国时期）",
+                    source_scope: "series", selected_variant_id: "current",
+                    variants: [
+                        { id: "current", url: "current.jpg" },
+                        { id: "old-1", url: "old-1.jpg" },
+                        { id: "old-2", url: "old-2.jpg" },
+                        { id: "old-3", url: "old-3.jpg" },
+                        { id: "old-4", url: "old-4.jpg" },
+                    ],
+                }]}
+                onInsertAsset={vi.fn()}
+                onToggleVariant={toggle}
+            />
+        </NextIntlClientProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Select reference views for 谭瑞齐（归国时期）" })).toBeNull();
+    expect(screen.getByRole("button", { name: "谭瑞齐（归国时期）" })).toBeTruthy();
+    expect(toggle).not.toHaveBeenCalled();
+});

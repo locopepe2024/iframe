@@ -70,7 +70,13 @@ export function resolveReferenceSubmission(
         if (!asset) continue;
         const explicitIds = selections[asset.id];
         let variants: ReferenceVariant[];
-        if (explicitIds?.length) {
+        if (asset.kind === "character") {
+            // Character generations retain old takes for review. Storyboard
+            // references follow the one selected portrait, so history cannot
+            // silently become a multi-image character input.
+            const primary = primaryVariant(asset);
+            variants = primary ? [primary] : [];
+        } else if (explicitIds?.length) {
             const byId = new Map(asset.variants.map((variant) => [variant.id, variant]));
             variants = [];
             for (const id of explicitIds) {

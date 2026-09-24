@@ -102,6 +102,10 @@ class InvalidAssetReference(ValueError):
     """Raised when a requested asset-library reference cannot be resolved."""
 
 
+class AssetGenerationInProgress(ValueError):
+    """Raised when an asset already has an active image-generation task."""
+
+
 class AssemblyPlanValidationError(ValueError):
     """Raised when an Assembly plan crosses an owner/reference boundary."""
 
@@ -263,18 +267,19 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def clear_asset_generation_state(self, script_id: str, asset_id: str, asset_type: str) -> Script:
         """Clear a failed/orphaned image generation marker without deleting assets."""
-        script = self.scripts.get(script_id)
-        if not script:
-            raise ValueError("Script not found")
-        target, source = self._find_asset_with_source(script, asset_id, asset_type)
-        if target is None:
-            raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
-        if target.status == GenerationStatus.PROCESSING:
-            raise ValueError("Asset generation is still processing")
-        target.status = GenerationStatus.COMPLETED if self._asset_has_uploaded_image(target) else GenerationStatus.PENDING
-        target.generation_error = None
-        self._save_after_asset_mutation(source)
-        return script
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            target, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target is None:
+                raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+            if target.status == GenerationStatus.PROCESSING:
+                raise AssetGenerationInProgress("Asset generation is still processing")
+            target.status = GenerationStatus.COMPLETED if self._asset_has_uploaded_image(target) else GenerationStatus.PENDING
+            target.generation_error = None
+            self._save_after_asset_mutation(source)
+            return script
 
     _MAX_LABEL_LEN = 20
 
@@ -770,7 +775,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text") -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
@@ -869,13 +874,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
-        target_asset.status = GenerationStatus.PROCESSING
-        target_asset.generation_error = None
-        if not target_asset.owner_user_id:
-            target_asset.owner_user_id = script.owner_user_id
-        if not target_asset.owner_profile_id:
-            target_asset.owner_profile_id = script.owner_profile_id
-        self._save_after_asset_mutation(source)
+        with self._save_lock:
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+            if target_asset.status == GenerationStatus.PROCESSING:
+                owned_task = self.asset_generation_tasks.get(_generation_task_id or "")
+                if not owned_task or owned_task.get("asset_id") != asset_id or owned_task.get("script_id") != script_id:
+                    raise AssetGenerationInProgress("Asset generation is already processing")
+            target_asset.status = GenerationStatus.PROCESSING
+            target_asset.generation_error = None
+            if not target_asset.owner_user_id:
+                target_asset.owner_user_id = script.owner_user_id
+            if not target_asset.owner_profile_id:
+                target_asset.owner_profile_id = script.owner_profile_id
+            self._save_after_asset_mutation(source)
         
         try:
             # Generate with Art Direction style injected
@@ -1004,55 +1017,57 @@ class ComicGenPipeline(StudioOwnerMixin):
         for structured_reference in normalized_references:
             self._resolve_asset_library_reference(script, structured_reference)
 
-        target_asset.status = GenerationStatus.PROCESSING
-        
-        # Create task
         task_id = str(uuid.uuid4())
-        self.asset_generation_tasks[task_id] = {
-            "status": "pending",  # pending -> processing -> completed/failed
-            "progress": 0,
-            "error": None,
-            "script_id": script_id,
-            "asset_id": asset_id,
-            "asset_type": asset_type,
-            "created_at": time.time(),
-            "owner_user_id": script.owner_user_id,
-            "owner_profile_id": script.owner_profile_id,
-            # Store all params for later processing
-            "params": {
-                "style_preset": style_preset,
-                "reference_image_url": reference_image_url,
-                "reference": normalized_reference,
-                "references": normalized_references,
-                "image_generation_mode": image_generation_mode,
-                "style_prompt": style_prompt,
-                "generation_type": generation_type,
-                "prompt": prompt,
-                "apply_style": apply_style,
-                "negative_prompt": negative_prompt,
-                "batch_size": batch_size,
-                "model_name": model_name,
-                "aspect_ratio": aspect_ratio,
-                # Cast generation must not silently turn an already-uploaded
-                # asset into provider input.  ``reference_image_url`` is the
-                # explicit opt-in for an image-edit request; legacy internal
-                # callers that invoke generate_asset directly keep their
-                # reference behavior through its default.
-                "use_reference_image": bool(reference_image_url),
+        with self._save_lock:
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+            if target_asset.status == GenerationStatus.PROCESSING:
+                raise AssetGenerationInProgress("Asset generation is already processing")
+
+            target_asset.status = GenerationStatus.PROCESSING
+            target_asset.generation_error = None
+            self.asset_generation_tasks[task_id] = {
+                "status": "pending",  # pending -> processing -> completed/failed
+                "progress": 0,
+                "error": None,
+                "script_id": script_id,
+                "asset_id": asset_id,
+                "asset_type": asset_type,
+                "created_at": time.time(),
+                "owner_user_id": script.owner_user_id,
+                "owner_profile_id": script.owner_profile_id,
+                "params": {
+                    "style_preset": style_preset,
+                    "reference_image_url": reference_image_url,
+                    "reference": normalized_reference,
+                    "references": normalized_references,
+                    "image_generation_mode": image_generation_mode,
+                    "style_prompt": style_prompt,
+                    "generation_type": generation_type,
+                    "prompt": prompt,
+                    "apply_style": apply_style,
+                    "negative_prompt": negative_prompt,
+                    "batch_size": batch_size,
+                    "model_name": model_name,
+                    "aspect_ratio": aspect_ratio,
+                    "use_reference_image": bool(reference_image_url),
+                }
             }
-        }
-        
-        self._save_after_asset_mutation(source)
+            self._save_after_asset_mutation(source)
         return script, task_id
 
     def process_asset_generation_task(self, task_id: str):
         """Processes an asset generation task in the background."""
-        task = self.asset_generation_tasks.get(task_id)
-        if not task:
-            logger.error(f"Task {task_id} not found")
-            return
-
-        task["status"] = "processing"
+        with self._save_lock:
+            task = self.asset_generation_tasks.get(task_id)
+            if not task:
+                logger.error(f"Task {task_id} not found")
+                return
+            if task.get("status") != "pending":
+                logger.warning("Ignoring duplicate or terminal asset task execution: %s", task_id)
+                return
+            task["status"] = "processing"
 
         provider_token = None
         try:
@@ -1086,6 +1101,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("reference"),
                     params.get("references"),
                     params.get("image_generation_mode", "text"),
+                    _generation_task_id=task_id,
                 )
             task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
             task["status"] = "completed"
@@ -1094,6 +1110,29 @@ class ComicGenPipeline(StudioOwnerMixin):
         except Exception as e:
             task["status"] = "failed"
             task["error"] = str(e)
+            with self._save_lock:
+                try:
+                    if task.get("is_series"):
+                        owner = self.series_store.get(task.get("script_id"))
+                        source = "series"
+                    else:
+                        owner = self.scripts.get(task.get("script_id"))
+                        source = "script"
+                    if owner:
+                        asset_type = task.get("asset_type")
+                        if task.get("is_series"):
+                            pool = getattr(owner, f"{asset_type}s", []) if asset_type in ("character", "scene", "prop") else []
+                            asset = next((item for item in pool if item.id == task.get("asset_id")), None)
+                        else:
+                            asset, source = self._find_asset_with_source(
+                                owner, task.get("asset_id"), asset_type,
+                            )
+                        if asset and asset.status == GenerationStatus.PROCESSING:
+                            asset.status = GenerationStatus.FAILED
+                            asset.generation_error = str(e)
+                            self._save_after_asset_mutation(source)
+                except Exception:
+                    logger.exception("Could not persist failed asset state for task %s", task_id)
             logger.error(f"Task {task_id} failed: {e}")
         finally:
             if provider_token is not None:
@@ -6529,33 +6568,40 @@ class ComicGenPipeline(StudioOwnerMixin):
                 effective_positive_prompt = f"{style_preset} style"
 
         task_id = str(uuid.uuid4())
-        self.asset_generation_tasks[task_id] = {
-            "status": "pending",
-            "progress": 0,
-            "error": None,
-            "script_id": series_id,  # reuse field name for task lookup
-            "asset_id": asset_id,
-            "asset_type": asset_type,
-            "created_at": time.time(),
-            "owner_user_id": series.owner_user_id,
-            "owner_profile_id": series.owner_profile_id,
-            "is_series": True,
-            "params": {
-                "style_preset": style_preset,
-                "reference_image_url": reference_image_url,
-                "reference": normalized_reference,
-                "references": normalized_references,
-                "image_generation_mode": image_generation_mode,
-                "effective_positive_prompt": effective_positive_prompt,
-                "effective_negative_prompt": effective_negative_prompt,
-                "generation_type": generation_type,
-                "prompt": prompt,
-                "apply_style": apply_style,
-                "batch_size": batch_size,
-                "t2i_model": t2i_model,
-                "effective_size": effective_size,
+        with self._save_lock:
+            series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
+            if target_asset.status == GenerationStatus.PROCESSING:
+                raise AssetGenerationInProgress("Asset generation is already processing")
+            target_asset.status = GenerationStatus.PROCESSING
+            target_asset.generation_error = None
+            self.asset_generation_tasks[task_id] = {
+                "status": "pending",
+                "progress": 0,
+                "error": None,
+                "script_id": series_id,  # reuse field name for task lookup
+                "asset_id": asset_id,
+                "asset_type": asset_type,
+                "created_at": time.time(),
+                "owner_user_id": series.owner_user_id,
+                "owner_profile_id": series.owner_profile_id,
+                "is_series": True,
+                "params": {
+                    "style_preset": style_preset,
+                    "reference_image_url": reference_image_url,
+                    "reference": normalized_reference,
+                    "references": normalized_references,
+                    "image_generation_mode": image_generation_mode,
+                    "effective_positive_prompt": effective_positive_prompt,
+                    "effective_negative_prompt": effective_negative_prompt,
+                    "generation_type": generation_type,
+                    "prompt": prompt,
+                    "apply_style": apply_style,
+                    "batch_size": batch_size,
+                    "t2i_model": t2i_model,
+                    "effective_size": effective_size,
+                }
             }
-        }
+            self._save_series_data()
         return series, task_id
 
     def import_assets_from_series(self, target_series_id: str, source_series_id: str, asset_ids: List[str]) -> Tuple[Series, List[str], List[str]]:

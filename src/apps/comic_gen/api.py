@@ -43,6 +43,7 @@ from urllib.parse import unquote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
+    AssetGenerationInProgress,
     LibraryAssetInUseError,
     InvalidAssetReference,
     AssemblyPlanValidationError,
@@ -70,7 +71,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="iFrame Studio API", version="0.1.4")
+app = FastAPI(title="iFrame Studio API", version="0.1.5")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -1123,6 +1124,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
         return signed_response(response_data)
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -3145,6 +3148,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
 
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

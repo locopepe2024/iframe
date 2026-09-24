@@ -338,7 +338,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const uploadInput = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
-    const [batchSize, setBatchSize] = useState(2);
+    const [batchSize, setBatchSize] = useState(1);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
@@ -357,6 +357,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
     const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
+    const [submitting, setSubmitting] = useState(false);
+    const submissionInFlight = useRef(false);
+    const generationBusy = generating || submitting;
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
@@ -584,6 +587,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     };
 
     const handleGenerate = async () => {
+        if (submissionInFlight.current) return;
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
                 projectId: currentProject.id,
@@ -591,6 +595,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             });
             return;
         }
+        submissionInFlight.current = true;
+        setSubmitting(true);
+        try {
         if (imageGenerationMode === "reference" && activePromptReferences.length === 0) {
             toast.warning(t("referenceModeRequiresImage"), {
                 projectId: currentProject.id,
@@ -707,6 +714,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
             toast.error(t("toastGenErr"), { body: normalizeTaskFailureDetail(detail) || t("toastGenErrUnknown") });
+        }
+        } finally {
+            submissionInFlight.current = false;
+            setSubmitting(false);
         }
     };
 
@@ -1211,7 +1222,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             key={mode}
                                             type="button"
                                             aria-pressed={imageGenerationMode === mode}
-                                            disabled={generating}
+                                            disabled={generationBusy}
                                             onClick={() => {
                                                 setImageGenerationMode(mode);
                                             }}
@@ -1240,7 +1251,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <button
                                         type="button"
                                         onClick={() => setLibraryPickerOpen(true)}
-                                        disabled={generating || visibleReferenceLibraryAssets.length === 0}
+                                        disabled={generationBusy || visibleReferenceLibraryAssets.length === 0}
                                         aria-expanded={libraryPickerOpen}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30"
                                     >
@@ -1249,7 +1260,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </button>
                                     <button
                                         onClick={handleResetTemplate}
-                                        disabled={generating}
+                                        disabled={generationBusy}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-text-muted hover:text-foreground transition-colors disabled:opacity-30"
                                         title={t("resetTemplateHint")}
                                     >
@@ -1283,7 +1294,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     onMentionChange={setMention}
                                     allowImplicitMentions={false}
                                     pruneUnlistedReferences
-                                    editable={!generating}
+                                    editable={!generationBusy}
                                     placeholder={t("promptLabel")}
                                 />
                                 {mention && (
@@ -1356,7 +1367,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <button
                                         key={tag.key}
                                         onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag.value)}
-                                        disabled={generating}
+                                        disabled={generationBusy}
                                         className="px-2.5 py-1 rounded border border-glass-border bg-glass text-[0.6875rem] text-text-muted hover:text-text-secondary hover:border-foreground/30 hover:bg-hover-bg transition-colors disabled:opacity-30"
                                     >
                                         + {t(`quickTags.${tag.key}`)}
@@ -1404,7 +1415,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <button
                                                 key={n}
                                                 onClick={() => setBatchSize(n)}
-                                                disabled={generating}
+                                                disabled={generationBusy}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     batchSize === n
                                                         ? accent.batchActive
@@ -1427,7 +1438,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <button
                                                 key={ratio}
                                                 onClick={() => setAspectRatioOverride(ratio === defaultAspectRatio ? null : ratio)}
-                                                disabled={generating}
+                                                disabled={generationBusy}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     effectiveAspectRatio === ratio
                                                         ? accent.batchActive
@@ -1456,11 +1467,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Generate CTA */}
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !prompt.trim() || (imageGenerationMode === "reference" && activePromptReferences.length === 0)}
+                                disabled={generationBusy || !prompt.trim() || (imageGenerationMode === "reference" && activePromptReferences.length === 0)}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
-                                {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
-                                {generating
+                                {generationBusy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
+                                {generationBusy
                                     ? t("generating")
                                     : variants.length === 0
                                         ? t("generateFirst")
@@ -1473,14 +1484,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
                                 onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
                             <div className="flex gap-2 mb-3">
-                                <button type="button" disabled={uploading || generating} onClick={() => uploadInput.current?.click()}
+                                <button type="button" disabled={uploading || generationBusy} onClick={() => uploadInput.current?.click()}
                                     className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
                                     {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                                     {t(uploading ? "uploading" : "uploadReference")}
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={generating || visibleReferenceLibraryAssets.length === 0}
+                                    disabled={generationBusy || visibleReferenceLibraryAssets.length === 0}
                                     onClick={() => setLibraryPickerOpen((open) => !open)}
                                     aria-expanded={libraryPickerOpen}
                                     className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
@@ -1568,7 +1579,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <button type="button" disabled={uploading || generating} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">
+                                <button type="button" disabled={uploading || generationBusy} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />

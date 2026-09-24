@@ -105,6 +105,22 @@ it('keeps an uploaded image in the candidate pool until @ explicitly binds it', 
  expect(vi.mocked(api.generateAsset).mock.calls[0][6]).not.toContain('@');
 });
 
+it('submits only once when generate is clicked twice during project validation', async () => {
+ let finishValidation!: (value: any) => void;
+ vi.mocked(api.getProject).mockReturnValue(new Promise((resolve) => { finishValidation = resolve; }) as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(project as any);
+ show();
+
+ const button = await screen.findByRole('button', { name: /Generate first batch/ });
+ fireEvent.click(button);
+ fireEvent.click(button);
+
+ expect(api.getProject).toHaveBeenCalledTimes(1);
+ await act(async () => finishValidation(project));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(api.generateAsset).mock.calls[0][9]).toBe(1);
+});
+
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {
  const withLibrary = { ...project, scenes: [{ id: 'scene-1', name: 'Night train', description: 'Train' }], props: [{ id: 'prop-1', name: 'Pocket watch', description: 'Watch' }] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
