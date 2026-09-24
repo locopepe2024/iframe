@@ -273,6 +273,9 @@ class AssetReferenceIndexEntry(BaseModel):
     source_container_id: Optional[str] = None
     source_name: Optional[str] = None
     selected_variant_id: Optional[str] = None
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover; independent from generation-container selection."
+    )
     variants: List[ImageVariant] = Field(default_factory=list)
 
 
@@ -386,6 +389,9 @@ class Character(BaseModel):
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
     )
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from generation-container selection."
+    )
     makeup_reference: Optional[AssetUnit] = Field(
         default_factory=AssetUnit,
         description="Virtual actor identity/makeup reference images",
@@ -463,6 +469,9 @@ class Scene(BaseModel):
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
     image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this scene")
@@ -488,6 +497,9 @@ class Prop(BaseModel):
     bgm_url: Optional[str] = None
     image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this prop")

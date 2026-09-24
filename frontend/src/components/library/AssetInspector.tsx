@@ -6,7 +6,7 @@ import { X, Star, Download, Sparkles, Loader2, Globe } from "lucide-react";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
-import { api } from "@/lib/api";
+import { api, type AssetCoverSelectionResult } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -36,6 +36,7 @@ interface AssetInspectorProps {
   starred: boolean;
   onClose: () => void;
   onToggleStar: () => void;
+  onCoverUpdated?: (result: AssetCoverSelectionResult) => void;
   /** 提升到全局成功后回调（父层刷新库以显示新入池资产）。可选。 */
   onPromoted?: () => void;
 }
@@ -93,6 +94,7 @@ export default function AssetInspector({
   starred,
   onClose,
   onToggleStar,
+  onCoverUpdated,
   onPromoted,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
@@ -120,10 +122,14 @@ export default function AssetInspector({
   const [extraVariants, setExtraVariants] = useState<ImageVariant[]>([]);
   const baseIds = new Set(baseVariants.map((v) => v.id));
   const variants = [...baseVariants, ...extraVariants.filter((v) => !baseIds.has(v.id))];
-  const defaultId = imageAsset?.selected_id ?? baseVariants[0]?.id ?? null;
+  const defaultId = (asset as { cover_variant_id?: string | null }).cover_variant_id
+    ?? imageAsset?.selected_id
+    ?? baseVariants[0]?.id
+    ?? null;
   const [activeVariantId, setActiveVariantId] = useState<string | null>(defaultId);
   const [generating, setGenerating] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [settingCover, setSettingCover] = useState(false);
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
   useEffect(() => {
@@ -164,6 +170,11 @@ export default function AssetInspector({
   }, []);
 
   const activeVariant = variants.find((v) => v.id === activeVariantId) ?? variants[0];
+  const selectedCoverId = (asset as { cover_variant_id?: string | null }).cover_variant_id
+    ?? imageAsset?.selected_id
+    ?? baseVariants[0]?.id
+    ?? null;
+  const activeVariantIsCover = !!activeVariant && activeVariant.id === selectedCoverId;
   const heroUrl = getAssetUrl(activeVariant?.url ?? fallbackUrl(asset, type));
   const prompt = activeVariant?.prompt_used ?? "";
 
@@ -200,6 +211,28 @@ export default function AssetInspector({
     } catch {
       // 跨域(CORS)/网络失败：download 属性对跨域 URL 无效，退回到新标签打开。
       window.open(heroUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleSetAsCover = async () => {
+    if (sourceKind !== "project" || !activeVariant || activeVariantIsCover || settingCover || generating) return;
+    setSettingCover(true);
+    try {
+      const projectId = sourceId.replace(/^project-/, "");
+      const result = await api.setAssetCoverVariant(
+        projectId,
+        asset.id,
+        SINGULAR_TYPE[type] as "character" | "scene" | "prop",
+        activeVariant.id,
+      );
+      onCoverUpdated?.(result);
+      toast.success(t("coverUpdated"));
+    } catch (error) {
+      toast.error(t("coverUpdateFailed"), {
+        body: (error as any)?.response?.data?.detail || (error as Error)?.message,
+      });
+    } finally {
+      setSettingCover(false);
     }
   };
 
@@ -398,6 +431,17 @@ export default function AssetInspector({
               })}
             </div>
           </div>
+        )}
+
+        {sourceKind === "project" && activeVariant && !activeVariantIsCover && (
+          <button
+            type="button"
+            onClick={() => void handleSetAsCover()}
+            disabled={settingCover || generating}
+            className="w-full rounded-md border border-primary/40 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            {settingCover ? t("settingCover") : t("setAsCover")}
+          </button>
         )}
 
         {/* Metadata */}

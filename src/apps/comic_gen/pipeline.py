@@ -1576,6 +1576,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             return None
         return getattr(getattr(asset, "image_asset", None), "selected_id", None)
 
+    @staticmethod
+    def _explicit_asset_cover_variant_id(asset: Any, asset_type: str) -> Optional[str]:
+        cover_id = getattr(asset, "cover_variant_id", None)
+        if cover_id and any(
+            getattr(variant, "id", None) == cover_id
+            for variant in ComicGenPipeline._asset_image_variants(asset, asset_type)
+        ):
+            return cover_id
+        return None
+
     def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
         """Return the normalized effective assets used by reference pickers."""
         script = self.get_script(script_id)
@@ -1611,6 +1621,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     source_container_id=source_container_id,
                     source_name=source_name,
                     selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
+                    cover_variant_id=self._explicit_asset_cover_variant_id(asset, asset_type),
                     variants=self._asset_image_variants(asset, asset_type),
                 ))
 
@@ -1651,6 +1662,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         source_container_id=container_id,
                         source_name=name,
                         selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
+                        cover_variant_id=self._explicit_asset_cover_variant_id(asset, asset_type),
                         variants=self._asset_image_variants(asset, asset_type),
                     ))
 
@@ -4671,6 +4683,36 @@ class ComicGenPipeline(StudioOwnerMixin):
             return script
         raise ValueError(f"Variant {variant_id} not found")
 
+    def set_asset_cover_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str) -> Dict[str, Any]:
+        """Persist a library cover independently from generation-container selections."""
+        if asset_type not in ("character", "scene", "prop"):
+            raise ValueError(f"Unsupported asset type: {asset_type}")
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if target_asset is None:
+            raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+        variant = next(
+            (item for item in self._asset_image_variants(target_asset, asset_type) if item.id == variant_id),
+            None,
+        )
+        if variant is None:
+            raise ValueError(f"Variant {variant_id} does not belong to asset {asset_id}")
+
+        target_asset.cover_variant_id = variant_id
+        self._save_after_asset_mutation(source)
+        return {
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "cover_variant_id": variant_id,
+            "variant": {
+                "id": variant.id,
+                "url": variant.url,
+                "created_at": variant.created_at,
+            },
+        }
+
     def select_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str, generation_type: str = None) -> Script:
         """Selects a specific variant for an asset."""
         script = self.scripts.get(script_id)
@@ -4810,6 +4852,13 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         if not deleted:
             raise ValueError(f"Variant {variant_id} not found")
+
+        if (
+            asset_type in ("character", "scene", "prop")
+            and target_asset is not None
+            and getattr(target_asset, "cover_variant_id", None) == variant_id
+        ):
+            target_asset.cover_variant_id = None
 
         cleaned_frame_selection = False
         for frame in script.frames:

@@ -218,6 +218,7 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
                     "source_container_id": "owned-project",
                     "source_name": "Owned",
                     "selected_variant_id": "actor-view",
+                    "cover_variant_id": None,
                     "variants": [project.characters[0].reference_sheet.image_variants[0].model_dump()],
                 }],
             }

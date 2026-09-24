@@ -70,7 +70,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="iFrame Studio API", version="0.1.1")
+app = FastAPI(title="iFrame Studio API", version="0.1.2")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -3337,6 +3337,10 @@ def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequ
 
 
 
+class SetAssetCoverRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1)
+
+
 class SelectVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
@@ -3359,6 +3363,19 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/cover")
+def set_asset_cover(script_id: str, asset_type: str, asset_id: str, request: SetAssetCoverRequest):
+    """Set one owned variant as the library cover without loading the project."""
+    try:
+        result = pipeline.set_asset_cover_variant(script_id, asset_id, asset_type, request.variant_id)
+        return private_no_store_signed_response(result)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to set asset library cover")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 class DeleteVariantRequest(BaseModel):
     asset_id: str

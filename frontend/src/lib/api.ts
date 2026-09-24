@@ -81,6 +81,8 @@ export interface AssetLibraryReference {
 export interface AssetReferenceIndexVariant {
     id: string;
     url: string;
+    created_at?: number;
+    prompt_used?: string | null;
     is_favorited?: boolean;
     reference_view_role?: string;
     reference_distance?: string;
@@ -96,7 +98,19 @@ export interface AssetReferenceIndexEntry {
     source_container_id?: string | null;
     source_name?: string | null;
     selected_variant_id?: string | null;
+    cover_variant_id?: string | null;
     variants: AssetReferenceIndexVariant[];
+}
+
+export interface AssetCoverSelectionResult {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    cover_variant_id: string;
+    variant: {
+        id: string;
+        url: string;
+        created_at: number;
+    };
 }
 
 export interface AssetReferenceIndex {
@@ -799,6 +813,20 @@ export const api = {
             asset_type: assetType,
             image_url: imageUrl
         });
+        return res.data;
+    },
+
+    setAssetCoverVariant: async (
+        scriptId: string,
+        assetId: string,
+        assetType: "character" | "scene" | "prop",
+        variantId: string,
+    ): Promise<AssetCoverSelectionResult> => {
+        const res = await axios.post<AssetCoverSelectionResult>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/cover`,
+            { variant_id: variantId },
+            { timeout: 15_000 },
+        );
         return res.data;
     },
 

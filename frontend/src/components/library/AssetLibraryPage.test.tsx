@@ -8,11 +8,16 @@ vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '' }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
 vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
-vi.mock('./AssetInspector', () => ({ default: () => <div>inspector</div> }));
+vi.mock('./AssetInspector', () => ({ default: ({ onCoverUpdated }: { onCoverUpdated: (result: any) => void }) => (
+  <button type="button" onClick={() => onCoverUpdated({
+    asset_type: 'character', asset_id: 'character-1', cover_variant_id: 'candidate-2',
+    variant: { id: 'candidate-2', url: 'assets/candidate.png' },
+  })}>apply cover selection</button>
+) }));
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
   vi.clearAllMocks();
-  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, variants: [] }] });
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
 });
 it('deletes a library character without selecting its card', async () => {
   mocked.deleteLibraryAsset.mockResolvedValue({ status: 'deleted' });
@@ -62,4 +67,31 @@ it('opens recreation media from the library and returns to semantic assets', asy
   expect(screen.queryByText('Test character')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'assets' }));
   expect(await screen.findByText('Test character')).toBeInTheDocument();
+});
+
+it('patches a cover from the mutation response without reloading the library index', async () => {
+  mocked.getAssetLibraryIndex.mockResolvedValue({
+    schema_version: 1,
+    project_id: 'library',
+    assets: [{
+      asset_type: 'character',
+      asset_id: 'character-1',
+      name: 'Test character',
+      source_scope: 'project',
+      source_container_id: 'project-1',
+      selected_variant_id: 'candidate-2',
+      cover_variant_id: 'cover-1',
+      variants: [
+        { id: 'cover-1', url: 'assets/cover.png' },
+        { id: 'candidate-2', url: 'assets/candidate.png' },
+      ],
+    }],
+  });
+  render(<AssetLibraryPage />);
+  const cardImage = await screen.findByRole('img', { name: 'Test character' });
+  expect(cardImage).toHaveAttribute('src', '/files/assets/cover.png');
+  fireEvent.click(screen.getByText('Test character'));
+  fireEvent.click(await screen.findByRole('button', { name: 'apply cover selection' }));
+  await waitFor(() => expect(cardImage).toHaveAttribute('src', '/files/assets/candidate.png'));
+  expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(1);
 });

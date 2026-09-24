@@ -98,6 +98,8 @@ export interface Character {
     voice_name?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     status?: string;
     is_consistent?: boolean;
     full_body_updated_at?: number;
@@ -125,6 +127,8 @@ export interface Scene {
     status?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     time_of_day?: string;
     lighting_mood?: string;
     source?: "episode" | "series" | "global";
@@ -141,6 +145,8 @@ export interface Prop {
     status?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     source?: "episode" | "series" | "global";
 }
 
