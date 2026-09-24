@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Series, Project, Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
+import type { Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
+import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { toast } from "@/store/toastStore";
 import { characterImageUrl, characterVariants } from "@/lib/characterImage";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
@@ -88,12 +89,18 @@ function recencyOf(asset: Character | Scene | Prop, type: AssetTab): number {
 export default function AssetLibraryPage() {
   const t = useTranslations("recreationMedia");
   const [section, setSection] = useState("assets");
+  const [mediaVisited, setMediaVisited] = useState(false);
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex flex-wrap gap-2 px-4 pt-3 md:px-7" role="group" aria-label={t("sections")}>
       {["assets", "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
-        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{t(value)}</button>)}
+        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => { if (value === "media") setMediaVisited(true); setSection(value); }}>{t(value)}</button>)}
     </div>
-    {section === "assets" ? <SemanticAssetLibrary /> : <RecreationMediaLibrary />}
+    <div className={section === "assets" ? "contents" : "hidden"} aria-hidden={section !== "assets"}>
+      <SemanticAssetLibrary />
+    </div>
+    {mediaVisited && <div className={section === "media" ? "contents" : "hidden"} aria-hidden={section !== "media"}>
+      <RecreationMediaLibrary />
+    </div>}
   </div>;
 }
 
@@ -110,6 +117,8 @@ function SemanticAssetLibrary() {
   const [starredOnly, setStarredOnly] = useState(false);
   const [selected, setSelected] = useState<{ sourceId: string; assetId: string; type: AssetTab } | null>(null);
   const [newAssetOpen, setNewAssetOpen] = useState(false);
+  const taskStateHydrationStarted = useRef(new Set<string>());
+  const assetSnapshotVersions = useRef(new Map<string, number>());
 
   useEffect(() => {
     loadAssets();
@@ -118,61 +127,55 @@ function SemanticAssetLibrary() {
   const loadAssets = async () => {
     setLoading(true);
     try {
-      const [seriesList, projects, globalPool] = await Promise.all([
-        api.listSeries(),
-        api.getProjects(),
-        api.listLibraryAssets(),
-      ]);
-      const result: AssetSource[] = [];
-
-      for (const s of seriesList as Series[]) {
-        if ((s.characters?.length || 0) + (s.scenes?.length || 0) + (s.props?.length || 0) > 0) {
-          result.push({
-            id: `series-${s.id}`,
-            rawId: s.id,
-            name: s.title,
-            kind: "series",
-            characters: s.characters || [],
-            scenes: s.scenes || [],
-            props: s.props || [],
-          });
+      const index = await api.getAssetLibraryIndex();
+      const grouped = new Map<string, AssetSource>();
+      const toAsset = (entry: AssetReferenceIndexEntry): Character | Scene | Prop => {
+        const variants = entry.variants || [];
+        const selectedId = entry.selected_variant_id || variants[0]?.id || null;
+        const source = entry.source_scope === "series" ? "series"
+          : entry.source_scope === "global" ? "global" : "episode";
+        if (entry.asset_type === "character") {
+          return {
+            id: entry.asset_id,
+            name: entry.name,
+            description: entry.description || "",
+            starred: entry.starred,
+            source,
+            reference_sheet: { selected_image_id: selectedId, image_variants: variants },
+          } as Character;
         }
-      }
+        const imageAsset = { selected_id: selectedId, variants };
+        const shared = {
+          id: entry.asset_id,
+          name: entry.name,
+          description: entry.description || "",
+          starred: entry.starred,
+          source,
+          image_asset: imageAsset,
+        };
+        return shared as Scene | Prop;
+      };
 
-      const standaloneProjects = (projects as Project[]).filter((p) => !p.series_id);
-      for (const p of standaloneProjects) {
-        if ((p.characters?.length || 0) + (p.scenes?.length || 0) + (p.props?.length || 0) > 0) {
-          result.push({
-            id: `project-${p.id}`,
-            rawId: p.id,
-            name: p.title,
-            kind: "project",
-            characters: p.characters || [],
-            scenes: p.scenes || [],
-            props: p.props || [],
-          });
-        }
+      for (const entry of index.assets) {
+        const scope = entry.source_scope === "episode" ? "project" : entry.source_scope;
+        const key = scope === "global" ? "global" : `${scope}-${entry.source_container_id}`;
+        const kind = scope === "global" ? "global" : scope === "series" ? "series" : "project";
+        const source = grouped.get(key) || {
+          id: key,
+          rawId: entry.source_container_id || "global",
+          name: entry.source_name || t("globalGroup"),
+          kind,
+          characters: [],
+          scenes: [],
+          props: [],
+        };
+        const asset = toAsset(entry);
+        if (entry.asset_type === "character") source.characters.push(asset as Character);
+        else if (entry.asset_type === "scene") source.scenes.push(asset as Scene);
+        else source.props.push(asset as Prop);
+        grouped.set(key, source);
       }
-
-      // 全局/共享池作为一个 kind:"global" 源（空池则不加）。名称在加载时取 i18n，
-      // 与 series/project 的 data 名同样存进 source.name。
-      const g = (globalPool || {}) as { characters?: Character[]; scenes?: Scene[]; props?: Prop[] };
-      const gChars = g.characters ?? [];
-      const gScenes = g.scenes ?? [];
-      const gProps = g.props ?? [];
-      if (gChars.length + gScenes.length + gProps.length > 0) {
-        result.push({
-          id: "global",
-          rawId: "global",
-          name: t("globalGroup"),
-          kind: "global",
-          characters: gChars,
-          scenes: gScenes,
-          props: gProps,
-        });
-      }
-
-      setSources(result);
+      setSources(Array.from(grouped.values()));
     } catch (error) {
       console.error("Failed to load asset library:", error);
       toast.error(t("loadFailed"), { body: t("loadFailedBody") });
@@ -181,14 +184,31 @@ function SemanticAssetLibrary() {
     }
   };
 
+  const updateAssetSnapshot = (sourceId: string, type: AssetTab, updated: Character | Scene | Prop) => {
+    const versionKey = `${sourceId}:${type}:${updated.id}`;
+    assetSnapshotVersions.current.set(versionKey, (assetSnapshotVersions.current.get(versionKey) ?? 0) + 1);
+    setSources((current) => current.map((source) => {
+      if (source.id !== sourceId) return source;
+      const replace = (assets: (Character | Scene | Prop)[]) => assets.map((asset) =>
+        asset.id === updated.id ? updated : asset,
+      );
+      if (type === "characters") return { ...source, characters: replace(source.characters) as Character[] };
+      if (type === "scenes") return { ...source, scenes: replace(source.scenes) as Scene[] };
+      return { ...source, props: replace(source.props) as Prop[] };
+    }));
+  };
+
   const [deleting, setDeleting] = useState<string | null>(null);
   const deleteAsset = async (assetId: string, type: AssetTab) => {
     if (deleting) return;
     setDeleting(assetId);
     try {
       await api.deleteLibraryAsset(SINGULAR[type], assetId);
-      setSelected((current) => current?.assetId === assetId ? null : current);
-      await loadAssets();
+      setSelected((current) => current?.sourceId === "global" && current.assetId === assetId ? null : current);
+      setSources((current) => current.map((source) => source.kind !== "global" ? source : {
+        ...source,
+        [type]: (source[type] as (Character | Scene | Prop)[]).filter((asset) => asset.id !== assetId),
+      }));
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
       toast.error(status === 409 ? t("deleteInUse") : t("deleteFailed"));
@@ -326,6 +346,44 @@ function SemanticAssetLibrary() {
     selected && selectedSource
       ? (selectedSource[selected.type] as (Character | Scene | Prop)[]).find((a) => a.id === selected.assetId)
       : undefined;
+
+  // The compact index intentionally omits task metadata. Load one project
+  // snapshot only when its detail drawer opens, then merge status fields only
+  // so signed image URLs and index variants remain the card's source of truth.
+  useEffect(() => {
+    if (!selected || !selectedSource || selectedSource.kind !== "project" || !selectedAsset) return;
+    const projectId = selectedSource.rawId;
+    if (!projectId || taskStateHydrationStarted.current.has(projectId)) return;
+    taskStateHydrationStarted.current.add(projectId);
+    const versionKey = `${selectedSource.id}:${selected.type}:${selected.assetId}`;
+    const startedAtVersion = assetSnapshotVersions.current.get(versionKey) ?? 0;
+
+    void api.getProject(projectId).then((project) => {
+      if ((assetSnapshotVersions.current.get(versionKey) ?? 0) !== startedAtVersion) return;
+      const collection = selected.type;
+      const fullAssets = project[collection] as (Character | Scene | Prop)[] | undefined;
+      const taskAsset = fullAssets?.find((item) => item.id === selected.assetId) as
+        | ((Character | Scene | Prop) & { generation_task?: unknown; status?: unknown })
+        | undefined;
+      if (!taskAsset) return;
+      setSources((current) => current.map((source) => {
+        if (source.id !== selectedSource.id) return source;
+        const mergeTaskState = (assets: (Character | Scene | Prop)[]) => assets.map((asset) => asset.id !== selected.assetId
+          ? asset
+          : {
+              ...asset,
+              ...(taskAsset.status !== undefined ? { status: taskAsset.status } : {}),
+              ...(taskAsset.generation_task !== undefined ? { generation_task: taskAsset.generation_task } : {}),
+            });
+        if (selected.type === "characters") return { ...source, characters: mergeTaskState(source.characters) as Character[] };
+        if (selected.type === "scenes") return { ...source, scenes: mergeTaskState(source.scenes) as Scene[] };
+        return { ...source, props: mergeTaskState(source.props) as Prop[] };
+      }));
+    }).catch(() => {
+      // Keep the drawer usable; reopening the same project can retry the status lookup.
+      taskStateHydrationStarted.current.delete(projectId);
+    });
+  }, [selected?.assetId, selected?.sourceId, selected?.type, selectedAsset, selectedSource]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -680,6 +738,7 @@ function SemanticAssetLibrary() {
             starred={!!selectedAsset.starred}
             onClose={() => setSelected(null)}
             onToggleStar={() => toggleStar(selected.sourceId, selected.assetId, selected.type)}
+            onAssetUpdated={(updated) => updateAssetSnapshot(selected.sourceId, selected.type, updated)}
             onPromoted={loadAssets}
           />
         )}

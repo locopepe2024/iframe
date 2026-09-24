@@ -17,12 +17,12 @@
  *   · Per-project toast surfaces success/error across the long round-trip
  *     (asset generation can take 20-60s).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { api, type AssetLibraryReference } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { AssetTaskFailure, getAssetIndexState, mergeAssetTaskResult, waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
@@ -127,12 +127,18 @@ interface ImageVariant {
     reference_distance?: string;
 }
 
-interface ReferenceLibraryAsset {
-    asset_type: CastKind;
-    asset_id: string;
-    name: string;
-    source?: "episode" | "series" | "global";
-    variants: ImageVariant[];
+type ReferenceLibraryAsset = AssetReferenceIndexEntry;
+
+interface PromptMention {
+    start: number;
+    end: number;
+    query: string;
+}
+
+interface PromptReferenceCandidate {
+    asset: ReferenceLibraryAsset;
+    variant: ImageVariant;
+    variantIndex: number;
 }
 
 type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
@@ -284,8 +290,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
 
     const uploadInput = useRef<HTMLInputElement>(null);
+    const promptInput = useRef<HTMLTextAreaElement>(null);
     const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
+    const [promptMention, setPromptMention] = useState<PromptMention | null>(null);
+    const [activeMentionIndex, setActiveMentionIndex] = useState(0);
     const [batchSize, setBatchSize] = useState(2);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
@@ -296,13 +305,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
-    const [libraryReference, setLibraryReference] = useState<AssetLibraryReference | null>(null);
+    const [promptReference, setPromptReference] = useState<AssetLibraryReference | null>(null);
+    const promptReferences = useMemo(() => promptReference ? [promptReference] : [], [promptReference]);
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
-    const [globalLibraryAssets, setGlobalLibraryAssets] = useState<{
-        characters: any[];
-        scenes: any[];
-        props: any[];
-    }>({ characters: [], scenes: [], props: [] });
+    const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const generating = generatingTasks.some((task) =>
         task.assetId === entityId && task.projectId === currentProject?.id
     );
@@ -345,79 +352,46 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const overlayMouseDown = useRef(false);
 
     useEffect(() => {
-        setLibraryReference(null);
+        setPromptReference(null);
+        setImageGenerationMode("text");
         setLibraryPickerOpen(false);
     }, [entityId, kind]);
 
     useEffect(() => {
-        if (!isOpen) return;
-        // A normal GET /projects response already merges series/global assets,
-        // but a freshly-created or cached project can predate that merge. Load
-        // the global pool opportunistically so the picker remains complete;
-        // the current project/series data still renders immediately.
-        const loadGlobalAssets = api.listLibraryAssets;
-        if (typeof loadGlobalAssets !== "function") return;
-        let request: unknown;
-        try {
-            request = loadGlobalAssets();
-        } catch {
+        if (!isOpen || !currentProject?.id) {
+            setReferenceLibraryAssets([]);
             return;
         }
-        void Promise.resolve(request)
-            .then((data: any) => {
-                setGlobalLibraryAssets({
-                    characters: data?.characters || [],
-                    scenes: data?.scenes || [],
-                    props: data?.props || [],
-                });
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id)
+            .then((index) => {
+                if (active) setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
             })
             .catch(() => {
-                // The current project response is still a valid source when
-                // the optional global-library read is unavailable.
+                if (active) setReferenceLibraryAssets([]);
             });
-    }, [isOpen]);
+        return () => { active = false; };
+    }, [isOpen, currentProject?.id]);
 
-    const referenceLibraryAssets = useMemo<ReferenceLibraryAsset[]>(() => {
-        if (!currentProject) return [];
-        const byKey = new Map<string, ReferenceLibraryAsset>();
-        const addGroup = (assetType: CastKind, assets: any[], fallbackSource?: ReferenceLibraryAsset["source"]) => {
-            for (const asset of assets || []) {
-                const variants = readLibraryVariants(asset, assetType);
-                if (!asset?.id || variants.length === 0) continue;
-                const key = `${assetType}:${asset.id}`;
-                // Episode-local/project response data has priority over the
-                // parent series and global fallback pools.
-                if (byKey.has(key)) continue;
-                byKey.set(key, {
-                    asset_type: assetType,
-                    asset_id: asset.id,
-                    name: asset.name,
-                    source: asset.source || fallbackSource,
-                    variants,
-                });
-            }
-        };
+    const promptReferenceCandidates = useMemo<PromptReferenceCandidate[]>(() => {
+        if (!promptMention) return [];
+        const query = promptMention.query.toLocaleLowerCase(locale);
+        return referenceLibraryAssets.flatMap((asset) => asset.variants.map((variant, variantIndex) => ({
+            asset,
+            variant,
+            variantIndex,
+        })))
+            .filter(({ asset }) => asset.name.toLocaleLowerCase(locale).includes(query))
+            .slice(0, 12);
+    }, [locale, promptMention, referenceLibraryAssets]);
 
-        addGroup("character", currentProject.characters || [], "episode");
-        addGroup("scene", currentProject.scenes || [], "episode");
-        addGroup("prop", currentProject.props || [], "episode");
-        addGroup("character", currentSeries?.characters || [], "series");
-        addGroup("scene", currentSeries?.scenes || [], "series");
-        addGroup("prop", currentSeries?.props || [], "series");
-        addGroup("character", globalLibraryAssets.characters, "global");
-        addGroup("scene", globalLibraryAssets.scenes, "global");
-        addGroup("prop", globalLibraryAssets.props, "global");
-        return Array.from(byKey.values());
-    }, [currentProject, currentSeries, globalLibraryAssets]);
-
-    const selectedLibraryAsset = useMemo(() => {
-        if (!libraryReference) return null;
+    const selectedLibraryAssets = useMemo(() => promptReferences.flatMap((reference) => {
         const asset = referenceLibraryAssets.find((item) =>
-            item.asset_type === libraryReference.asset_type && item.asset_id === libraryReference.asset_id,
+            item.asset_type === reference.asset_type && item.asset_id === reference.asset_id,
         );
-        const variant = asset?.variants.find((item) => item.id === libraryReference.variant_id);
-        return asset && variant ? { asset, variant } : null;
-    }, [libraryReference, referenceLibraryAssets]);
+        const variant = asset?.variants.find((item) => item.id === reference.variant_id);
+        return asset && variant ? [{ reference, asset, variant }] : [];
+    }), [promptReferences, referenceLibraryAssets]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -433,7 +407,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     }, [isOpen, entity, kind, selectedTemplate]);
 
     useEffect(() => {
-        setLibraryReference(null);
+        setPromptReference(null);
+        setImageGenerationMode("text");
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
 
@@ -475,6 +450,75 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleResetTemplate = () => {
         setPrompt(buildTemplate(kind, entity, selectedTemplate));
         setPromptDirty(false);
+        setPromptMention(null);
+        setPromptReference(null);
+    };
+
+    const handlePromptChange = (value: string, caret: number) => {
+        setPrompt(value);
+        setPromptDirty(true);
+        const at = value.lastIndexOf("@", Math.max(0, caret - 1));
+        if (at < 0) {
+            setPromptMention(null);
+            setActiveMentionIndex(0);
+            return;
+        }
+        const query = value.slice(at + 1, caret);
+        if (/[\s@]/.test(query)) {
+            setPromptMention(null);
+            setActiveMentionIndex(0);
+            return;
+        }
+        setPromptMention({ start: at, end: caret, query });
+        setActiveMentionIndex(0);
+    };
+
+    const choosePromptReference = (candidate: PromptReferenceCandidate) => {
+        if (!promptMention) return;
+        const label = candidate.asset.name;
+        const nextPrompt = `${prompt.slice(0, promptMention.start)}${label}${prompt.slice(promptMention.end)}`;
+        const nextCaret = promptMention.start + label.length;
+        setPrompt(nextPrompt);
+        setPromptDirty(true);
+        const reference = {
+            asset_type: candidate.asset.asset_type,
+            asset_id: candidate.asset.asset_id,
+            variant_id: candidate.variant.id,
+        } satisfies AssetLibraryReference;
+        // The running generation API accepts one structured asset/variant ID.
+        // A later @ selection replaces the previous reference explicitly.
+        setPromptReference(reference);
+        setImageGenerationMode("reference");
+        setLibraryPickerOpen(false);
+        setPromptMention(null);
+        setActiveMentionIndex(0);
+        requestAnimationFrame(() => {
+            promptInput.current?.focus();
+            promptInput.current?.setSelectionRange(nextCaret, nextCaret);
+        });
+    };
+
+    const handlePromptKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+        if (!promptMention) return;
+        if (event.key === "Escape") {
+            event.preventDefault();
+            setPromptMention(null);
+            return;
+        }
+        if (event.key === "ArrowDown" && promptReferenceCandidates.length > 0) {
+            event.preventDefault();
+            setActiveMentionIndex((index) => (index + 1) % promptReferenceCandidates.length);
+            return;
+        }
+        if (event.key === "ArrowUp" && promptReferenceCandidates.length > 0) {
+            event.preventDefault();
+            setActiveMentionIndex((index) => (index - 1 + promptReferenceCandidates.length) % promptReferenceCandidates.length);
+            return;
+        }
+        if (event.key === "Enter" && promptReferenceCandidates.length > 0) {
+            event.preventDefault();
+            choosePromptReference(promptReferenceCandidates[activeMentionIndex] || promptReferenceCandidates[0]);
+        }
     };
 
     const handleTemplateSwitch = (tpl: CharacterTemplate) => {
@@ -488,6 +532,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setSelectedTemplate(tpl);
             setPrompt(buildTemplate(kind, entity, tpl));
             setPromptDirty(false);
+            setPromptReference(null);
         }
     };
 
@@ -496,6 +541,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setSelectedTemplate(pendingTemplate);
         setPrompt(buildTemplate(kind, entity, pendingTemplate));
         setPromptDirty(false);
+        setPromptReference(null);
         setPendingTemplate(null);
     };
 
@@ -511,6 +557,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             });
             return;
         }
+        if (imageGenerationMode === "reference" && promptReferences.length === 0) {
+            toast.warning(t("referenceModeRequiresImage"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        const submittedReference = imageGenerationMode === "reference" ? promptReferences[0] : undefined;
         // Refresh project + validate the entity still exists backend-side
         // before submitting. The store can hold a stale character that was
         // deleted server-side, which makes generateAsset 404 with
@@ -532,6 +586,37 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         } catch {
             // Refresh failed — proceed with cached data; backend will reject
             // if the entity truly is stale and the poll surfaces the error.
+        }
+        if (submittedReference) {
+            try {
+                const freshIndex = await api.getAssetReferenceIndex(currentProject.id);
+                const asset = freshIndex.assets.find((item) =>
+                    item.asset_type === submittedReference.asset_type && item.asset_id === submittedReference.asset_id,
+                );
+                const staleReference = asset?.variants.some((variant) => variant.id === submittedReference.variant_id)
+                    ? undefined
+                    : submittedReference;
+                if (staleReference) {
+                    setPromptReference((current) => current
+                        && current.asset_type === staleReference.asset_type
+                        && current.asset_id === staleReference.asset_id
+                        && current.variant_id === staleReference.variant_id
+                        ? null
+                        : current);
+                    setReferenceLibraryAssets(freshIndex.assets.filter((asset) => asset.variants.length > 0));
+                    toast.warning(t("toastReferenceStale"), {
+                        projectId: currentProject.id,
+                        projectTitle: currentProject.title,
+                    });
+                    return;
+                }
+            } catch {
+                toast.error(t("toastReferenceCheckFailed"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                return;
+            }
         }
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
         addGeneratingTask(
@@ -562,7 +647,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 effectiveBatchSize,
                 selectedModelId,
                 aspectRatioOverride || undefined,
-                libraryReference ?? undefined,
+                submittedReference,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -616,11 +701,36 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     : updated.props;
             const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id);
             const uploadedVariantId = readSelectedId(updatedEntity, kind);
-            setLibraryReference(uploadedVariantId ? {
-                asset_type: kind,
-                asset_id: entity.id,
-                variant_id: uploadedVariantId,
-            } : null);
+            // Uploading makes a variant available but does not silently opt it
+            // into the next provider request. Add it to the asset index and let
+            // the user pick it with @ or the reference picker.
+            if (uploadedVariantId) {
+                const uploadedVariants = readLibraryVariants(updatedEntity, kind);
+                setReferenceLibraryAssets((current) => {
+                    const key = (asset: ReferenceLibraryAsset) => asset.asset_type === kind && asset.asset_id === entity.id;
+                    const existing = current.find(key);
+                    const entry: ReferenceLibraryAsset = {
+                        asset_type: kind,
+                        asset_id: entity.id,
+                        name: entity.name,
+                        source_scope: currentProject.series_id ? "episode" : "project",
+                        source_container_id: currentProject.id,
+                        source_name: currentProject.title,
+                        selected_variant_id: uploadedVariantId,
+                        variants: uploadedVariants,
+                    };
+                    return existing
+                        ? current.map((item) => key(item) ? entry : item)
+                        : [...current, entry];
+                });
+                try {
+                    const index = await api.getAssetReferenceIndex(currentProject.id);
+                    setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
+                } catch {
+                    // The upload response already provides the selected variant;
+                    // keep it available in the picker if the index refresh fails.
+                }
+            }
             setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
@@ -632,16 +742,31 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     };
 
     const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
-        setLibraryReference({
+        const reference: AssetLibraryReference = {
             asset_type: asset.asset_type,
             asset_id: asset.asset_id,
             variant_id: variant.id,
-        });
+        };
+        const isSelected = promptReferences.some((item) => item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+        setPromptReference(isSelected ? null : reference);
+        setImageGenerationMode(isSelected ? "text" : "reference");
         setLibraryPickerOpen(false);
     };
 
     const handleClearLibraryReference = () => {
-        setLibraryReference(null);
+        setPromptReference(null);
+        setImageGenerationMode("text");
+    };
+
+    const handleRemovePromptReference = (removed: AssetLibraryReference) => {
+        if (promptReference === removed) setPromptReference(null);
+        setImageGenerationMode("text");
+    };
+
+    const handleToggleImageGenerationMode = (mode: "text" | "reference") => {
+        setImageGenerationMode(mode);
+        if (mode === "text") setPromptReference(null);
     };
 
     const handleSelectVariant = async (variantId: string) => {
@@ -654,11 +779,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
             );
             updateProject(currentProject.id, updated);
-            setLibraryReference({
-                asset_type: kind,
-                asset_id: entity.id,
-                variant_id: variantId,
-            });
             toast.success(t("toastSelected"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -693,7 +813,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         try {
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
-            setLibraryReference((current) => current?.asset_type === kind
+            setPromptReference((current) => current
+                && current.asset_type === kind
                 && current.asset_id === entity.id
                 && current.variant_id === variantId
                 ? null
@@ -1023,12 +1144,87 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     {t("resetTemplate")}
                                 </button>
                             </div>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => { setPrompt(e.target.value); setPromptDirty(true); }}
-                                disabled={generating}
-                                className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
-                            />
+                            <div className="mb-3 rounded-md border border-glass-border bg-black/20 p-2.5">
+                                <div className="grid grid-cols-2 gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={t("imageGenerationMode")}>
+                                    {(["text", "reference"] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            aria-pressed={imageGenerationMode === mode}
+                                            disabled={generating}
+                                            onClick={() => handleToggleImageGenerationMode(mode)}
+                                            className={`min-h-9 rounded px-3 py-2 text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${imageGenerationMode === mode ? "bg-primary/15 text-primary" : "text-text-muted hover:bg-hover-bg hover:text-foreground"} disabled:opacity-40`}
+                                        >
+                                            {t(mode === "text" ? "textMode" : "referenceMode")}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-text-muted">
+                                    {t(imageGenerationMode === "text" ? "textGenerationModeHint" : "referenceGenerationModeHint")}
+                                </p>
+                            </div>
+                            <div className="relative">
+                                <textarea
+                                    ref={promptInput}
+                                    value={prompt}
+                                    onChange={(e) => handlePromptChange(e.target.value, e.currentTarget.selectionStart ?? e.target.value.length)}
+                                    onKeyDown={handlePromptKeyDown}
+                                    disabled={generating}
+                                    aria-autocomplete="list"
+                                    aria-expanded={!!promptMention}
+                                    aria-controls={promptMention ? "cast-prompt-reference-listbox" : undefined}
+                                    aria-activedescendant={promptMention && promptReferenceCandidates.length > 0 ? `cast-prompt-reference-option-${activeMentionIndex}` : undefined}
+                                    className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
+                                />
+                                {promptMention && (
+                                <div
+                                    id="cast-prompt-reference-listbox"
+                                    role="listbox"
+                                    aria-label={t("promptReferencePickerTitle")}
+                                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
+                                >
+                                    <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                        {t("promptReferencePickerTitle")}
+                                    </div>
+                                    {promptReferenceCandidates.length === 0 ? (
+                                        <p className="px-2 py-2 text-xs text-text-muted">
+                                            {referenceLibraryAssets.length > 0 ? t("promptReferenceNoMatch") : t("promptReferenceEmpty")}
+                                        </p>
+                                    ) : promptReferenceCandidates.map((candidate, index) => {
+                                        const variantDetail = candidate.variant.reference_view_role
+                                            || candidate.variant.reference_distance
+                                            || t("promptReferenceVariant", { index: candidate.variantIndex + 1 });
+                                        const optionLabel = `${candidate.asset.name} · ${variantDetail}`;
+                                        const active = index === activeMentionIndex;
+                                        return (
+                                            <button
+                                                id={`cast-prompt-reference-option-${index}`}
+                                                key={`${candidate.asset.asset_type}:${candidate.asset.asset_id}:${candidate.variant.id}`}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={active}
+                                                aria-label={`${t("useLibraryVariant", { name: candidate.asset.name })} · ${variantDetail}`}
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onMouseEnter={() => setActiveMentionIndex(index)}
+                                                onClick={() => choosePromptReference(candidate)}
+                                                className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${active ? "bg-hover-bg" : "hover:bg-hover-bg"}`}
+                                            >
+                                                <img
+                                                    src={getAssetUrl(candidate.variant.url)}
+                                                    alt=""
+                                                    loading="lazy"
+                                                    className="h-9 w-9 shrink-0 rounded-md border border-glass-border bg-surface-inset object-cover"
+                                                />
+                                                <span className="min-w-0 flex-1 text-xs">
+                                                    <span className="block truncate text-foreground">{candidate.asset.name}</span>
+                                                    <span className="block truncate text-text-muted">{variantDetail} · {t(`librarySource.${candidate.asset.source_scope}`)}</span>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                )}
+                            </div>
 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -1154,8 +1350,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 </div>
 
                                 {/* Model — full row, chip selected */}
-                                <div>
-                                    <label className="block font-mono text-[0.625rem] uppercase tracking-[0.16em] text-text-muted mb-2">
+                                <div role="group" aria-labelledby="cast-image-model-label">
+                                    <label id="cast-image-model-label" className="block font-mono text-[0.625rem] uppercase tracking-[0.16em] text-text-muted mb-2">
                                         {t("modelLabel")}
                                     </label>
                                     <GroupedModelGrid
@@ -1185,7 +1381,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                                 <button
                                     onClick={handleGenerate}
-                                    disabled={generating || !prompt.trim()}
+                                    disabled={generating || !prompt.trim() || (imageGenerationMode === "reference" && promptReferences.length === 0)}
                                     className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                                 >
                                     {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
@@ -1218,30 +1414,29 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     {t("chooseFromLibrary")}
                                 </button>
                             </div>
-                            {selectedLibraryAsset && (
-                                <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/35 bg-primary/5 p-2">
-                                    <PreviewImage
-                                        src={getAssetUrl(selectedLibraryAsset.variant.url)}
-                                        alt={`${selectedLibraryAsset.asset.name} ${selectedLibraryAsset.variant.id}`}
-                                        className="h-12 w-12 rounded object-cover"
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-[0.75rem] font-medium text-foreground truncate">{selectedLibraryAsset.asset.name}</p>
-                                        <p className="text-[0.625rem] text-primary/80">
-                                            {selectedLibraryAsset.asset.asset_id === entity.id
-                                                && selectedLibraryAsset.asset.asset_type === kind
-                                                ? t("selectedVariantReference")
-                                                : t("libraryReferenceSelected")}
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleClearLibraryReference}
-                                        aria-label={t("clearLibraryReference")}
-                                        className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
-                                    >
-                                        <X size={14} />
-                                    </button>
+                            {selectedLibraryAssets.length > 0 && (
+                                <div className="mb-3 space-y-2">
+                                    {selectedLibraryAssets.map(({ reference, asset, variant }) => (
+                                        <div key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} className="flex items-center gap-2 rounded-lg border border-primary/35 bg-primary/5 p-2">
+                                            <PreviewImage
+                                                src={getAssetUrl(variant.url)}
+                                                alt={`${asset.name} ${variant.id}`}
+                                                className="h-12 w-12 rounded object-cover"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-[0.75rem] font-medium text-foreground truncate">{asset.name}</p>
+                                                <p className="text-[0.625rem] text-primary/80">{t("libraryReferenceSelected")}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemovePromptReference(reference)}
+                                                aria-label={t("clearLibraryReference")}
+                                                className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                             {libraryPickerOpen && (
@@ -1260,13 +1455,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <div key={`${asset.asset_type}:${asset.asset_id}`}>
                                                 <div className="mb-1 flex items-center gap-1.5">
                                                     <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
-                                                    {asset.source && <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source}`)}</span>}
+                                                    <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source_scope}`)}</span>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-1.5">
                                                     {asset.variants.map((variant) => {
-                                                        const active = libraryReference?.asset_type === asset.asset_type
-                                                            && libraryReference.asset_id === asset.asset_id
-                                                            && libraryReference.variant_id === variant.id;
+                                                        const active = promptReferences.some((reference) => reference.asset_type === asset.asset_type
+                                                            && reference.asset_id === asset.asset_id
+                                                            && reference.variant_id === variant.id);
                                                         return (
                                                             <button
                                                                 type="button"

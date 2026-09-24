@@ -35,6 +35,8 @@ interface AssetInspectorProps {
   starred: boolean;
   onClose: () => void;
   onToggleStar: () => void;
+  /** Merge a returned snapshot into the visible card without reloading every asset source. */
+  onAssetUpdated?: (asset: Character | Scene | Prop) => void;
   /** 提升到全局成功后回调（父层刷新库以显示新入池资产）。可选。 */
   onPromoted?: () => void;
 }
@@ -92,6 +94,7 @@ export default function AssetInspector({
   starred,
   onClose,
   onToggleStar,
+  onAssetUpdated,
   onPromoted,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
@@ -127,6 +130,7 @@ export default function AssetInspector({
   const [generating, setGenerating] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [clearingGeneration, setClearingGeneration] = useState(false);
+  const [settingCover, setSettingCover] = useState(false);
   const generationFailed = (asset as any).status === "failed" || (asset as any).generation_task?.status === "failed";
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
@@ -168,6 +172,8 @@ export default function AssetInspector({
   }, []);
 
   const activeVariant = variants.find((v) => v.id === activeVariantId) ?? variants[0];
+  const selectedCoverId = imageAsset?.selected_id ?? baseVariants[0]?.id ?? null;
+  const activeVariantIsCover = !!activeVariant && activeVariant.id === selectedCoverId;
   const heroUrl = activeVariant?.url ?? fallbackUrl(asset, type);
   const prompt = activeVariant?.prompt_used ?? "";
 
@@ -204,6 +210,44 @@ export default function AssetInspector({
     } catch {
       // 跨域(CORS)/网络失败：download 属性对跨域 URL 无效，退回到新标签打开。
       window.open(heroUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleSetAsCover = async () => {
+    if (sourceKind !== "project" || !activeVariant || activeVariantIsCover || settingCover) return;
+    const projectId = sourceId.replace(/^project-/, "");
+    let generationType: string | undefined;
+    if (type === "characters") {
+      const character = asset as Character;
+      if (character.reference_sheet?.image_variants?.some((variant) => variant.id === activeVariant.id)) {
+        generationType = "reference_sheet";
+      } else if (character.full_body_asset?.variants?.some((variant) => variant.id === activeVariant.id)) {
+        generationType = "full_body";
+      }
+    }
+
+    setSettingCover(true);
+    try {
+      const updatedProject = await api.selectAssetVariant(
+        projectId,
+        asset.id,
+        SINGULAR_TYPE[type],
+        activeVariant.id,
+        generationType,
+      );
+      const collection = type;
+      const updatedAsset = (updatedProject?.[collection] as (Character | Scene | Prop)[] | undefined)
+        ?.find((item) => item.id === asset.id);
+      if (!updatedAsset) throw new Error(t("coverUpdateFailed"));
+      useProjectStore.getState().updateProject(projectId, updatedProject);
+      onAssetUpdated?.(updatedAsset);
+      toast.success(t("coverUpdated"));
+    } catch (error) {
+      toast.error(t("coverUpdateFailed"), {
+        body: (error as any)?.response?.data?.detail || (error as Error)?.message,
+      });
+    } finally {
+      setSettingCover(false);
     }
   };
 
@@ -284,6 +328,7 @@ export default function AssetInspector({
       }
       const freshVariants = (updated ? primaryImageAsset(updated, type)?.variants : undefined) ?? [];
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
+      onAssetUpdated?.(updated as Character | Scene | Prop);
       const added = freshVariants.filter((v) => !baseIds.has(v.id));
       setExtraVariants(freshVariants);
       if (added[0]) setActiveVariantId(added[0].id);
@@ -305,6 +350,7 @@ export default function AssetInspector({
             || (store.currentProject?.id === projectId ? store.currentProject : null);
           const patch = mergeAssetTaskResult(latestProject, e.task);
           if (patch) store.updateProject(projectId, patch);
+          onAssetUpdated?.(failedAsset as Character | Scene | Prop);
         }
       }
       removeGeneratingTask(assetId, "all", projectId);
@@ -345,6 +391,9 @@ export default function AssetInspector({
         || (store.currentProject?.id === projectId ? store.currentProject : null);
       const patch = mergeAssetTaskResult(latestProject, result);
       if (patch) store.updateProject(projectId, patch);
+      if ((result as { asset?: Character | Scene | Prop }).asset) {
+        onAssetUpdated?.((result as { asset: Character | Scene | Prop }).asset);
+      }
       for (const task of store.generatingTasks) {
         if (task.assetId === asset.id && task.projectId === projectId) {
           store.removeGeneratingTask(asset.id, task.generationType, projectId);
@@ -458,6 +507,16 @@ export default function AssetInspector({
                 );
               })}
             </div>
+            {sourceKind === "project" && !activeVariantIsCover && (
+              <button
+                type="button"
+                onClick={() => void handleSetAsCover()}
+                disabled={settingCover || generating}
+                className="mt-2 w-full rounded-md border border-primary/40 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                {settingCover ? t("settingCover") : t("setAsCover")}
+              </button>
+            )}
           </div>
         )}
 

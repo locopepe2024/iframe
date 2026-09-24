@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
 import zhMessages from '../../../../messages/zh.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), clearAssetGenerationStatus: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getAssetReferenceIndex: vi.fn(), getProject: vi.fn(), getTaskStatus: vi.fn(), clearAssetGenerationStatus: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -16,7 +16,7 @@ const project: any = { id: 'project', title: 'Project', characters: [character],
 function show(locale: 'en' | 'zh' = 'en', localeMessages = locale === 'zh' ? zhMessages : messages) {
  render(<NextIntlClientProvider locale={locale} messages={localeMessages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>);
 }
-beforeEach(() => { cleanup(); for (const observer of Array.from(activePolls.values())) observer.observing = false; activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
+beforeEach(() => { cleanup(); for (const observer of Array.from(activePolls.values())) observer.observing = false; activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] } as any); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
 
 it('applies the completed asset snapshot and clears its task without fetching the project', async () => {
  vi.useFakeTimers();
@@ -99,7 +99,7 @@ it('clears a failed task marker from its asset snapshot and keeps the image vari
  }));
  expect(api.getProject).not.toHaveBeenCalled();
 });
-it('opens upload from the empty gallery and appends a selected reference', async () => {
+it('uploads an image without implicitly submitting it as a provider reference', async () => {
  vi.mocked(api.generateAsset).mockResolvedValue(project as any);
  show();
  const input = screen.getByLabelText('Upload reference image');
@@ -107,19 +107,22 @@ it('opens upload from the empty gallery and appends a selected reference', async
  fireEvent.click(screen.getByText(messages.castWorkbench.emptyVariantsTitle));
  expect(click).toHaveBeenCalledOnce();
  const file = new File(['image'], 'reference.png', { type: 'image/png' });
- vi.mocked(api.uploadAsset).mockResolvedValue({ ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] });
+ const withUpload = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }], selected_image_id: 'one' } }] };
+ vi.mocked(api.uploadAsset).mockResolvedValue(withUpload as any);
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({
+  schema_version: 1,
+  project_id: 'project',
+  assets: [{ asset_type: 'character', asset_id: 'char', name: 'Test', source_scope: 'episode', variants: [{ id: 'one', url: 'one.png' }] }],
+ } as any);
  fireEvent.change(input, { target: { files: [file] } });
- await waitFor(() => expect(screen.getAllByText('Test one')).toHaveLength(2));
+ await waitFor(() => expect(screen.getAllByText('Test one')).toHaveLength(1));
  expect(api.uploadAsset).toHaveBeenCalledWith('project', 'character', 'char', file, 'reference_sheet');
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const generationArgs = vi.mocked(api.generateAsset).mock.calls[0];
  expect(generationArgs[5]).toBe('reference_sheet');
- expect(generationArgs[12]).toEqual({
-  asset_type: 'character',
-  asset_id: 'char',
-  variant_id: 'one',
- });
+ expect(generationArgs[12]).toBeUndefined();
+ expect(generationArgs).toHaveLength(13);
 });
 it('selects an existing canonical reference without the preview swallowing its click', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };
@@ -130,11 +133,8 @@ it('selects an existing canonical reference without the preview swallowing its c
  await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'reference_sheet'));
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
- expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toEqual({
-  asset_type: 'character',
-  asset_id: 'char',
-  variant_id: 'one',
- });
+ expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
+ expect(vi.mocked(api.generateAsset).mock.calls[0]).toHaveLength(13);
 });
 it('allows retrying the same file after upload fails', async () => {
  vi.mocked(api.uploadAsset).mockRejectedValue(new Error('Upload unavailable'));
@@ -231,10 +231,15 @@ it('selects a specific asset-library variant and submits only its stable ids', a
  };
  const withLibrary = { ...project, scenes: [libraryAsset] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [{
+  asset_type: 'scene', asset_id: 'library-scene', name: 'Tea room', source_scope: 'global',
+  variants: [{ id: 'scene-variant', url: 'users/owner/scene.png' }],
+ }] } as any);
  vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
+ await waitFor(() => expect(screen.getByRole('button', { name: 'Choose from library' })).not.toBeDisabled());
  fireEvent.click(screen.getByRole('button', { name: 'Choose from library' }));
  fireEvent.click(screen.getByRole('button', { name: 'Use this Tea room variant as reference' }));
  expect(screen.getByText('Using a library variant as reference')).toBeTruthy();
@@ -243,10 +248,45 @@ it('selects a specific asset-library variant and submits only its stable ids', a
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toEqual({ asset_type: 'scene', asset_id: 'library-scene', variant_id: 'scene-variant' });
+ expect(args).toHaveLength(13);
  expect(JSON.stringify(args)).not.toContain('users/owner/scene.png');
 });
 
-it('clears an asset-library reference before the next text-to-image request', async () => {
+it('opens the asset index from @ in the prompt and submits the selected stable reference', async () => {
+ const libraryCharacter = {
+  id: 'library-character',
+  name: '周涵',
+  source: 'global',
+  reference_sheet: {
+   image_variants: [{ id: 'zhou-reference', url: 'private/zhou.png' }],
+   selected_image_id: 'zhou-reference',
+  },
+ };
+ const withLibrary = { ...project, characters: [character, libraryCharacter] };
+ useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [
+  { asset_type: 'character', asset_id: 'library-character', name: '周涵', source_scope: 'global', variants: [{ id: 'zhou-reference', url: 'private/zhou.png' }] },
+ ] } as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
+ show('zh');
+
+ const prompt = screen.getByRole('textbox') as HTMLTextAreaElement;
+ fireEvent.change(prompt, { target: { value: '外观参考@周' } });
+
+ const picker = await screen.findByRole('listbox', { name: '参考素材' });
+ fireEvent.click(within(picker).getByRole('option', { name: /周涵/ }));
+ expect(prompt.value).toBe('外观参考周涵');
+ expect(screen.getByText(zhMessages.castWorkbench.libraryReferenceSelected)).toBeTruthy();
+
+ fireEvent.click(screen.getByRole('button', { name: /生成第一组/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ const args = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(args[12]).toEqual({ asset_type: 'character', asset_id: 'library-character', variant_id: 'zhou-reference' });
+ expect(args).toHaveLength(13);
+ expect(JSON.stringify(args)).not.toContain('private/');
+});
+
+it('switching to text mode clears structured references before the next request', async () => {
  const libraryAsset = {
   id: 'library-prop',
   name: 'Tea cup',
@@ -256,17 +296,47 @@ it('clears an asset-library reference before the next text-to-image request', as
  };
  const withLibrary = { ...project, props: [libraryAsset] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [{
+  asset_type: 'prop', asset_id: 'library-prop', name: 'Tea cup', source_scope: 'global',
+  variants: [{ id: 'prop-variant', url: 'users/owner/prop.png' }],
+ }] } as any);
  vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
  vi.mocked(api.generateAsset).mockResolvedValue(withLibrary as any);
  show();
 
+ await waitFor(() => expect(screen.getByRole('button', { name: 'Choose from library' })).not.toBeDisabled());
  fireEvent.click(screen.getByRole('button', { name: 'Choose from library' }));
  fireEvent.click(screen.getByRole('button', { name: 'Use this Tea cup variant as reference' }));
- fireEvent.click(screen.getByRole('button', { name: 'Clear library reference' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Text' }));
+ expect(screen.queryByText('Using a library variant as reference')).toBeNull();
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toBeUndefined();
+ expect(args).toHaveLength(13);
+});
+
+it('blocks generation when a selected reference variant is no longer in the project index', async () => {
+ const staleRef = { asset_type: 'character', asset_id: 'library-character', variant_id: 'deleted-variant' };
+ const currentIndex = { schema_version: 1, project_id: 'project', assets: [{
+  ...staleRef, name: 'Library character', source_scope: 'global', variants: [{ id: staleRef.variant_id, url: 'private/deleted.png' }],
+ }] };
+ const missingVariantIndex = { schema_version: 1, project_id: 'project', assets: [] };
+ vi.mocked(api.getAssetReferenceIndex)
+  .mockResolvedValueOnce(currentIndex as any)
+  .mockResolvedValueOnce(missingVariantIndex as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(project as any);
+ show();
+
+ const prompt = screen.getByRole('textbox') as HTMLTextAreaElement;
+ fireEvent.change(prompt, { target: { value: '外观参考@Library' } });
+ const picker = await screen.findByRole('listbox', { name: 'Reference assets' });
+ fireEvent.click(within(picker).getByRole('option', { name: /Library character/ }));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+ expect(api.generateAsset).not.toHaveBeenCalled();
+ expect(screen.getByRole('button', { name: /Generate first batch/ })).toBeDisabled();
 });
 
 it('loads a global library reference when the project response has only local assets', async () => {
@@ -280,7 +350,10 @@ it('loads a global library reference when the project response has only local as
  const localProject = { ...project, scenes: [localScene] };
  useProjectStore.setState({ currentProject: localProject, projects: [localProject] });
  vi.mocked(api.getProject).mockResolvedValue(localProject as any);
- vi.mocked(api.listLibraryAssets).mockResolvedValue({ characters: [], scenes: [libraryScene], props: [] } as any);
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [{
+  asset_type: 'scene', asset_id: 'global-scene', name: 'Shared tea room', source_scope: 'global',
+  variants: [{ id: 'global-variant', url: 'users/owner/scene.png' }],
+ }] } as any);
  vi.mocked(api.generateAsset).mockResolvedValue(localProject as any);
  show();
 
