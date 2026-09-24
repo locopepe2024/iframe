@@ -1,3 +1,5 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -14,6 +16,7 @@ from src.apps.comic_gen.models import (
     Series,
 )
 from src.apps.comic_gen.pipeline import (
+    AssetGenerationInProgress,
     ComicGenPipeline,
     InvalidAssetReference,
 )
@@ -45,11 +48,115 @@ def _pipeline_with_assets(tmp_path: Path):
     pipeline.series_store = {}
     pipeline.library_store = GlobalAssetLibrary()
     pipeline.asset_generation_tasks = {}
+    pipeline._save_lock = threading.RLock()
     pipeline._save_data = Mock()
     pipeline._save_library_data = Mock()
     pipeline._save_series_data = Mock()
     pipeline.effective_director_profile = lambda _script: None
     return pipeline, target
+
+
+def test_project_asset_generation_rejects_a_second_inflight_task(tmp_path):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    barrier = threading.Barrier(2)
+    validate_mode = pipeline._validate_asset_generation_mode
+    pipeline._validate_asset_generation_mode = lambda *args: (barrier.wait(timeout=2), validate_mode(*args))[1]
+
+    def submit(prompt):
+        try:
+            return pipeline.create_asset_generation_task("project", target.id, "scene", prompt=prompt)[1]
+        except ValueError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(submit, ("Tea room", "Tea room again")))
+
+    task_ids = [result for result in results if isinstance(result, str)]
+    errors = [result for result in results if isinstance(result, ValueError)]
+    assert len(task_ids) == 1
+    assert len(errors) == 1 and "already processing" in str(errors[0])
+    assert target.status.value == "processing"
+    assert list(pipeline.asset_generation_tasks) == task_ids
+
+
+def test_series_asset_generation_rejects_a_second_inflight_task(tmp_path):
+    from src.apps.comic_gen.models import Series
+
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    series = Series(
+        id="series", title="Series", created_at=1, updated_at=1,
+        owner_user_id="user", owner_profile_id="owner", scenes=[target],
+    )
+    pipeline.series_store[series.id] = series
+    pipeline.get_series = lambda series_id, *_args: pipeline.series_store.get(series_id)
+    pipeline._save_series_data_unlocked = Mock()
+    barrier = threading.Barrier(2)
+    validate_mode = pipeline._validate_asset_generation_mode
+    pipeline._validate_asset_generation_mode = lambda *args: (barrier.wait(timeout=2), validate_mode(*args))[1]
+
+    def submit(prompt):
+        try:
+            return pipeline.generate_series_asset("series", target.id, "scene", prompt=prompt)[1]
+        except ValueError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(submit, ("Tea room", "Tea room again")))
+
+    task_ids = [result for result in results if isinstance(result, str)]
+    errors = [result for result in results if isinstance(result, ValueError)]
+    assert len(task_ids) == 1
+    assert len(errors) == 1 and "already processing" in str(errors[0])
+    assert target.status.value == "processing"
+    assert list(pipeline.asset_generation_tasks) == task_ids
+
+
+def test_asset_background_task_cannot_be_executed_twice(tmp_path, monkeypatch):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    pipeline.asset_generator = Mock()
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+    _, task_id = pipeline.create_asset_generation_task("project", target.id, "scene")
+
+    pipeline.process_asset_generation_task(task_id)
+    pipeline.process_asset_generation_task(task_id)
+
+    assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
+    pipeline.asset_generator.generate_scene.assert_called_once()
+
+
+def test_project_task_failure_persists_failed_asset_state_when_setup_raises(tmp_path, monkeypatch):
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+    _, task_id = pipeline.create_asset_generation_task("project", target.id, "scene")
+    pipeline.generate_asset = Mock(side_effect=RuntimeError("stale reference"))
+
+    pipeline.process_asset_generation_task(task_id)
+
+    assert pipeline.asset_generation_tasks[task_id]["status"] == "failed"
+    assert target.status.value == "failed"
+    assert target.generation_error == "stale reference"
+
+
+def test_series_task_failure_persists_failed_asset_state(tmp_path, monkeypatch):
+    from src.apps.comic_gen.models import Series
+
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    series = Series(
+        id="series", title="Series", created_at=1, updated_at=1,
+        owner_user_id="user", owner_profile_id="owner", scenes=[target],
+    )
+    pipeline.series_store[series.id] = series
+    pipeline.get_series = lambda series_id, *_args: pipeline.series_store.get(series_id)
+    pipeline._save_series_data_unlocked = Mock()
+    _, task_id = pipeline.generate_series_asset("series", target.id, "scene")
+    pipeline._process_series_asset_task = Mock(side_effect=RuntimeError("provider failed"))
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+
+    pipeline.process_asset_generation_task(task_id)
+
+    assert pipeline.asset_generation_tasks[task_id]["status"] == "failed"
+    assert target.status.value == "failed"
+    assert target.generation_error == "provider failed"
 
 
 def test_task_snapshots_library_reference_ids_and_resolves_at_execution(tmp_path, monkeypatch):
@@ -283,6 +390,7 @@ def test_series_task_resolves_global_library_reference_at_execution(tmp_path, mo
     )
 
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = threading.RLock()
     pipeline.series_store = {series.id: series}
     pipeline.library_store = GlobalAssetLibrary(props=[reference_asset])
     pipeline.asset_generation_tasks = {}
@@ -346,6 +454,22 @@ def test_asset_generation_endpoint_maps_invalid_reference_to_http_400(monkeypatc
     with pytest.raises(HTTPException) as error:
         api.generate_single_asset("project", request, BackgroundTasks())
     assert error.value.status_code == 400
+
+
+def test_duplicate_generation_request_maps_to_http_conflict(monkeypatch):
+    from fastapi import BackgroundTasks, HTTPException
+    from src.apps.comic_gen import api
+
+    def reject(*_args, **_kwargs):
+        raise AssetGenerationInProgress("Asset generation is already processing")
+
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(create_asset_generation_task=reject))
+    request = api.GenerateAssetRequest(asset_id="scene", asset_type="scene")
+
+    with pytest.raises(HTTPException) as error:
+        api.generate_single_asset("project", request, BackgroundTasks())
+
+    assert error.value.status_code == 409
 
 
 def test_explicit_upload_url_reference_mode_remains_compatible(tmp_path, monkeypatch):
