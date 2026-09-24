@@ -3155,8 +3155,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
 def clear_asset_generation_state(script_id: str, asset_type: str, asset_id: str):
     """Clear a failed/orphaned image-generation marker without deleting the asset."""
     try:
-        updated = pipeline.clear_asset_generation_state(script_id, asset_id, asset_type)
-        return signed_response(updated)
+        pipeline.clear_asset_generation_state(script_id, asset_id, asset_type)
+        return get_project(script_id)
     except ValueError as e:
         status_code = 409 if "still processing" in str(e) else 404
         raise HTTPException(status_code=status_code, detail=str(e))
