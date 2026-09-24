@@ -30,12 +30,26 @@ renaming their current request fields.
 - The current index has `schema_version` but no monotonic content revision or
   delta cursor. Browser candidate pools and selected images can therefore
   temporarily reflect different read snapshots.
+- Image asset generation tasks are held in backend process memory. The
+  frontend persists `generatingTasks`, but the persisted entry contains only
+  `assetId`, `generationType`, and `batchSize`, not the backend `task_id`.
+  After a backend restart, the browser can keep showing an asset as generating
+  while `/tasks/{task_id}` can no longer resolve it.
+- Startup orphan recovery currently sweeps persisted storyboard video tasks;
+  it does not recover in-memory image generation tasks. The asset UI removes
+  its local generating marker only after polling reports completion or failure,
+  so an unreachable task has no user cleanup action.
 
 Evidence owners: `src/apps/comic_gen/models.py` (`ImageVariant`, `AssetUnit`,
 `AssetReferenceIndex`), `pipeline.py` (`get_asset_reference_index`,
 `create_asset_generation_task`, `_resolve_asset_library_reference`,
 `delete_library_asset`), and the existing
 `2026-09-22-asset-material-reference-contract-v1.md`.
+
+The stale-generation observation is additionally owned by
+`frontend/src/store/projectStore.ts` (`generatingTasks` persistence),
+`frontend/src/components/modules/ConsistencyVault.tsx` (polling and marker
+removal), and `pipeline.py` (`asset_generation_tasks` in-memory registry).
 
 ## Direct Implications
 
@@ -80,6 +94,11 @@ image views remain variants within that asset.
 | Remove project binding | Delete project membership after dependency check | Personal source and its material survive. |
 | Add/delete one asset variant | Change variant membership and selected ID atomically | Main image, strip, and candidate index move to the same revision. |
 | Delete personal asset/material | Check every binding, draft/task retention, and shot dependency | Refuse destructive deletion while required, or use an explicit detach/archive migration. |
+
+Generation failure is not asset deletion. A failed attempt must leave the
+existing asset and successful variants usable, while exposing the failed task
+diagnostic and a retry or dismiss action. A user must never need to delete a
+character just to clear a failed generation marker.
 
 Image and video variants share identity and lifecycle rules. Their generation
 roles differ: video may be a direct project asset, source clip, or output, while
@@ -174,6 +193,60 @@ transactional metadata owner (or a proven single-writer journal with recovery),
 plus transactional event/outbox publication. An in-memory lock or a full-project
 GET after each mutation is not an equivalent guarantee.
 
+## Exception and Recovery Contract
+
+Every asynchronous image or video operation has a durable task record, even if
+the worker queue is in memory. The task state machine is:
+
+```text
+accepted -> queued -> running -> succeeded
+                         |-> failed_retryable
+                         |-> failed_permanent
+                         |-> cancelled
+queued/running -> expired_orphaned
+```
+
+Each record contains `task_id`, owner/workspace, target asset identity, input
+manifest, attempt number, created/updated/heartbeat timestamps, provider IDs,
+safe error code, user-readable detail, and whether a result was committed. The
+asset's `generation_status` is a projection of the latest attempt; it is not
+the task record and cannot be the only cleanup state.
+
+Required behavior:
+
+- **Submit failure:** if validation or provider submission fails before work is
+  accepted, atomically mark the task terminal and restore the asset's prior
+  usable status. Return the error code and task ID; do not leave `processing`.
+- **Worker failure:** persist terminal state and diagnostics. A retry creates a
+  new attempt linked to the original manifest; it does not overwrite history or
+  silently change references, model, or prompt.
+- **Heartbeat timeout:** mark queued/running work `expired_orphaned` after a
+  bounded lease. Retry only with provider idempotency or an explicit cost
+  decision; otherwise expose “check provider / dismiss”.
+- **Backend restart:** reconcile durable leases and provider IDs. An in-memory
+  task with no durable record is abandoned, and its asset marker is cleared or
+  marked recoverable during startup reconciliation.
+- **User cleanup:** provide idempotent `dismiss/clear failed task`. It clears
+  the UI projection and stale generating marker but preserves successful
+  variants, diagnostics, and audit history. `cancel` is separate: it requests
+  provider cancellation and may end as cancellation-unknown.
+- **Partial success:** commit successful batch variants and mark the attempt
+  `succeeded_with_warnings`; failed outputs remain diagnosable and do not block
+  the asset.
+- **Missing target or source:** mark `invalidated` with a typed reason such as
+  `asset_deleted`, `variant_deleted`, `workspace_revoked`, or `source_missing`.
+  Do not poll forever or retarget to a same-named asset.
+
+The client stores backend `task_id` and workspace/index revision with each
+optimistic marker. On reload it queries the task ledger; an unknown ID becomes
+`expired_orphaned` and is dismissible. It must never persist an uncorrelated
+`assetId -> generating=true` flag. Terminal events update only the target asset
+and affected index entries, then remove the marker by task ID.
+
+Every failed or stale task must expose **查看原因**, **重试** when retryable,
+**取消** when running, and **清除状态** always. Clearing state does not delete
+the asset or its successful variants.
+
 ## Client Synchronization
 
 - Apply an optimistic local delta immediately to main preview, strip,
@@ -229,9 +302,12 @@ grants mutation or durable access.
 3. Add workspace revisions, idempotent mutations, deltas, and tombstones.
    Test concurrent select/delete, duplicate requests, delayed polls, restart,
    and multiple writers against persisted state.
-4. Move image and video selectors to revisioned deltas and optimistic rollback;
+4. Persist a unified task ledger and lease recovery. Add retry, cancel, clear,
+   partial-success, orphan, provider-timeout, and missing-source tests. Remove
+   browser-only generating flags that have no task ID.
+5. Move image and video selectors to revisioned deltas and optimistic rollback;
    test main preview, strip, `@` candidates, and shot selectors together.
-5. Freeze accepted task manifests and material retention; test deletion after
+6. Freeze accepted task manifests and material retention; test deletion after
    submit, task retry, permissions, and provider input order.
 
 Success means every accepted mutation has one authoritative revision, every
