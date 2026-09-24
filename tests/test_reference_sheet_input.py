@@ -197,6 +197,68 @@ def test_text_mode_does_not_attach_uploaded_character_reference_implicitly(tmp_p
     assert model.generate.call_args.kwargs.get("ref_image_paths") == []
 
 
+@pytest.mark.parametrize("generation_type", ["three_view", "headshot"])
+def test_derived_character_generation_uses_selected_reference_sheet(
+    tmp_path, monkeypatch, generation_type
+):
+    monkeypatch.chdir(tmp_path)
+    generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_dir = "output/assets"
+    model = Mock()
+    generator._get_model_for = Mock(return_value=model)
+    monkeypatch.setattr("src.apps.comic_gen.assets.time.sleep", lambda _: None)
+    character = Character(
+        id="c",
+        name="Test",
+        description="Test",
+        image_url="https://storage.example/stale-image-url.png",
+        full_body_image_url="https://storage.example/stale-full-body.png",
+        reference_sheet=AssetUnit(
+            image_variants=[
+                ImageVariant(id="old", url="https://storage.example/old-reference.png"),
+                ImageVariant(id="master", url="https://storage.example/selected-master.png"),
+            ],
+            selected_image_id="master",
+        ),
+    )
+
+    generator.generate_character(
+        character,
+        generation_type=generation_type,
+        model_name="test-t2i",
+        i2i_model_name="test-i2i",
+    )
+
+    assert model.generate.call_count == 1
+    assert model.generate.call_args.kwargs["ref_image_path"] == "https://storage.example/selected-master.png"
+
+
+def test_canonical_reference_variant_can_be_favorited():
+    variant = ImageVariant(id="master", url="master.png")
+    character = Character(
+        id="c",
+        name="Test",
+        description="Test",
+        reference_sheet=AssetUnit(image_variants=[variant], selected_image_id="master"),
+    )
+    script = Script(
+        id="p",
+        title="Project",
+        original_text="",
+        created_at=1,
+        updated_at=1,
+        characters=[character],
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline._save_data = Mock()
+
+    pipeline.toggle_variant_favorite("p", "c", "character", "master", True, "reference_sheet")
+
+    assert variant.is_favorited is True
+    pipeline._save_data.assert_called_once_with()
+
+
 @pytest.mark.parametrize('prefix', ['comic_gen', 'lumenx'])
 @pytest.mark.parametrize('signed', [True, False])
 def test_stored_reference_reaches_real_uniart_edit_adapter(tmp_path, monkeypatch, prefix, signed):

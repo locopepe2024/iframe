@@ -46,6 +46,7 @@ it('merges the completed target snapshot and clears its marker without fetching 
  startAssetPoll('char', 'task', 'project', 'character', 'reference_sheet', ((key: string) => key) as any, () => ({
   updateProject: store.updateProject,
   removeGeneratingTask: store.removeGeneratingTask,
+  getProject: (projectId: string) => projectId === project.id ? project : undefined,
  }));
 
  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });

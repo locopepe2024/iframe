@@ -37,4 +37,3 @@ for an existing image without exposing upload in the same panel.
 - Unknown or non-owned variants return 404/422 rather than proxying a caller
   supplied URL.
 - Backend tests, focused frontend tests, typecheck, and production build pass.
-

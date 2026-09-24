@@ -44,4 +44,3 @@ def test_version_update_keeps_all_surfaces_consistent(tmp_path):
 def test_version_validation_rejects_non_semver(value):
     with pytest.raises(ValueError):
         validate_version(value)
-

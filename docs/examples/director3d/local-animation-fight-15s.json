@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "iframe.director3d.local-animation.v1",
+  "manifestId": "fight-take-15s",
+  "title": "15 秒白模武打示例",
+  "durationSeconds": 15,
+  "fps": 24,
+  "source": {
+    "kind": "local",
+    "label": "local-animation-fight-15s.json"
+  },
+  "tracks": [
+    {
+      "trackId": "fighter-a-pose",
+      "trackKind": "character_pose",
+      "target": { "characterId": "A" },
+      "propertyKey": "pose.normalized_values",
+      "keyframes": [
+        {
+          "timeSeconds": 0,
+          "value": {
+            "root": [0, 0, 0],
+            "spine_chest": [0, 0, 0],
+            "upper_arm_l": [0, 0, -18],
+            "upper_arm_r": [0, 0, 18]
+          },
+          "interpolation": "step"
+        },
+        {
+          "timeSeconds": 3.5,
+          "value": {
+            "root": [0, 18, 0],
+            "spine_chest": [-8, 0, 0],
+            "upper_arm_l": [-35, 0, -55],
+            "lower_arm_l": [-70, 0, 0],
+            "upper_arm_r": [12, 0, 48]
+          },
+          "interpolation": "bezier"
+        },
+        {
+          "timeSeconds": 8,
+          "value": {
+            "root": [0, -12, 0],
+            "spine_chest": [10, 0, 0],
+            "upper_arm_l": [20, 0, -40],
+            "upper_arm_r": [-55, 0, 65],
+            "lower_arm_r": [-80, 0, 0]
+          },
+          "interpolation": "bezier"
+        },
+        {
+          "timeSeconds": 15,
+          "value": {
+            "root": [0, 0, 0],
+            "spine_chest": [0, 0, 0],
+            "upper_arm_l": [0, 0, -18],
+            "upper_arm_r": [0, 0, 18]
+          },
+          "interpolation": "step"
+        }
+      ]
+    },
+    {
+      "trackId": "fighter-b-pose",
+      "trackKind": "character_pose",
+      "target": { "characterId": "B" },
+      "propertyKey": "pose.normalized_values",
+      "keyframes": [
+        {
+          "timeSeconds": 0,
+          "value": {
+            "root": [0, 0, 0],
+            "upper_arm_l": [0, 0, -18],
+            "upper_arm_r": [0, 0, 18]
+          },
+          "interpolation": "step"
+        },
+        {
+          "timeSeconds": 5,
+          "value": {
+            "root": [0, -16, 0],
+            "spine_chest": [8, 0, 0],
+            "upper_arm_l": [-52, 0, -58],
+            "lower_arm_l": [-75, 0, 0],
+            "upper_arm_r": [24, 0, 42]
+          },
+          "interpolation": "bezier"
+        },
+        {
+          "timeSeconds": 11,
+          "value": {
+            "root": [0, 20, 0],
+            "spine_chest": [-12, 0, 0],
+            "upper_arm_l": [18, 0, -42],
+            "upper_arm_r": [-48, 0, 60],
+            "lower_arm_r": [-82, 0, 0]
+          },
+          "interpolation": "bezier"
+        },
+        {
+          "timeSeconds": 15,
+          "value": {
+            "root": [0, 0, 0],
+            "upper_arm_l": [0, 0, -18],
+            "upper_arm_r": [0, 0, 18]
+          },
+          "interpolation": "step"
+        }
+      ]
+    },
+    {
+      "trackId": "fighter-a-transform",
+      "trackKind": "character_transform",
+      "target": { "characterId": "A" },
+      "propertyKey": "transform.position_m",
+      "keyframes": [
+        { "timeSeconds": 0, "value": [-1.25, 0, 0], "interpolation": "bezier" },
+        { "timeSeconds": 5, "value": [-0.45, 0, 0], "interpolation": "bezier" },
+        { "timeSeconds": 9.5, "value": [-1.05, 0.1, 0], "interpolation": "bezier" },
+        { "timeSeconds": 15, "value": [-0.8, 0.1, 0], "interpolation": "bezier" }
+      ]
+    },
+    {
+      "trackId": "fighter-b-transform",
+      "trackKind": "character_transform",
+      "target": { "characterId": "B" },
+      "propertyKey": "transform.position_m",
+      "keyframes": [
+        { "timeSeconds": 0, "value": [1.25, 0, 0], "interpolation": "bezier" },
+        { "timeSeconds": 5, "value": [0.45, 0, 0], "interpolation": "bezier" },
+        { "timeSeconds": 9.5, "value": [1.1, 0.1, 0], "interpolation": "bezier" },
+        { "timeSeconds": 15, "value": [0.8, 0.1, 0], "interpolation": "bezier" }
+      ]
+    }
+  ],
+  "limitations": [
+    "本文件只验证白模姿态与空间变换预览。",
+    "不包含骨骼自动重定向、碰撞、IK、物理或 MP4 生成。"
+  ]
+}

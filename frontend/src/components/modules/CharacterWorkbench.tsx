@@ -47,6 +47,17 @@ function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
         || variants.at(-1)?.url;
 }
 
+function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
+    const variants = Array.isArray(referenceSheet?.image_variants)
+        ? referenceSheet.image_variants
+        : [];
+    if (variants.length === 0) return undefined;
+
+    const selectedId = referenceSheet?.selected_image_id;
+    if (selectedId) return variants.find((variant: any) => variant?.id === selectedId)?.url;
+    return variants[0]?.url;
+}
+
 function selectedVariant(unit: any): any | undefined {
     const variants = Array.isArray(unit?.variants)
         ? unit.variants
@@ -56,15 +67,6 @@ function selectedVariant(unit: any): any | undefined {
     const selectedId = unit?.selected_id || unit?.selected_image_id;
     return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
 }
-
-function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
-    const variants = Array.isArray(referenceSheet?.image_variants) ? referenceSheet.image_variants : [];
-    if (variants.length === 0) return undefined;
-    const selectedId = referenceSheet?.selected_image_id;
-    if (selectedId) return variants.find((variant: any) => variant?.id === selectedId)?.url;
-    return variants[0]?.url;
-}
-
 
 interface CharacterWorkbenchProps {
     asset: any;

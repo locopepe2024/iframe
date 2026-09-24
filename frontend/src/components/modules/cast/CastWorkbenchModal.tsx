@@ -87,6 +87,7 @@ export function startAssetPoll(
     getStore: () => {
         updateProject: (id: string, data: any) => void;
         removeGeneratingTask: (assetId: string, generationType: string) => void;
+        getProject: (id: string) => any;
     },
     progressToastId?: string,
 ) {
@@ -100,10 +101,8 @@ export function startAssetPoll(
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const { updateProject, removeGeneratingTask } = getStore();
-                const state = useProjectStore.getState();
-                const current = state.projects.find((project) => project.id === projectId)
-                    || (state.currentProject?.id === projectId ? state.currentProject : null);
+                const { updateProject, removeGeneratingTask, getProject } = getStore();
+                const current = getProject(projectId);
                 const currentEntity = current?.id === projectId
                     ? (kind === "character" ? current.characters : kind === "scene" ? current.scenes : current.props)?.find((item: any) => item.id === entityId)
                     : null;
@@ -680,6 +679,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, () => ({
                     updateProject: useProjectStore.getState().updateProject,
                     removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
+                    getProject: (projectId) => {
+                        const state = useProjectStore.getState();
+                        return state.projects.find((project) => project.id === projectId)
+                            || (state.currentProject?.id === projectId ? state.currentProject : undefined);
+                    },
                 }), progressId);
             } else if (resp) {
                 toast.dismiss(progressId);

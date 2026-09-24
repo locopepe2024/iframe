@@ -54,4 +54,3 @@ python3 scripts/update_version.py --check 0.1.1
 python3 -m py_compile src/apps/comic_gen/api.py scripts/check_version_consistency.py scripts/update_version.py
 cd frontend && npm run typecheck
 ```
-

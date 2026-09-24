@@ -141,6 +141,30 @@ class AssetGenerator:
             raise ValueError("Selected reference image is missing; select it again")
         return selected.url
 
+    @staticmethod
+    def _selected_reference_sheet_url(character: Character) -> str:
+        """Return the selected canonical character reference, if one exists."""
+        reference_sheet = getattr(character, "reference_sheet", None)
+        variants = getattr(reference_sheet, "image_variants", None) or []
+        selected_id = getattr(reference_sheet, "selected_image_id", None)
+        if not variants:
+            if selected_id:
+                raise ValueError("Selected reference image is missing; select it again")
+            return ""
+
+        if selected_id:
+            selected = next((variant for variant in variants if variant.id == selected_id), None)
+            if selected is None:
+                raise ValueError("Selected reference image is missing; select it again")
+        else:
+            # Older records may contain a valid reference variant without a
+            # selected id. Match the gallery's first-available display rule.
+            selected = variants[0]
+
+        if not selected.url:
+            raise ValueError("Selected reference image is missing; select it again")
+        return selected.url
+
     def generate_character(
         self,
         character: Character,
