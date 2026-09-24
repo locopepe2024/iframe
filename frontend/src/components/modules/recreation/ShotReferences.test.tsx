@@ -27,6 +27,17 @@ it('selects a stable media ID and saves only on explicit action, retaining draft
   expect(recreationApi.bindShot).toHaveBeenLastCalledWith(project, 'shot', { reference_media_id: 'image', replacement_media_id: null, instruction: 'Replace yellow box', description: '', instruction_refs: [] });
 });
 
+it('uses the generated preview URL in the media picker', async () => {
+  vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [{ ...image, preview_url: '/preview.webp' }], next_cursor: null });
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  const chooseButtons = await screen.findAllByRole('button', { name: 'choose' });
+  fireEvent.click(chooseButtons[0]);
+  const picker = await screen.findByRole('region', { name: 'choose' });
+  await waitFor(() => expect(picker.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/preview.webp')));
+  const preview = picker.querySelector('img');
+  expect(preview).toHaveAttribute('loading', 'lazy');
+});
+
 it('loads saved references and prevents writes while timeline cuts are unsaved', async () => {
   const saved = { ...project, timeline: { ...project.timeline!, shots: [{ ...project.timeline!.shots[0], reference_media_id: 'image' }] } };
   render(<ShotReferences project={saved} disabled onSaved={vi.fn()} />);

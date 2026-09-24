@@ -27,6 +27,7 @@ _studio_user: ContextVar[Optional[UserContext]] = ContextVar(
 _studio_uniart: ContextVar[Optional[Dict[str, str]]] = ContextVar(
     "iframe_studio_uniart", default=None
 )
+STUDIO_MEDIA_PREVIEW_SIZES = frozenset({160, 320, 512, 960})
 
 
 def set_studio_user(user: UserContext) -> Token:
@@ -111,6 +112,32 @@ def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int =
     )
 
 
+def studio_media_preview_url(
+    owner_profile_id: str,
+    stored_path: str,
+    max_edge: int = 320,
+    ttl_seconds: int = 3600,
+) -> str:
+    """Sign an owner-scoped image preview request at a bounded size."""
+    if max_edge not in STUDIO_MEDIA_PREVIEW_SIZES:
+        raise ValueError("Unsupported Studio media preview size")
+    owner_key = studio_owner_key(owner_profile_id)
+    normalized = stored_path.replace("\\", "/").lstrip("/")
+    prefix = f"users/{owner_key}/studio/"
+    if not normalized.startswith(prefix):
+        return stored_path
+    relative_path = normalized[len(prefix):]
+    if not relative_path:
+        return stored_path
+    expires = int(time.time()) + ttl_seconds
+    message = f"{owner_key}:{relative_path}:{expires}:preview:{max_edge}".encode("utf-8")
+    signature = hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return (
+        f"/studio/media/{owner_key}/{quote(relative_path)}"
+        f"?preview={max_edge}&expires={expires}&signature={signature}"
+    )
+
+
 def _local_studio_path_for_object_key(
     stored_path: str,
     owner_profile_id: str,
@@ -157,6 +184,33 @@ def verify_studio_media(owner_key: str, relative_path: str, expires: int, signat
     if not normalized or normalized.startswith("../") or "/../" in normalized:
         raise HTTPException(status_code=404, detail="Media not found")
     expected = _studio_media_signature(owner_key, normalized, expires)
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="Invalid media signature")
+    root = os.path.realpath(os.path.join("output", "users", owner_key, "studio"))
+    candidate = os.path.realpath(os.path.join(root, normalized))
+    if not candidate.startswith(root + os.sep):
+        raise HTTPException(status_code=404, detail="Media not found")
+    return candidate
+
+
+def verify_studio_media_preview(
+    owner_key: str,
+    relative_path: str,
+    max_edge: int,
+    expires: int,
+    signature: str,
+) -> str:
+    if max_edge not in STUDIO_MEDIA_PREVIEW_SIZES:
+        raise HTTPException(status_code=404, detail="Media not found")
+    if len(owner_key) != 24 or any(char not in "0123456789abcdef" for char in owner_key):
+        raise HTTPException(status_code=404, detail="Media not found")
+    if expires < int(time.time()):
+        raise HTTPException(status_code=401, detail="Media URL expired")
+    normalized = relative_path.replace("\\", "/").lstrip("/")
+    if not normalized or normalized.startswith("../") or "/../" in normalized:
+        raise HTTPException(status_code=404, detail="Media not found")
+    message = f"{owner_key}:{normalized}:{expires}:preview:{max_edge}".encode("utf-8")
+    expected = hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid media signature")
     root = os.path.realpath(os.path.join("output", "users", owner_key, "studio"))

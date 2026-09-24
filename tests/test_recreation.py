@@ -237,7 +237,7 @@ def test_api_registration_analysis_evidence_and_confirmation(service, video, mon
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from src.apps.recreation.api import router
-    from src.apps.studio_access import require_studio_user, verify_studio_media
+    from src.apps.studio_access import require_studio_user, verify_studio_media, verify_studio_media_preview
     from urllib.parse import urlsplit, parse_qs
     app = FastAPI()
     app.include_router(router)
@@ -260,14 +260,107 @@ def test_api_registration_analysis_evidence_and_confirmation(service, video, mon
     assert client.post(url + "/analyze", json={"revision": 0}).status_code == 202
     project = client.get(url).json()
     assert project["status"] == "review"
+    candidate = project["analysis"]["candidates"][0]
+    preview = urlsplit(candidate["before_preview_url"])
+    preview_query = parse_qs(preview.query)
+    preview_owner, preview_path = preview.path.removeprefix("/studio/media/").split("/", 1)
+    assert preview_query["preview"] == ["512"]
+    assert Path(verify_studio_media_preview(
+        preview_owner, preview_path, 512, int(preview_query["expires"][0]), preview_query["signature"][0]
+    )).is_file()
+    media_page = client.get("/recreation/media", params={"kind": "sample_frame"}).json()
+    assert media_page["items"]
+    assert media_page["items"][0]["preview_url"].startswith("/studio/media/")
     cut = project["analysis"]["frame_pts"][2]
     pair = client.post(url + "/evidence", json={"analysis_id": project["analysis_id"], "pts": cut})
     assert pair.status_code == 200
     assert pair.json()["before_url"].startswith("/studio/media/")
+    assert pair.json()["before_preview_url"].startswith("/studio/media/")
     assert client.put(url + "/timeline", json={"revision": project["revision"],
         "analysis_id": project["analysis_id"], "cut_pts": [cut + 0.5]}).status_code == 422
     assert client.put(url + "/timeline", json={"revision": project["revision"],
         "analysis_id": project["analysis_id"], "cut_pts": [cut]}).status_code == 200
+
+
+def test_studio_media_preview_endpoint_resizes_and_caches_image(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from PIL import Image, ImageFilter
+    from src.apps.comic_gen.api import get_studio_media
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import studio_media_preview_url, studio_owner_key
+    from urllib.parse import parse_qs, urlsplit
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only-signing-key")
+    owner = UserContext("user", "profile", "User", "")
+    owner_root = Path("output/users") / studio_owner_key(owner.owner_profile_id) / "studio"
+    source = owner_root / "recreation" / "source.png"
+    source.parent.mkdir(parents=True)
+    Image.effect_noise((1600, 900), 100).convert("RGB").filter(ImageFilter.GaussianBlur(0.4)).save(source, "PNG")
+    stored_path = source.relative_to("output").as_posix()
+    signed = studio_media_preview_url(owner.owner_profile_id, stored_path, max_edge=320)
+    parsed = urlsplit(signed)
+
+    app = FastAPI()
+    app.add_api_route("/studio/media/{owner_key}/{relative_path:path}", get_studio_media)
+    client = TestClient(app)
+    response = client.get(parsed.path + "?" + parsed.query)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/webp"
+    assert len(response.content) < source.stat().st_size
+    with Image.open(BytesIO(response.content)) as thumbnail:
+        assert thumbnail.format == "WEBP"
+        assert max(thumbnail.size) <= 320
+
+    repeated = client.get(parsed.path + "?" + parsed.query)
+    assert repeated.status_code == 200
+    assert repeated.content == response.content
+    assert repeated.headers["cache-control"].startswith("private")
+
+    query = parse_qs(parsed.query)
+    query["preview"] = ["960"]
+    changed_query = "&".join(f"{key}={values[0]}" for key, values in query.items())
+    assert client.get(parsed.path + "?" + changed_query).status_code == 401
+
+
+@pytest.mark.parametrize("size", [(40_000_001, 1), (18_000, 10_000)])
+def test_studio_media_preview_rejects_decompression_bombs(tmp_path, monkeypatch, size):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from PIL import Image
+    from src.apps.comic_gen.api import get_studio_media
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import studio_media_preview_url, studio_owner_key
+    from urllib.parse import urlsplit
+    import zlib
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only-signing-key")
+    owner = UserContext("user", "profile", "User", "")
+    owner_root = Path("output/users") / studio_owner_key(owner.owner_profile_id) / "studio"
+    source = owner_root / "recreation" / "oversized.png"
+    source.parent.mkdir(parents=True)
+    png = BytesIO()
+    Image.new("RGB", (1, 1)).save(png, "PNG")
+    data = bytearray(png.getvalue())
+    dimensions = size[0].to_bytes(4, "big") + size[1].to_bytes(4, "big")
+    data[16:24] = dimensions
+    data[29:33] = zlib.crc32(b"IHDR" + dimensions).to_bytes(4, "big")
+    source.write_bytes(data)
+
+    signed = studio_media_preview_url(
+        owner.owner_profile_id,
+        source.relative_to("output").as_posix(),
+        max_edge=320,
+    )
+    parsed = urlsplit(signed)
+    app = FastAPI()
+    app.add_api_route("/studio/media/{owner_key}/{relative_path:path}", get_studio_media)
+    response = TestClient(app).get(parsed.path + "?" + parsed.query)
+
+    assert response.status_code == 415
+    assert not list((owner_root / ".media-previews").glob("*.webp"))
 
 
 @pytest.mark.skipif(not os.getenv("LUMENX_RECREATION_SAMPLE"), reason="Optional authorized source-video acceptance")

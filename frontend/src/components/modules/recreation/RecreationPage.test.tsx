@@ -16,8 +16,8 @@ const project: RecreationProject = {
   status: "review", error: null, timeline: null,
   analysis: { time_base: "1/60000", start_pts: 0, end_pts: 900000,
     frame_pts: [0, 1000, 241000, 545000, 624000, 899000], duration_seconds: 15,
-    width: 1080, height: 1920, audio_streams: 0, contact_sheet_url: "/contact.jpg",
-    candidates: [{ pts: 241000, before_pts: 1000, before_url: "/before.jpg", after_url: "/after.jpg", source: "detected" }] },
+    width: 1080, height: 1920, audio_streams: 0, contact_sheet_url: "/contact.jpg", contact_sheet_preview_url: "/contact-preview.webp",
+    candidates: [{ pts: 241000, before_pts: 1000, before_url: "/before.jpg", after_url: "/after.jpg", before_preview_url: "/before-preview.webp", after_preview_url: "/after-preview.webp", source: "detected" }] },
 };
 
 beforeEach(() => {
@@ -42,12 +42,13 @@ async function open() {
 describe("recreation confirmation", () => {
   it("navigates the six workflow stages and keeps asset management available", async () => {
     await open();
+    expect(screen.getByRole("img", { name: "Previous frame" })).toHaveAttribute("src", expect.stringContaining("/before-preview.webp"));
     const navigation = screen.getByRole("navigation", { name: "Recreation project stages" });
     expect(navigation.querySelectorAll("button")).toHaveLength(6);
     expect(screen.getByRole("button", { name: "Assets" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
     expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Contact sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Contact sheet" })).toHaveAttribute("src", expect.stringContaining("/contact-preview.webp"));
   });
 
   it("starts source analysis from Parse when no analysis exists", async () => {

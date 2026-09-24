@@ -1,13 +1,13 @@
 import axios from "axios";
 import { API_URL } from "./api";
 
-export interface CutEvidence { pts: number; before_pts: number; before_url: string; after_url: string; source: string }
+export interface CutEvidence { pts: number; before_pts: number; before_url: string; after_url: string; before_preview_url?: string; after_preview_url?: string; source: string }
 export interface SourceAnalysis {
   manual_evidence?: Record<string, CutEvidence>;
   time_base: string; start_pts: number; end_pts: number; frame_pts: number[];
   duration_seconds: number; width: number; height: number; audio_streams: number;
-  candidates: CutEvidence[]; contact_sheet_url: string;
-  samples?: { pts: number; url: string }[];
+  candidates: CutEvidence[]; contact_sheet_url: string; contact_sheet_preview_url?: string;
+  samples?: { pts: number; url: string; preview_url?: string }[];
   analyzer?: string; scene_threshold?: number; source_fingerprint?: string;
 }
 export interface RecreationProject {
@@ -47,7 +47,7 @@ export function importCuts(text: string, analysis: SourceAnalysis): number[] {
 export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image" | "generated_video" | "final_video";
 export interface RecreationMedia {
   media_id: string; project_id: string; kind: RecreationMediaKind; display_name: string;
-  storage_path: string; sha256: string; created_at: number;
+  storage_path: string; preview_url?: string; sha256: string; created_at: number;
   metadata: { parent_media_id?: string; analysis_id?: string; pts?: number | null; time_base?: string; role?: string; extraction_method?: string; note?: string };
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
