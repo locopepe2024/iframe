@@ -864,7 +864,9 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
-            version: 1,
+            // Version 1 could leave project-scoped generating markers without
+            // a server task ID. Those entries cannot be polled after refresh.
+            version: 2,
             migrate: (persistedState, _version) => {
                 const state = persistedState as Partial<ProjectStore> | undefined;
                 return {

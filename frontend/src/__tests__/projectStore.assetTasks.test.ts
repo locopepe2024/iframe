@@ -31,6 +31,26 @@ it("persists task identity and ownership fields needed to resume polling", () =>
     .toBe("task-1");
 });
 
+it("drops project-scoped version 1 task markers that have no server task ID", async () => {
+  localStorage.setItem("project-storage", JSON.stringify({
+    state: {
+      projects: [],
+      generatingTasks: [{
+        assetId: "stuck-asset",
+        generationType: "reference_sheet",
+        batchSize: 2,
+        projectId: "project-1",
+        assetType: "character",
+      }],
+    },
+    version: 1,
+  }));
+
+  await useProjectStore.persist.rehydrate();
+
+  expect(useProjectStore.getState().generatingTasks).toEqual([]);
+});
+
 it("removes a completed task only from its matching project", () => {
   const store = useProjectStore.getState();
   store.addGeneratingTask("same-id", "all", 1, "project-1", "scene");
