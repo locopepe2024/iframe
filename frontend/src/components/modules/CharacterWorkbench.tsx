@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video } from "lucide-react";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video, Upload, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 
@@ -54,6 +54,12 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
     return variants[0]?.url;
 }
 
+function selectedVariant(unit: any): any | undefined {
+    const variants = Array.isArray(unit?.variants) ? unit.variants : [];
+    const selectedId = unit?.selected_id || unit?.selected_image_id;
+    return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
+}
+
 
 interface CharacterWorkbenchProps {
     asset: any;
@@ -76,10 +82,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const currentProject = useProjectStore(state => state.currentProject);
     const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
 
-    const openImageEditor = (imageUrl: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
-        const source = getAssetUrl(imageUrl);
+    const openVariantEditor = (unit: any, fallback: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
+        const variant = selectedVariant(unit);
+        const source = currentProject && variant?.id
+            ? api.assetVariantContentUrl(currentProject.id, "character", asset.id, variant.id)
+            : getAssetUrl(fallback || variant?.url);
         if (!source) return;
         setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
+    };
+
+    const uploadCharacterImage = async (file: File, uploadType: CharacterEditUploadType) => {
+        if (!currentProject) throw new Error("Project is no longer available");
+        const updatedProject = await api.uploadAsset(
+            currentProject.id,
+            "character",
+            asset.id,
+            file,
+            uploadType,
+            asset.description,
+        );
+        updateProject(currentProject.id, updatedProject);
+        toast.success(tc("uploadRef"));
     };
 
     const saveEditedImage = async (file: File) => {
@@ -393,7 +416,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         asset={masterAsset}
                         currentImageUrl={masterImageUrl}
                         editImageUrl={masterImageUrl}
-                        onEditImage={() => openImageEditor(masterImageUrl, tc("masterAsset"), masterImageUploadType)}
+                        onEditImage={() => openVariantEditor(masterAsset, masterImageUrl, tc("masterAsset"), masterImageUploadType)}
+                        onUploadImage={(file: File) => uploadCharacterImage(file, masterImageUploadType)}
                         onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
@@ -442,7 +466,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
                         editImageUrl={selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url)}
-                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url), tc("threeViews"), "three_views")}
+                        onEditImage={() => openVariantEditor(asset.three_view_asset, asset.three_view_image_url, tc("threeViews"), "three_views")}
+                        onUploadImage={(file: File) => uploadCharacterImage(file, "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
@@ -471,7 +496,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
                         editImageUrl={selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url)}
-                        onEditImage={() => openImageEditor(selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url), tc("avatar"), "head_shot")}
+                        onEditImage={() => openVariantEditor(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url, tc("avatar"), "head_shot")}
+                        onUploadImage={(file: File) => uploadCharacterImage(file, "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
@@ -609,6 +635,7 @@ export function WorkbenchPanel({
     currentImageUrl,
     editImageUrl,
     onEditImage,
+    onUploadImage,
     onSelect,
     onDelete,
     onFavorite,
@@ -650,6 +677,7 @@ export function WorkbenchPanel({
 }: any) {
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
 
     return (
         <div
@@ -663,17 +691,47 @@ export function WorkbenchPanel({
                         {title}
                     </h3>
 
-                    {onEditImage && editImageUrl && mode === 'static' && (
-                        <button
-                            type="button"
-                            onClick={(event) => { event.stopPropagation(); onEditImage(); }}
-                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                            title={ti("title")}
-                            aria-label={`${ti("title")}: ${title}`}
-                        >
-                            <Pencil size={16} />
-                            <span className="hidden text-xs sm:inline">{ti("title")}</span>
-                        </button>
+                    {mode === 'static' && (
+                        <div className="flex items-center gap-1">
+                            {onUploadImage && (
+                                <label
+                                    className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-within:outline focus-within:outline-2 focus-within:outline-primary"
+                                    title={tc("uploadRef")}
+                                >
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        className="sr-only"
+                                        aria-label={`${tc("uploadRef")}: ${title}`}
+                                        disabled={isUploadingImage}
+                                        onClick={(event) => event.stopPropagation()}
+                                        onChange={async (event) => {
+                                            event.stopPropagation();
+                                            const file = event.target.files?.[0];
+                                            event.target.value = "";
+                                            if (!file) return;
+                                            setIsUploadingImage(true);
+                                            try { await onUploadImage(file); }
+                                            finally { setIsUploadingImage(false); }
+                                        }}
+                                    />
+                                    {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    <span className="hidden text-xs sm:inline">{tc("uploadRef")}</span>
+                                </label>
+                            )}
+                            {onEditImage && editImageUrl && (
+                                <button
+                                    type="button"
+                                    onClick={(event) => { event.stopPropagation(); onEditImage(); }}
+                                    className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                    title={ti("title")}
+                                    aria-label={`${ti("title")}: ${title}`}
+                                >
+                                    <Pencil size={16} />
+                                    <span className="hidden text-xs sm:inline">{ti("title")}</span>
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     {/* Mode Switcher (Asset Activation v2) */}

@@ -20,8 +20,11 @@ from .models import (
     PromptConfig,
     ArtDirection,
     DirectorProfile,
+    AssemblyEditPlan,
+    director_execution_payload,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    merge_director_profile_patch,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor
@@ -95,6 +98,18 @@ class LibraryAssetInUseError(Exception):
 
 class InvalidAssetReference(ValueError):
     """Raised when a requested asset-library reference cannot be resolved."""
+
+
+class AssemblyPlanValidationError(ValueError):
+    """Raised when an Assembly plan crosses an owner/reference boundary."""
+
+
+class AssemblyPlanConflictError(ValueError):
+    """Raised when an Assembly plan update uses a stale revision."""
+
+    def __init__(self, message: str, current_revision: Optional[int] = None):
+        self.current_revision = current_revision
+        super().__init__(message)
 
 
 class ComicGenPipeline(StudioOwnerMixin):
@@ -1781,12 +1796,19 @@ class ComicGenPipeline(StudioOwnerMixin):
         profile = self.effective_director_profile(script)
         if not profile:
             return ""
-        payload = profile.model_dump(exclude={"confirmed_at"})
+        payload = director_execution_payload(profile)
         return (
             f"Director profile revision: {profile.revision}. Treat this as confirmed narrative "
             "context. Do not turn unresolved questions into facts. "
             + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         )
+
+    def director_execution_context(self, script: Script) -> Optional[Dict[str, Any]]:
+        """Return the bounded Director contract used by downstream design calls."""
+        profile = self.effective_director_profile(script)
+        if not profile:
+            return None
+        return director_execution_payload(profile)
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
         script, entities, _ = self.storyboard_analysis_context(script_id)
@@ -1806,10 +1828,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities, style = self.director_analysis_context(script_id)
         normalized_draft = normalize_director_profile_draft(draft)
         DirectorProfile(**normalized_draft)
-        revised = self.script_processor.refine_director_profile(
+        revised_patch = self.script_processor.refine_director_profile(
             script.original_text, entities, style, normalized_draft, instructions
         )
-        normalized_result = normalize_director_profile_draft(revised)
+        normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
         DirectorProfile(**normalized_result)
         return normalized_result
 
@@ -1821,8 +1843,16 @@ class ComicGenPipeline(StudioOwnerMixin):
         clean = DirectorProfile(**normalized).model_dump(
             exclude={"revision", "content_hash", "confirmed_at"}
         )
+        # Summaries are bounded downstream projections, not a second source of
+        # narrative truth. Keep historical content hash/revision semantics
+        # based on the full Director fields only.
+        hash_payload = {
+            key: value for key, value in clean.items()
+            if key not in {"execution_summary", "scene_summaries"}
+            and not (key == "canon_state" and value in (None, {}, []))
+        }
         content_hash = hashlib.sha256(json.dumps(
-            clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
         current = self.effective_director_profile(script)
         revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
@@ -1866,10 +1896,10 @@ class ComicGenPipeline(StudioOwnerMixin):
     def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         frames = self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
@@ -1880,10 +1910,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     instructions: List[str]) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -1906,10 +1936,11 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # An explicit reviewed draft is applied exactly as shown and never
         # triggers a second analysis call.
-        director_profile = self.effective_director_profile(script)
+        confirmed_director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(script)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
-            director_profile=director_profile.model_dump() if director_profile else None,
+            director_profile=director_profile,
         )
 
         if not raw_frames:
@@ -1982,8 +2013,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 dialogue=frame_data.get("dialogue"),
                 speaker=frame_data.get("speaker"),
                 duration=frame_data.get("duration"),
-                director_profile_revision=director_profile.revision if director_profile else None,
-                director_profile_hash=director_profile.content_hash if director_profile else None,
+                director_profile_revision=(
+                    confirmed_director_profile.revision if confirmed_director_profile else None
+                ),
+                director_profile_hash=(
+                    confirmed_director_profile.content_hash if confirmed_director_profile else None
+                ),
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)
@@ -4606,6 +4641,509 @@ class ComicGenPipeline(StudioOwnerMixin):
     # ============================================================
     # Series Storage & CRUD
     # ============================================================
+
+    @staticmethod
+    def _assembly_resource_kind(kind: str) -> str:
+        if kind not in ("project", "series"):
+            raise AssemblyPlanValidationError(
+                "assembly scope must be 'project' or 'series'"
+            )
+        return kind
+
+    def _validate_assembly_plan_references(
+        self,
+        scope: str,
+        resource_id: str,
+        plan: AssemblyEditPlan,
+    ) -> None:
+        """Validate stable source IDs against the current owner-scoped store.
+
+        Pydantic validates the shape and timeline geometry.  This second
+        boundary is intentionally here, next to persistence, because only the
+        pipeline can prove that an episode/frame/task belongs to the resource
+        being edited.  We do not resolve or persist signed URLs.
+        """
+        self._assembly_resource_kind(scope)
+        if plan.scope != scope:
+            raise AssemblyPlanValidationError(
+                f"plan scope {plan.scope!r} does not match {scope!r} resource"
+            )
+
+        if scope == "project":
+            resource = self.get_script(resource_id)
+            if not resource:
+                raise AssemblyPlanValidationError("Project not found")
+            projects = {resource.id: resource}
+        else:
+            resource = self.get_series(resource_id)
+            if not resource:
+                raise AssemblyPlanValidationError("Series not found")
+            projects = {}
+            for episode_id in resource.episode_ids:
+                episode = self.get_script(episode_id, resource.owner_profile_id)
+                if episode:
+                    projects[episode.id] = episode
+
+        for lane in plan.lanes:
+            # A marker lane is retained for editor compatibility, but markers
+            # themselves live in plan.markers and never need media ownership.
+            for clip in lane.clips:
+                project_id = clip.source_project_id or clip.source_episode_id
+                if project_id is not None and project_id not in projects:
+                    raise AssemblyPlanValidationError(
+                        f"clip {clip.id} references project outside {scope}: {project_id}"
+                    )
+
+                if clip.source_episode_id is not None:
+                    if clip.source_episode_id not in projects:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references episode outside series: "
+                            f"{clip.source_episode_id}"
+                        )
+                    if scope == "project" and clip.source_episode_id != resource_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references a different project episode"
+                        )
+
+                if clip.source_project_id is not None and scope == "project":
+                    if clip.source_project_id != resource_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references a different project"
+                        )
+
+                # Editorial video clips must have an unambiguous project and a
+                # durable frame or task identity.  Audio clips may be external
+                # or carry only a source_ref, so they remain less restrictive.
+                if lane.kind == "video":
+                    if project_id is None:
+                        raise AssemblyPlanValidationError(
+                            f"video clip {clip.id} requires source_project_id"
+                        )
+                    if not clip.source_frame_id and not clip.source_task_id:
+                        raise AssemblyPlanValidationError(
+                            f"video clip {clip.id} requires source_frame_id or source_task_id"
+                        )
+
+                source_project = projects.get(project_id) if project_id else None
+                frame = None
+                task = None
+                if clip.source_frame_id:
+                    if source_project is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} has a frame without a valid source project"
+                        )
+                    frame = next(
+                        (item for item in source_project.frames
+                         if item.id == clip.source_frame_id),
+                        None,
+                    )
+                    if frame is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references unknown frame "
+                            f"{clip.source_frame_id}"
+                        )
+
+                if clip.source_task_id:
+                    if source_project is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} has a task without a valid source project"
+                        )
+                    task = next(
+                        (item for item in source_project.video_tasks
+                         if item.id == clip.source_task_id),
+                        None,
+                    )
+                    if task is None:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} references unknown video task "
+                            f"{clip.source_task_id}"
+                        )
+                    task_project_id = getattr(task, "project_id", None)
+                    if task_project_id and task_project_id != source_project.id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} video task belongs to another project"
+                        )
+                    task_frame_id = getattr(task, "frame_id", None)
+                    if clip.source_frame_id and task_frame_id and task_frame_id != clip.source_frame_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} task/frame references do not match"
+                        )
+
+                if frame is not None and clip.source_episode_id:
+                    # The frame lookup above is deliberately episode-local;
+                    # this check makes the relation explicit for series plans.
+                    if source_project.id != clip.source_episode_id:
+                        raise AssemblyPlanValidationError(
+                            f"clip {clip.id} frame is not owned by source episode"
+                        )
+
+        for marker in plan.markers:
+            if marker.source_episode_id is None:
+                continue
+            if marker.source_episode_id not in projects:
+                raise AssemblyPlanValidationError(
+                    f"marker {marker.id} references episode outside {scope}: "
+                    f"{marker.source_episode_id}"
+                )
+            if scope == "project" and marker.source_episode_id != resource_id:
+                raise AssemblyPlanValidationError(
+                    f"marker {marker.id} references a different project"
+                )
+
+    def get_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+    ) -> Optional[AssemblyEditPlan]:
+        """Return an owner-scoped plan, or ``None`` for legacy resources."""
+        self._assembly_resource_kind(scope)
+        resource = (
+            self.get_script(resource_id)
+            if scope == "project"
+            else self.get_series(resource_id)
+        )
+        if not resource:
+            return None
+        plan = getattr(resource, "assembly_plan", None)
+        if plan is not None and plan.scope != scope:
+            # Old/corrupt records should fail closed instead of being silently
+            # interpreted as a plan for the other resource kind.
+            raise AssemblyPlanValidationError(
+                f"stored plan scope {plan.scope!r} does not match {scope!r}"
+            )
+        return plan
+
+    def _resolve_assembly_video_source(
+        self,
+        clip: Any,
+        source_project: Script,
+    ) -> str:
+        """Resolve one clip to a local, owner-scoped Motion output."""
+        task = None
+        frame = None
+        if clip.source_frame_id:
+            frame = next(
+                (item for item in source_project.frames if item.id == clip.source_frame_id),
+                None,
+            )
+
+        if clip.source_task_id:
+            task = next(
+                (item for item in source_project.video_tasks if item.id == clip.source_task_id),
+                None,
+            )
+        elif frame and frame.selected_video_id:
+            task = next(
+                (item for item in source_project.video_tasks
+                 if item.id == frame.selected_video_id),
+                None,
+            )
+
+        if task is not None:
+            if task.status != "completed":
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} video task is not completed"
+                )
+            if task.owner_profile_id and task.owner_profile_id != source_project.owner_profile_id:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} video task belongs to another owner"
+                )
+            source_ref = task.video_url
+        else:
+            source_ref = frame.video_url if frame is not None else None
+
+        if not source_ref:
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} has no rendered Motion output"
+            )
+        if source_ref.startswith(("http://", "https://")):
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} must use a local managed output"
+            )
+
+        try:
+            if source_project.owner_profile_id:
+                relative = resolve_studio_reference(
+                    source_ref,
+                    source_project.owner_profile_id,
+                )
+                source_path = _safe_resolve_path("output", relative)
+            else:
+                source_path = _safe_resolve_path("output", source_ref)
+        except (OSError, ValueError) as exc:
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} source is outside local managed output"
+            ) from exc
+
+        if not os.path.isfile(source_path):
+            raise AssemblyPlanValidationError(
+                f"clip {clip.id} source media is missing"
+            )
+        return source_path
+
+    def render_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+        owner_profile_id: Optional[str] = None,
+    ) -> Any:
+        """Compile a saved Assembly video timeline into one local MP4.
+
+        This v1 compiler is deliberately explicit and video-only. Saving an
+        edit plan never calls this method, and this method never submits a
+        provider generation task.
+        """
+        self._assembly_resource_kind(scope)
+        _validate_safe_id(resource_id, f"{scope}_id")
+        resource = (
+            self.get_script(resource_id, owner_profile_id)
+            if scope == "project"
+            else self.get_series(resource_id, owner_profile_id)
+        )
+        if not resource:
+            raise AssemblyPlanValidationError(
+                "Project not found" if scope == "project" else "Series not found"
+            )
+        plan = getattr(resource, "assembly_plan", None)
+        if plan is None:
+            raise AssemblyPlanValidationError("Assembly plan not found")
+
+        # Revalidate at execution time: a referenced task or episode may have
+        # changed since the plan was saved.
+        self._validate_assembly_plan_references(scope, resource_id, plan)
+        plan_revision = plan.revision
+
+        unsupported = [
+            lane.kind
+            for lane in plan.lanes
+            if lane.kind in ("dialogue", "bgm", "sfx")
+            and any(clip.enabled for clip in lane.clips)
+        ]
+        if unsupported:
+            kinds = ", ".join(sorted(set(unsupported)))
+            raise AssemblyPlanValidationError(
+                f"Assembly audio lanes are not supported by render v1: {kinds}"
+            )
+
+        clips = sorted(
+            [
+                clip
+                for lane in plan.lanes
+                if lane.kind == "video"
+                for clip in lane.clips
+                if clip.enabled
+            ],
+            key=lambda item: (item.timeline_start_ms, item.timeline_end_ms, item.id),
+        )
+        if not clips:
+            raise AssemblyPlanValidationError("Assembly plan has no enabled video clips")
+
+        cursor = 0
+        for clip in clips:
+            if clip.timeline_start_ms != cursor:
+                if cursor == 0:
+                    raise AssemblyPlanValidationError(
+                        "Assembly video timeline must begin at 0"
+                    )
+                raise AssemblyPlanValidationError(
+                    f"Assembly video timeline has a gap or overlap before clip {clip.id}"
+                )
+            cursor = clip.timeline_end_ms
+        if cursor != plan.target_duration_ms:
+            raise AssemblyPlanValidationError(
+                "Assembly video timeline must end at target_duration_ms"
+            )
+
+        if scope == "project":
+            projects = {resource.id: resource}
+        else:
+            projects = {
+                episode_id: self.get_script(episode_id, resource.owner_profile_id)
+                for episode_id in resource.episode_ids
+            }
+
+        source_paths: List[str] = []
+        filter_steps: List[str] = []
+        for index, clip in enumerate(clips):
+            project_id = clip.source_project_id or clip.source_episode_id
+            source_project = projects.get(project_id)
+            if source_project is None:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} source project is unavailable"
+                )
+            source_paths.append(
+                self._resolve_assembly_video_source(clip, source_project)
+            )
+
+            timeline_duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000
+            source_start = clip.source_start_ms / 1000
+            source_end_ms = (
+                clip.source_end_ms
+                if clip.source_end_ms is not None
+                else clip.source_start_ms + (clip.timeline_end_ms - clip.timeline_start_ms)
+            )
+            source_end = source_end_ms / 1000
+            source_duration = source_end - source_start
+            if source_duration <= 0:
+                raise AssemblyPlanValidationError(
+                    f"clip {clip.id} has a non-positive source range"
+                )
+            speed_factor = timeline_duration / source_duration
+            filter_steps.append(
+                f"[{index}:v]"
+                f"trim=start={source_start:.6f}:end={source_end:.6f},"
+                f"setpts=(PTS-STARTPTS)*{speed_factor:.9f},"
+                "scale=1280:720:force_original_aspect_ratio=decrease,"
+                "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
+                "setsar=1,fps=24,format=yuv420p"
+                f"[v{index}]"
+            )
+
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for Assembly rendering. "
+                + get_ffmpeg_install_instructions()
+            )
+
+        filter_steps.append(
+            "".join(f"[v{index}]" for index in range(len(clips)))
+            + f"concat=n={len(clips)}:v=1:a=0[outv]"
+        )
+        output_dir = self._owner_output_dir(resource, "video")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = _safe_resolve_path(
+            output_dir,
+            f"assembly_{scope}_{resource_id}_{int(time.time())}.mp4",
+        )
+        command = [ffmpeg_path, "-y"]
+        for source_path in source_paths:
+            command.extend(["-i", source_path])
+        command.extend([
+            "-filter_complex",
+            ";".join(filter_steps),
+            "-map",
+            "[outv]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "fast",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ])
+
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("Assembly FFmpeg render timed out") from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode(errors="replace") if exc.stderr else ""
+            logger.error("[ASSEMBLY] FFmpeg failed: %s", stderr)
+            raise RuntimeError(
+                self._extract_ffmpeg_error_message(stderr, source_paths)
+            ) from exc
+
+        if not os.path.isfile(output_path):
+            raise RuntimeError("Assembly render completed without an output file")
+
+        with self._save_lock:
+            current = (
+                self.get_script(resource_id, owner_profile_id)
+                if scope == "project"
+                else self.get_series(resource_id, owner_profile_id)
+            )
+            current_plan = getattr(current, "assembly_plan", None) if current else None
+            if current_plan is None or current_plan.revision != plan_revision:
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+                raise AssemblyPlanConflictError(
+                    "assembly plan changed while rendering",
+                    current_revision=(current_plan.revision if current_plan else None),
+                )
+            current.merged_video_url = os.path.relpath(output_path, "output")
+            current.updated_at = time.time()
+            if scope == "project":
+                self._save_data()
+            else:
+                self._save_series_data_unlocked()
+        return current
+
+    def save_assembly_plan(
+        self,
+        scope: str,
+        resource_id: str,
+        plan: AssemblyEditPlan,
+        expected_revision: Optional[int] = None,
+    ) -> AssemblyEditPlan:
+        """Persist a validated plan with optimistic revision checking.
+
+        New plans start at revision 1.  Existing plans require the caller to
+        send the current revision (either ``expected_revision`` or the plan's
+        revision) and are returned with an incremented revision.
+        """
+        self._assembly_resource_kind(scope)
+        with self._save_lock:
+            resource = (
+                self.get_script(resource_id)
+                if scope == "project"
+                else self.get_series(resource_id)
+            )
+            if not resource:
+                raise AssemblyPlanValidationError(
+                    "Project not found" if scope == "project" else "Series not found"
+                )
+
+            current = getattr(resource, "assembly_plan", None)
+            if current is None:
+                if expected_revision not in (None, 1):
+                    raise AssemblyPlanConflictError(
+                        "assembly plan does not exist; expected_revision must be 1",
+                        current_revision=None,
+                    )
+                if plan.revision != 1:
+                    raise AssemblyPlanConflictError(
+                        "new assembly plan must start at revision 1",
+                        current_revision=None,
+                    )
+                saved = plan
+            else:
+                requested_revision = (
+                    expected_revision
+                    if expected_revision is not None
+                    else plan.revision
+                )
+                if requested_revision != current.revision:
+                    raise AssemblyPlanConflictError(
+                        "stale assembly plan revision",
+                        current_revision=current.revision,
+                    )
+                saved = plan.model_copy(
+                    update={"revision": current.revision + 1}
+                )
+
+            # Check the references after the optimistic-concurrency boundary.
+            # A stale client receives 409 even if another editor changed or
+            # removed one of its now-old source references.
+            self._validate_assembly_plan_references(scope, resource_id, plan)
+
+            resource.assembly_plan = saved
+            resource.updated_at = time.time()
+            if scope == "project":
+                self._save_data()
+            else:
+                self._save_series_data_unlocked()
+            return saved
 
     def _load_series_data(self) -> Dict[str, Series]:
         if not os.path.exists(self.series_data_file):

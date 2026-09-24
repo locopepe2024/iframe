@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
+import { api } from "@/lib/api";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -20,9 +21,12 @@ vi.mock("../common/VariantSelector", () => ({
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
-vi.mock("@/lib/api", () => ({ api: {} }));
+vi.mock("@/lib/api", () => ({ api: { uploadAsset: vi.fn() } }));
 vi.mock("@/store/projectStore", () => ({
-    useProjectStore: (selector: (state: unknown) => unknown) => selector({}),
+    useProjectStore: (selector: (state: unknown) => unknown) => selector({
+        currentProject: { id: "project" },
+        updateProject: vi.fn(),
+    }),
 }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
 
@@ -54,7 +58,8 @@ it("does not offer editing when a panel has no selected image", () => {
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
 });
 
-it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+it("unlocks derived prompts and uploads to the canonical reference sheet", async () => {
+    vi.mocked(api.uploadAsset).mockResolvedValue({} as Awaited<ReturnType<typeof api.uploadAsset>>);
     render(
         <CharacterWorkbench
             asset={{
@@ -78,6 +83,21 @@ it("unlocks derived asset prompts when the canonical reference sheet is availabl
     expect(promptFields[1]).not.toBeDisabled();
     expect(promptFields[2]).not.toBeDisabled();
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
+    const file = new File(["image"], "master.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("uploadRef: masterAsset"), { target: { files: [file] } });
+    await waitFor(() => expect(api.uploadAsset).toHaveBeenCalledWith(
+        "project", "character", "character", file, "reference_sheet", "A character",
+    ));
+});
+
+it("uploads a new image directly from the static asset panel", async () => {
+    const onUploadImage = vi.fn().mockResolvedValue(undefined);
+    render(<WorkbenchPanel {...baseProps} onUploadImage={onUploadImage} />);
+    const file = new File(["image"], "actor.png", { type: "image/png" });
+
+    fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
+
+    await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

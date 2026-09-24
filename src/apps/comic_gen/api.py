@@ -24,7 +24,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from typing import Optional, Dict, List, Any, Tuple, Literal
+from typing import Optional, Dict, List, Any, Tuple, Literal, Union
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -40,7 +40,15 @@ import logging
 import re
 import traceback
 from ...utils.uniart_catalog import fetch_uniart_catalog
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError, InvalidAssetReference
+from urllib.parse import unquote, urlparse
+from urllib.request import Request as UrlRequest, urlopen
+from .pipeline import (
+    ComicGenPipeline,
+    LibraryAssetInUseError,
+    InvalidAssetReference,
+    AssemblyPlanValidationError,
+    AssemblyPlanConflictError,
+)
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -51,13 +59,14 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    AssemblyEditPlan,
     AssetLibraryReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
-from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
+from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
 from ...utils import setup_logging, get_user_data_dir
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
@@ -496,6 +505,71 @@ def upload_asset(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_EDITOR_IMAGE_MAX_BYTES = 25 * 1024 * 1024
+
+
+@app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/variants/{variant_id}/content")
+def get_asset_variant_content(
+    script_id: str,
+    asset_type: str,
+    asset_id: str,
+    variant_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return an owner-visible image variant through the Studio origin.
+
+    Canvas editors cannot reliably read private COS images directly because a
+    displayable signed URL may still lack browser canvas CORS headers. Resolve
+    the stable variant ids server-side so this endpoint never becomes an
+    arbitrary URL proxy.
+    """
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        resolved, _ = pipeline._resolve_asset_library_reference(script, {
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "variant_id": variant_id,
+        })
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    if os.path.isfile(resolved):
+        if os.path.getsize(resolved) > _EDITOR_IMAGE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+        return FileResponse(resolved, headers=headers)
+
+    uploader = OSSImageUploader()
+    fetch_url = ""
+    if is_object_key(resolved):
+        fetch_url = uploader.sign_url_for_api(resolved)
+    elif resolved.startswith(("https://", "http://")) and uploader.is_configured:
+        parsed = urlparse(resolved)
+        probe = urlparse(uploader.sign_url_for_api("__iframe_editor_probe__"))
+        if parsed.hostname and parsed.hostname == probe.hostname:
+            fetch_url = uploader.sign_url_for_api(unquote(parsed.path.lstrip("/")))
+    if not fetch_url:
+        raise HTTPException(status_code=422, detail="Variant image storage is not editable")
+
+    try:
+        request = UrlRequest(fetch_url, headers={"User-Agent": "iFrame-Studio/1.0"})
+        with urlopen(request, timeout=30) as remote:
+            content_type = (remote.headers.get_content_type() or "").lower()
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=422, detail="Variant content is not an image")
+            data = remote.read(_EDITOR_IMAGE_MAX_BYTES + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Unable to read asset variant %s for editor: %s", variant_id, exc)
+        raise HTTPException(status_code=502, detail="Unable to load image for editing") from exc
+    if len(data) > _EDITOR_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+    return Response(data, media_type=content_type, headers=headers)
+
+
 class CreateProjectRequest(BaseModel):
     title: str
     text: str
@@ -733,6 +807,13 @@ class UpdateSeriesRequest(BaseModel):
     art_direction: Optional[ArtDirection] = None
 
 
+class AssemblyPlanEnvelope(BaseModel):
+    """Optional envelope for clients that keep the base revision separately."""
+
+    plan: AssemblyEditPlan
+    expected_revision: Optional[int] = Field(None, ge=1)
+
+
 @app.post("/series")
 def create_series(
     request: CreateSeriesRequest,
@@ -778,6 +859,85 @@ def get_series(series_id: str):
         for ep in episodes
     ]
     return signed_response(result)
+
+
+@app.get("/series/{series_id}/assembly-plan")
+def get_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the series Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_series(series_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Series not found")
+        return signed_response(pipeline.get_assembly_plan("series", series_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/series/{series_id}/assembly-plan")
+def put_series_assembly_plan(
+    series_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated series Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "series",
+            series_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/series/{series_id}/assembly-plan/render")
+def render_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved series Assembly plan."""
+    if not pipeline.get_series(series_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Series not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "series",
+            series_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.put("/series/{series_id}")
@@ -1776,6 +1936,85 @@ def get_project(script_id: str):
                 d["source"] = "global"
                 payload["props"].append(d)
     return signed_response(payload)
+
+
+@app.get("/projects/{script_id}/assembly-plan")
+def get_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the project Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_script(script_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        return signed_response(pipeline.get_assembly_plan("project", script_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/projects/{script_id}/assembly-plan")
+def put_project_assembly_plan(
+    script_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated project Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "project",
+            script_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assembly-plan/render")
+def render_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved project Assembly plan."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "project",
+            script_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 
@@ -4147,6 +4386,7 @@ def start_director_profile_analysis(
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {"profile": pipeline.preview_director_profile(script_id)},
+        queue_group="director",
     )
 
 
@@ -4166,6 +4406,8 @@ def start_director_profile_refinement(
         lambda: {"profile": pipeline.refine_director_profile(
             script_id, draft, instructions
         )},
+        queue_policy="lifo",
+        queue_group="director",
     )
 
 

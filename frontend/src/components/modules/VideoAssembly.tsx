@@ -3,15 +3,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package } from "lucide-react";
-import { useProjectStore } from "@/store/projectStore";
-import { api, type BgmPreset } from "@/lib/api";
+import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package, ArrowDown, ArrowUp, Save, Plus } from "lucide-react";
+import { useProjectStore, type Project } from "@/store/projectStore";
+import { api, type AssemblyClip, type AssemblyEditPlan, type BgmPreset } from "@/lib/api";
 import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
 import { getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
+import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
 
-type AssemblyPhase = "takes" | "mix" | "export";
+type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
 export default function VideoAssembly() {
     const ta = useTranslations("assembly");
@@ -19,11 +20,25 @@ export default function VideoAssembly() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
 
-    const [phase, setPhase] = useState<AssemblyPhase>("takes");
+    const [phase, setPhase] = useState<AssemblyPhase>("timeline");
     const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
     const [isMerging, setIsMerging] = useState(false);
     const [mergeError, setMergeError] = useState<string | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [assemblyPlan, setAssemblyPlan] = useState<AssemblyEditPlan | null>(
+        currentProject?.assembly_plan ?? null,
+    );
+    const [isSavingPlan, setIsSavingPlan] = useState(false);
+    const [planError, setPlanError] = useState<string | null>(null);
+    const hasUnsavedAssemblyChanges = hasAssemblyPlanChanges(
+        assemblyPlan,
+        currentProject?.assembly_plan,
+    );
+
+    useEffect(() => {
+        setAssemblyPlan(currentProject?.assembly_plan ?? null);
+        setPlanError(null);
+    }, [currentProject?.id, currentProject?.assembly_plan]);
 
     // Group videos by frame
     const videosByFrame = useMemo(() => {
@@ -57,8 +72,17 @@ export default function VideoAssembly() {
         setMergeError(null);  // Clear previous errors
 
         try {
-            const updatedProject = await api.mergeVideos(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
+            if (assemblyPlan) {
+                if (hasUnsavedAssemblyChanges) {
+                    setMergeError(ta("savePlanBeforeRender"));
+                    return;
+                }
+                const rendered = await api.renderAssemblyPlan("project", currentProject.id);
+                updateProject(currentProject.id, { merged_video_url: rendered.url });
+            } else {
+                const updatedProject = await api.mergeVideos(currentProject.id);
+                updateProject(currentProject.id, updatedProject);
+            }
             // Success - error will be null, merged video will show below
         } catch (error: any) {
             console.error("Failed to merge videos:", error);
@@ -72,6 +96,27 @@ export default function VideoAssembly() {
             alert(`${ta("mergeFailedAlert")}:\n\n${errorDetail}`);
         } finally {
             setIsMerging(false);
+        }
+    };
+
+    const handleCreatePlan = () => {
+        if (!currentProject) return;
+        setPlanError(null);
+        setAssemblyPlan(buildDraftAssemblyPlan(currentProject));
+    };
+
+    const handleSavePlan = async () => {
+        if (!currentProject || !assemblyPlan) return;
+        setIsSavingPlan(true);
+        setPlanError(null);
+        try {
+            const saved = await api.saveAssemblyPlan("project", currentProject.id, assemblyPlan);
+            setAssemblyPlan(saved);
+            updateProject(currentProject.id, { assembly_plan: saved });
+        } catch (error) {
+            setPlanError(extractErrorDetail(error, "Assembly plan could not be saved"));
+        } finally {
+            setIsSavingPlan(false);
         }
     };
 
@@ -141,6 +186,7 @@ export default function VideoAssembly() {
                 {/* PR-3k · Phase tabs — Takes / Mix / Export */}
                 <div className="flex items-center gap-1 px-6 pt-2 border-b border-glass-border bg-surface">
                     {[
+                        { id: "timeline" as const, label: ta("phaseTimeline"), icon: <Layout size={12} /> },
                         { id: "takes" as const,  label: ta("phaseTakes"),  icon: <Film size={12} /> },
                         { id: "mix" as const,    label: ta("phaseMix"),    icon: <Sliders size={12} /> },
                         { id: "export" as const, label: ta("phaseExport"), icon: <Package size={12} /> },
@@ -162,6 +208,17 @@ export default function VideoAssembly() {
                         </button>
                     ))}
                 </div>
+                {phase === "timeline" && (
+                    <AssemblyPlanPhase
+                        project={currentProject}
+                        plan={assemblyPlan}
+                        isSaving={isSavingPlan}
+                        error={planError}
+                        onCreate={handleCreatePlan}
+                        onChange={setAssemblyPlan}
+                        onSave={handleSavePlan}
+                    />
+                )}
                 {phase === "takes" && (
                     <div
                         role="status"
@@ -288,6 +345,8 @@ export default function VideoAssembly() {
                             framesReady={framesReady}
                             framesTotal={framesTotal}
                             framesMissing={framesMissing}
+                            usesAssemblyPlan={Boolean(assemblyPlan)}
+                            hasUnsavedPlan={hasUnsavedAssemblyChanges}
                             onMerge={handleMerge}
                             onDownload={handleDownload}
                             onDismissError={() => setMergeError(null)}
@@ -386,6 +445,254 @@ export default function VideoAssembly() {
 // ──────────────────────────────────────────────────────────────────
 // PR-3k · Phase sub-components
 // ──────────────────────────────────────────────────────────────────
+
+export function AssemblyPlanPhase({
+    project,
+    plan,
+    isSaving,
+    error,
+    onCreate,
+    onChange,
+    onSave,
+    readyCountOverride,
+}: {
+    project: Project | null;
+    plan: AssemblyEditPlan | null;
+    isSaving: boolean;
+    error: string | null;
+    onCreate: () => void;
+    onChange: (plan: AssemblyEditPlan | null) => void;
+    onSave: () => void;
+    readyCountOverride?: number;
+}) {
+    const ta = useTranslations("assembly");
+    const readyCount = readyCountOverride ?? (project?.frames ?? []).filter((frame: any) =>
+        resolveAssemblyVideo(frame, project?.video_tasks ?? []),
+    ).length;
+
+    if (!plan) {
+        return (
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+                <section className="max-w-3xl rounded-lg border border-glass-border bg-glass p-5">
+                    <div className="flex items-start gap-3">
+                        <Layout size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <h3 className="font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-text-muted">
+                                {ta("planTitle")}
+                            </h3>
+                            <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                                {ta("planEmpty")}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={onCreate}
+                                disabled={readyCount === 0}
+                                className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <Plus size={14} aria-hidden="true" />
+                                {ta("createPlan")}
+                            </button>
+                            <p className="mt-2 text-[0.6875rem] text-text-muted">
+                                {ta("readySourceCount", { count: readyCount })}
+                            </p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        );
+    }
+
+    const updateTarget = (value: number) => {
+        const target = Math.max(1_000, Math.min(3_600_000, Math.round(value * 1000)));
+        onChange({ ...plan, target_duration_ms: target });
+    };
+
+    return (
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-glass-border pb-4">
+                <div>
+                    <h3 className="flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-text-muted">
+                        <Layout size={13} className="text-primary" aria-hidden="true" />
+                        {ta("planTitle")}
+                    </h3>
+                    <p className="mt-1 text-xs text-text-muted">
+                        {ta("planRevision", { revision: plan.revision })}
+                    </p>
+                </div>
+                <div className="flex items-end gap-2">
+                    <label className="flex flex-col gap-1 text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
+                        {ta("targetSeconds")}
+                        <input
+                            aria-label={ta("targetSeconds")}
+                            type="number"
+                            min={1}
+                            max={3600}
+                            step={1}
+                            value={Math.round(plan.target_duration_ms / 1000)}
+                            onChange={(event) => updateTarget(Number(event.target.value) || 1)}
+                            className="w-24 rounded-md border border-glass-border bg-elevated px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={onSave}
+                        disabled={isSaving}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Save size={13} aria-hidden="true" />}
+                        {isSaving ? ta("savingPlan") : ta("savePlan")}
+                    </button>
+                </div>
+            </div>
+
+            {error && (
+                <div role="alert" className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/[0.06] px-3 py-2 text-xs text-red-200">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            <p className="rounded-md border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[0.6875rem] leading-relaxed text-amber-100/85">
+                {ta("planCompileNotice")}
+            </p>
+
+            <div className="rounded-md border border-glass-border bg-elevated px-3 py-2 font-mono text-[0.6875rem] text-text-muted">
+                <div className="flex items-center justify-between gap-3">
+                    <span>0:00</span>
+                    <span>{formatAssemblyTime(plan.target_duration_ms)}</span>
+                </div>
+                <div className="mt-2 h-1 rounded-full bg-glass-border" aria-hidden="true">
+                    <div className="h-full w-full rounded-full bg-primary/60" />
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                {plan.lanes.map((lane) => (
+                    <section key={lane.id} className="rounded-lg border border-glass-border bg-glass">
+                        <div className="flex items-center justify-between border-b border-glass-border px-3 py-2">
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono text-[0.6875rem] uppercase tracking-[0.16em] text-foreground">
+                                    {lane.label || lane.kind}
+                                </span>
+                                <span className="text-[0.625rem] text-text-muted">{lane.clips.length}</span>
+                            </div>
+                            <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                {lane.kind}
+                            </span>
+                        </div>
+                        {lane.clips.length === 0 ? (
+                            <p className="px-3 py-3 text-xs text-text-muted">{ta("laneEmpty")}</p>
+                        ) : (
+                            <div className="divide-y divide-glass-border">
+                                {lane.clips.map((clip, clipIndex) => (
+                                    <AssemblyClipRow
+                                        key={clip.id}
+                                        clip={clip}
+                                        index={clipIndex}
+                                        total={lane.clips.length}
+                                        onChange={(patch) => onChange(updateAssemblyClip(plan, lane.id, clip.id, patch))}
+                                        onMove={(direction) => onChange(moveAssemblyClip(plan, lane.id, clip.id, direction))}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                ))}
+            </div>
+
+            {plan.markers.length > 0 && (
+                <section className="rounded-lg border border-glass-border bg-glass">
+                    <div className="border-b border-glass-border px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-[0.16em] text-text-muted">
+                        {ta("markers")}
+                    </div>
+                    <div className="divide-y divide-glass-border">
+                        {plan.markers.map((marker) => (
+                            <div key={marker.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                                <span className="min-w-0 truncate text-text-secondary">{marker.label}</span>
+                                <span className="shrink-0 font-mono text-[0.6875rem] text-text-muted">{formatAssemblyTime(marker.time_ms)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+        </div>
+    );
+}
+
+function AssemblyClipRow({
+    clip,
+    index,
+    total,
+    onChange,
+    onMove,
+}: {
+    clip: AssemblyClip;
+    index: number;
+    total: number;
+    onChange: (patch: Partial<AssemblyClip>) => void;
+    onMove: (direction: -1 | 1) => void;
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+            <label className="inline-flex min-h-10 items-center gap-2 text-xs text-text-secondary">
+                <input
+                    type="checkbox"
+                    checked={clip.enabled}
+                    onChange={(event) => onChange({ enabled: event.target.checked })}
+                    aria-label={`Enable ${clip.label || clip.id}`}
+                    className="h-4 w-4 accent-primary"
+                />
+                <span className="max-w-48 truncate">{clip.label || clip.id}</span>
+            </label>
+            <div className="ml-auto flex items-center gap-2 font-mono text-[0.6875rem] text-text-muted">
+                <label className="flex items-center gap-1">
+                    <span className="sr-only">Start milliseconds</span>
+                    <input
+                        type="number"
+                        min={0}
+                        value={clip.timeline_start_ms}
+                        onChange={(event) => onChange({ timeline_start_ms: Number(event.target.value) || 0 })}
+                        aria-label={`${clip.label || clip.id} start milliseconds`}
+                        className="w-24 rounded border border-glass-border bg-elevated px-1.5 py-1 text-right text-[0.6875rem] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                </label>
+                <span>→</span>
+                <label className="flex items-center gap-1">
+                    <span className="sr-only">End milliseconds</span>
+                    <input
+                        type="number"
+                        min={1}
+                        value={clip.timeline_end_ms}
+                        onChange={(event) => onChange({ timeline_end_ms: Number(event.target.value) || 1 })}
+                        aria-label={`${clip.label || clip.id} end milliseconds`}
+                        className="w-24 rounded border border-glass-border bg-elevated px-1.5 py-1 text-right text-[0.6875rem] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                </label>
+                <span className="w-12 text-right">{formatAssemblyTime(clip.timeline_end_ms - clip.timeline_start_ms)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <button
+                    type="button"
+                    onClick={() => onMove(-1)}
+                    disabled={index === 0}
+                    aria-label={`Move ${clip.label || clip.id} earlier`}
+                    className="grid h-9 w-9 place-items-center rounded border border-glass-border text-text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                    <ArrowUp size={13} aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onMove(1)}
+                    disabled={index === total - 1}
+                    aria-label={`Move ${clip.label || clip.id} later`}
+                    className="grid h-9 w-9 place-items-center rounded border border-glass-border text-text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                    <ArrowDown size={13} aria-hidden="true" />
+                </button>
+            </div>
+        </div>
+    );
+}
 
 function MixPhase({
     scriptId,
@@ -535,6 +842,8 @@ function ExportPhase({
     framesReady,
     framesTotal,
     framesMissing,
+    usesAssemblyPlan,
+    hasUnsavedPlan,
     onMerge,
     onDownload,
     onDismissError,
@@ -546,12 +855,16 @@ function ExportPhase({
     framesReady: number;
     framesTotal: number;
     framesMissing: number;
+    usesAssemblyPlan: boolean;
+    hasUnsavedPlan: boolean;
     onMerge: () => void;
     onDownload: () => void;
     onDismissError: () => void;
 }) {
     const ta = useTranslations("assembly");
-    const canMerge = framesTotal > 0 && framesReady > 0;
+    const canMerge = usesAssemblyPlan
+        ? !hasUnsavedPlan
+        : framesTotal > 0 && framesReady > 0;
     return (
         <div className="space-y-6 max-w-3xl">
             <section className="rounded-xl border border-glass-border bg-glass p-6">
@@ -562,9 +875,16 @@ function ExportPhase({
                             {ta("exportTitle")}
                         </h3>
                         <p className="mt-1 text-body-sm text-text-secondary">
-                            {ta("exportSubtitle", { ready: framesReady, total: framesTotal })}
+                            {usesAssemblyPlan
+                                ? ta("assemblyExportSubtitle")
+                                : ta("exportSubtitle", { ready: framesReady, total: framesTotal })}
                         </p>
-                        {framesMissing > 0 && (
+                        {hasUnsavedPlan && (
+                            <p role="status" className="mt-2 text-xs text-amber-300/90">
+                                {ta("savePlanBeforeRender")}
+                            </p>
+                        )}
+                        {!usesAssemblyPlan && framesMissing > 0 && (
                             <p className="mt-2 text-xs text-amber-300/90">
                                 {ta("partialExportWarning", { missing: framesMissing })}
                             </p>
@@ -576,7 +896,9 @@ function ExportPhase({
                         className="shrink-0 inline-flex items-center gap-2 bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-md font-semibold text-[0.8125rem]"
                     >
                         {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
-                        {ta("mergeAndProceed")}
+                        {isMerging
+                            ? ta("renderingAssembly")
+                            : usesAssemblyPlan ? ta("renderAssembly") : ta("mergeAndProceed")}
                     </button>
                 </div>
             </section>

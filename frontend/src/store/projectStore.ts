@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
+import type { AssemblyEditPlan } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
@@ -217,6 +218,12 @@ export interface DirectorProfile {
     prohibitions: string[];
     unresolved_questions: string[];
     sample_plan: Record<string, unknown>[];
+    /** Bounded downstream contract; the full fields remain editable/auditable. */
+    execution_summary?: string;
+    /** Scene-local continuity memory used by storyboard/asset prompts. */
+    scene_summaries?: Record<string, unknown>[];
+    /** Source-linked cross-scene canon ledger; bounded by the backend contract. */
+    canon_state?: Record<string, unknown>;
     revision: number;
     content_hash: string;
     confirmed_at: number;
@@ -287,6 +294,8 @@ export interface Series {
      *  direct_r2v); 'i2v' = 画面优先 (new shots default t2i_i2v). */
     default_generation_mode?: "r2v" | "i2v";
     episode_ids: string[];
+    assembly_plan?: AssemblyEditPlan | null;
+    merged_video_url?: string | null;
     created_at: number;
     updated_at: number;
 }
@@ -316,6 +325,7 @@ export interface Project {
     /** PR-3k · Assembly Mix phase fields */
     bgm_url?: string | null;
     mix_settings?: Record<string, number>;
+    assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */

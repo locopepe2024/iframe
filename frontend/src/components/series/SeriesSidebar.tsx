@@ -12,6 +12,7 @@ import {
   MessageSquareCode,
   Download,
   Palette,
+  Clapperboard,
 } from "lucide-react";
 import clsx from "clsx";
 import type { Series, Project } from "@/store/projectStore";
@@ -21,6 +22,7 @@ import { useTranslations } from "next-intl";
 
 export type SidebarItem =
   | { kind: "art_direction" }   // R2V v2 — series-level style baseline
+  | { kind: "assembly" }        // Series-level editorial swimlane
   | { kind: "asset"; tab: "characters" | "scenes" | "props" }
   | { kind: "episode"; episodeId: string };
 
@@ -258,6 +260,31 @@ export default function SeriesSidebar({
       </div>
 
       {/* ── Episode list ── */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={() => onItemChange({ kind: "assembly" })}
+          aria-label={t("assemblyNav")}
+          className={clsx(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative overflow-hidden",
+            activeItem.kind === "assembly"
+              ? "bg-primary/10 text-foreground"
+              : "text-text-secondary hover:text-foreground hover:bg-hover-bg"
+          )}
+        >
+          {activeItem.kind === "assembly" && (
+            <motion.div
+              layoutId="series-active-pill"
+              className="absolute left-0 w-1 h-full bg-primary"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            />
+          )}
+          <Clapperboard size={18} className={activeItem.kind === "assembly" ? "text-primary" : "group-hover:text-foreground"} />
+          <span className="text-sm font-medium flex-1 text-left truncate">{t("assemblyNav")}</span>
+          <span className="text-[0.625rem] px-1.5 py-0.5 rounded-md font-mono bg-glass text-text-muted">60s</span>
+        </button>
+      </div>
+
       <div className="flex-1 flex flex-col min-h-0 border-t border-glass-border">
         <div className="px-6 py-2.5 flex items-center justify-between">
           <span className="text-[0.625rem] font-mono text-text-muted uppercase tracking-wider">
