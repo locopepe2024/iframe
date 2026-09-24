@@ -63,8 +63,9 @@ class WanxImageModel(ImageGenModel):
         if ref_image_paths:
             all_ref_paths.extend(ref_image_paths)
             
-        # Remove duplicates
-        all_ref_paths = list(set(all_ref_paths))
+        # Preserve prompt/attachment slot order while removing duplicates.
+        # Reference labels such as <Picture 1> depend on this exact ordering.
+        all_ref_paths = list(dict.fromkeys(all_ref_paths))
         # Model selection priority: explicit model_name > config params > defaults
         if model_name:
             final_model_name = model_name

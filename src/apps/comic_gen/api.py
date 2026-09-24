@@ -39,7 +39,6 @@ import uuid
 import logging
 import re
 import traceback
-from ...utils.uniart_catalog import fetch_uniart_catalog
 from urllib.parse import unquote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
@@ -65,12 +64,13 @@ from .models import (
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
 from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
+from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="iFrame Studio API", version="0.1.0")
+app = FastAPI(title="iFrame Studio API", version="0.1.2")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -187,6 +187,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path.startswith("/recreation/")
         or path == "/library"
         or path.startswith("/library/")
+        or path == "/asset-index"
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")
@@ -302,6 +303,13 @@ def signed_response(data):
     return JSONResponse(content=processed_data)
 
 
+def private_no_store_signed_response(data):
+    """Return owner-scoped mutable data without allowing intermediary caching."""
+    response = signed_response(data)
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
 @app.get("/studio/media/{owner_key}/{relative_path:path}")
 def get_studio_media(
     owner_key: str,
@@ -333,6 +341,8 @@ class GenerateAssetRequest(BaseModel):
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
     reference: Optional[AssetLibraryReference] = None
+    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
+    image_generation_mode: Literal["text", "reference"] = "text"
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -1104,6 +1114,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.reference,
+            request.references,
+            request.image_generation_mode,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -1936,6 +1948,26 @@ def get_project(script_id: str):
                 d["source"] = "global"
                 payload["props"].append(d)
     return signed_response(payload)
+
+
+@app.get("/projects/{script_id}/asset-index")
+def get_project_asset_index(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the normalized effective asset view used by reference pickers."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.get_asset_reference_index(script_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/asset-index")
+def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
+    """Return the normalized cross-series/project/global asset view."""
+    return private_no_store_signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
 
 
 @app.get("/projects/{script_id}/assembly-plan")
@@ -3099,6 +3131,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.model_name,
             request.aspect_ratio,
             request.reference,
+            request.references,
+            request.image_generation_mode,
         )
         
         # Add background processing
@@ -3117,6 +3151,20 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generation/clear", response_model=Script)
+def clear_asset_generation_state(script_id: str, asset_type: str, asset_id: str):
+    """Clear a failed/orphaned image-generation marker without deleting the asset."""
+    try:
+        pipeline.clear_asset_generation_state(script_id, asset_id, asset_type)
+        return get_project(script_id)
+    except ValueError as e:
+        status_code = 409 if "still processing" in str(e) else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to clear asset generation state")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/tasks/{task_id}")
 def get_task_status(task_id: str):
     """Returns a recoverable asset or persisted video task status."""
@@ -3130,7 +3178,7 @@ def get_task_status(task_id: str):
         return signed_response(status)
 
     # Asset tasks are polled frequently. Keep pending/processing responses
-    # cheap, then sign only the completed target-asset snapshot so the client
+    # cheap, and sign only the completed target-asset snapshot so the client
     # can merge it without loading the full project.
     if status.get("asset_id") and status.get("asset_type") in (
         "character", "scene", "prop", "full_body", "head_shot"
@@ -3289,6 +3337,10 @@ def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequ
 
 
 
+class SetAssetCoverRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1)
+
+
 class SelectVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
@@ -3311,6 +3363,19 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/cover")
+def set_asset_cover(script_id: str, asset_type: str, asset_id: str, request: SetAssetCoverRequest):
+    """Set one owned variant as the library cover without loading the project."""
+    try:
+        result = pipeline.set_asset_cover_variant(script_id, asset_id, asset_type, request.variant_id)
+        return private_no_store_signed_response(result)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to set asset library cover")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 class DeleteVariantRequest(BaseModel):
     asset_id: str
@@ -3346,13 +3411,16 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
-        updated_script = pipeline.delete_asset_variant(
+        pipeline.delete_asset_variant(
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id
         )
-        return signed_response(updated_script)
+        # Shared series/global assets are merged into a project only at read
+        # time. Returning the raw episode Script would temporarily remove the
+        # edited asset from the frontend and close its detail workbench.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

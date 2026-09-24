@@ -82,6 +82,8 @@ export interface Character {
     // reference_sheet is the canonical character asset (new schema);
     // full_body_asset is legacy, kept only as a read fallback.
     reference_sheet?: AssetUnit;
+    /** Older compatibility payload; prefer reference_sheet/full_body_asset when both exist. */
+    full_body?: AssetUnit;
     makeup_reference?: AssetUnit;
     pose_references?: AssetUnit;
     full_body_asset?: ImageAsset;
@@ -96,6 +98,8 @@ export interface Character {
     voice_name?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     status?: string;
     is_consistent?: boolean;
     full_body_updated_at?: number;
@@ -123,6 +127,8 @@ export interface Scene {
     status?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     time_of_day?: string;
     lighting_mood?: string;
     source?: "episode" | "series" | "global";
@@ -139,6 +145,8 @@ export interface Prop {
     status?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     source?: "episode" | "series" | "global";
 }
 
@@ -368,7 +376,7 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number }[];
+    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string }[];
     addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
 
@@ -814,10 +822,16 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
+            version: 2,
+            migrate: (persistedState: any) => ({
+                ...persistedState,
+                // Generation markers are runtime state. Older releases
+                // persisted markers without a backend task ID, which left
+                // assets stuck after a server restart.
+                generatingTasks: [],
+            }),
             partialize: (state) => ({
                 projects: state.projects,
-
-                generatingTasks: state.generatingTasks // Now persisting this to maintain state across refreshes
             }),
         }
     )

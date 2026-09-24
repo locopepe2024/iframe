@@ -3,21 +3,24 @@ import type { Project } from "@/store/projectStore";
 export type TaskStatus = { status?: string; error?: string };
 
 export type AssetTaskResult = TaskStatus & {
+  script_id?: string;
   asset_id?: string;
   asset_type?: "character" | "scene" | "prop" | "full_body" | "head_shot";
   asset_source?: "episode" | "series" | "global";
   asset?: Record<string, any>;
 };
 
-/** Merge one completed task's asset snapshot into the current project. */
+/** Merge one completed task's target asset snapshot into the current project. */
 export function mergeAssetTaskResult(
   project: Project | null | undefined,
   status: AssetTaskResult,
 ): Partial<Project> | null {
   if (!project || !status.asset || !status.asset_type) return null;
+  if (status.status && status.status !== "completed") return null;
+  if (status.script_id && status.script_id !== project.id) return null;
   if (status.asset.id && status.asset_id && status.asset.id !== status.asset_id) return null;
 
-  const collection = status.asset_type === "character"
+  const collection = status.asset_type === "character" || status.asset_type === "full_body" || status.asset_type === "head_shot"
     ? "characters"
     : status.asset_type === "scene"
       ? "scenes"
@@ -33,7 +36,7 @@ export function mergeAssetTaskResult(
   const assetId = status.asset_id || status.asset.id;
   if (!assetId) return null;
 
-  const index = assets.findIndex(asset => asset.id === assetId);
+  const index = assets.findIndex((asset) => asset.id === assetId);
   const existing = index >= 0 ? assets[index] : undefined;
   const updated = {
     ...existing,
@@ -52,7 +55,7 @@ export async function waitForAssetTask(
   read: () => Promise<AssetTaskResult>,
   observing: () => boolean,
   failureMessage: string,
-  pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 2000)),
+  pause: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 2000)),
 ): Promise<AssetTaskResult | null> {
   while (observing()) {
     await pause();

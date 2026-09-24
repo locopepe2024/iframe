@@ -1,13 +1,21 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
-import { api } from "@/lib/api";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
     buildCharacterVideoPrompt,
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
 } from "@/lib/characterPrompts";
+
+const apiMocks = vi.hoisted(() => ({
+    getAssetReferenceIndex: vi.fn(),
+}));
+
+const projectStoreMocks = vi.hoisted(() => ({
+    currentProject: { id: "project-1" } as { id: string; revision?: number; characters?: any[]; scenes?: any[]; props?: any[] },
+    updateProject: vi.fn(),
+}));
 
 vi.mock("next-intl", () => ({
     useTranslations: () => (key: string) => key,
@@ -16,17 +24,16 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: () => null,
+    VariantSelector: ({ onGenerate }: { onGenerate?: (batchSize: number) => void }) => (
+        <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
+    ),
 }));
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
-vi.mock("@/lib/api", () => ({ api: { uploadAsset: vi.fn() } }));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
 vi.mock("@/store/projectStore", () => ({
-    useProjectStore: (selector: (state: unknown) => unknown) => selector({
-        currentProject: { id: "project" },
-        updateProject: vi.fn(),
-    }),
+    useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
 
@@ -58,9 +65,9 @@ it("does not offer editing when a panel has no selected image", () => {
     expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
 });
 
-it("unlocks derived prompts and uploads to the canonical reference sheet", async () => {
-    vi.mocked(api.uploadAsset).mockResolvedValue({} as Awaited<ReturnType<typeof api.uploadAsset>>);
-    render(
+it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const { container } = render(
         <CharacterWorkbench
             asset={{
                 id: "character",
@@ -78,16 +85,11 @@ it("unlocks derived prompts and uploads to the canonical reference sheet", async
         />,
     );
 
-    const promptFields = screen.getAllByPlaceholderText("Enter prompt description...");
+    const promptFields = Array.from(container.querySelectorAll("[contenteditable]"));
     expect(promptFields).toHaveLength(3);
-    expect(promptFields[1]).not.toBeDisabled();
-    expect(promptFields[2]).not.toBeDisabled();
+    expect(promptFields[1]).toHaveAttribute("contenteditable", "true");
+    expect(promptFields[2]).toHaveAttribute("contenteditable", "true");
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
-    const file = new File(["image"], "master.png", { type: "image/png" });
-    fireEvent.change(screen.getByLabelText("uploadRef: masterAsset"), { target: { files: [file] } });
-    await waitFor(() => expect(api.uploadAsset).toHaveBeenCalledWith(
-        "project", "character", "character", file, "reference_sheet", "A character",
-    ));
 });
 
 it("uploads a new image directly from the static asset panel", async () => {
@@ -98,6 +100,170 @@ it("uploads a new image directly from the static asset panel", async () => {
     fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
 
     await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
+});
+
+it("shows indexed clips when typing @ and emits the stable selected reference", () => {
+    const setPrompt = vi.fn();
+    const onReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch",
+        previewUrl: "/files/watch.png",
+        sourceLabel: "global",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(
+        <WorkbenchPanel
+            {...baseProps}
+            prompt=""
+            setPrompt={setPrompt}
+            referenceCandidates={[candidate]}
+            onReferencesChange={onReferencesChange}
+        />,
+    );
+
+    const editor = screen.getByRole("textbox") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => {
+        editor.editor.commands.focus();
+        editor.editor.commands.setContent("<p>@wat</p>");
+    });
+    expect(editor.editor.getText()).toBe("@wat");
+
+    expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
+    fireEvent.mouseDown(screen.getByRole("option"));
+    fireEvent.click(screen.getByRole("option"));
+
+    expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
+    expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
+});
+
+it("does not turn a manually typed @name into an implicit reference", () => {
+    const setPrompt = vi.fn();
+    const onReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(
+        <WorkbenchPanel
+            {...baseProps}
+            prompt=""
+            setPrompt={setPrompt}
+            referenceCandidates={[candidate]}
+            onReferencesChange={onReferencesChange}
+        />,
+    );
+    const editor = screen.getByRole("textbox") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => {
+        editor.editor.commands.focus();
+        editor.editor.commands.setContent("<p>@Pocket watch</p>");
+    });
+    fireEvent.blur(editor);
+
+    expect(onReferencesChange).toHaveBeenLastCalledWith([]);
+});
+
+it("loads the project reference index for the character workbench", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({
+        schema_version: 1,
+        project_id: "project-1",
+        assets: [{
+            asset_type: "prop",
+            asset_id: "watch-1",
+            name: "Pocket watch",
+            source_scope: "global",
+            variants: [{ id: "watch-front", url: "/files/watch.png" }],
+        }],
+    });
+    const onGenerate = vi.fn();
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={onGenerate}
+            generatingTypes={[]}
+        />,
+    );
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
+    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor: import("@tiptap/core").Editor }>;
+    act(() => { editors[0].editor.commands.setContent("<p>@wat</p>"); });
+    expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
+    fireEvent.mouseDown(screen.getByRole("option"));
+    fireEvent.click(screen.getByRole("option"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
+    fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
+        "full_body",
+        "@Pocket watch ",
+        true,
+        expect.any(String),
+        1,
+        [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
+        "reference",
+    ));
+});
+
+it("refreshes the reference index when a generated project snapshot arrives", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    projectStoreMocks.currentProject = {
+        id: "project-1",
+        characters: [{ id: "character-1", full_body_asset: { selected_id: "deleted-view", variants: [{ id: "deleted-view", url: "/files/deleted-view.png" }] } }],
+    };
+    const indexWithDeletedView = {
+        schema_version: 1,
+        project_id: "project-1",
+        assets: [{
+            asset_type: "character" as const,
+            asset_id: "character-1",
+            name: "Hero",
+            source_scope: "series" as const,
+            variants: [{ id: "deleted-view", url: "/files/deleted-view.png" }],
+        }],
+    };
+    const indexWithNewView = {
+        ...indexWithDeletedView,
+        assets: [{ ...indexWithDeletedView.assets[0], variants: [{ id: "new-view", url: "/files/new-view.png" }] }],
+    };
+    apiMocks.getAssetReferenceIndex
+        .mockResolvedValueOnce(indexWithDeletedView)
+        .mockResolvedValueOnce(indexWithNewView);
+    const onGenerate = vi.fn();
+    const workbench = (onClose: () => void) => (
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+            onClose={onClose}
+            onUpdateDescription={vi.fn()}
+            onGenerate={onGenerate}
+            generatingTypes={[]}
+        />
+    );
+    const { rerender } = render(workbench(vi.fn()));
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
+    projectStoreMocks.currentProject = {
+        id: "project-1",
+        revision: 2,
+        characters: [{ id: "character-1", full_body_asset: { selected_id: "new-view", variants: [{ id: "new-view", url: "/files/new-view.png" }] } }],
+    };
+    rerender(workbench(vi.fn()));
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+
+    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { editor.editor.commands.setContent("<p>@Hero</p>"); });
+    fireEvent.click(screen.getByRole("option"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
+    fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
+        "full_body",
+        "@Hero ",
+        true,
+        expect.any(String),
+        1,
+        [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],
+        "reference",
+    ));
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

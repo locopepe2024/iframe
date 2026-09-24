@@ -186,6 +186,10 @@ class ImageVariant(BaseModel):
         None,
         description="Asset-library reference variant ID used to generate this variant",
     )
+    reference_inputs: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Ordered stable asset-library inputs used to generate this variant",
+    )
     reference_view_role: Optional[str] = Field(
         None,
         description="Optional product view role such as front, right, three_quarter_right, or detail",
@@ -255,6 +259,33 @@ class AssetLibraryReference(BaseModel):
     asset_type: Literal["character", "scene", "prop"]
     asset_id: str = Field(..., min_length=1)
     variant_id: str = Field(..., min_length=1)
+
+
+class AssetReferenceIndexEntry(BaseModel):
+    """Normalized reusable asset entry projected for reference pickers."""
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    name: str
+    description: str = ""
+    starred: bool = False
+    source_scope: Literal["episode", "project", "series", "global"]
+    source_container_id: Optional[str] = None
+    source_name: Optional[str] = None
+    selected_variant_id: Optional[str] = None
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover; independent from generation-container selection."
+    )
+    variants: List[ImageVariant] = Field(default_factory=list)
+
+
+class AssetReferenceIndex(BaseModel):
+    """Versioned effective asset view for one project."""
+
+    schema_version: Literal[1] = 1
+    project_id: str
+    assets: List[AssetReferenceIndexEntry] = Field(default_factory=list)
+
 
 class VideoTask(BaseModel):
     id: str
@@ -358,6 +389,9 @@ class Character(BaseModel):
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
     )
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from generation-container selection."
+    )
     makeup_reference: Optional[AssetUnit] = Field(
         default_factory=AssetUnit,
         description="Virtual actor identity/makeup reference images",
@@ -419,6 +453,7 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -434,6 +469,9 @@ class Scene(BaseModel):
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
     image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this scene")
@@ -442,6 +480,7 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -458,6 +497,9 @@ class Prop(BaseModel):
     bgm_url: Optional[str] = None
     image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this prop")
@@ -466,6 +508,7 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None

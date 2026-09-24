@@ -7,7 +7,7 @@ import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "luci
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api, crudApi, type VideoTask, type RefineSSEEvent } from "@/lib/api";
+import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -53,6 +53,17 @@ export default function StoryboardR2V() {
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
+    const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[] | undefined>();
+
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.getAssetReferenceIndex !== "function") return;
+        let active = true;
+        void api.getAssetReferenceIndex(projectId)
+            .then((index) => { if (active) setAssetIndex(index.assets); })
+            .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
+        return () => { active = false; };
+    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
     // Derive shots from project frames. Workbench state (T2I 抽卡
     // history, last-active tab, batch count) now comes from backend-
@@ -2102,6 +2113,7 @@ export default function StoryboardR2V() {
                             characters={characters}
                             scenes={scenes}
                             props={props}
+                            assetIndex={assetIndex}
                             onUpdatePrompt={(prompt) => updatePrompt(index, prompt)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
                             durationEditorConfig={durationEditorCfg}
@@ -2449,6 +2461,7 @@ export default function StoryboardR2V() {
                 characters={characters}
                 scenes={scenes}
                 props={props}
+                assetIndex={assetIndex}
                 onSelectAsset={insertAssetFromDrawer}
                 selectedVariantIds={drawerState.targetShotIndex == null
                     ? {}

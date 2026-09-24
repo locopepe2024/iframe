@@ -446,7 +446,7 @@ export function resolveModelId(
  * Resolve the model used by the legacy asset-generation surface.
  *
  * Older projects can keep a model id that is no longer visible in the live
- * catalog.  Every asset-generation entry point must use the same resolver so
+ * catalog. Every asset-generation entry point must use the same resolver so
  * those projects do not submit a retired provider SKU just because the
  * project JSON predates the current catalog.
  */

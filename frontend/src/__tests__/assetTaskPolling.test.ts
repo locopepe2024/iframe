@@ -41,6 +41,7 @@ it('merges only the completed target asset into the project patch', () => {
 
   expect(mergeAssetTaskResult(project, {
     status: 'completed',
+    script_id: 'project',
     asset_id: 'character',
     asset_type: 'character',
     asset_source: 'episode',
@@ -50,11 +51,19 @@ it('merges only the completed target asset into the project patch', () => {
   });
 });
 
-it('rejects a task snapshot whose asset ID differs from the target ID', () => {
+it('rejects a task snapshot whose asset or project ID differs from the target', () => {
   expect(mergeAssetTaskResult({ id: 'project' } as any, {
     status: 'completed',
+    script_id: 'project',
     asset_id: 'target',
     asset_type: 'character',
     asset: { id: 'other' },
+  })).toBeNull();
+  expect(mergeAssetTaskResult({ id: 'project' } as any, {
+    status: 'completed',
+    script_id: 'other-project',
+    asset_id: 'target',
+    asset_type: 'character',
+    asset: { id: 'target' },
   })).toBeNull();
 });

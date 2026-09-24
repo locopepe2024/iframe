@@ -25,7 +25,7 @@ report:
 
 import time
 import uuid
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -142,7 +142,7 @@ def test_task_status_endpoint_falls_back_to_persisted_video_task(monkeypatch):
     assert api.get_task_status("video-complete") == status
 
 
-def test_task_status_endpoint_returns_asset_snapshot_without_loading_project(monkeypatch):
+def test_task_status_returns_completed_asset_snapshot_without_loading_project(monkeypatch):
     from src.apps.comic_gen import api
 
     status = {
@@ -164,15 +164,10 @@ def test_task_status_endpoint_returns_asset_snapshot_without_loading_project(mon
     assert "script" not in result
 
 
-def test_task_status_endpoint_keeps_pending_asset_polls_unsigned(monkeypatch):
+def test_task_status_keeps_pending_asset_polls_unsigned(monkeypatch):
     from src.apps.comic_gen import api
 
-    status = {
-        "task_id": "asset-pending",
-        "status": "processing",
-        "asset_id": "character",
-        "asset_type": "character",
-    }
+    status = {"task_id": "asset-pending", "status": "processing", "asset_id": "character", "asset_type": "character"}
     monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: status)
     monkeypatch.setattr(api.pipeline, "get_script", lambda _script_id: pytest.fail("project lookup is not expected"))
     monkeypatch.setattr(api, "signed_response", lambda _value: pytest.fail("pending status has no media to sign"))
@@ -197,12 +192,7 @@ def test_motion_reference_task_status_includes_only_target_asset_snapshot():
             "script_id": script.id,
             "asset_id": character.id,
             "asset_type": "full_body",
-            "params": {
-                "prompt": "motion",
-                "audio_url": None,
-                "duration": 5,
-                "batch_size": 1,
-            },
+            "params": {"prompt": "motion", "audio_url": None, "duration": 5, "batch_size": 1},
         },
     }
     pipeline.generate_motion_ref = lambda **_kwargs: script
@@ -216,6 +206,32 @@ def test_motion_reference_task_status_includes_only_target_asset_snapshot():
     assert status["asset_source"] == "episode"
     assert status["asset"]["id"] == character.id
     assert "script" not in status
+
+
+def test_full_body_motion_reference_uses_selected_canonical_reference_sheet():
+    character = Character(
+        id="character",
+        name="Test",
+        description="A character",
+        reference_sheet=AssetUnit(
+            image_variants=[
+                {"id": "old", "url": "old.png"},
+                {"id": "master", "url": "master.png"},
+            ],
+            selected_image_id="master",
+        ),
+    )
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.video_generator = Mock()
+    pipeline.video_generator.generate_i2v.return_value = {"video_url": "video.mp4"}
+    pipeline._save_data = Mock()
+
+    pipeline.generate_motion_ref(script.id, character.id, "full_body", prompt="motion")
+
+    assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "master.png"
 
 
 # ---------------------------------------------------------------------------

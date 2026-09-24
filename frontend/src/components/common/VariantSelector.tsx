@@ -10,8 +10,8 @@ import { useTranslations } from "next-intl";
 interface VariantSelectorProps {
     asset: ImageAsset | undefined;
     currentImageUrl?: string; // Fallback/Legacy URL
-    onSelect: (variantId: string) => void;
-    onDelete: (variantId: string) => void;
+    onSelect: (variantId: string) => void | Promise<void>;
+    onDelete: (variantId: string) => void | Promise<void>;
     onFavorite?: (variantId: string, isFavorited: boolean) => void;
     onGenerate: (batchSize: number) => void;
     isGenerating: boolean;
@@ -39,6 +39,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [batchSize, setBatchSize] = useState(1);
     const [localGeneratingBatchSize, setLocalGeneratingBatchSize] = useState(1); // Track the batch size when generation started locally
     const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+    const [pendingSelection, setPendingSelection] = useState<string | null>(null);
+    const [pendingDeletions, setPendingDeletions] = useState<string[]>([]);
     const prevIsGenerating = useRef(isGenerating);
 
     // Automatically save batchSize when generation starts
@@ -54,13 +56,40 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const displayGeneratingBatchSize = propGeneratingBatchSize || localGeneratingBatchSize;
 
     // Determine the image to display
-    const selectedVariant = asset?.variants?.find(v => v.id === asset.selected_id);
+    const variants = (asset?.variants || []).filter(variant => !pendingDeletions.includes(variant.id));
+    const selectedId = pendingSelection && variants.some(variant => variant.id === pendingSelection)
+        ? pendingSelection
+        : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id;
+    const selectedVariant = variants.find(v => v.id === selectedId);
     const apiBase = getApiBaseUrl();
-    const displayUrl = selectedVariant ?
-        getAssetUrl(selectedVariant.url) :
-        getAssetUrl(currentImageUrl);
+    const displayUrl = selectedVariant
+        ? getAssetUrl(selectedVariant.url)
+        : pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
 
-    const variants = asset?.variants || [];
+    useEffect(() => {
+        if (pendingSelection && asset?.selected_id === pendingSelection) setPendingSelection(null);
+    }, [asset?.selected_id, pendingSelection]);
+
+    useEffect(() => {
+        if (pendingDeletions.length) {
+            setPendingDeletions(current => current.filter(id => asset?.variants?.some(variant => variant.id === id)));
+        }
+    }, [asset?.variants, pendingDeletions.length]);
+
+    const selectVariant = (variantId: string) => {
+        setPendingSelection(variantId);
+        Promise.resolve().then(() => onSelect(variantId)).catch(() => {
+            setPendingSelection(current => current === variantId ? null : current);
+        });
+    };
+
+    const deleteVariant = (variantId: string) => {
+        setPendingDeletions(current => [...current, variantId]);
+        if (pendingSelection === variantId) setPendingSelection(null);
+        Promise.resolve().then(() => onDelete(variantId)).catch(() => {
+            setPendingDeletions(current => current.filter(id => id !== variantId));
+        });
+    };
 
     // Helper to calculate aspect ratio class
     const getAspectRatioClass = () => {
@@ -104,7 +133,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                     {selectedVariant && (
                         <button
-                            onClick={(e) => { e.stopPropagation(); onDelete(selectedVariant.id); }}
+                            onClick={(e) => { e.stopPropagation(); if (confirm(t("confirmDeleteVariant"))) deleteVariant(selectedVariant.id); }}
                             className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full backdrop-blur-sm"
                             title={t("deleteVariant")}
                         >
@@ -160,7 +189,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     <div className="relative">
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
                             {variants.map((variant) => {
-                                const isSelected = variant.id === asset?.selected_id;
+                                const isSelected = variant.id === selectedId;
                                 const isFavorited = (variant as any).is_favorited || false;
                                 const url = getAssetUrl(variant.url);
 
@@ -178,7 +207,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                             alt="Variant"
                                             loading="lazy"
                                             className="w-full h-full object-cover cursor-pointer"
-                                            onClick={() => onSelect(variant.id)}
+                                            onClick={() => selectVariant(variant.id)}
                                         />
 
                                         {/* Selected indicator */}
@@ -211,7 +240,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (confirm(t("confirmDeleteVariant"))) {
-                                                        onDelete(variant.id);
+                                                        deleteVariant(variant.id);
                                                     }
                                                 }}
                                                 className="absolute bottom-1 right-1 p-1 bg-red-500/80 hover:bg-red-500 rounded-full text-white opacity-0 group-hover/variant:opacity-100 transition-all"

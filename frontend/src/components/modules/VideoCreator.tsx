@@ -21,6 +21,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, VideoTask } from "@/lib/api";
 import { R2V_SELECTION_MODEL_ID, getR2vRouteModelId, isR2vImageBased } from "@/lib/modelCatalog";
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
+import { characterImageUrl, characterReferenceVariants } from "@/lib/characterImage";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
 import type { VideoParams } from "@/store/projectStore";
 
@@ -497,9 +498,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             if (c.full_body?.video_variants?.length) {
                 variants.push(...c.full_body.video_variants.map((v: any) => ({
                     url: v.url,
-                    thumbnail: c.full_body?.selected_image_id
-                        ? (c.full_body.image_variants?.find((img: any) => img.id === c.full_body.selected_image_id)?.url || c.full_body_image_url)
-                        : c.full_body_image_url,
+                    thumbnail: characterImageUrl(c),
                     title: `${c.name} - Full Body Motion Reference`,
                     assetName: c.name,
                     type: 'character_full_body'
@@ -558,7 +557,16 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const availableReferenceImages = currentProject ? [
         ...currentProject.characters.flatMap((c: any) => {
             const images: { url: string; thumbnail: string; title: string; assetName: string; type: string }[] = [];
-            if (c.full_body_image_url) {
+            const fullBodyVariants = characterReferenceVariants(c);
+            if (fullBodyVariants.length > 0) {
+                images.push(...fullBodyVariants.map((variant: any) => ({
+                    url: getAssetUrl(variant.url),
+                    thumbnail: getAssetUrl(variant.url),
+                    title: `${c.name} - Full Body Variant`,
+                    assetName: c.name,
+                    type: 'character_full_body'
+                })));
+            } else if (c.full_body_image_url) {
                 images.push({
                     url: getAssetUrl(c.full_body_image_url),
                     thumbnail: getAssetUrl(c.full_body_image_url),
@@ -566,15 +574,6 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     assetName: c.name,
                     type: 'character_full_body'
                 });
-            }
-            if (c.full_body?.image_variants?.length) {
-                images.push(...c.full_body.image_variants.map((v: any) => ({
-                    url: getAssetUrl(v.url),
-                    thumbnail: getAssetUrl(v.url),
-                    title: `${c.name} - Full Body Variant`,
-                    assetName: c.name,
-                    type: 'character_full_body'
-                })));
             }
             if (c.headshot_image_url) {
                 images.push({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Lock, Unlock, ChevronRight, Maximize2 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -18,6 +18,8 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     const ts = useTranslations("storyboard");
     const currentProject = useProjectStore(state => state.currentProject);
     const updateProject = useProjectStore(state => state.updateProject);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+    const selectionVersion = useRef(0);
 
     // Get the latest frame data from the store (instead of using stale prop)
     const frame = useMemo(() => {
@@ -89,23 +91,29 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         }
     };
 
-    const handleSelectVariant = async (variantId: string) => {
+    const handleSelectVariant = (variantId: string) => {
         if (!currentProject) return;
-        try {
+        const version = ++selectionVersion.current;
+        const operation = selectionQueue.current.then(async () => {
             const updatedProject = await api.selectAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
+            if (version === selectionVersion.current) updateProject(currentProject.id, updatedProject);
+        });
+        selectionQueue.current = operation.catch(() => {});
+        return operation.catch((error) => {
             console.error("Failed to select variant:", error);
-        }
+            throw error;
+        });
     };
 
     const handleDeleteVariant = async (variantId: string) => {
         if (!currentProject) return;
         try {
+            await selectionQueue.current;
             const updatedProject = await api.deleteAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            throw error;
         }
     };
 
@@ -141,6 +149,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                     {/* Left: Variant Selector */}
                     <div className="flex-1 bg-surface p-4 flex flex-col overflow-hidden relative">
                         <VariantSelector
+                            key={frame.id}
                             asset={frame.rendered_image_asset}
                             currentImageUrl={frame.rendered_image_url || frame.image_url}
                             onSelect={handleSelectVariant}

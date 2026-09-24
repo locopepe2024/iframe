@@ -48,4 +48,3 @@ prompt contract has not been verified.
 pytest -q tests/test_recreation.py tests/test_uniart_catalog.py
 cd frontend && npm run typecheck && npm run test -- --run src/components/modules/recreation/ShotReferences.test.tsx
 ```
-

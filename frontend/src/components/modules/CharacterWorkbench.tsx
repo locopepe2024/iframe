@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video, Upload, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { api } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -20,6 +20,10 @@ import {
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
     hasCharacterReferenceConstraint,
 } from "@/lib/characterPrompts";
+import ReferencePromptEditor, {
+    type ReferenceCandidate,
+    type ReferenceSuggestion,
+} from "./playground/ReferencePromptEditor";
 
 const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
@@ -55,17 +59,20 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
 }
 
 function selectedVariant(unit: any): any | undefined {
-    const variants = Array.isArray(unit?.variants) ? unit.variants : [];
+    const variants = Array.isArray(unit?.variants)
+        ? unit.variants
+        : Array.isArray(unit?.image_variants)
+            ? unit.image_variants
+            : [];
     const selectedId = unit?.selected_id || unit?.selected_image_id;
     return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
 }
-
 
 interface CharacterWorkbenchProps {
     asset: any;
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
-    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) => void;
+    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
     styleNegativePrompt?: string;
@@ -81,6 +88,66 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
+    const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+    const selectionVersion = useRef(0);
+    const [promptReferences, setPromptReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
+        full_body: [],
+        three_view: [],
+        headshot: [],
+    });
+    const [promptModes, setPromptModes] = useState<Record<"full_body" | "three_view" | "headshot", "text" | "reference">>({
+        full_body: "text",
+        three_view: "text",
+        headshot: "text",
+    });
+
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.getAssetReferenceIndex !== "function") {
+            setAssetIndex([]);
+            return;
+        }
+        let active = true;
+        void api.getAssetReferenceIndex(projectId)
+            .then((index) => {
+                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.some((variant) => variant.id)));
+            })
+            .catch(() => {
+                if (active) setAssetIndex([]);
+            });
+        return () => { active = false; };
+    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+
+    useEffect(() => {
+        setPromptReferences({ full_body: [], three_view: [], headshot: [] });
+        setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
+    }, [asset.id]);
+
+    const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
+        const usedLabels = new Set<string>();
+        const candidates: ReferenceCandidate[] = [];
+        for (const entry of assetIndex) {
+            const variants = entry.variants || [];
+            variants.forEach((variant, index) => {
+                if (!variant.id) return;
+                const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+                const baseLabel = variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
+                let label = baseLabel;
+                let suffix = 2;
+                while (usedLabels.has(label)) label = `${baseLabel} ${suffix++}`;
+                usedLabels.add(label);
+                candidates.push({
+                    label,
+                    previewUrl: getAssetUrl(variant.url),
+                    sourceLabel: entry.source_name || entry.source_scope,
+                    variantLabel,
+                    reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+                });
+            });
+        }
+        return candidates;
+    }, [assetIndex]);
 
     const openVariantEditor = (unit: any, fallback: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
         const variant = selectedVariant(unit);
@@ -89,6 +156,44 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             : getAssetUrl(fallback || variant?.url);
         if (!source) return;
         setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
+    };
+
+    // Uploads are immediately usable in the same explicit @ index. The
+    // project asset index is fetched once per workbench session, so merge the
+    // newly created selected variant locally instead of requiring a reload.
+    const retainUploadedVariantInIndex = (updatedProject: any, uploadType: CharacterEditUploadType) => {
+        const updatedAsset = updatedProject?.characters?.find((item: any) => item.id === asset.id);
+        const unit = uploadType === "reference_sheet"
+            ? updatedAsset?.reference_sheet
+            : uploadType === "full_body"
+                ? updatedAsset?.full_body_asset
+                : uploadType === "three_views"
+                ? updatedAsset?.three_view_asset
+                : updatedAsset?.headshot_asset;
+        const variant = selectedVariant(unit);
+        if (!variant?.id) return;
+        setAssetIndex((current) => {
+            const existing = current.find((entry) => entry.asset_type === "character" && entry.asset_id === asset.id);
+            if (!existing) {
+                return [...current, {
+                    asset_type: "character",
+                    asset_id: asset.id,
+                    name: updatedAsset?.name || asset.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject?.id || null,
+                    selected_variant_id: variant.id,
+                    variants: [{ id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
+                }];
+            }
+            if (existing.variants.some((item) => item.id === variant.id)) return current;
+            return current.map((entry) => entry === existing
+                ? {
+                    ...entry,
+                    selected_variant_id: variant.id,
+                    variants: [...entry.variants, { id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
+                }
+                : entry);
+        });
     };
 
     const uploadCharacterImage = async (file: File, uploadType: CharacterEditUploadType) => {
@@ -102,6 +207,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             asset.description,
         );
         updateProject(currentProject.id, updatedProject);
+        retainUploadedVariantInIndex(updatedProject, uploadType);
         toast.success(tc("uploadRef"));
     };
 
@@ -116,6 +222,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             asset.description,
         );
         updateProject(currentProject.id, updatedProject);
+        retainUploadedVariantInIndex(updatedProject, editTarget.uploadType);
         toast.success(ti("saved"));
         setEditTarget(null);
     };
@@ -143,26 +250,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const hasUploadedFullBody = asset.full_body_asset?.variants?.some((v: any) => v.is_uploaded_source) || false;
     const hasAnyUpload = hasUploadedThreeViews || hasUploadedHeadshot || hasUploadedFullBody;
     const hasNonFullBodyUpload = hasUploadedThreeViews || hasUploadedHeadshot;
-    // R2V v2 writes the main character image to reference_sheet. Keep the
-    // legacy full_body fields as the fallback so older projects still open.
     const hasReferenceSheetVariants = !!asset.reference_sheet?.image_variants?.length;
     const referenceSheetImageUrl = selectedReferenceSheetUrl(asset.reference_sheet);
     const referenceSheetImageAsset = hasReferenceSheetVariants
-        ? {
-            selected_id: asset.reference_sheet.selected_image_id,
-            variants: asset.reference_sheet.image_variants,
-        }
+        ? { selected_id: asset.reference_sheet.selected_image_id, variants: asset.reference_sheet.image_variants }
         : undefined;
-    // A present canonical pool owns selection, including a broken/missing
-    // selected ID; do not silently display an unrelated legacy image.
+    // The canonical pool owns selection. A broken selected ID should not
+    // silently show an unrelated legacy full-body image.
     const masterImageUrl = hasReferenceSheetVariants
         ? referenceSheetImageUrl
         : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
-    const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset
-        ? "reference_sheet"
-        : "full_body";
+    const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
 
     // Local state for prompts
@@ -333,13 +433,32 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
-    const handleGenerateClick = (type: "full_body" | "reference_sheet" | "three_view" | "headshot", batchSize: number) => {
+    const handleGenerateClick = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", batchSize: number) => {
         let prompt = "";
         if (type === "full_body" || type === "reference_sheet") prompt = fullBodyPrompt;
         else if (type === "three_view") prompt = threeViewPrompt;
         else if (type === "headshot") prompt = headshotPrompt;
 
-        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize);
+        const promptType = type === "reference_sheet" ? "full_body" : type;
+        const references = promptReferences[promptType];
+        const imageGenerationMode = promptModes[promptType];
+        if (imageGenerationMode === "reference" && references.length === 0) {
+            toast.warning("Add at least one explicit @ reference before generating.");
+            return;
+        }
+        if (imageGenerationMode === "text" && references.length > 0) {
+            toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
+            return;
+        }
+        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode);
+    };
+
+    const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
+        setPromptReferences((current) => ({ ...current, [type]: references }));
+    };
+
+    const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
+        setPromptModes((current) => ({ ...current, [type]: mode }));
     };
 
     // Helper to check if a specific type is generating
@@ -351,25 +470,30 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return task ? { isGenerating: true, batchSize: task.batchSize || 1 } : { isGenerating: false, batchSize: 1 };
     };
 
-    const handleSelectVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
+    const handleSelectVariant = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
-
-        try {
+        const version = ++selectionVersion.current;
+        const operation = selectionQueue.current.then(async () => {
             const updatedProject = await api.selectAssetVariant(currentProject.id, asset.id, "character", variantId, type);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
+            if (version === selectionVersion.current) updateProject(currentProject.id, updatedProject);
+        });
+        selectionQueue.current = operation.catch(() => {});
+        return operation.catch((error) => {
             console.error("Failed to select variant:", error);
-        }
+            throw error;
+        });
     };
 
     const handleDeleteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string) => {
         if (!currentProject) return;
 
         try {
+            await selectionQueue.current;
             const updatedProject = await api.deleteAssetVariant(currentProject.id, asset.id, "character", variantId);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            throw error;
         }
     };
 
@@ -409,6 +533,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 1: Full Body (Master) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -424,6 +549,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
+                        imageGenerationMode={promptModes.full_body}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("full_body", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick(masterGenerationType, batchSize)}
                         isGenerating={getGeneratingInfo(masterGenerationType).isGenerating}
                         generatingBatchSize={getGeneratingInfo(masterGenerationType).batchSize}
@@ -459,6 +588,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 2: Three View (Derived) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -474,6 +604,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
+                        imageGenerationMode={promptModes.three_view}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
                         isGenerating={getGeneratingInfo("three_view").isGenerating}
                         generatingBatchSize={getGeneratingInfo("three_view").batchSize}
@@ -489,6 +623,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 3: Headshot (Derived) */}
                     <WorkbenchPanel
+                        assetScope={asset.id}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -504,6 +639,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
+                        referenceCandidates={referenceCandidates}
+                        onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
+                        imageGenerationMode={promptModes.headshot}
+                        onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
@@ -627,6 +766,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 export function WorkbenchPanel({
     title,
+    assetScope,
     isActive,
     onClick,
 
@@ -642,6 +782,10 @@ export function WorkbenchPanel({
 
     prompt,
     setPrompt,
+    referenceCandidates = [],
+    onReferencesChange,
+    imageGenerationMode = "text",
+    onImageGenerationModeChange,
     onGenerate,
     isGenerating,
     generatingBatchSize,
@@ -678,6 +822,10 @@ export function WorkbenchPanel({
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
     const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
+        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+    );
 
     return (
         <div
@@ -944,6 +1092,7 @@ export function WorkbenchPanel({
                         />
                     ) : (
                         <VariantSelector
+                            key={assetScope}
                             asset={asset}
                             currentImageUrl={currentImageUrl}
                             onSelect={onSelect}
@@ -973,14 +1122,71 @@ export function WorkbenchPanel({
             <div className="h-1/3 border-t border-glass-border flex flex-col bg-surface">
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
+                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
+                        {(["text", "reference"] as const).map((generationMode) => (
+                            <button
+                                key={generationMode}
+                                type="button"
+                                aria-pressed={imageGenerationMode === generationMode}
+                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
+                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                            >
+                                {generationMode === "text" ? "Text to image" : "Reference image"}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    disabled={isLocked}
-                    className="flex-1 w-full bg-transparent p-4 text-xs text-text-secondary resize-none focus:outline-none focus:bg-glass font-mono leading-relaxed"
-                    placeholder="Enter prompt description..."
-                />
+                <div className="relative min-h-0 flex-1 overflow-visible p-4">
+                    <ReferencePromptEditor
+                        value={prompt}
+                        candidates={referenceCandidates}
+                        onChange={setPrompt}
+                        onReferencesChange={onReferencesChange}
+                        onMentionChange={setMention}
+                        allowImplicitMentions={false}
+                        pruneUnlistedReferences
+                        editable={!isLocked}
+                        placeholder="Enter prompt description..."
+                    />
+                    {mention && (
+                        <div
+                            role="listbox"
+                            aria-label="选择参考素材"
+                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
+                        >
+                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                参考索引
+                            </div>
+                            {matchingReferenceCandidates.length === 0 ? (
+                                <div className="px-2 py-2 text-xs text-text-muted">
+                                    {referenceCandidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}
+                                </div>
+                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
+                                <button
+                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                    type="button"
+                                    role="option"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        mention.choose(candidate);
+                                        setMention(null);
+                                    }}
+                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                >
+                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                        {candidate.previewUrl ? (
+                                            <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" />
+                                        ) : <ImageIcon size={15} className="text-text-muted" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1 text-xs">
+                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
+                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
