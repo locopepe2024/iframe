@@ -166,6 +166,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # half-completed video task could double-charge providers.
         try:
             self._recover_orphan_tasks()
+            self._recover_orphan_asset_states()
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("Orphan task recovery failed: %s", exc)
 
@@ -225,6 +226,55 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         else:
             logger.debug("Orphan task recovery: no stuck tasks found.")
+
+    def _recover_orphan_asset_states(self) -> None:
+        """Convert persisted image assets left in processing after a restart.
+
+        Image generation tasks currently live in memory, so a restart removes
+        their task record while the target asset can remain persisted as
+        ``processing``. Mark that state as recoverable failure instead of
+        exposing an eternal spinner. Successful existing variants remain
+        untouched and can be selected or used for an explicit retry.
+        """
+        recovered = 0
+        resources = [
+            (self.scripts.values(), "script"),
+            (self.series_store.values(), "series"),
+            (self.library_store, "global"),
+        ]
+        for containers, source in resources:
+            owners = containers if source != "global" else [containers]
+            for owner in owners:
+                for asset_type in ("character", "scene", "prop"):
+                    for asset in getattr(owner, f"{asset_type}s", []) or []:
+                        if asset.status != GenerationStatus.PROCESSING:
+                            continue
+                        asset.status = GenerationStatus.FAILED
+                        asset.generation_error = "Generation interrupted by backend restart. Retry or clear the status."
+                        recovered += 1
+            if source == "script" and recovered:
+                self._save_data()
+            elif source == "series" and recovered:
+                self._save_series_data()
+            elif source == "global" and recovered:
+                self._save_library_data()
+        if recovered:
+            logger.warning("Orphan asset recovery: marked %d image asset(s) recoverable", recovered)
+
+    def clear_asset_generation_state(self, script_id: str, asset_id: str, asset_type: str) -> Script:
+        """Clear a failed/orphaned image generation marker without deleting assets."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        target, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if target is None:
+            raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        if target.status == GenerationStatus.PROCESSING:
+            raise ValueError("Asset generation is still processing")
+        target.status = GenerationStatus.COMPLETED if self._asset_has_uploaded_image(target) else GenerationStatus.PENDING
+        target.generation_error = None
+        self._save_after_asset_mutation(source)
+        return script
 
     _MAX_LABEL_LEN = 20
 
@@ -820,6 +870,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
 
         target_asset.status = GenerationStatus.PROCESSING
+        target_asset.generation_error = None
         if not target_asset.owner_user_id:
             target_asset.owner_user_id = script.owner_user_id
         if not target_asset.owner_profile_id:
@@ -886,6 +937,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
                 
             target_asset.status = GenerationStatus.COMPLETED
+            target_asset.generation_error = None
             director_profile = self.effective_director_profile(script)
             if director_profile:
                 target_asset.director_profile_revision = director_profile.revision
@@ -893,6 +945,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 target_asset.director_review_required = False
         except Exception as e:
             target_asset.status = GenerationStatus.FAILED
+            target_asset.generation_error = str(e)
             raise e
         finally:
             self._save_after_asset_mutation(source)

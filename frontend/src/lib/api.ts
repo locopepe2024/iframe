@@ -730,6 +730,11 @@ export const api = {
         return res.data;
     },
 
+    clearAssetGenerationState: async (scriptId: string, assetType: string, assetId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/generation/clear`);
+        return res.data;
+    },
+
     generateAssetVideo: async (scriptId: string, assetType: string, assetId: string, data: { prompt?: string, duration?: number, aspect_ratio?: string }) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/generate_video`, data);
         return res.data;

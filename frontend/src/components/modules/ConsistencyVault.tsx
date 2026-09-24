@@ -80,6 +80,16 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleClearGenerationState = async (assetId: string, type: string) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.clearAssetGenerationState(currentProject.id, type, assetId);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error: any) {
+            alert(error?.response?.data?.detail || error?.message || "Failed to clear generation state");
+        }
+    };
+
     const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text") => {
         if (!currentProject) return;
 
@@ -467,6 +477,7 @@ export default function ConsistencyVault() {
                                 }}
                                 onDelete={() => handleDeleteAsset(asset.id, activeTab)}
                                 onUpload={() => handleOpenUploadModal(asset, activeTab)}
+                                onClearGenerationState={() => handleClearGenerationState(asset.id, activeTab)}
                             />
                         ))}
                         {/* Create New Asset Button */}
@@ -997,7 +1008,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload }: any) {
+function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -1057,6 +1068,12 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 </div>
             )}
 
+            {asset.status === "failed" && !isGenerating && (
+                <div className="absolute top-2 left-2 z-30 max-w-[calc(100%-1rem)] rounded-md bg-red-950/80 px-2 py-1 text-[0.625rem] text-red-200" title={asset.generation_error || "Generation failed"}>
+                    Generation failed
+                </div>
+            )}
+
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
@@ -1091,6 +1108,19 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 </p>
 
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
+                    {asset.status === "failed" && !isGenerating && (
+                        <WorkflowActionButton
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClearGenerationState?.();
+                            }}
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
+                        >
+                            Clear
+                        </WorkflowActionButton>
+                    )}
                     <WorkflowActionButton
                         onClick={(e) => {
                             e.stopPropagation();

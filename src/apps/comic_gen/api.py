@@ -3151,6 +3151,20 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generation/clear", response_model=Script)
+def clear_asset_generation_state(script_id: str, asset_type: str, asset_id: str):
+    """Clear a failed/orphaned image-generation marker without deleting the asset."""
+    try:
+        updated = pipeline.clear_asset_generation_state(script_id, asset_id, asset_type)
+        return signed_response(updated)
+    except ValueError as e:
+        status_code = 409 if "still processing" in str(e) else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to clear asset generation state")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/tasks/{task_id}")
 def get_task_status(task_id: str):
     """Returns a recoverable asset or persisted video task status."""

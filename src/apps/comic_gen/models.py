@@ -447,6 +447,7 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -470,6 +471,7 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -494,6 +496,7 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None

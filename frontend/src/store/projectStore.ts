@@ -370,7 +370,7 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number }[];
+    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string }[];
     addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
 
@@ -816,10 +816,16 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
+            version: 2,
+            migrate: (persistedState: any) => ({
+                ...persistedState,
+                // Generation markers are runtime state. Older releases
+                // persisted markers without a backend task ID, which left
+                // assets stuck after a server restart.
+                generatingTasks: [],
+            }),
             partialize: (state) => ({
                 projects: state.projects,
-
-                generatingTasks: state.generatingTasks // Now persisting this to maintain state across refreshes
             }),
         }
     )
