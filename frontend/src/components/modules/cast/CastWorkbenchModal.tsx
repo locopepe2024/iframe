@@ -145,7 +145,7 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     face_focus: {
         labelKey: "tplFaceFocusLabel",
         descKey: "tplFaceFocusDesc",
-        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45度、右前45度和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
+        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45°、右前45°和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images, inconsistent face, different person, deformed eyes, asymmetrical features",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
@@ -876,16 +876,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted mb-2.5">
                                         {t("templateSelectLabel")}
                                     </p>
-                                    <div className="flex gap-3">
+                                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                                         {(Object.entries(CHARACTER_TEMPLATES) as [CharacterTemplate, typeof CHARACTER_TEMPLATES[CharacterTemplate]][]).map(([key, tpl]) => {
                                             const isActive = selectedTemplate === key;
                                             const isLocked = !!(tpl.comingSoon && !isGptImage2);
                                             return (
                                                 <button
+                                                    type="button"
                                                     key={key}
                                                     onClick={() => !isLocked && handleTemplateSwitch(key)}
                                                     disabled={isLocked}
-                                                    className={`relative flex flex-col rounded-lg border overflow-hidden transition-all flex-1 min-w-0 ${
+                                                    aria-pressed={isActive}
+                                                    className={`relative flex flex-col rounded-lg border overflow-hidden transition-all min-w-0 ${
                                                         isActive
                                                             ? "border-primary/60 ring-1 ring-primary/30 bg-primary/5"
                                                             : isLocked

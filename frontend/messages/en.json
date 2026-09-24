@@ -361,7 +361,7 @@
     "tplDetailedLabel": "Detailed Reference",
     "tplDetailedDesc": "Tri-view + multi-angle face close-ups",
     "tplFaceFocusLabel": "Face Design Board",
-    "tplFaceFocusDesc": "Multi-angle face + four expressions",
+    "tplFaceFocusDesc": "Front, left-front 45°, right-front 45°, side; natural, smiling, serious, surprised; consistent face shape, feature proportions, skin tone, hairstyle, and age",
     "tplDesignSheetLabel": "Design Sheet",
     "tplDesignSheetDesc": "gpt-image-2 only",
     "tplSwitchConfirm": "Switching template will overwrite current prompt",

@@ -361,7 +361,7 @@
     "tplDetailedLabel": "详细参考表",
     "tplDetailedDesc": "三视图 + 多角度面部特写",
     "tplFaceFocusLabel": "人脸设计板",
-    "tplFaceFocusDesc": "多角度脸型 + 四种表情",
+    "tplFaceFocusDesc": "正面、左前45°、右前45°、侧面；自然、微笑、严肃、惊讶；保持脸型、五官比例、肤色、发型和年龄一致",
     "tplDesignSheetLabel": "角色设定图",
     "tplDesignSheetDesc": "仅支持 gpt-image-2",
     "tplSwitchConfirm": "切换模板将覆盖当前提示词",

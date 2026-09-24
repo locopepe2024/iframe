@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
+import zhMessages from '../../../../messages/zh.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
@@ -12,7 +13,9 @@ vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }))
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
 const project: any = { id: 'project', title: 'Project', characters: [character], scenes: [], props: [] };
-function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
+function show(locale: 'en' | 'zh' = 'en', localeMessages = locale === 'zh' ? zhMessages : messages) {
+ render(<NextIntlClientProvider locale={locale} messages={localeMessages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>);
+}
 beforeEach(() => { cleanup(); for (const poll of Array.from(activePolls.values())) clearInterval(poll); activePolls.clear(); vi.useRealTimers(); vi.clearAllMocks(); useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] }); });
 
 it('applies the completed asset snapshot and clears its task without fetching the project', async () => {
@@ -57,7 +60,9 @@ it('opens upload from the empty gallery and appends a selected reference', async
  expect(api.uploadAsset).toHaveBeenCalledWith('project', 'character', 'char', file, 'reference_sheet');
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
- expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toEqual({
+ const generationArgs = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(generationArgs[5]).toBe('reference_sheet');
+ expect(generationArgs[12]).toEqual({
   asset_type: 'character',
   asset_id: 'char',
   variant_id: 'one',
@@ -106,6 +111,34 @@ it('labels a child reference by angle and framing without creating another asset
  show();
  fireEvent.change(screen.getAllByRole('combobox', { name: 'View angle for Test' })[0], { target: { value: 'front' } });
  await waitFor(() => expect(api.updateAssetVariantMetadata).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'front', undefined));
+});
+
+it('renders the face design board responsively with an accessible selected state', () => {
+ show();
+
+ const simpleCard = screen.getByRole('button', { name: /Simple Three-View/ });
+ const faceCard = screen.getByRole('button', { name: /Face Design Board/ });
+ expect(simpleCard).toHaveAttribute('aria-pressed', 'true');
+ expect(faceCard).toHaveAttribute('aria-pressed', 'false');
+ expect(faceCard.parentElement).toHaveClass('grid-cols-2', 'lg:grid-cols-4');
+
+ fireEvent.click(faceCard);
+
+ expect(simpleCard).toHaveAttribute('aria-pressed', 'false');
+ expect(faceCard).toHaveAttribute('aria-pressed', 'true');
+ const prompt = screen.getByRole('textbox') as HTMLTextAreaElement;
+ expect(prompt.value).toContain('正面、左前45°、右前45°和侧面');
+ expect(prompt.value).toContain('自然、微笑、严肃、惊讶');
+ expect(prompt.value).toContain('脸型、五官比例、肤色、发型和年龄一致');
+});
+
+it('exposes the face design board and quick tag in Chinese', () => {
+ show('zh');
+
+ expect(screen.getByRole('button', { name: /人脸设计板/ })).toHaveTextContent(
+  '正面、左前45°、右前45°、侧面；自然、微笑、严肃、惊讶；保持脸型、五官比例、肤色、发型和年龄一致',
+ );
+ expect(screen.getByRole('button', { name: '+ 人脸设计' })).toBeTruthy();
 });
 
 it('keeps provider prompts out of the default customer view', async () => {
