@@ -69,3 +69,16 @@ def test_missing_asset_is_not_replaced_with_name_guess():
         query_asset_mentions(script, "prop", "unknown", source_version(script.original_text))
 
     assert error.value.status_code == 404
+
+
+def test_source_revision_list_omits_text_and_legacy_current_source_is_readable(monkeypatch):
+    from src.apps.comic_gen import api
+
+    script = make_script("周涵走向电影院。")
+    monkeypatch.setattr(api.pipeline, "get_script", lambda script_id: script)
+
+    revisions = api.list_source_revisions(script.id, user=None)
+    assert len(revisions) == 1
+    assert "text" not in revisions[0]
+    assert revisions[0]["content_hash"] == source_version(script.original_text)
+    assert api.get_source_revision(script.id, 1, user=None).text == script.original_text

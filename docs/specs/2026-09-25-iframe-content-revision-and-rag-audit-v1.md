@@ -103,6 +103,12 @@ find_source_ranges(flow_id, source_revision_id, query, filters={scene, character
 4. 在 Director 审阅中先展示每条解释所用的事实与原文；在 Assets/Storyboard 生成路径引入同一个 context builder，分别按角色/场景和 shot/beat 取证据。
 5. 用第一集选定的角色跨时期、关系变化和重复动作样本验证覆盖率与引用正确性；全局导演阐释仍由完整事实账本归纳，不能只由局部召回拼接。
 
+### ScriptSource revision 切片（2026-09-25）
+
+本切片在现有 `Script` JSON 文档内保存不可变原文快照，不引入独立数据库。`original_text` 仍是当前读模型；`source_revision` 指向当前版本，`source_revisions` 保存正文、SHA-256 和创建时间。旧项目首次写入时先保存旧正文为 revision 1，再保存变化后的正文；重复保存相同文本不产生版本。新项目创建时保存 revision 1。重新提取实体须保留原文和 Director 历史，并在正文变化时推进 source revision。提供版本列表和指定版本正文读取接口，供后续事实来源范围校验。
+
+边界：这个切片只记录原文版本，不把现有 `canon_state` 自动认定为经证据核准的事实账本；文本变化仅标记 Director/下游待复核，不自动改写已批准导演决定。后续 `ScriptFactLedger` 必须引用明确的 source revision 和字符范围，并在审核后才作为下游事实输入。验收：同文保存幂等；不同文本可读取旧版；reparse 后版本及 Director 历史保留；旧项目可无损迁移。
+
 验收以行为为准：同一查询在固定 revision 下结果稳定；剧本修改后旧查询可复现旧证据，新查询只读新证据；角色设计与分镜草稿能显示准确来源；冲突/未知项不被默认当作事实；局部返修不需要发送整集原文。
 
 ## What would verify it

@@ -757,6 +757,13 @@ class DirectorProfileRevision(BaseModel):
     source: Literal["user_apply", "migration"] = "user_apply"
 
 
+class ScriptSourceRevision(BaseModel):
+    revision: int = Field(..., ge=1)
+    content_hash: str = Field(..., min_length=1)
+    text: str
+    created_at: float = Field(..., ge=0)
+
+
 _DIRECTOR_TEXT_FIELDS = (
     "emotional_arc",
     "pacing",
@@ -1658,6 +1665,8 @@ class Script(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Authenticated UniArt profile owner")
     title: str = Field(..., description="Title of the comic/video")
     original_text: str = Field(..., description="The original novel text")
+    source_revision: int = Field(1, ge=1)
+    source_revisions: List[ScriptSourceRevision] = Field(default_factory=list)
     
     characters: List[Character] = Field(default_factory=list)
     scenes: List[Scene] = Field(default_factory=list)

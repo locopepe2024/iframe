@@ -54,6 +54,7 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
+    ScriptSourceRevision,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -663,13 +664,49 @@ def update_script_text(script_id: str, request: UpdateScriptTextRequest):
     without triggering an LLM round-trip. Heavy reparse stays bound to the
     explicit "提取实体" CTA.
     """
+    try:
+        return signed_response(pipeline.update_script_text(script_id, request.text))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+def _source_snapshots(script: Script) -> List[ScriptSourceRevision]:
+    if script.source_revisions:
+        return script.source_revisions
+    return [ScriptSourceRevision(
+        revision=script.source_revision,
+        content_hash=source_version(script.original_text),
+        text=script.original_text,
+        created_at=script.created_at,
+    )]
+
+
+@app.get("/projects/{script_id}/source-revisions")
+def list_source_revisions(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
-    script.original_text = request.text or ""
-    script.updated_at = time.time()
-    pipeline._save_data()
-    return signed_response(script)
+    return [snapshot.model_dump(exclude={"text"}) for snapshot in _source_snapshots(script)]
+
+
+@app.get("/projects/{script_id}/source-revisions/{revision}", response_model=ScriptSourceRevision)
+def get_source_revision(
+    script_id: str,
+    revision: int,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    snapshot = next((item for item in _source_snapshots(script) if item.revision == revision), None)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Source revision not found")
+    return snapshot
 
 
 @app.put("/projects/{script_id}/reparse", response_model=Script)

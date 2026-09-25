@@ -22,6 +22,7 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
+    ScriptSourceRevision,
     AssemblyEditPlan,
     director_execution_payload,
     GlobalAssetLibrary,
@@ -32,6 +33,7 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor
+from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
 from .video import VideoGenerator
@@ -665,6 +667,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
+        self._record_source_text(script, script.original_text)
         self.stamp_owned_children(script)
         self.scripts[script.id] = script
         self._save_data()
@@ -694,6 +697,42 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script = self.script_processor.parse_novel(existing_script.title, text, custom_extraction)
         self._extraction_cache[script_id] = (time.time(), new_script)
         return new_script
+
+    @staticmethod
+    def _record_source_text(script: Script, text: str) -> bool:
+        """Archive the current source before changing the compatibility read model."""
+        text = text or ""
+        if not script.source_revisions:
+            script.source_revisions.append(ScriptSourceRevision(
+                revision=script.source_revision,
+                content_hash=source_version(script.original_text),
+                text=script.original_text,
+                created_at=script.created_at,
+            ))
+        latest = script.source_revisions[-1]
+        if latest.revision != script.source_revision or latest.text != script.original_text:
+            raise ValueError("Script source revision does not match current text")
+        if text == script.original_text:
+            return False
+        script.source_revision += 1
+        script.original_text = text
+        script.source_revisions.append(ScriptSourceRevision(
+            revision=script.source_revision,
+            content_hash=source_version(text),
+            text=text,
+            created_at=time.time(),
+        ))
+        script.director_review_required = True
+        return True
+
+    def update_script_text(self, script_id: str, text: str) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if self._record_source_text(script, text):
+            script.updated_at = time.time()
+        self._save_data()
+        return script
 
     def reparse_project(self, script_id: str, text: str,
                         draft: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Script:
@@ -726,6 +765,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.owner_user_id = existing_script.owner_user_id
         new_script.owner_profile_id = existing_script.owner_profile_id
         self.stamp_owned_children(new_script)
+
+        self._record_source_text(existing_script, text)
+        new_script.original_text = existing_script.original_text
+        new_script.source_revision = existing_script.source_revision
+        new_script.source_revisions = [item.model_copy(deep=True) for item in existing_script.source_revisions]
+        new_script.director_profile_revisions = [
+            item.model_copy(deep=True) for item in existing_script.director_profile_revisions
+        ]
+        new_script.director_review_required = existing_script.director_review_required
         
         # Preserve project-level settings
         new_script.art_direction = existing_script.art_direction
