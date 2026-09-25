@@ -2108,6 +2108,19 @@ class ComicGenPipeline(StudioOwnerMixin):
         art_direction = self.effective_art_direction(script)
         return art_direction.director_profile if art_direction else None
 
+    def storyboard_visual_style(self, script: Script) -> Dict[str, Any]:
+        """Return the stable project-level style contract used across storyboard frames."""
+        art_direction = self.effective_art_direction(script)
+        if art_direction:
+            return {
+                "selected_style_id": art_direction.selected_style_id,
+                "style_config": art_direction.style_config,
+            }
+        return {
+            "style_preset": script.style_preset,
+            "style_prompt": script.style_prompt,
+        }
+
     def director_prompt_context(self, script: Script) -> str:
         profile = self.effective_director_profile(script)
         if not profile:
@@ -2216,6 +2229,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frames = self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=prompt,
             director_profile=director_profile,
+            visual_style=self.storyboard_visual_style(script),
         )
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
@@ -2230,6 +2244,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
             director_profile=director_profile,
+            visual_style=self.storyboard_visual_style(script),
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -2257,6 +2272,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
+            visual_style=self.storyboard_visual_style(script),
         )
 
         if not raw_frames:
@@ -2393,14 +2409,30 @@ class ComicGenPipeline(StudioOwnerMixin):
         prev_ctx = None
         if frame_idx > 0:
             pf = script.frames[frame_idx - 1]
-            prev_ctx = f"Action: {pf.action_description}. Shot: {pf.shot_size}, {pf.camera_angle}."
+            prev_scene = next((s.name for s in all_scenes if s.id == pf.scene_id), None)
+            prev_characters = [c.name for c in all_characters if c.id in pf.character_ids]
+            prev_ctx = (
+                f"Scene: {prev_scene}. Characters: {', '.join(prev_characters)}. "
+                f"Action: {pf.action_description}. Dialogue: {pf.dialogue or 'None'}. "
+                f"Visual atmosphere: {pf.visual_atmosphere or 'unspecified'}. "
+                f"Shot: {pf.shot_size}, {pf.camera_angle}."
+            )
         next_ctx = None
         if frame_idx < len(script.frames) - 1:
             nf = script.frames[frame_idx + 1]
-            next_ctx = f"Action: {nf.action_description}. Shot: {nf.shot_size}, {nf.camera_angle}."
+            next_scene = next((s.name for s in all_scenes if s.id == nf.scene_id), None)
+            next_characters = [c.name for c in all_characters if c.id in nf.character_ids]
+            next_ctx = (
+                f"Scene: {next_scene}. Characters: {', '.join(next_characters)}. "
+                f"Action: {nf.action_description}. Dialogue: {nf.dialogue or 'None'}. "
+                f"Visual atmosphere: {nf.visual_atmosphere or 'unspecified'}. "
+                f"Shot: {nf.shot_size}, {nf.camera_angle}."
+            )
 
         result = self.script_processor.refine_frame_to_rich(
-            coarse, char_assets, scene_assets, prev_ctx, next_ctx
+            coarse, char_assets, scene_assets, prev_ctx, next_ctx,
+            visual_style=self.storyboard_visual_style(script),
+            director_context=self.director_prompt_context(script),
         )
         if not result:
             return frame

@@ -693,6 +693,13 @@ from .extraction_jobs import ExtractionJobs
 extraction_jobs = ExtractionJobs()
 
 
+@app.on_event("startup")
+def recover_interrupted_extraction_jobs():
+    recovered = extraction_jobs.recover_interrupted()
+    if recovered:
+        logger.warning("Recovered %s interrupted extraction jobs", recovered)
+
+
 def extraction_response(job, script_id):
     if job['status'] == 'completed':
         # Rehydrate the apply cache, including after a backend restart.
@@ -2720,6 +2727,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
+    visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         text,
@@ -2728,6 +2736,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         instructions,
         prompt,
         director_profile.model_dump() if director_profile else None,
+        visual_style,
         llm.provider,
         llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()

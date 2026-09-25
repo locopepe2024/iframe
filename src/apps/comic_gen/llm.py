@@ -594,6 +594,17 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 """
 
 
+STORYBOARD_CONTINUITY_CONTEXT = """
+
+# 全片分镜连续性约束
+1. 原始剧本是事件、时间地点、动作因果和对白的事实来源。按原顺序拆分动作；每帧只突出一个主要动作，并让动作状态自然推进，不重复、回滚或跳过必要的因果结果。
+2. 只引用实体表中的角色、场景和道具；角色使用完整身份/时期变体名。人物外观、服装、道具形态和场景布局跨帧保持一致，除非剧本明确发生变化。
+3. 同一连续场景维持时间、天气、空间方位、人物朝向、视线/动作方向和道具持有状态；保持镜头轴线与屏幕方向连贯。景别、角度和运镜可以变化，但变化应服务叙事且不得意外翻转空间关系。
+4. 保留剧本对白原文、说话人和先后顺序；多人轮流说话时按原顺序拆成不同帧。没有依据的动作、对白、人物事实和场景细节不得补写。
+5. 全片使用同一项目视觉风格。只允许剧情明确要求的时空/氛围变化带来局部光线差异，不得因此改变角色设计、场景身份或整体材质、色彩与渲染语言。
+"""
+
+
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
         self._api_key = api_key
@@ -1481,8 +1492,23 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
         return result
 
+    @staticmethod
+    def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:
+        if not visual_style:
+            return ""
+        return """
+
+# 全片统一视觉风格
+下面的项目级视觉风格适用于所有分镜帧。跨帧保持稳定的色彩、材质、摄影和渲染语言；
+只在剧本或镜头需要时改变动作、构图、景别与局部光线。视觉风格不得改变剧本中的地点、年代、文化背景或角色身份。
+<project_visual_style>
+%s
+</project_visual_style>
+""" % json.dumps(visual_style, ensure_ascii=False, indent=2)
+
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
-                              director_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                              director_profile: Optional[Dict[str, Any]] = None,
+                              visual_style: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -1514,6 +1540,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += self._storyboard_visual_style_context(visual_style)
+        system_prompt += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
             execution_context = director_execution_payload(director_profile)
             system_prompt += """
@@ -1592,6 +1620,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         instructions: List[str],
         custom_extraction_prompt: str = "",
         director_profile: Optional[Dict[str, Any]] = None,
+        visual_style: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -1603,6 +1632,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        baseline += self._storyboard_visual_style_context(visual_style)
+        baseline += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
                 director_execution_payload(director_profile), ensure_ascii=False, indent=2
@@ -1665,6 +1696,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         scene_assets: List[Dict[str, Any]],
         prev_frame_context: Optional[str] = None,
         next_frame_context: Optional[str] = None,
+        visual_style: Optional[Dict[str, Any]] = None,
+        director_context: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Phase 2: Refine a coarse frame into a rich frame with full structured fields."""
         if not self.is_configured:
@@ -1729,12 +1762,18 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.
-5. Maintain continuity with adjacent frames.
+5. Maintain continuity with adjacent frames: preserve character appearance/clothing, scene layout, time/weather, screen direction, eyelines, action direction, and prop state unless an explicit script event changes them. Camera framing may vary without accidentally reversing the axis.
 6. camera_movement has at most primary + secondary.
+
+# Project Visual Style
+{json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}
+
+# Confirmed Director Continuity Constraints
+{director_context or "No confirmed director profile"}
 
 # Coarse Frame
 {json.dumps(coarse_frame, ensure_ascii=False, indent=2)}
