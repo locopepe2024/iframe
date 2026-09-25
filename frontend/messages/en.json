@@ -1188,6 +1188,7 @@
     "directorReanalyze": "Regenerate Interpretation",
     "directorDraft": "Director profile draft",
     "directorRevision": "Confirmed v{revision}",
+    "directorHistory": "Confirmed versions",
     "directorRevisionPlaceholder": "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     "directorRefine": "Revise",
     "directorApply": "Confirm direction",

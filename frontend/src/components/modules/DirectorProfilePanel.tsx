@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
-import { useProjectStore, type DirectorProfile } from "@/store/projectStore";
+import { useProjectStore, type DirectorProfile, type DirectorProfileRevision } from "@/store/projectStore";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
@@ -41,12 +41,22 @@ export default function DirectorProfilePanel() {
     const [history, setHistory] = useState<string[]>([]);
     const [busy, setBusy] = useState<"analyze" | "refine" | "apply" | null>(null);
     const [status, setStatus] = useState<DirectorStatus>({ kind: "idle" });
+    const [revisions, setRevisions] = useState<DirectorProfileRevision[]>([]);
 
     useEffect(() => {
         setDraftText(editableProfile(confirmed));
         setInstruction("");
         setHistory([]);
         setStatus({ kind: "idle" });
+    }, [currentProject?.id, confirmed?.content_hash]);
+
+    useEffect(() => {
+        if (!currentProject) return;
+        let active = true;
+        api.listDirectorProfileRevisions(currentProject.id)
+            .then(value => { if (active) setRevisions(value as DirectorProfileRevision[]); })
+            .catch(() => { if (active) setRevisions([]); });
+        return () => { active = false; };
     }, [currentProject?.id, confirmed?.content_hash]);
 
     const parseDraft = () => {
@@ -197,6 +207,21 @@ export default function DirectorProfilePanel() {
 
             {draftText ? (
                 <div className="space-y-3">
+                    {revisions.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorHistory")}>
+                            <span>{t("directorHistory")}</span>
+                            {revisions.slice().reverse().map(revision => (
+                                <button
+                                    key={`${revision.revision}-${revision.content_hash}`}
+                                    type="button"
+                                    className="rounded border border-border px-2 py-1 hover:border-primary"
+                                    onClick={() => setDraftText(JSON.stringify(revision.profile, null, 2))}
+                                >
+                                    {t("directorRevision", { revision: revision.revision })}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <textarea
                         aria-label={t("directorDraft")}
                         value={draftText}

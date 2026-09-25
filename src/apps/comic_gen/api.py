@@ -53,6 +53,7 @@ from .structured_evidence import query_asset_mentions, source_version
 from .models import (
     ArtDirection,
     DirectorProfile,
+    DirectorProfileRevision,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -4565,6 +4566,19 @@ def director_profile_status(
     user: UserContext = Depends(require_studio_user),
 ):
     return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
+
+
+@app.get("/projects/{script_id}/director-profile/revisions", response_model=List[DirectorProfileRevision])
+def list_director_profile_revisions(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """List confirmed Director snapshots without exposing transient jobs."""
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return script.director_profile_revisions
 
 
 @app.post("/projects/{script_id}/director-profile/apply", response_model=Script)

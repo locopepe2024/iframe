@@ -993,6 +993,11 @@ export const api = {
         return res.data;
     },
 
+    listDirectorProfileRevisions: async (scriptId: string) => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/director-profile/revisions`);
+        return res.data;
+    },
+
     getStylePresets: async () => {
         const res = await axios.get(`${API_URL}/art_direction/presets`);
         return res.data;

@@ -237,6 +237,14 @@ export interface DirectorProfile {
     confirmed_at: number;
 }
 
+export interface DirectorProfileRevision {
+    revision: number;
+    content_hash: string;
+    profile: DirectorProfile;
+    confirmed_at: number;
+    source: "user_apply" | "migration";
+}
+
 export type ModelSettings = FrontendModelSettings;
 
 export const ASPECT_RATIOS = [

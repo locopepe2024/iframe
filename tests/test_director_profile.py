@@ -606,6 +606,25 @@ def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_re
     pipeline._save_data.assert_called_once()
 
 
+def test_apply_director_profile_archives_only_changed_confirmations():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+
+    first = pipeline.apply_director_profile("film", draft)
+    assert len(first.director_profile_revisions) == 1
+    assert first.director_profile_revisions[0].revision == 1
+    assert first.director_profile_revisions[0].profile.content_hash == first.art_direction.director_profile.content_hash
+
+    unchanged = pipeline.apply_director_profile("film", draft)
+    assert len(unchanged.director_profile_revisions) == 1
+
+    changed_draft = {**draft, "pacing": "更克制，保留等待的停顿"}
+    changed = pipeline.apply_director_profile("film", changed_draft)
+    assert len(changed.director_profile_revisions) == 2
+    assert [item.revision for item in changed.director_profile_revisions] == [1, 2]
+    assert changed.director_profile_revisions[-1].profile.pacing == changed_draft["pacing"]
+
+
 def test_episode_director_profile_preserves_inherited_series_visual_style():
     pipeline, script = make_pipeline()
     script.art_direction = None

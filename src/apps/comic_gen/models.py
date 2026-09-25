@@ -742,6 +742,21 @@ class DirectorProfile(BaseModel):
     confirmed_at: float = 0.0
 
 
+class DirectorProfileRevision(BaseModel):
+    """Immutable, user-reviewable snapshot of a confirmed Director profile.
+
+    The active profile remains embedded in ``ArtDirection`` for backwards
+    compatibility; this archive is the durable review surface for restoring or
+    comparing decisions made during Director editing.
+    """
+
+    revision: int = Field(..., ge=1)
+    content_hash: str = Field(..., min_length=1)
+    profile: DirectorProfile
+    confirmed_at: float = Field(..., ge=0)
+    source: Literal["user_apply", "migration"] = "user_apply"
+
+
 _DIRECTOR_TEXT_FIELDS = (
     "emotional_arc",
     "pacing",
@@ -1656,6 +1671,10 @@ class Script(BaseModel):
     
     # Art Direction configuration (new approach)
     art_direction: Optional[ArtDirection] = Field(None, description="Global visual style configuration")
+    director_profile_revisions: List[DirectorProfileRevision] = Field(
+        default_factory=list,
+        description="Append-only confirmed Director profile snapshots for review and restore.",
+    )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage

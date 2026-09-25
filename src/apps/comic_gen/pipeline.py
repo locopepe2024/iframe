@@ -21,6 +21,7 @@ from .models import (
     PromptConfig,
     ArtDirection,
     DirectorProfile,
+    DirectorProfileRevision,
     AssemblyEditPlan,
     director_execution_payload,
     GlobalAssetLibrary,
@@ -2198,6 +2199,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             script.art_direction.director_profile = confirmed
         changed = not current or current.content_hash != content_hash
+        if changed:
+            # Keep the active profile as the compatibility read model, while
+            # preserving each confirmed decision as an append-only snapshot.
+            script.director_profile_revisions.append(
+                DirectorProfileRevision(
+                    revision=confirmed.revision,
+                    content_hash=confirmed.content_hash,
+                    profile=confirmed.model_copy(deep=True),
+                    confirmed_at=confirmed.confirmed_at,
+                )
+            )
         if changed:
             script.director_review_required = True
             for item in [*script.characters, *script.scenes, *script.props, *script.frames]:

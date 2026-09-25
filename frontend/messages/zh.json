@@ -1189,6 +1189,7 @@
     "directorReanalyze": "重新生成解读",
     "directorDraft": "导演设定草稿",
     "directorRevision": "已确认 v{revision}",
+    "directorHistory": "已确认版本",
     "directorRevisionPlaceholder": "提出修改，例如：故事仍发生在中国；日式只用于摄影语言；重点突出未接来电。",
     "directorRefine": "继续修订",
     "directorApply": "确认导演设定",
