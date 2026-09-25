@@ -141,6 +141,21 @@ def test_storyboard_job_progress_and_resume_after_failed_batch(tmp_path):
         assert [frame['action_summary'] for frame in done['result']['frames']] == ['first', 'second']
 
 
+def test_expired_storyboard_worker_cannot_save_batch_without_polling(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    with store.connect() as db:
+        db.execute(
+            'INSERT INTO jobs (id, owner, project, fingerprint, status, created) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            ('expired', 'owner', 'project', 'storyboard:expired', 'running', time.time() - 1801),
+        )
+
+    assert not store.save_batch('owner', 'project', 'storyboard:expired', 'expired',
+                                0, 'source:chars-0-4', [{'action_summary': 'late'}])
+    assert store.get('owner', 'project', 'expired')['status'] == 'failed'
+    assert store.load_batches('owner', 'project', 'storyboard:expired') == {}
+
+
 def test_lifo_latest_wins_queue_discards_older_director_revisions(tmp_path):
     first_started = Event()
     release_first = Event()
