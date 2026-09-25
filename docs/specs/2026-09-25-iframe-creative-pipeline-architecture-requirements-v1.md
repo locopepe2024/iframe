@@ -50,7 +50,7 @@ Script → Director → Assets → Storyboard → Motion
 
 ### 2. Script Stage
 
-产物：`ScriptSource`。
+产物：`ScriptSource` 与经用户核对的 `ScriptFactLedger`。
 
 包含：
 
@@ -59,14 +59,32 @@ Script → Director → Assets → Storyboard → Motion
 - 对白、说话人、动作段落；
 - 原文出现的角色、时期变体、道具和关系；
 - 长文分段索引和可恢复 batch 状态。
+- 事实账本：人物、关系、事件、时间线、场景、来源冲突和未知项，保留 source refs 与事实状态。
 
 禁止把模型推断写回原文事实。
 
 ### 3. Director Stage
 
-产物必须拆成三层，不能只返回一个 Director Profile：
+Director 基于批准的 ScriptFactLedger 工作，产出两个先后衔接、可分别修改、批准和版本化的产物，不能只返回一个混合 Director Profile。
 
-1. `ScenePlan`：按时间/地点划场，包含场景时长、情绪和连续性。
+#### `DirectorInterpretation`
+
+表达导演对整集/全片的理解，以及打算怎样引导观众理解和感受：
+
+- 主题、戏剧主线、叙事重点与观众情绪目标；
+- 人物目标、人物弧光、关系变化和冲突结构；
+- 情绪曲线、关键转折、并行时间线和剧情线；
+- 线索/意象的铺设、揭示和回收；
+- 希望突出、压低、延迟揭示或保持暧昧的信息及理由；
+- 整体风格、表演、视听、节奏和剪辑原则。
+
+每项需区分 `source_fact`、`director_interpretation`、`hypothesis` 和 `user_decision`，并引用 ScriptFactLedger。导演解释不得回写为剧本事实。
+
+#### `DirectorShootingPlan`
+
+用户批准 DirectorInterpretation 后，再具体化为：
+
+1. `ScenePlan`：按时间/地点划场，包含戏剧目的、时长和连续性。
 2. `BeatPlan`：场景内事件/动作节拍，引用原文范围。
 3. `ShotPlan`：将多个 beat 组织成正式镜头，决定切镜和镜头语言。
 
@@ -79,7 +97,18 @@ Script → Director → Assets → Storyboard → Motion
 - 屏幕方向、人物空间关系和连续性状态；
 - 导演假设与未决问题。
 
-核心规则：一个 shot 可以承载多个 beat；beat 数量不得直接决定 shot 数量。
+核心规则：一个 shot 可以承载多个 beat；beat 数量不得直接决定 shot 数量。拍摄计划必须引用确切的已批准导演阐释版本。
+
+#### 当前实现与目标差距（本地代码事实）
+
+- `DirectorProfilePanel` 支持异步分析、JSON 草稿编辑、自然语言指令返修，以及用户显式 Apply。
+- 用户修改后的草稿状态由前端组件持有；分析/返修结果会作为有保留期限的异步 job 结果保存，但不是可恢复、可比较的权威 draft artifact。点击 Apply 后，profile 才写入服务端。
+- 已确认 profile 存在单个 `ArtDirection.director_profile` 字段中，带 revision/hash，但不是可查询的不可变历史 artifact。
+- profile 变化时，当前实现会给角色、场景、道具和所有 frames 设置 `director_review_required`；没有按产物依赖关系做定向 stale 计算。
+- 当前 profile schema 同时容纳事实摘要、导演阐释、未决项和 `sample_plan`；没有 ScriptFactLedger 或 DirectorShootingPlan 独立产物。
+- 仓库还有独立的 `DirectorWorkbench` /“3D 导演台”：它操作 3D 舞台中的角色、路径、姿势和相机，当前界面明确显示仅保存浏览器本地草稿，不调用后端导演台 API。
+
+因此，现有叙事用 DirectorProfile 的“分析 → 手工修改/反馈返修 → Apply”可作为交互迁移起点；目标改造需要补草稿持久化与产物拆分，再引入版本比较、批准 lineage 和精确下游失效。3D 导演台是另一类镜头/表演编辑工具，不是 Script → Director 的剧本理解产物；若未来接入流水线，应由已批准的 ShotPlan 初始化 3D 场景，并把用户确认的 3D blocking/camera 作为镜头执行资料单独保存，不能与 DirectorInterpretation 共用一个状态对象。
 
 ### 4. Assets Stage
 
@@ -91,7 +120,7 @@ Script → Director → Assets → Storyboard → Motion
 - 时期/身份/服装变体；
 - 导演确认的表演边界、关系状态和可见情绪范围；
 - 角色在不同场景中的可见状态；
-- 来源、版本和 `director_profile_revision`。
+- 来源、版本和 `director_interpretation_revision`、`director_shooting_plan_revision`。
 
 #### 场景资产要求
 
@@ -142,8 +171,10 @@ AI 自动化不等于自动批准。每一阶段都要支持“生成 → 查看
 
 | 阶段 | 用户需要决定的内容 | 默认状态 |
 |---|---|---|
-| Script | 原文、分集范围、场景识别是否正确 | `DRAFT` |
-| Director | 场景边界、节奏、镜头数量、切镜理由 | `HUMAN_REVIEW` |
+| ScriptSource | 原文、分集范围和源文本版本 | `DRAFT` |
+| ScriptFactLedger | 人物/关系/事件事实、来源冲突和未知项 | `HUMAN_REVIEW` |
+| DirectorInterpretation | 主题、人物弧光、冲突/情绪/线索线、风格和剧情重点 | `HUMAN_REVIEW` |
+| DirectorShootingPlan | 场景边界、beat-shot 组合、镜头数量、时长和切镜理由 | `HUMAN_REVIEW` |
 | Assets | 角色视觉锚点、时期变体、场景基准图、导演风格 | `HUMAN_REVIEW` |
 | Storyboard | 镜头表、首帧构图和完整描述 | `HUMAN_REVIEW` |
 | Motion | 执行模式、模型、时长、成本和批量范围 | `APPROVAL_REQUIRED` |
@@ -177,9 +208,10 @@ Skill 只负责本阶段生产或验证，不得跨阶段隐式修改上游事�
 推荐角色：
 
 - `flow_director`：编排和授权；
-- `script_plot_director`：剧本事实、场次和 beat；
+- `script_fact_extractor`：来源锚定的事实账本与冲突整理；
+- `director_interpreter`：主题、人物、冲突、情绪/线索线和创作方向；
+- `shot_plan_director`：在批准的阐释下生成场景/beat/shot 拍摄计划；
 - `creative_asset_director`：角色、场景和道具视觉定义；
-- `shot_plan_director`：镜头规划；
 - `storyboard_writer`：完整分镜描述；
 - `motion_prompt_director`：运动执行描述；
 - `unified_qa`：结构校验、连续性检查和返修路由。
@@ -188,12 +220,13 @@ Skill 只负责本阶段生产或验证，不得跨阶段隐式修改上游事�
 
 现有分批恢复能力应保留，但职责要调整：
 
-1. Script 阶段负责 source range 和分段事实索引。
-2. Director 对每个 batch 生成 scene/beat 草稿，并携带前后连续性摘要。
-3. Orchestrator 汇总全部 batch 后，执行一次跨批次场景边界和 shot 合并。
-4. 只有全局合并后的 `ShotPlan` 才能进入 Assets/Storyboard。
-5. batch 重试只能替换对应 source range；不得重复追加旧结果。
-6. 每批结果必须带 `source_ref`、输入版本和 batch revision。
+1. Script 阶段负责 source range、分段索引和带引用的局部事实抽取。
+2. Reduce 汇总全篇事实账本、时间线、关系、场景候选与冲突；用户先审阅事实。
+3. `DirectorInterpretation` 基于全篇事实账本和完整剧情生成；用户审阅批准整体理解和创作方向，不能直接拼接局部 batch 的情绪判断。
+4. `DirectorShootingPlan` 再把已批准的整体方向具体化为全局 scene/beat/shot，跨批次合并后由用户确认镜头数和节奏。
+5. 只有已批准的 DirectorInterpretation 与 DirectorShootingPlan 才进入 Assets/Storyboard。
+6. batch 重试只能替换对应 source range；不得重复追加旧结果。
+7. 每批结果必须带 `source_ref`、输入版本和 batch revision。
 
 ## 版本和局部失效
 
@@ -201,17 +234,19 @@ Skill 只负责本阶段生产或验证，不得跨阶段隐式修改上游事�
 
 ```text
 Script v3
-  → Director v3.1
+  → ScriptFactLedger v3.1
+  → DirectorInterpretation v3.1
+  → DirectorShootingPlan v3.1
   → Assets v3.1
-  → ShotPlan v3.1
   → Storyboard v3.1
   → Motion v3.1
 ```
 
 修改规则：
 
-- 修改 Script 场景范围：下游 Director/Assets/ShotPlan/Storyboard/Motion 标记 `STALE`；
-- 修改 Director 镜头规划：只使受影响 Assets/Storyboard/Motion 标记 `STALE`；
+- 修改 ScriptSource/FactLedger：下游 DirectorInterpretation、DirectorShootingPlan、Assets、Storyboard、Motion 标记 `STALE`；
+- 修改 DirectorInterpretation：下游 DirectorShootingPlan、Assets、Storyboard、Motion 标记 `STALE`；
+- 修改 DirectorShootingPlan：按场景/角色引用使相关 Assets、Storyboard、Motion 标记 `STALE`；
 - 修改单个角色资产：只使引用该角色的 Storyboard/Motion 标记 `STALE`；
 - 修改单个 Storyboard：只使该镜头 Motion 标记 `STALE`。
 
@@ -242,12 +277,15 @@ FAILED
 
 ## MVP 建议
 
-第一阶段不做完整 agent graph，先实现四个稳定契约：
+第一阶段不做完整 agent graph，按用户决策顺序先打通以下契约：
 
-1. `DirectorPlan`：`scene_plan + beat_plan + shot_plan`；
-2. `CreativeAssetProfile`：角色/场景/道具的导演化定义；
-3. `StoryboardFrame` 必须绑定 `shot_plan_id`；
-4. 每阶段 draft/review/apply/revise/version 状态和用户批准记录。
+1. `ScriptFactLedger`：可校对的来源事实、冲突与未知项；
+2. `DirectorInterpretation`：可编辑、保存、返修、比较版本、批准生效的导演阐释；
+3. `DirectorShootingPlan`：只在导演阐释被批准后生成，包含 `scene_plan + beat_plan + shot_plan`，可独立审阅和批准；
+4. `CreativeAssetProfile`：角色/场景/道具的导演化定义，并引用两个批准的 Director revisions；
+5. `StoryboardFrame` 必须绑定 `shot_plan_id` 和明确的上游 revisions。
+
+早期 UI 可以沿用 DirectorProfilePanel 的分析/反馈/应用交互作迁移入口，但必须把其单一 JSON 草稿拆成可读、可局部编辑的事实账本和导演阐释视图；拍摄计划使用按场景和镜头组织的表格/列表，不要求用户直接编辑原始 JSON。草稿保存、批准生效应为不同操作。
 
 第一集 158 条旧记录只做审计和迁移，不直接复用为 motion 输入。
 
@@ -268,8 +306,8 @@ FAILED
 
 ## 需要产品确认的问题
 
-1. Director 阶段默认是否必须用户批准 `ShotPlan` 后才能生成 Storyboard？
+1. 用户是否可对低风险场次批量批准 DirectorShootingPlan，同时保留逐场/逐镜锁定和返修？
 2. Assets 阶段是否必须人工确认角色/场景视觉基准图？
 3. Storyboard 首帧是否作为强制人工门，Motion 是否只能从批准的首帧启动？
-4. 是否允许用户选择“自动推进模式”，但仍保留每阶段可暂停和回退？
+4. 是否允许用户选择“自动推进模式”，以及哪些批准能预先授权自动通过？
 5. 第一集迁移是生成新的完整项目版本，还是在旧版本上创建可比较的 storyboard revision？
