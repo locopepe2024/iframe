@@ -33,11 +33,16 @@ class ExtractionJobs:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(self.path, timeout=5)
         db.row_factory = sqlite3.Row
-        db.execute('CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, owner TEXT NOT NULL, project TEXT NOT NULL, fingerprint TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL, result TEXT, error TEXT, superseded INTEGER NOT NULL DEFAULT 0, queue_group TEXT NOT NULL DEFAULT \'\')')
+        db.execute('CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, owner TEXT NOT NULL, project TEXT NOT NULL, fingerprint TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL, result TEXT, error TEXT, superseded INTEGER NOT NULL DEFAULT 0, queue_group TEXT NOT NULL DEFAULT \'\', total_batches INTEGER NOT NULL DEFAULT 0)')
         # Existing installations predate the superseded marker. Keep the
         # migration local and additive so old durable results remain readable.
         try:
             db.execute('ALTER TABLE jobs ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError as exc:
+            if 'duplicate column name' not in str(exc).lower():
+                raise
+        try:
+            db.execute('ALTER TABLE jobs ADD COLUMN total_batches INTEGER NOT NULL DEFAULT 0')
         except sqlite3.OperationalError as exc:
             if 'duplicate column name' not in str(exc).lower():
                 raise
@@ -47,7 +52,37 @@ class ExtractionJobs:
             if 'duplicate column name' not in str(exc).lower():
                 raise
         db.execute('CREATE INDEX IF NOT EXISTS extraction_owner_project ON jobs(owner, project, fingerprint, created)')
+        db.execute('CREATE TABLE IF NOT EXISTS storyboard_batches (owner TEXT NOT NULL, project TEXT NOT NULL, fingerprint TEXT NOT NULL, batch_index INTEGER NOT NULL, source_ref TEXT NOT NULL, frames TEXT NOT NULL, PRIMARY KEY(owner, project, fingerprint, batch_index))')
         return db
+
+    def load_batches(self, owner, project, fingerprint):
+        with closing(self.connect()) as db:
+            rows = db.execute(
+                'SELECT batch_index, source_ref, frames FROM storyboard_batches '
+                'WHERE owner=? AND project=? AND fingerprint=? ORDER BY batch_index',
+                (owner, project, fingerprint),
+            ).fetchall()
+            return {row['batch_index']: {'source_ref': row['source_ref'],
+                                         'frames': json.loads(row['frames'])} for row in rows}
+
+    def save_batch(self, owner, project, fingerprint, job_id, index, source_ref, frames):
+        """Only an active worker may commit a batch; expired workers lose ownership."""
+        with closing(self.connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            self._expire_storyboard_jobs(db, time.time())
+            active = db.execute(
+                "SELECT 1 FROM jobs WHERE id=? AND owner=? AND project=? AND fingerprint=? AND status='running'",
+                (job_id, owner, project, fingerprint),
+            ).fetchone()
+            if not active:
+                return False
+            db.execute(
+                'INSERT INTO storyboard_batches (owner, project, fingerprint, batch_index, source_ref, frames) '
+                'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner, project, fingerprint, batch_index) '
+                'DO UPDATE SET source_ref=excluded.source_ref, frames=excluded.frames',
+                (owner, project, fingerprint, index, source_ref, json.dumps(frames, ensure_ascii=False)),
+            )
+            return True
 
     def recover_interrupted(self):
         """Close rows whose in-process workers disappeared on server restart."""
@@ -68,17 +103,18 @@ class ExtractionJobs:
         )
 
     @staticmethod
-    def public(row):
+    def public(row, completed_batches=0):
         superseded = bool(row['superseded']) if 'superseded' in row.keys() else False
         status = 'superseded' if superseded and row['status'] == 'running' else row['status']
         error = row['error']
         if status == 'superseded' and not error:
             error = '该修订已被更新的请求替代。'
         return {'id': row['id'], 'status': status,
+                'progress': {'completed': completed_batches, 'total': row['total_batches']} if row['total_batches'] else None,
                 'result': json.loads(row['result']) if row['result'] and status != 'superseded' else None,
                 'error': error}
 
-    def start(self, owner, project, fingerprint, work, *, queue_policy='fifo', queue_group=''):
+    def start(self, owner, project, fingerprint, work, *, queue_policy='fifo', queue_group='', pass_job_id=False, total_batches=0):
         if queue_policy not in ('fifo', 'lifo'):
             raise ValueError(f'Unknown extraction queue policy: {queue_policy}')
         if queue_policy == 'lifo':
@@ -88,6 +124,7 @@ class ExtractionJobs:
             db.execute('BEGIN IMMEDIATE')
             self._expire_storyboard_jobs(db, now)
             db.execute("DELETE FROM jobs WHERE status!='running' AND created<?", (now - RETENTION,))
+            db.execute('DELETE FROM storyboard_batches WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE jobs.owner=storyboard_batches.owner AND jobs.project=storyboard_batches.project AND jobs.fingerprint=storyboard_batches.fingerprint)')
             prior = db.execute("SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint=? AND status IN ('running','completed') ORDER BY created DESC LIMIT 1", (owner, project, fingerprint)).fetchone()
             if prior:
                 return self.public(prior)
@@ -96,14 +133,15 @@ class ExtractionJobs:
             if db.execute("SELECT COUNT(*) FROM jobs WHERE status='running'").fetchone()[0] >= 4:
                 raise HTTPException(503, '分析任务繁忙，请稍后重试。')
             job_id = uuid4().hex
-            db.execute('INSERT INTO jobs (id, owner, project, fingerprint, status, created, result, error, superseded, queue_group) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?)',
-                       (job_id, owner, project, fingerprint, 'running', now, queue_group))
+            db.execute('INSERT INTO jobs (id, owner, project, fingerprint, status, created, result, error, superseded, queue_group, total_batches) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)',
+                       (job_id, owner, project, fingerprint, 'running', now, queue_group, total_batches))
         try:
-            self.executor.submit(copy_context().run, self._run, job_id, work)
+            self.executor.submit(copy_context().run, self._run, job_id, work, pass_job_id)
         except Exception:
             self._finish(job_id, error='分析任务未能启动，请重试。')
             raise HTTPException(503, '分析任务未能启动，请重试。')
-        return {'id': job_id, 'status': 'running', 'result': None, 'error': None}
+        return {'id': job_id, 'status': 'running', 'result': None, 'error': None,
+                'progress': {'completed': 0, 'total': total_batches} if total_batches else None}
 
     def _start_lifo(self, owner, project, fingerprint, work, queue_group):
         """Queue a latest-wins job without changing other extraction flows."""
@@ -216,12 +254,19 @@ class ExtractionJobs:
         self._pending_work.pop(job_id, None)
         self._dispatch_after_finish()
 
-    def _run(self, job_id, work):
+    def _run(self, job_id, work, pass_job_id=False):
         try:
-            self._finish(job_id, result=work())
+            self._finish(job_id, result=work(job_id) if pass_job_id else work())
         except Exception as exc:
             logger.error('Script extraction %s failed (%s)', job_id, type(exc).__name__)
-            self._finish(job_id, error='剧本分析失败，请检查模型配置后重试。')
+            with closing(self.connect()) as db:
+                row = db.execute('SELECT fingerprint FROM jobs WHERE id=?', (job_id,)).fetchone()
+            message = (
+                '分镜分析失败；已完成的分段已保存，重试会从未完成段继续。'
+                if row and row['fingerprint'].startswith('storyboard:')
+                else '剧本分析失败，请检查模型配置后重试。'
+            )
+            self._finish(job_id, error=message)
 
     def get(self, owner, project, job_id):
         with closing(self.connect()) as db, db:
@@ -229,7 +274,13 @@ class ExtractionJobs:
             row = db.execute('SELECT * FROM jobs WHERE id=? AND owner=? AND project=?', (job_id, owner, project)).fetchone()
             if not row:
                 raise HTTPException(404, 'Analysis task not found')
-            return self.public(row)
+            completed = 0
+            if row['total_batches']:
+                completed = db.execute(
+                    'SELECT COUNT(*) FROM storyboard_batches WHERE owner=? AND project=? AND fingerprint=?',
+                    (owner, project, row['fingerprint']),
+                ).fetchone()[0]
+            return self.public(row, completed)
 
     def forget_result(self, owner, project, key, value):
         """Remove completed jobs whose JSON result contains an exact key/value."""

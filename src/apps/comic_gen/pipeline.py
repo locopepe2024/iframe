@@ -2222,15 +2222,42 @@ class ComicGenPipeline(StudioOwnerMixin):
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
         return script, entities_json, prompt
 
-    def preview_storyboard_analysis(self, script_id: str, text: str) -> List[Dict[str, Any]]:
+    def preview_storyboard_analysis(self, script_id: str, text: str,
+                                    load_batches=None, save_batch=None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
         director_profile = self.director_execution_context(script)
-        frames = self.script_processor.analyze_to_storyboard(
-            text, entities_json, custom_extraction_prompt=prompt,
-            director_profile=director_profile,
-            visual_style=self.storyboard_visual_style(script),
-        )
+        visual_style = self.storyboard_visual_style(script)
+        if len(text) <= 1800 or load_batches is None or save_batch is None:
+            frames = self.script_processor.analyze_to_storyboard(
+                text, entities_json, custom_extraction_prompt=prompt,
+                director_profile=director_profile, visual_style=visual_style,
+            )
+        else:
+            from .llm import split_director_source
+            chunks = split_director_source(
+                text, direct_max_chars=1800, target_chars=1600, max_chars=1800
+            )
+            cached = load_batches()
+            frames = []
+            for index, chunk in enumerate(chunks):
+                prior = cached.get(index)
+                if prior and prior.get("source_ref") == chunk["source_ref"]:
+                    batch_frames = prior["frames"]
+                else:
+                    batch_frames = self.script_processor.analyze_to_storyboard(
+                        chunk["text"], entities_json,
+                        custom_extraction_prompt=prompt,
+                        director_profile=director_profile,
+                        visual_style=visual_style,
+                        previous_frames=frames[-3:],
+                    )
+                    if not batch_frames:
+                        raise RuntimeError(f"分镜分析第 {index + 1}/{len(chunks)} 段没有返回镜头。")
+                    batch_frames = [{**frame, "source_ref": chunk["source_ref"]} for frame in batch_frames]
+                    if not save_batch(index, chunk["source_ref"], batch_frames):
+                        raise RuntimeError("分镜分析任务已过期，请重试。")
+                frames.extend(batch_frames)
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
         return frames

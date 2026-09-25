@@ -44,7 +44,7 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
             "selected_style_id": "film-noir",
             "style_config": {"positive_prompt": "黑白电影质感"},
         },
-        preview_storyboard_analysis=lambda project, text: first,
+        preview_storyboard_analysis=lambda project, text, **kwargs: first,
         refine_storyboard_analysis=lambda project, text, draft, instructions: (
             captured.update(text=text, draft=draft, instructions=instructions) or refined
         ),
@@ -219,6 +219,35 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
     assert "跨帧保持稳定" in prompt
     assert "空间方位" in prompt and "对白原文" in prompt
     assert result[0]["action_summary"] == "角色推门进入"
+
+
+def test_long_storyboard_preview_resumes_ordered_source_batches():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    script = Script(id="project", title="Story", original_text="", created_at=1, updated_at=1)
+    pipeline.scripts = {script.id: script}
+    pipeline.storyboard_analysis_context = lambda project: (script, {"characters": [], "scenes": [], "props": []}, "prompt")
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.side_effect = lambda text, *_args, **_kwargs: [{"action_summary": text[:8]}]
+    source = "第一场。" * 1000
+    saved = {}
+    calls = []
+
+    def save(index, source_ref, frames):
+        saved[index] = {"source_ref": source_ref, "frames": frames}
+        calls.append(index)
+        return True
+
+    first = pipeline.preview_storyboard_analysis("project", source, load_batches=lambda: {}, save_batch=save)
+    assert len(first) > 1
+    assert calls == list(range(len(first)))
+    assert all(frame["source_ref"] == saved[index]["source_ref"] for index, frame in enumerate(first))
+
+    pipeline.script_processor.analyze_to_storyboard.reset_mock()
+    second = pipeline.preview_storyboard_analysis("project", source, load_batches=lambda: saved, save_batch=save)
+    assert second == first
+    pipeline.script_processor.analyze_to_storyboard.assert_not_called()
 
 
 def test_rich_frame_prompt_keeps_project_style_and_continuity_constraints():
