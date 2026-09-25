@@ -20,7 +20,7 @@
 # import_file_preview, import_file_confirm, upload_t2i_frame,
 # analyze_script_for_styles. All others are `def` for a reason.
 # ─────────────────────────────────────────────────────────────────────────────
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Depends, Header
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -41,6 +41,7 @@ import re
 import traceback
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError
+from .structured_evidence import query_asset_mentions, source_version
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -4080,6 +4081,41 @@ class DirectorProfileRefineRequest(BaseModel):
 
 class DirectorProfileApplyRequest(BaseModel):
     draft: Dict[str, Any]
+
+
+@app.get("/projects/{script_id}/evidence/source")
+def get_evidence_source(script_id: str, user: UserContext = Depends(require_studio_user)):
+    """Return the current text fingerprint used to pin evidence queries."""
+    del user  # Studio ownership is enforced by enforce_studio_owner_boundary.
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return {
+        "project_id": script_id,
+        "source_version": source_version(script.original_text or ""),
+        "source_version_kind": "content_hash",
+        "character_count": len(script.original_text or ""),
+    }
+
+
+@app.get("/projects/{script_id}/evidence/assets/{asset_kind}/{asset_id}")
+def get_asset_evidence(
+    script_id: str,
+    asset_kind: Literal["character", "scene", "prop"],
+    asset_id: str,
+    source_version: str,
+    limit: int = Query(20, ge=1, le=100),
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return source spans for a structured asset, without inferring facts."""
+    del user  # Studio ownership is enforced by enforce_studio_owner_boundary.
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return query_asset_mentions(
+        script, asset_kind, asset_id, source_version,
+        assets=pipeline.resolve_episode_assets(script), limit=limit,
+    )
 
 
 def _validated_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
