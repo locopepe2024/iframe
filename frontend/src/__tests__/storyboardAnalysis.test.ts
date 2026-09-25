@@ -33,6 +33,20 @@ it("resumes a durable storyboard job and returns its draft", async () => {
     );
 });
 
+it("reports persisted batch progress while polling", async () => {
+    const progress = vi.fn();
+    vi.mocked(axios.post).mockResolvedValue({
+        data: { id: "job", status: "running", progress: { completed: 0, total: 3 } },
+    });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { id: "job", status: "running", progress: { completed: 2, total: 3 } } })
+        .mockResolvedValueOnce({ data: { id: "job", status: "completed", result: { frames }, progress: { completed: 3, total: 3 } } });
+    const pending = analyzeStoryboardPreview("/api", "project", "script", progress);
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual(frames);
+    expect(progress.mock.calls).toEqual([[0, 3], [2, 3], [3, 3]]);
+});
+
 it("waits through queued and running states before returning the draft", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "job", status: "queued" } });
     vi.mocked(axios.get)

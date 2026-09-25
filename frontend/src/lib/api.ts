@@ -1152,8 +1152,9 @@ export const api = {
         return analyzeAndApplyStoryboard(API_URL, scriptId, text);
     },
 
-    analyzeStoryboardPreview: async (scriptId: string, text: string) =>
-        analyzeStoryboardPreview(API_URL, scriptId, text),
+    analyzeStoryboardPreview: async (scriptId: string, text: string,
+                                     onProgress?: (completed: number, total: number) => void) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress),
 
     refineStoryboardPreview: async (
         scriptId: string,
