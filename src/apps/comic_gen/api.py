@@ -333,7 +333,7 @@ def get_studio_media(
         headers = None
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
-    return FileResponse(path, headers=headers)
+    return FileResponse(path, headers=headers, media_type="image/webp" if preview else None)
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
