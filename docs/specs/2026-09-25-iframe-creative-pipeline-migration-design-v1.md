@@ -35,45 +35,85 @@ CreativeFlow
   id
   owner_profile_id
   project_id
-  active_revision_id
   status
   created_at
   updated_at
 ```
 
-### StageArtifact
+`CreativeFlow` 只负责项目级流程状态，不持有一个无法代表多产物并行版本的全局 `active_revision_id`。每个逻辑产物各有自己的 draft/approved head。
 
-所有阶段结果采用不可变 revision，修订创建新 revision：
+### Artifact revision 与 head
+
+内容权威落在结构化、可版本化的 artifact 上，而不是分散在业务对象里的互不关联 revision/hash 字段。artifact payload 可按领域 schema 存 JSON；逻辑模型不预先绑定某种数据库。Revision 是不可变快照：任何用户修改或 AI 返修都创建新的 `revision_id`，不原位覆盖已批准内容。
 
 ```text
-StageArtifact
-  id
+ContentArtifactRevision
+  revision_id
+  artifact_key           # script_source, director_interpretation, storyboard_shot:{shot_id}, ...
   flow_id
   stage                 # script | director | assets | storyboard | motion
-  revision
-  parent_artifact_ids[]
-  source_refs[]
+  revision_number
+  parent_revision_ids[]
+  input_refs[]           # exact artifact revision IDs consumed
+  source_refs[]          # source artifact revision + range/locator
   payload
-  status                # draft | ready_for_review | approved | stale | failed
+  content_hash           # integrity/dedup aid; not a revision identity
   prompt_id / prompt_revision
   skill_id / skill_revision
   model_provider / model_id
-  created_by            # ai | user | system
-  approved_by / approved_at
-  qa_result
+  created_by             # ai | user | system
   created_at
+
+ArtifactHead
+  flow_id
+  artifact_key
+  draft_revision_id
+  approved_revision_id
+
+ArtifactReviewEvent
+  event_id
+  revision_id
+  decision               # approve | reject | request_revision | lock_fields
+  actor_id / actor_type
+  field_paths[]
+  comment
+  created_at
+
+ArtifactJob
+  job_id
+  stage
+  input_revision_ids[]
+  prompt_id / prompt_revision
+  skill_id / skill_revision
+  model_provider / model_id
+  status / progress / error
+  output_revision_ids[]
+  idempotency_key
+  created_at / completed_at
 ```
 
-阶段产物不可覆盖已批准版本。`active_revision_id` 只指向用户当前选择的版本。
+`artifact_key` 是逻辑产物身份，`revision_id` 是内容版本身份；例如一个 ShotPlan revision 可以改变镜头集合，而每条 StoryboardShot 另有稳定 shot identity 和自身 revisions。`content_hash` 用于内容相等/完整性检查，不能替代 revision ID，也不能单独证明来源、批准或下游依赖。
+
+审批不修改 revision 内容。一次批准以 `ArtifactReviewEvent` 记录，并在同一持久化事务内把相应 `ArtifactHead.approved_revision_id` 指向已审阅 revision。保存草稿也创建可恢复的 revision，只更新 draft head；不能隐式推进下游。
+
+下游任务必须 pin 确切 `input_revision_ids`。新上游批准版本与下游输入不一致时，依赖投影将后者显示为 `stale`；历史 revision 本身不被改写，用户可选择基于新版本局部返修、重做或继续查看旧结果。受影响对象由依赖边和字段范围计算，不用项目级单一 `director_review_required` 布尔值代替。
+
+### 物理存储边界
+
+- 结构化 artifact revision、head、review event 和依赖关系必须处于支持一致提交/并发控制的权威持久化层；revision 内容可以是 schema 校验的 JSON payload。
+- 当前本地代码的 `output/projects.json` / `output/series.json` 覆盖式保存和临时 job SQLite 不能单独满足不可变历史与多记录原子更新的目标。
+- 线上实际 API/数据库/文件存储与备份配置尚未核验。实现前先确认生产真实权威存储及事务边界，再选择复用或迁移持久化 adapter；不能因本地开发使用 JSON 文件就假定生产也相同。
+- 新旧兼容期必须明确单一写入权威。旧 `Script` / `StoryboardFrame` 可作为兼容读模型/投影；批准动作在一次事务内创建 revision、review event、更新 head 并更新必要投影，避免双写后两边都声称是最新。
 
 ### Job 与 Artifact 的区别
 
 - **Job** 是一次可恢复的计算尝试：排队、运行、失败、重试、进度。
-- **Artifact** 是可审阅/批准/引用的内容版本。
-- 一个 Job 可以产出一个或多个临时 batch result；只有聚合、结构验证成功后才创建 `StageArtifact`。
+- **Artifact revision** 是可审阅/批准/引用的内容版本。
+- 一个 Job 可以产出一个或多个临时 batch result；只有聚合、结构验证成功后才创建可审阅的 artifact revision。
 - Job 完成不代表 Artifact 已批准。
+- Job fingerprint/idempotency key 用于重复请求控制，不代表内容版本或批准 lineage。
 
-复用现有 `ExtractionJobs` 作为异步执行基础，但后续需扩展为 stage-aware job，并保留独立 artifact store。线上分批恢复能力可通过 batch checkpoint adapter 迁移，不让 UI 直接依赖 SQLite batch 表结构。
+复用现有 `ExtractionJobs` 作为迁移初期的异步执行基础，但后续需记录准确输入 revision，并把结果交给 artifact store 管理。线上分批恢复能力可通过 batch checkpoint adapter 迁移，不让 UI 直接依赖 SQLite batch 表结构。
 
 ## 阶段数据契约
 
