@@ -1,6 +1,12 @@
 import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
-import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import {
+    analyzeAndApplyStoryboard,
+    analyzeStoryboardPreview,
+    applyStoryboardDraft as applyStoryboardDraftRequest,
+    refineStoryboardPreview,
+    type StoryboardDraftFrame,
+} from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
 import {
     analyzeDirectorProfile,
@@ -1143,10 +1149,7 @@ export const api = {
      * Replaces existing frames with newly generated ones.
      */
     analyzeToStoryboard: async (scriptId: string, text: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
-            text: text
-        });
-        return res.data;
+        return analyzeAndApplyStoryboard(API_URL, scriptId, text);
     },
 
     analyzeStoryboardPreview: async (scriptId: string, text: string) =>
@@ -1160,8 +1163,7 @@ export const api = {
     ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
 
     applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
-        return res.data;
+        return applyStoryboardDraftRequest(API_URL, scriptId, text, draft);
     },
 
     /**

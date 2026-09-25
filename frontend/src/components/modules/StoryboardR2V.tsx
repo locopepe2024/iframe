@@ -8,6 +8,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
+import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -50,10 +51,18 @@ import {
 
 export default function StoryboardR2V() {
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[] | undefined>();
+    const displayedStyle = currentProject
+        ? resolveStoryboardStyle(currentProject, currentSeries)
+        : { positivePrompt: "", negativePrompt: "" };
+    const loadGenerationStyle = useCallback(() => {
+        if (!currentProject) throw new Error("Project is unavailable");
+        return resolveStoryboardStyleForRender(currentProject, currentSeries, api.getSeries);
+    }, [currentProject, currentSeries]);
 
     useEffect(() => {
         const projectId = currentProject?.id;
@@ -881,11 +890,12 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
             const t2iPrompt = buildGenerationPrompt(
                 shot,
                 false,
                 videoConfig.model,
-                currentProject.art_direction?.style_config?.positive_prompt || "",
+                style.positivePrompt,
             )
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
@@ -897,7 +907,7 @@ export default function StoryboardR2V() {
                 t2iPrompt,
                 1,   // batchSize
                 resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     "",
                     shot.negativePromptOverride,
                 ),
@@ -929,7 +939,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, t2iStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, persistWorkbench]);
+    }, [shots, currentProject, persistWorkbench, loadGenerationStyle]);
 
     // Generate video for a shot
     const generateVideo = useCallback(async (index: number) => {
@@ -941,6 +951,7 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
             if (shot.tabMode === "direct_r2v") {
                 // R2V mode: use reference assets. We prefer the user's
                 // explicit R2V model choice (videoConfig.r2vModel) over
@@ -964,13 +975,13 @@ export default function StoryboardR2V() {
                     shot,
                     generateAudio,
                     routeModelId,
-                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                    style.positivePrompt,
                 );
                 const promptText = routeModelId.toLowerCase().includes("minimax-h3")
                     ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
                     : basePromptText;
                 const negativePrompt = resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     videoConfig.negativePrompt,
                     shot.negativePromptOverride,
                 );
@@ -1061,10 +1072,10 @@ export default function StoryboardR2V() {
                     shot,
                     generateAudio,
                     videoConfig.model,
-                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                    style.positivePrompt,
                 );
                 const negativePrompt = resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     videoConfig.negativePrompt,
                     shot.negativePromptOverride,
                 );
@@ -1116,7 +1127,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences]);
+    }, [shots, currentProject, videoConfig, resolveShotReferences, loadGenerationStyle]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls
@@ -1140,17 +1151,6 @@ export default function StoryboardR2V() {
         const generateAudio = storyboardGeneratedAudio(
             requestedModelId,
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-        );
-        const basePromptText = buildGenerationPrompt(
-            shot,
-            generateAudio,
-            requestedModelId,
-            currentProject.art_direction?.style_config?.positive_prompt || "",
-        );
-        const effectiveNegativePrompt = resolveNegativePrompt(
-            currentProject.art_direction?.style_config?.negative_prompt || "",
-            params?.negativePrompt ?? videoConfig.negativePrompt,
-            shot.negativePromptOverride,
         );
         const referenceSubmission = resolveShotReferences(shot);
         const requestedDuration = params?.duration ?? videoConfig.duration;
@@ -1242,6 +1242,15 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
+            const basePromptText = buildGenerationPrompt(
+                shot, generateAudio, requestedModelId, style.positivePrompt,
+            );
+            const effectiveNegativePrompt = resolveNegativePrompt(
+                style.negativePrompt,
+                params?.negativePrompt ?? videoConfig.negativePrompt,
+                shot.negativePromptOverride,
+            );
             // Build a per-call factory so the batch fires N parallel
             // requests through Promise.all — fail-fast on any one
             // failure leaves the others untouched on the backend (the
@@ -1371,7 +1380,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" as const } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences, missingRefsMessage, t]);
+    }, [shots, currentProject, videoConfig, resolveShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
     // Project-level task refresh: when any task on any shot is in
     // flight, refetch the whole project every 5s. The candidates
@@ -2107,7 +2116,7 @@ export default function StoryboardR2V() {
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}
-                            globalStylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
+                            globalStylePrompt={displayedStyle.positivePrompt}
                             index={index}
                             totalShots={shots.length}
                             characters={characters}

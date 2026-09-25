@@ -322,6 +322,7 @@ export interface Project {
     updatedAt: string;
     aspectRatio?: string;
     style_preset?: string;
+    style_prompt?: string;
     art_direction?: ArtDirection;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;

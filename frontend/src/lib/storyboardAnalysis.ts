@@ -4,12 +4,13 @@ export type StoryboardDraftFrame = Record<string, any>;
 
 interface StoryboardJob {
     id: string;
-    status: "running" | "completed" | "failed";
+    status: "queued" | "running" | "completed" | "failed" | "superseded";
     result: { frames: StoryboardDraftFrame[] } | null;
     error?: string;
 }
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const JOB_TIMEOUT_MS = 30 * 60 * 1000;
 const transient = (error: unknown) => axios.isAxiosError(error) &&
     (!error.response || [408, 429, 502, 503, 504].includes(error.response.status));
 
@@ -27,7 +28,9 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
     if (!submitted?.id) throw new Error("Invalid storyboard analysis task response");
     let job = submitted;
     let failures = 0;
-    while (job.status === "running") {
+    const deadline = Date.now() + JOB_TIMEOUT_MS;
+    while (job.status === "running" || job.status === "queued") {
+        if (Date.now() >= deadline) throw new Error("Storyboard analysis timed out. Please retry.");
         await pause(2000);
         try {
             const next = (await axios.get<StoryboardJob>(`${pollBase}/${job.id}`, { timeout: 15000 })).data;
@@ -47,6 +50,29 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
 export function analyzeStoryboardPreview(baseUrl: string, projectId: string, text: string) {
     const base = `${baseUrl}/projects/${projectId}/storyboard-analysis-jobs`;
     return runStoryboardJob(base, base, { text });
+}
+
+export async function applyStoryboardDraft(
+    baseUrl: string,
+    projectId: string,
+    text: string,
+    draft: StoryboardDraftFrame[],
+) {
+    const response = await axios.post(
+        `${baseUrl}/projects/${projectId}/storyboard-analysis/apply`,
+        { text, draft },
+    );
+    return response.data;
+}
+
+/** Compatibility flow for callers that still expect generation + apply in one call. */
+export async function analyzeAndApplyStoryboard(
+    baseUrl: string,
+    projectId: string,
+    text: string,
+) {
+    const draft = await analyzeStoryboardPreview(baseUrl, projectId, text);
+    return applyStoryboardDraft(baseUrl, projectId, text, draft);
 }
 
 export function refineStoryboardPreview(
