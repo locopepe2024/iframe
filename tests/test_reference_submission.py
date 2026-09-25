@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.models import uniart
+from src.models import reference_binding
 from src.models.reference_binding import bind_reference_names
 from src.apps.playground.models import PlaygroundGeneration
 from src.apps.playground.service import PlaygroundService
@@ -46,6 +47,25 @@ def test_image_edit_keeps_all_urls_and_names_without_quality_changes(monkeypatch
     assert body['images'] == ([{'image_url': ref} for ref in refs] if objects else refs)
     assert body['prompt'] == '@1 穿 @2'
     assert body['quality'] == 'high'
+
+
+def test_image_edit_accepts_webp_when_system_mime_database_lacks_it(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    original_guess = reference_binding.mimetypes.guess_type
+    monkeypatch.setattr(
+        reference_binding.mimetypes, 'guess_type',
+        lambda path: (None, None) if path.endswith('.webp') else original_guess(path),
+    )
+    refs = ['https://cdn.example/face.jpeg', 'https://cdn.example/outfit.webp']
+    gen = PlaygroundGeneration(
+        id='webp-edit', model_id='uniart/gpt-image-2.5-sunburst-discount', mode='i2i',
+        prompt='Keep the face and change the outfit', input_media=refs, created_at='today',
+    )
+
+    PlaygroundService(Mock(output_dir=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
+
+    assert post.call_args.args[1] == '/images/edits'
+    assert post.call_args.args[2]['images'] == [{'image_url': ref} for ref in refs]
 
 
 def test_ambiguous_duplicate_names_are_rejected():
