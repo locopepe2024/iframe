@@ -17,6 +17,7 @@
 - 当前常见 relationship 形状包含 `pair / initial / change / final`，但没有必需的 `phase_id` 或带来源的状态转换，因此不足以推断精确的人物关系时间图。
 - 后端现已加入可选的严格 `DirectorProfile.story_map`；phases/events、按阶段的 relationship states、story threads 和角色变体引用都经过 Pydantic 约束。pipeline 在保存/确认时绑定当前剧本文本 revision、稳定来源 ID 和有效角色变体，并验证关系/事件引用及可选 Fact Ledger ID。旧草稿的空 `story_map` 不进入旧内容 hash。
 - 前端当前仍编辑旧 timeline/relationships；story map 规范视图和 Fact Ledger 证据选择尚未接入，因此新增后端契约目前不改变旧项目的呈现方式。
+- Story map 草稿允许暂缺阶段名、事件描述或显式事实引用，便于用户分步编辑；确认时要求至少一个有名阶段、至少一个有描述的事件，并要求标为 `explicit` 的事件/关系状态引用已确认事实。
 - `sample_plan` 当前用于少量场次示例，含 `range / purpose / focus / asset_need` 等描述；它不等于 scene/beat/shot 拍摄计划，也没有镜头时长及 shot ID。
 - `ScriptFactLedgerPanel` 已提供独立的草稿保存、确认、历史版本与原文证据接口，但其事实编辑入口目前也是 JSON textarea。
 - 风格选择已具备独立的目录、预览、项目保存、系列继承/覆盖行为；它目前与 Director Profile 共存于 `art_direction`。

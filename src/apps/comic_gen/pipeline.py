@@ -2575,6 +2575,34 @@ class ComicGenPipeline(StudioOwnerMixin):
         if unconfirmed:
             raise ValueError("Explicit story-map claims must cite confirmed facts: " + ", ".join(sorted(unconfirmed)))
 
+    @staticmethod
+    def _validate_director_story_map_for_confirmation(value: Any) -> None:
+        """Allow incomplete maps to be saved as drafts, but not confirmed."""
+        if value is None:
+            return
+        story_map = value.model_dump() if hasattr(value, "model_dump") else value
+        phases = story_map.get("phases", [])
+        if not phases:
+            raise ValueError("Add at least one story phase before confirming the story map")
+        events = [event for phase in phases for event in phase.get("events", [])]
+        if not events:
+            raise ValueError("Add at least one story event before confirming the story map")
+        for phase in phases:
+            if not str(phase.get("label", "")).strip():
+                raise ValueError("Name every story phase before confirming the story map")
+            for event in phase.get("events", []):
+                if not str(event.get("description", "")).strip():
+                    raise ValueError("Describe every story event before confirming the story map")
+                if event.get("evidence_status") == "explicit" and not event.get("source_fact_ids"):
+                    raise ValueError("Explicit story events must link confirmed Fact Ledger entries")
+        for arc in story_map.get("relationship_arcs", []):
+            for state in arc.get("states", []):
+                if state.get("evidence_status") == "explicit" and not state.get("source_fact_ids"):
+                    raise ValueError("Explicit relationship states must link confirmed Fact Ledger entries")
+        for thread in story_map.get("story_threads", []):
+            if not str(thread.get("label", "")).strip():
+                raise ValueError("Name every story thread before confirming the story map")
+
     def save_director_profile_draft(
         self,
         script_id: str,
@@ -2649,6 +2677,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             normalized,
         )
         self._validate_director_story_map(script, normalized.get("story_map"))
+        self._validate_director_story_map_for_confirmation(normalized.get("story_map"))
         clean = _director_profile_content(normalized)
         if expected_draft_revision is not None:
             saved_draft = script.director_profile_draft

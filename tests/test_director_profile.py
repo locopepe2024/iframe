@@ -754,6 +754,23 @@ def test_story_map_draft_is_saved_and_confirmed_as_part_of_the_director_revision
     assert confirmed.art_direction.director_profile.content_hash != ""
 
 
+def test_incomplete_story_map_can_be_saved_as_a_draft_but_not_confirmed():
+    pipeline, script = make_pipeline()
+    story_map = valid_story_map()
+    story_map["source_revision_id"] = ""
+    story_map["phases"][0]["label"] = ""
+    story_map["phases"][0]["events"][0]["description"] = ""
+    story_map["phases"][0]["events"][0]["evidence_status"] = "explicit"
+    draft = {**profile_payload(), "story_map": story_map}
+
+    saved = pipeline.save_director_profile_draft("film", script.source_revision, 0, draft)
+    assert saved.director_profile_draft_revision == 1
+    with pytest.raises(ValueError, match="Name every story phase"):
+        pipeline.apply_director_profile(
+            "film", draft, expected_current_revision=0, expected_draft_revision=1,
+        )
+
+
 def test_director_profile_cannot_confirm_unsaved_or_stale_drafts():
     pipeline, script = make_pipeline()
     draft = profile_payload()

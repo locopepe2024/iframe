@@ -753,7 +753,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
     event_id: str = Field(..., min_length=1, max_length=120)
     order: int = Field(0, ge=0)
     title: str = Field("", max_length=180)
-    description: str = Field(..., min_length=1, max_length=3000)
+    description: str = Field("", max_length=3000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
     dramatic_function: str = Field("", max_length=1200)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
@@ -761,8 +761,6 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
 
     @model_validator(mode="after")
     def validate_fact_status(self):
-        if self.evidence_status == "explicit" and not self.source_fact_ids:
-            raise ValueError("explicit story events must cite confirmed fact IDs")
         if len(self.source_fact_ids) != len(set(self.source_fact_ids)):
             raise ValueError("story event source_fact_ids must be unique")
         if len(self.character_ids) != len(set(self.character_ids)):
@@ -773,7 +771,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
 class DirectorStoryPhase(_DirectorStoryMapModel):
     phase_id: str = Field(..., min_length=1, max_length=120)
     order: int = Field(..., ge=0)
-    label: str = Field(..., min_length=1, max_length=180)
+    label: str = Field("", max_length=180)
     time_anchor: str = Field("", max_length=240)
     events: List[DirectorStoryEvent] = Field(default_factory=list, max_length=100)
 
@@ -787,8 +785,6 @@ class DirectorRelationshipState(_DirectorStoryMapModel):
 
     @model_validator(mode="after")
     def validate_fact_status(self):
-        if self.evidence_status == "explicit" and not self.source_fact_ids:
-            raise ValueError("explicit relationship states must cite confirmed fact IDs")
         if len(self.source_fact_ids) != len(set(self.source_fact_ids)):
             raise ValueError("relationship state source_fact_ids must be unique")
         if len(self.trigger_event_ids) != len(set(self.trigger_event_ids)):
@@ -818,7 +814,7 @@ class DirectorStorylineMilestone(_DirectorStoryMapModel):
 
 class DirectorStoryThread(_DirectorStoryMapModel):
     thread_id: str = Field(..., min_length=1, max_length=120)
-    label: str = Field(..., min_length=1, max_length=180)
+    label: str = Field("", max_length=180)
     person_ids: List[str] = Field(default_factory=list, max_length=20)
     milestones: List[DirectorStorylineMilestone] = Field(default_factory=list, max_length=100)
 
