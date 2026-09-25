@@ -30,6 +30,8 @@ from src.apps.comic_gen.models import (
     merge_director_profile_patch,
     normalize_director_canon_state,
     Script,
+    ScriptFactLedgerEntry,
+    ScriptFactLedgerRevision,
     Series,
     normalize_director_profile_draft,
     normalize_director_profile_patch,
@@ -768,6 +770,32 @@ def test_incomplete_story_map_can_be_saved_as_a_draft_but_not_confirmed():
     with pytest.raises(ValueError, match="Name every story phase"):
         pipeline.apply_director_profile(
             "film", draft, expected_current_revision=0, expected_draft_revision=1,
+        )
+
+
+def test_story_map_cannot_link_to_a_rejected_fact_ledger_entry():
+    pipeline, script = make_pipeline()
+    fact = ScriptFactLedgerEntry(
+        fact_id="fact-rejected",
+        kind="event",
+        source_revision=script.source_revision,
+        value={"summary": "Rejected claim"},
+        evidence_status="rejected",
+    )
+    script.fact_ledger_revisions = [ScriptFactLedgerRevision(
+        revision=1,
+        source_revision=script.source_revision,
+        facts=[fact],
+        confirmed_at=10,
+    )]
+    story_map = valid_story_map()
+    story_map["source_revision_id"] = ""
+    story_map["fact_ledger_revision"] = 1
+    story_map["phases"][0]["events"][0]["source_fact_ids"] = ["fact-rejected"]
+
+    with pytest.raises(ValueError, match="cannot cite rejected facts"):
+        pipeline.save_director_profile_draft(
+            "film", script.source_revision, 0, {**profile_payload(), "story_map": story_map},
         )
 
 

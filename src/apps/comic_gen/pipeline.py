@@ -2554,6 +2554,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         missing = referenced_fact_ids - set(facts_by_id)
         if missing:
             raise ValueError("Story map references facts absent from its pinned ledger: " + ", ".join(sorted(missing)))
+        rejected = [
+            fact_id for fact_id in referenced_fact_ids
+            if facts_by_id[fact_id].evidence_status == "rejected"
+        ]
+        if rejected:
+            raise ValueError("Story map cannot cite rejected facts: " + ", ".join(sorted(rejected)))
 
         explicit_fact_ids = {
             fact_id
