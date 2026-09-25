@@ -59,6 +59,8 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
     "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
     "不要把没有原文依据的推断写成 active 事实。"
+    "story_map 最多 24 个 phase、60 个 event、40 条 relationship arc、12 条 story thread；"
+    "phase、event、relationship、thread ID 在本草稿内唯一。"
 )
 
 # A Director prompt is allowed to carry a complete source only while it is
@@ -1397,11 +1399,21 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 梳理人物关系变化、因果链、关键事件的叙事功能与权重、情绪弧线、节奏、连续性和禁用项。
 不得发明对白、剧情、文化符号或人物动机。
 
-只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
+只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events, story_map,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
 execution_summary, scene_summaries, canon_state。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
+phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
+event 使用 event_id/order/title/description/character_ids/dramatic_function/source_fact_ids/evidence_status。
+character_ids 必须精确使用已确认实体中对应时期的角色变体 id；不能填角色姓名代替 id。
+relationship_arcs 的 person_ids 必须是两个不同的、来自实体上下文的 person_id；states 必须用 phase_id
+表达关系在对应故事阶段的状态，并通过 trigger_event_ids 指向真实 event_id。
+story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/reveal/payoff/open/close。
+people、source_revision、source_revision_id 由服务端补齐。当前提示未提供可引用的 Fact Ledger ID，
+所有 source_fact_ids 必须返回空数组；不得猜 range 或 fact_id。未链接事实的模型内容标为 interpretation，
+来源不清或内部矛盾标为 uncertain/conflicted。不得从旧 relationship initial/change/final 猜测阶段状态。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
@@ -1480,7 +1492,10 @@ execution_summary 或相应方向字段中，并标记为用户要求；它们�
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
 execution_summary 必须最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；
 scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，并且只保留后续分镜和
-资产设计需要的事实与约束。canon_state 只返回本次受影响的事实分类；优先复用已有
+资产设计需要的事实与约束。若 story_map 发生变化，返回完整替换对象；对未更改的 phase/event/
+relationship/thread 保留稳定 ID，states 仍使用 phase_id 与真实 trigger_event_ids。只可保留当前 story_map
+中已有 source_fact_ids，不得编造新证据 ID；用户新加且无引用的解释维持 interpretation。
+canon_state 只返回本次受影响的事实分类；优先复用已有
 fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
 不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""

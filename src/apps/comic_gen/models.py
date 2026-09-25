@@ -5,7 +5,7 @@ import json
 import os
 import time
 import uuid
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ...utils.model_catalog import get_default_model_settings
 
@@ -26,6 +26,8 @@ DIRECTOR_CANON_STATE_MAX_ITEMS = 32
 DIRECTOR_CANON_STATE_MAX_CHARS = 12000
 DIRECTOR_CANON_EXECUTION_MAX_ITEMS = 16
 DIRECTOR_CANON_EXECUTION_MAX_CHARS = 3600
+DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS = 3600
+DIRECTOR_STORY_MAP_EXECUTION_MAX_EVENTS = 48
 
 
 def _coerce_director_execution_summary_limit(raw_value: Optional[str]) -> int:
@@ -733,6 +735,176 @@ class ModelSettings(BaseModel):
     storyboard_aspect_ratio: str = Field("16:9", description="Aspect ratio for Storyboard (9:16, 16:9, 1:1)")
 
 
+DirectorEvidenceStatus = Literal["explicit", "interpretation", "uncertain", "conflicted"]
+
+
+class _DirectorStoryMapModel(BaseModel):
+    """Strict nested contract for the visual, versioned story map."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class DirectorStoryPerson(_DirectorStoryMapModel):
+    person_id: str = Field(..., min_length=1, max_length=120)
+    display_name: str = Field(..., min_length=1, max_length=160)
+    variant_character_ids: List[str] = Field(default_factory=list, max_length=40)
+
+
+class DirectorStoryEvent(_DirectorStoryMapModel):
+    event_id: str = Field(..., min_length=1, max_length=120)
+    order: int = Field(0, ge=0)
+    title: str = Field("", max_length=180)
+    description: str = Field(..., min_length=1, max_length=3000)
+    character_ids: List[str] = Field(default_factory=list, max_length=20)
+    dramatic_function: str = Field("", max_length=1200)
+    source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
+    evidence_status: DirectorEvidenceStatus = "interpretation"
+
+    @model_validator(mode="after")
+    def validate_fact_status(self):
+        if self.evidence_status == "explicit" and not self.source_fact_ids:
+            raise ValueError("explicit story events must cite confirmed fact IDs")
+        if len(self.source_fact_ids) != len(set(self.source_fact_ids)):
+            raise ValueError("story event source_fact_ids must be unique")
+        if len(self.character_ids) != len(set(self.character_ids)):
+            raise ValueError("story event character_ids must be unique")
+        return self
+
+
+class DirectorStoryPhase(_DirectorStoryMapModel):
+    phase_id: str = Field(..., min_length=1, max_length=120)
+    order: int = Field(..., ge=0)
+    label: str = Field(..., min_length=1, max_length=180)
+    time_anchor: str = Field("", max_length=240)
+    events: List[DirectorStoryEvent] = Field(default_factory=list, max_length=100)
+
+
+class DirectorRelationshipState(_DirectorStoryMapModel):
+    phase_id: str = Field(..., min_length=1, max_length=120)
+    state: str = Field(..., min_length=1, max_length=1200)
+    trigger_event_ids: List[str] = Field(default_factory=list, max_length=40)
+    source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
+    evidence_status: DirectorEvidenceStatus = "interpretation"
+
+    @model_validator(mode="after")
+    def validate_fact_status(self):
+        if self.evidence_status == "explicit" and not self.source_fact_ids:
+            raise ValueError("explicit relationship states must cite confirmed fact IDs")
+        if len(self.source_fact_ids) != len(set(self.source_fact_ids)):
+            raise ValueError("relationship state source_fact_ids must be unique")
+        if len(self.trigger_event_ids) != len(set(self.trigger_event_ids)):
+            raise ValueError("relationship state trigger_event_ids must be unique")
+        return self
+
+
+class DirectorRelationshipArc(_DirectorStoryMapModel):
+    relationship_id: str = Field(..., min_length=1, max_length=120)
+    person_ids: List[str] = Field(..., min_length=2, max_length=2)
+    label: str = Field("", max_length=180)
+    legacy_summary: str = Field("", max_length=1200)
+    states: List[DirectorRelationshipState] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_pair(self):
+        if self.person_ids[0] == self.person_ids[1]:
+            raise ValueError("relationship arc must connect two different people")
+        return self
+
+
+class DirectorStorylineMilestone(_DirectorStoryMapModel):
+    event_id: str = Field(..., min_length=1, max_length=120)
+    role: Literal["setup", "progress", "turn", "reveal", "payoff", "open", "close"] = "progress"
+    note: str = Field("", max_length=500)
+
+
+class DirectorStoryThread(_DirectorStoryMapModel):
+    thread_id: str = Field(..., min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=180)
+    person_ids: List[str] = Field(default_factory=list, max_length=20)
+    milestones: List[DirectorStorylineMilestone] = Field(default_factory=list, max_length=100)
+
+
+class DirectorStoryMap(_DirectorStoryMapModel):
+    schema_version: Literal[1] = 1
+    source_revision: int = Field(..., ge=1)
+    source_revision_id: str = Field(..., min_length=1, max_length=240)
+    fact_ledger_revision: Optional[int] = Field(None, ge=1)
+    people: List[DirectorStoryPerson] = Field(default_factory=list, max_length=100)
+    phases: List[DirectorStoryPhase] = Field(default_factory=list, max_length=80)
+    relationship_arcs: List[DirectorRelationshipArc] = Field(default_factory=list, max_length=200)
+    story_threads: List[DirectorStoryThread] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_references(self):
+        people_by_id = {item.person_id: item for item in self.people}
+        phase_ids = [item.phase_id for item in self.phases]
+        event_ids = [event.event_id for phase in self.phases for event in phase.events]
+        event_ids_by_phase = {
+            phase.phase_id: {event.event_id for event in phase.events}
+            for phase in self.phases
+        }
+        if len(people_by_id) != len(self.people):
+            raise ValueError("story map person IDs must be unique")
+        if len(phase_ids) != len(set(phase_ids)):
+            raise ValueError("story map phase IDs must be unique")
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("story map event IDs must be unique")
+        if len([item.order for item in self.phases]) != len(set(item.order for item in self.phases)):
+            raise ValueError("story map phase order values must be unique")
+
+        variant_ids = {
+            character_id
+            for person in self.people
+            for character_id in person.variant_character_ids
+        }
+        for phase in self.phases:
+            if len([event.order for event in phase.events]) != len(set(event.order for event in phase.events)):
+                raise ValueError(f"event order values must be unique in phase {phase.phase_id}")
+            for event in phase.events:
+                if not set(event.character_ids).issubset(variant_ids):
+                    raise ValueError(f"event {event.event_id} references an unknown character variant")
+
+        relationship_ids = [arc.relationship_id for arc in self.relationship_arcs]
+        if len(relationship_ids) != len(set(relationship_ids)):
+            raise ValueError("story map relationship IDs must be unique")
+        for arc in self.relationship_arcs:
+            if not set(arc.person_ids).issubset(people_by_id):
+                raise ValueError(f"relationship {arc.relationship_id} references an unknown person")
+            state_phases = [state.phase_id for state in arc.states]
+            if len(state_phases) != len(set(state_phases)):
+                raise ValueError(f"relationship {arc.relationship_id} has duplicate states for a phase")
+            for state in arc.states:
+                if state.phase_id not in phase_ids:
+                    raise ValueError(f"relationship {arc.relationship_id} references an unknown phase")
+                if not set(state.trigger_event_ids).issubset(event_ids_by_phase[state.phase_id]):
+                    raise ValueError(
+                        f"relationship {arc.relationship_id} references a trigger event outside its phase"
+                    )
+
+        thread_ids = [thread.thread_id for thread in self.story_threads]
+        if len(thread_ids) != len(set(thread_ids)):
+            raise ValueError("story map thread IDs must be unique")
+        for thread in self.story_threads:
+            if not set(thread.person_ids).issubset(people_by_id):
+                raise ValueError(f"story thread {thread.thread_id} references an unknown person")
+            if any(milestone.event_id not in event_ids for milestone in thread.milestones):
+                raise ValueError(f"story thread {thread.thread_id} references an unknown event")
+
+        fact_ids = [
+            fact_id
+            for phase in self.phases
+            for event in phase.events
+            for fact_id in event.source_fact_ids
+        ] + [
+            fact_id
+            for arc in self.relationship_arcs
+            for state in arc.states
+            for fact_id in state.source_fact_ids
+        ]
+        if fact_ids and self.fact_ledger_revision is None:
+            raise ValueError("story map fact references require a fact ledger revision")
+        return self
+
+
 class DirectorProfile(BaseModel):
     """Confirmed narrative direction carried into downstream generation."""
     setting: Dict[str, Any] = Field(default_factory=dict)
@@ -769,6 +941,13 @@ class DirectorProfile(BaseModel):
         description=(
             "Source-linked, versioned story facts used to prevent cross-scene "
             "drift. This is an editable/auditable ledger, not a semantic proof."
+        ),
+    )
+    story_map: Optional[DirectorStoryMap] = Field(
+        None,
+        description=(
+            "Phase/event/relationship-state story structure for the visual Director editor. "
+            "Legacy timeline and relationships remain readable but are not migrated into this field automatically."
         ),
     )
     revision: int = Field(1, ge=1)
@@ -1317,7 +1496,128 @@ def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> D
     }
     if "script_fact_ledger" in raw:
         payload["script_fact_ledger"] = raw["script_fact_ledger"]
+    story_map = build_director_story_map_execution(raw.get("story_map"))
+    if story_map:
+        payload["story_map"] = story_map
     return payload
+
+
+def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
+    """Build a bounded, source-aware story-map projection for downstream prompts."""
+    if isinstance(value, DirectorStoryMap):
+        raw = value.model_dump(mode="json")
+    elif isinstance(value, dict):
+        raw = value
+    else:
+        return {}
+
+    phases = raw.get("phases") if isinstance(raw.get("phases"), list) else []
+    people = raw.get("people") if isinstance(raw.get("people"), list) else []
+    projected_people = [
+        {
+            "person_id": item.get("person_id", ""),
+            "display_name": _bounded_director_text(item.get("display_name", ""), 100),
+            "variant_character_ids": item.get("variant_character_ids", [])[:20],
+        }
+        for item in people[:100] if isinstance(item, dict)
+    ]
+    projected_phases: List[Dict[str, Any]] = []
+    remaining_events = DIRECTOR_STORY_MAP_EXECUTION_MAX_EVENTS
+    for phase in phases[:80]:
+        if not isinstance(phase, dict):
+            continue
+        events = phase.get("events") if isinstance(phase.get("events"), list) else []
+        projected_events = []
+        for event in events[:remaining_events]:
+            if not isinstance(event, dict):
+                continue
+            projected_events.append({
+                "event_id": _bounded_director_text(event.get("event_id", ""), 120),
+                "title": _bounded_director_text(event.get("title", ""), 100),
+                "description": _bounded_director_text(event.get("description", ""), 360),
+                "character_ids": event.get("character_ids", [])[:20],
+                "dramatic_function": _bounded_director_text(event.get("dramatic_function", ""), 180),
+                "source_fact_ids": event.get("source_fact_ids", [])[:20],
+                "evidence_status": event.get("evidence_status", "interpretation"),
+            })
+        remaining_events -= len(projected_events)
+        projected_phases.append({
+            "phase_id": phase.get("phase_id", ""),
+            "order": phase.get("order", 0),
+            "label": _bounded_director_text(phase.get("label", ""), 100),
+            "time_anchor": _bounded_director_text(phase.get("time_anchor", ""), 120),
+            "events": projected_events,
+        })
+        if remaining_events <= 0:
+            break
+
+    projected_arcs = []
+    arcs = raw.get("relationship_arcs") if isinstance(raw.get("relationship_arcs"), list) else []
+    for arc in arcs[:60]:
+        if not isinstance(arc, dict):
+            continue
+        states = arc.get("states") if isinstance(arc.get("states"), list) else []
+        projected_arcs.append({
+            "relationship_id": arc.get("relationship_id", ""),
+            "person_ids": arc.get("person_ids", [])[:2],
+            "label": _bounded_director_text(arc.get("label", ""), 100),
+            "legacy_summary": _bounded_director_text(arc.get("legacy_summary", ""), 180),
+            "states": [
+                {
+                    "phase_id": state.get("phase_id", ""),
+                    "state": _bounded_director_text(state.get("state", ""), 240),
+                    "trigger_event_ids": state.get("trigger_event_ids", [])[:20],
+                    "source_fact_ids": state.get("source_fact_ids", [])[:20],
+                    "evidence_status": state.get("evidence_status", "interpretation"),
+                }
+                for state in states[:40] if isinstance(state, dict)
+            ],
+        })
+
+    projected_threads = []
+    threads = raw.get("story_threads") if isinstance(raw.get("story_threads"), list) else []
+    for thread in threads[:40]:
+        if not isinstance(thread, dict):
+            continue
+        milestones = thread.get("milestones") if isinstance(thread.get("milestones"), list) else []
+        projected_threads.append({
+            "thread_id": thread.get("thread_id", ""),
+            "label": _bounded_director_text(thread.get("label", ""), 100),
+            "person_ids": thread.get("person_ids", [])[:20],
+            "milestones": [
+                {"event_id": item.get("event_id", ""), "role": item.get("role", "progress")}
+                for item in milestones[:80] if isinstance(item, dict)
+            ],
+        })
+
+    result = {
+        "schema_version": raw.get("schema_version", 1),
+        "source_revision": raw.get("source_revision"),
+        "source_revision_id": raw.get("source_revision_id"),
+        "fact_ledger_revision": raw.get("fact_ledger_revision"),
+        "people": projected_people,
+        "phases": projected_phases,
+        "relationship_arcs": projected_arcs,
+        "story_threads": projected_threads,
+    }
+    while len(json.dumps(result, ensure_ascii=False, separators=(",", ":"))) > DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS:
+        if projected_threads:
+            projected_threads.pop()
+        elif projected_arcs:
+            projected_arcs.pop()
+        elif any(item["events"] for item in projected_phases):
+            next(item for item in reversed(projected_phases) if item["events"])["events"].pop()
+        elif len(projected_phases) > 1:
+            projected_phases.pop()
+        elif projected_people:
+            projected_people.pop()
+        else:
+            projected_phases = []
+            break
+    result["phases"] = projected_phases
+    result["relationship_arcs"] = projected_arcs
+    result["story_threads"] = projected_threads
+    return result
 
 
 def _normalize_director_object_list(value: Any) -> Any:
@@ -1377,6 +1677,9 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         normalized["canon_state"] = normalize_director_canon_state(
             normalized["canon_state"]
         )
+    if "story_map" in normalized and normalized["story_map"] is not None:
+        if not isinstance(normalized["story_map"], dict):
+            raise TypeError("story_map must be an object")
 
     normalized["execution_summary"] = build_director_execution_summary(normalized)
 
@@ -1401,6 +1704,7 @@ _DIRECTOR_PROFILE_FIELDS = (
     "execution_summary",
     "scene_summaries",
     "canon_state",
+    "story_map",
 )
 
 
@@ -1438,6 +1742,9 @@ def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
         normalized["canon_state"] = normalize_director_canon_state(
             normalized["canon_state"]
         )
+    if "story_map" in normalized and normalized["story_map"] is not None:
+        if not isinstance(normalized["story_map"], dict):
+            raise TypeError("story_map must be an object")
     if "execution_summary" in normalized:
         normalized["execution_summary"] = _bounded_director_text(
             normalized["execution_summary"], DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
@@ -1519,6 +1826,10 @@ def build_director_refinement_context(
     canon_serialized_length = len(
         json.dumps(canon_state, ensure_ascii=False, separators=(",", ":"))
     )
+    story_map = build_director_story_map_execution(raw.get("story_map"))
+    story_map_serialized_length = len(
+        json.dumps(story_map, ensure_ascii=False, separators=(",", ":"))
+    ) if story_map else 0
     summary_limit = max(
         512,
         min(
@@ -1526,6 +1837,7 @@ def build_director_refinement_context(
             DIRECTOR_REFINE_CONTEXT_MAX_CHARS
             - scene_serialized_length
             - canon_serialized_length
+            - story_map_serialized_length
             - 128,
         ),
     )
@@ -1536,6 +1848,8 @@ def build_director_refinement_context(
         "scene_summaries": scene_summaries,
         "canon_state": canon_state,
     }
+    if story_map:
+        context["story_map"] = story_map
     field_limits = {
         "setting": 700,
         "timeline": 700,

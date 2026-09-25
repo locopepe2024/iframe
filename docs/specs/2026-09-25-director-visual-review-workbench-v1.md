@@ -12,9 +12,11 @@
 
 ## 代码事实
 
-- 当前 `DirectorProfilePanel` 将整个 Director Profile 放在单个 JSON textarea 中；模型分析结果是本地 React 草稿，显式 Apply 后才持久化为确认版本。
+- 当前 `DirectorProfilePanel` 已有结构化故事字段、旧格式阶段列表、旧关系图和可折叠高级 JSON；AI 结果先进入编辑草稿，草稿通过独立接口持久化，Apply 才写入确认版本。
 - `DirectorProfile.timeline`、`relationships`、`key_events`、`sample_plan` 在前端和后端均为开放对象数组，缺少稳定的领域字段约束。
 - 当前常见 relationship 形状包含 `pair / initial / change / final`，但没有必需的 `phase_id` 或带来源的状态转换，因此不足以推断精确的人物关系时间图。
+- 后端现已加入可选的严格 `DirectorProfile.story_map`；phases/events、按阶段的 relationship states、story threads 和角色变体引用都经过 Pydantic 约束。pipeline 在保存/确认时绑定当前剧本文本 revision、稳定来源 ID 和有效角色变体，并验证关系/事件引用及可选 Fact Ledger ID。旧草稿的空 `story_map` 不进入旧内容 hash。
+- 前端当前仍编辑旧 timeline/relationships；story map 规范视图和 Fact Ledger 证据选择尚未接入，因此新增后端契约目前不改变旧项目的呈现方式。
 - `sample_plan` 当前用于少量场次示例，含 `range / purpose / focus / asset_need` 等描述；它不等于 scene/beat/shot 拍摄计划，也没有镜头时长及 shot ID。
 - `ScriptFactLedgerPanel` 已提供独立的草稿保存、确认、历史版本与原文证据接口，但其事实编辑入口目前也是 JSON textarea。
 - 风格选择已具备独立的目录、预览、项目保存、系列继承/覆盖行为；它目前与 Director Profile 共存于 `art_direction`。
@@ -54,33 +56,45 @@
 
 ```json
 {
+  "source_revision": 3,
+  "source_revision_id": "source-r3:<content-hash>",
+  "fact_ledger_revision": 2,
+  "people": [{
+    "person_id": "shen-xia",
+    "display_name": "沈夏",
+    "variant_character_ids": ["shen-xia-college", "shen-xia-graduate"]
+  }],
   "phases": [{
     "phase_id": "phase-02",
     "order": 2,
     "label": "考研结果后",
     "events": [{
       "event_id": "event-07",
+      "order": 1,
+      "title": "升学与离校",
       "description": "沈夏考上研究生，周涵前往北京",
-      "source_refs": [],
-      "evidence_status": "explicit",
-      "dramatic_function": "校园共同生活被切断"
+      "character_ids": ["shen-xia-college"],
+      "dramatic_function": "校园共同生活被切断",
+      "source_fact_ids": ["fact-17"],
+      "evidence_status": "explicit"
     }]
   }],
   "relationship_arcs": [{
     "relationship_id": "shen-xia__zhou-han",
-    "character_ids": ["shen-xia", "zhou-han"],
+    "person_ids": ["shen-xia", "zhou-han"],
     "states": [{
       "phase_id": "phase-02",
       "state": "进入异地关系",
       "trigger_event_ids": ["event-07"],
-      "source_refs": [],
+      "source_fact_ids": [],
       "evidence_status": "interpretation"
     }]
-  }]
+  }],
+  "story_threads": []
 }
 ```
 
-这是目标结构示例，不表示当前 API 已接受这些字段。旧 Profile 的 `timeline` 和 `relationships` 在迁移前按旧版兼容数据展示；不能自动生成精确的 phase/event ID 或 source range。
+这是目标结构的概念示例。当前后端字段名为 `source_fact_ids`，且已接受严格的 `story_map`；引用通过 `fact_ledger_revision` 固定到已确认账本。旧 Profile 的 `timeline` 和 `relationships` 仍按旧版兼容数据展示；不能自动生成精确的 phase/event ID 或 source range。
 
 ### DirectorShootingPlan：拍摄计划
 
@@ -133,7 +147,7 @@
 ## 实施切片
 
 1. **工作台壳层与故事理解可视切片**：在 Director 步骤加入三个可访问页签；将旧风格画廊移动至“风格选择”；以结构字段、旧版阶段时间线和人物关系图替代 Profile 的默认 JSON 编辑。旧关系只显示“初始/变化/结局”摘要，不声称有精确阶段来源；保留高级 JSON。
-2. **规范化解释与草稿持久化**：正式 `DirectorInterpretation` schema 与旧 Profile 兼容转换；引入 phase/event IDs 和带来源的关系状态弧；实现服务端草稿保存、并发校验与确认历史。Fact Ledger 的可视编辑另开切片，不改事实所有权。
+2. **规范化故事地图与可视编辑**：在当前版本化 Director Profile 中加入严格的 `story_map` 结构；旧 Profile 保持只读兼容，不把 legacy relationship summaries 转成精确阶段关系。图、时间轴、剧情线和详情表单共用 phase/event/relationship-state IDs 与 Fact Ledger 引用。
 3. **独立拍摄计划**：新建 Pydantic/API/job/persistence/revision contract；AI 生成 scene/beat/shot 草稿；结构化时间轴编辑、总时长和镜头数校验；确认后建立与阐释的 lineage。
 4. **下游接线**：Assets 读取确认的 DirectorInterpretation；Storyboard 读取确认的 shot_plan、阐释和资产；拒绝未确认或 stale 上游作为新产物来源。
 5. **风格版本 lineage**：如需下游严格复现，再为项目和系列的已保存风格追加 revision/hash；保留现有 art_direction 读兼容。
@@ -171,4 +185,41 @@
 - “拍摄计划”页签目前是明确的空态和旧 `sample_plan` 参考展示，不生成、不编辑、不确认正式 scene/beat/shot 计划。它不会把旧场次示例计作镜头或视频任务。
 - 风格选择复用原有项目/系列风格保存功能。Director 页签支持方向键切换；UI 测试覆盖编辑、人物关系图、草稿保存与确认分离。前端 typecheck/build 与 `tests/test_director_profile.py` 已通过。
 
-下一个功能切片必须新增独立 shooting-plan schema 与草稿/确认版本接口，再实现 scene → beat → shot 可视化编辑与生成；只有在对应的 Assets/Storyboard 消费和 lineage 已明确后，才把确认计划接入下游生成。
+story_map 完成后，拍摄计划仍需新增独立 shooting-plan schema 与草稿/确认版本接口，再实现 scene → beat → shot 可视化编辑与生成；只有在对应的 Assets/Storyboard 消费和 lineage 已明确后，才把确认计划接入下游生成。
+
+## 后续方向：故事结构的可视审阅与编辑（2026-09-26）
+
+### 参考项目观察
+
+检查了公开仓库 [AI-Reader-V2](https://github.com/mouseart2025/AI-Reader-V2) 的 README、`TimelinePage`、`StorylineView`、`GraphPage` 与 `visualization_service`：
+
+- README 描述章节时间轴、按人物分轨的故事线、人物关系图、类型/重要度筛选、章节折叠，以及从人物事件跳到人物卡片。
+- `StorylineView` 使用“章节 × 人物”泳道，支持选人物、缩放、查看多人交汇事件；关系图支持类别过滤和两人路径查询。
+- 后端按章节事实聚合事件与关系，章节是其主要时间刻度；它是小说分析/阅读视图，不提供导演判断的草稿、修改、确认或拍摄计划契约。
+- README 明确提示分析结果可能有错；本参考只证明这些交互模式已被一个公开项目实现，不证明其抽取准确，也不证明图形能自动提升导演决策质量。
+- 仓库标注 AGPL-3.0。本项目借鉴交互概念，不复制其源码或组件。
+
+### 采用的架构决定
+
+1. Director 的故事理解加入 `story_map` 作为可版本化的规范结构，并暂时随现有 Director Profile 草稿/确认 revision 一起保存；不另建第二套草稿 revision API。该兼容边界以后若要把 `DirectorInterpretation` 拆成独立资源，再单独迁移。
+2. `story_map` 至少包含有稳定 ID 的 `phases → events`、按 `phase_id` 表达的 `relationship_arcs.states`、以及引用事件的 `story_threads.milestones`。时间轴、关系图和剧情线泳道都是同一数据的视图，不各存一份。
+3. 事件和关系状态分别记录原文/事实引用及证据状态。可见状态区分剧本明确、导演解释、未确认、冲突；自由文本来源备注不能伪装成精确 source range。所有精确范围绑定剧本 source revision。
+4. 剧情时间轴使用阶段/事件顺序；拍摄计划的 scene/beat/shot 时间轴使用镜头/成片时长。两者在数据模型、坐标刻度和用户操作上保持独立。
+5. 旧 Profile 的 `timeline` 和 `relationships` 继续可读。旧“初始/变化/结局”只作为 legacy summary；不得自动转换成带具体 `phase_id` 的关系状态。只有用户明确重新分析或在新地图里确认后才进入规范 `story_map`。
+6. UI 采用可筛选的多轨事件时间轴、人物关系图 + 按阶段展开的关系状态详情，以及线索/剧情线泳道。选择图节点/边或时间轴事件后，在同一详情面板编辑；键盘可操作的卡片列表是图形编辑的等价路径。力导向图不是唯一视图，也不将拖动节点位置解释为剧情变更。
+7. 事件、关系状态、线索节点提供到来源证据的展开/跳转。没有来源引用的 AI 解释应明确显示“未链接原文”，不能因此阻止用户保存导演解释，但不能标记成剧本事实。
+
+### 本迭代目标与边界
+
+- 目标：将规范 `story_map` 结构接入 Director 草稿、确认版本和现有 lineage；提供故事阶段/事件的可视编辑与阶段关系视图；保留 legacy profile 的只读兼容展示。
+- 成功条件：服务端拒绝重复/悬空 ID、无效关系参与者/阶段/事件引用、错误来源 revision 和不在固定账本中的 Fact ID；前端时间轴、关系图、剧情线过滤与详情编辑读写同一结构；保存草稿、刷新恢复和显式确认生效沿用既有并发/过期保护；窄屏和键盘可完成相同编辑。
+- 暂不做：DirectorShootingPlan、beat/shot 生成、Assets/Storyboard 新 schema 消费、RAG 服务、全本逐事件事实抽取、把旧 profile 自动伪造成规范 story map。
+- 假设：当前 source revision 与 Fact Ledger 可作为证据权威；规范 story map 属于用户可修订的导演解释，不覆盖 Fact Ledger。
+- 风险边界：AI Reader 的章节泳道适合阅读已聚合事件；iFrame 需要可审阅的编辑计划，因此采用其筛选、折叠、交汇和 drill-down 概念，按 source revision、draft revision 与 explicit apply 约束数据。
+
+### 受影响范围与验证
+
+- 后端：`src/apps/comic_gen/models.py`、`llm.py`、`pipeline.py`、`api.py` 及 Director Profile 行为测试。
+- 前端：`frontend/src/store/projectStore.ts`、`frontend/src/lib/directorProfile.ts`、`frontend/src/components/modules/DirectorInterpretationVisualEditor.tsx`、`DirectorProfilePanel.tsx` 及相关 UI 测试。
+- 文档：本规格。
+- 验收命令：Director Profile pytest；Director UI tests；`npm run typecheck`、`npm run build`、`git diff --check`。

@@ -74,6 +74,20 @@ def _validate_safe_id(value: str, label: str = "id") -> str:
     return value
 
 
+def _director_profile_content(value: Any) -> Dict[str, Any]:
+    """Return versioned Director content without server metadata.
+
+    ``story_map`` was added after existing Director drafts had already been
+    stored. Omit its empty default so legacy draft comparisons and content
+    hashes keep their pre-story-map shape.
+    """
+    profile = value if isinstance(value, DirectorProfile) else DirectorProfile(**value)
+    content = profile.model_dump(exclude={"revision", "content_hash", "confirmed_at"})
+    if content.get("story_map") is None:
+        content.pop("story_map", None)
+    return content
+
+
 def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
     """Resolve *untrusted_rel* under *base_dir* and ensure the result stays inside it.
 
@@ -2417,20 +2431,149 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities, style = self.director_analysis_context(script_id)
         draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
         normalized = normalize_director_profile_draft(draft)
+        self._bind_director_story_map(script, entities, normalized)
         DirectorProfile(**normalized)
+        self._validate_director_story_map(script, normalized.get("story_map"))
         return normalized
 
     def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
         normalized_draft = normalize_director_profile_draft(draft)
+        self._bind_director_story_map(script, entities, normalized_draft)
         DirectorProfile(**normalized_draft)
+        self._validate_director_story_map(script, normalized_draft.get("story_map"))
         revised_patch = self.script_processor.refine_director_profile(
             script.original_text, entities, style, normalized_draft, instructions
         )
         normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
+        self._bind_director_story_map(script, entities, normalized_result)
         DirectorProfile(**normalized_result)
+        self._validate_director_story_map(script, normalized_result.get("story_map"))
         return normalized_result
+
+    @staticmethod
+    def _director_story_people(characters: List[Any]) -> List[Dict[str, Any]]:
+        """Group visual character variants under their stable base character ID."""
+        by_id = {str(getattr(item, "id", "")): item for item in characters if getattr(item, "id", None)}
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for character in characters:
+            character_id = str(getattr(character, "id", "") or "")
+            if not character_id:
+                continue
+            person_id = str(getattr(character, "base_character_id", None) or character_id)
+            base = by_id.get(person_id, character)
+            display_name = (
+                getattr(base, "persona", "")
+                or getattr(base, "name", "")
+                or getattr(character, "persona", "")
+                or getattr(character, "name", "")
+                or person_id
+            )
+            entry = grouped.setdefault(person_id, {
+                "person_id": person_id,
+                "display_name": str(display_name),
+                "variant_character_ids": [],
+            })
+            if character_id not in entry["variant_character_ids"]:
+                entry["variant_character_ids"].append(character_id)
+        return sorted(grouped.values(), key=lambda item: item["display_name"])
+
+    def _bind_director_story_map(
+        self,
+        script: Script,
+        entities: Dict[str, Any],
+        profile: Dict[str, Any],
+    ) -> None:
+        """Bind a current story map to server-owned source and character IDs."""
+        story_map = profile.get("story_map")
+        if story_map is None:
+            return
+        if not isinstance(story_map, dict):
+            raise ValueError("story_map must be an object")
+        story_map = dict(story_map)
+        source_revision = story_map.get("source_revision")
+        if source_revision is not None and source_revision != script.source_revision:
+            raise ValueError("Story map source revision changed; refresh it before saving")
+        source_revision_id = self.source_revision_id(script, script.source_revision)
+        supplied_source_id = story_map.get("source_revision_id")
+        if supplied_source_id and supplied_source_id != source_revision_id:
+            raise ValueError("Story map source revision identity does not match the current script")
+        story_map["schema_version"] = 1
+        story_map["source_revision"] = script.source_revision
+        story_map["source_revision_id"] = source_revision_id
+        story_map.setdefault("fact_ledger_revision", None)
+        story_map["people"] = self._director_story_people(entities.get("characters", []))
+        profile["story_map"] = story_map
+
+    def _validate_director_story_map(self, script: Script, value: Any) -> None:
+        if value is None:
+            return
+        story_map = value.model_dump() if hasattr(value, "model_dump") else value
+        if not isinstance(story_map, dict):
+            raise ValueError("story_map must be an object")
+        source_revision = story_map.get("source_revision")
+        if source_revision != script.source_revision:
+            raise ValueError("Story map source revision changed; regenerate or refresh the Director interpretation")
+        expected_source_id = self.source_revision_id(script, script.source_revision)
+        if story_map.get("source_revision_id") != expected_source_id:
+            raise ValueError("Story map source revision identity does not match the current script")
+
+        resolved = self.resolve_episode_assets(script)
+        available_characters = resolved.get("characters", [])
+        valid_people = {
+            item["person_id"]: set(item["variant_character_ids"])
+            for item in self._director_story_people(available_characters)
+        }
+        people = story_map.get("people", [])
+        for person in people:
+            person_id = person.get("person_id")
+            if person_id not in valid_people:
+                raise ValueError(f"Story map references unknown person {person_id}")
+            if not set(person.get("variant_character_ids", [])).issubset(valid_people[person_id]):
+                raise ValueError(f"Story map person {person_id} references an unknown character variant")
+
+        referenced_fact_ids = set()
+        for phase in story_map.get("phases", []):
+            for event in phase.get("events", []):
+                referenced_fact_ids.update(event.get("source_fact_ids", []))
+        for arc in story_map.get("relationship_arcs", []):
+            for state in arc.get("states", []):
+                referenced_fact_ids.update(state.get("source_fact_ids", []))
+        if not referenced_fact_ids:
+            return
+
+        ledger_revision = story_map.get("fact_ledger_revision")
+        snapshot = next((
+            item for item in script.fact_ledger_revisions
+            if item.revision == ledger_revision
+        ), None)
+        if snapshot is None or snapshot.source_revision != script.source_revision:
+            raise ValueError("Story map fact citations must reference a confirmed ledger for the current script revision")
+        facts_by_id = {fact.fact_id: fact for fact in snapshot.facts}
+        missing = referenced_fact_ids - set(facts_by_id)
+        if missing:
+            raise ValueError("Story map references facts absent from its pinned ledger: " + ", ".join(sorted(missing)))
+
+        explicit_fact_ids = {
+            fact_id
+            for phase in story_map.get("phases", [])
+            for event in phase.get("events", [])
+            if event.get("evidence_status") == "explicit"
+            for fact_id in event.get("source_fact_ids", [])
+        } | {
+            fact_id
+            for arc in story_map.get("relationship_arcs", [])
+            for state in arc.get("states", [])
+            if state.get("evidence_status") == "explicit"
+            for fact_id in state.get("source_fact_ids", [])
+        }
+        unconfirmed = [
+            fact_id for fact_id in explicit_fact_ids
+            if facts_by_id[fact_id].evidence_status != "confirmed"
+        ]
+        if unconfirmed:
+            raise ValueError("Explicit story-map claims must cite confirmed facts: " + ", ".join(sorted(unconfirmed)))
 
     def save_director_profile_draft(
         self,
@@ -2449,9 +2592,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Director draft revision changed; reload before saving")
 
             normalized = normalize_director_profile_draft(draft)
-            clean = DirectorProfile(**normalized).model_dump(
-                exclude={"revision", "content_hash", "confirmed_at"}
+            self._bind_director_story_map(
+                script,
+                self.resolve_episode_assets(script),
+                normalized,
             )
+            self._validate_director_story_map(script, normalized.get("story_map"))
+            clean = _director_profile_content(normalized)
             script.director_profile_draft = DirectorProfile(**clean)
             script.director_profile_draft_revision += 1
             script.director_profile_draft_source_revision = source_revision
@@ -2496,14 +2643,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Source revision changed; reload the Director draft before confirming")
 
         normalized = normalize_director_profile_draft(draft)
-        clean = DirectorProfile(**normalized).model_dump(
-            exclude={"revision", "content_hash", "confirmed_at"}
+        self._bind_director_story_map(
+            script,
+            self.resolve_episode_assets(script),
+            normalized,
         )
+        self._validate_director_story_map(script, normalized.get("story_map"))
+        clean = _director_profile_content(normalized)
         if expected_draft_revision is not None:
             saved_draft = script.director_profile_draft
-            saved_content = saved_draft.model_dump(
-                exclude={"revision", "content_hash", "confirmed_at"}
-            ) if saved_draft else None
+            saved_content = _director_profile_content(saved_draft) if saved_draft else None
             if saved_content != clean:
                 raise ValueError("Director draft has unsaved edits; save it before confirming")
         # Summaries are bounded downstream projections, not a second source of
@@ -2702,7 +2851,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
         resolved = self.resolve_episode_assets(script)
         entities_json = {
-            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in resolved["characters"]],
+            "characters": [{
+                "id": c.id,
+                "name": c.name,
+                "description": c.description,
+                "persona": c.persona,
+                "base_character_id": c.base_character_id,
+                "person_id": c.base_character_id or c.id,
+            } for c in resolved["characters"]],
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }

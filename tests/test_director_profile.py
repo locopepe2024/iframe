@@ -11,6 +11,8 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    DirectorStoryMap,
+    DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS,
@@ -23,6 +25,7 @@ from src.apps.comic_gen.models import (
     DIRECTOR_SCENE_SUMMARIES_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
+    build_director_story_map_execution,
     merge_director_canon_state,
     merge_director_profile_patch,
     normalize_director_canon_state,
@@ -74,6 +77,43 @@ def structured_profile_payload():
         "sound_direction": {"foreground": "雨声", "silence": "电话接通前的静默"},
     })
     return payload
+
+
+def valid_story_map():
+    return {
+        "schema_version": 1,
+        "source_revision": 1,
+        "source_revision_id": "source-r1:test-hash",
+        "fact_ledger_revision": None,
+        "people": [{
+            "person_id": "shen",
+            "display_name": "沈夏",
+            "variant_character_ids": ["shen"],
+        }],
+        "phases": [{
+            "phase_id": "phase-campus",
+            "order": 0,
+            "label": "大学阶段",
+            "time_anchor": "毕业前",
+            "events": [{
+                "event_id": "event-meet",
+                "order": 0,
+                "title": "相恋",
+                "description": "沈夏与周涵成为情侣。",
+                "character_ids": ["shen"],
+                "dramatic_function": "建立亲密关系。",
+                "source_fact_ids": [],
+                "evidence_status": "interpretation",
+            }],
+        }],
+        "relationship_arcs": [],
+        "story_threads": [{
+            "thread_id": "thread-main",
+            "label": "沈夏的主线",
+            "person_ids": ["shen"],
+            "milestones": [{"event_id": "event-meet", "role": "setup", "note": ""}],
+        }],
+    }
 
 
 def make_pipeline():
@@ -518,6 +558,62 @@ def test_model_summary_is_clipped_during_draft_normalization():
     DirectorProfile(**normalized)
 
 
+def test_story_map_validates_stable_references_and_rejects_cross_phase_relationship_triggers():
+    story_map = valid_story_map()
+    DirectorStoryMap(**story_map)
+
+    invalid = {
+        **story_map,
+        "people": [
+            *story_map["people"],
+            {"person_id": "zhou", "display_name": "周涵", "variant_character_ids": ["zhou"]},
+        ],
+        "phases": [
+            story_map["phases"][0],
+            {"phase_id": "phase-after", "order": 1, "label": "后来", "events": []},
+        ],
+        "relationship_arcs": [{
+            "relationship_id": "shen__zhou",
+            "person_ids": ["shen", "shen"],
+            "states": [{
+                "phase_id": "phase-after",
+                "state": "分开",
+                "trigger_event_ids": ["event-meet"],
+            }],
+        }],
+    }
+    with pytest.raises(ValueError, match="two different people"):
+        DirectorStoryMap(**invalid)
+
+    invalid["relationship_arcs"][0]["person_ids"] = ["shen", "zhou"]
+    with pytest.raises(ValueError, match="outside its phase"):
+        DirectorStoryMap(**invalid)
+
+
+def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
+    projected = build_director_story_map_execution(valid_story_map())
+
+    assert projected["phases"][0]["events"][0]["event_id"] == "event-meet"
+    assert projected["people"][0]["variant_character_ids"] == ["shen"]
+    assert projected["story_threads"][0]["milestones"][0]["event_id"] == "event-meet"
+
+    oversized = {
+        "schema_version": 1,
+        "source_revision": 1,
+        "source_revision_id": "source-r1:test-hash",
+        "fact_ledger_revision": None,
+        "people": [
+            {"person_id": f"person-{index}", "display_name": "人" * 160, "variant_character_ids": []}
+            for index in range(100)
+        ],
+        "phases": [],
+        "relationship_arcs": [],
+        "story_threads": [],
+    }
+    bounded = build_director_story_map_execution(oversized)
+    assert len(json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))) <= DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS
+
+
 def test_director_summary_budget_defaults_to_7000_and_clamps_configuration():
     assert DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS == 7000
     assert _coerce_director_execution_summary_limit(None) == 7000
@@ -637,6 +733,25 @@ def test_director_profile_draft_persists_separately_and_requires_current_revisio
     )
     assert active.art_direction.director_profile.revision == 1
     assert active.director_profile_revisions[-1].profile.pacing == draft["pacing"]
+
+
+def test_story_map_draft_is_saved_and_confirmed_as_part_of_the_director_revision():
+    pipeline, script = make_pipeline()
+    story_map = valid_story_map()
+    story_map["source_revision_id"] = ""
+    draft = {**profile_payload(), "story_map": story_map}
+
+    saved = pipeline.save_director_profile_draft("film", script.source_revision, 0, draft)
+    assert saved.director_profile_draft.story_map.phases[0].events[0].event_id == "event-meet"
+    assert saved.director_profile_draft.story_map.source_revision_id == pipeline.source_revision_id(
+        script, script.source_revision
+    )
+
+    confirmed = pipeline.apply_director_profile(
+        "film", draft, expected_current_revision=0, expected_draft_revision=1,
+    )
+    assert confirmed.art_direction.director_profile.story_map.phases[0].events[0].event_id == "event-meet"
+    assert confirmed.art_direction.director_profile.content_hash != ""
 
 
 def test_director_profile_cannot_confirm_unsaved_or_stale_drafts():
