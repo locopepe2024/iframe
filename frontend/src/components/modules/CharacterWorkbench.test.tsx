@@ -15,7 +15,9 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: () => null,
+    VariantSelector: ({ currentImageUrl }: { currentImageUrl?: string }) => (
+        currentImageUrl ? <img alt="Workbench preview" src={currentImageUrl} /> : null
+    ),
 }));
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
@@ -78,6 +80,34 @@ it("unlocks derived asset prompts when the canonical reference sheet is availabl
     expect(promptFields[1]).not.toBeDisabled();
     expect(promptFields[2]).not.toBeDisabled();
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
+});
+
+it("shows a canonical image when the stored selected variant ID is stale", () => {
+    render(
+        <CharacterWorkbench
+            asset={{
+                id: "character-stale-selection",
+                name: "赵嵘（新郎）",
+                description: "新郎角色",
+                reference_sheet: {
+                    selected_image_id: "deleted-view",
+                    image_variants: [
+                        { id: "front-view", url: "/files/front-view.png" },
+                        { id: "side-view", url: "/files/side-view.png" },
+                    ],
+                },
+            }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+        />,
+    );
+
+    expect(screen.getByRole("img", { name: "Workbench preview" })).toHaveAttribute(
+        "src",
+        "/files/front-view.png",
+    );
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

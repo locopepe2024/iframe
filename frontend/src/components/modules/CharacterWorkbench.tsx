@@ -50,8 +50,10 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
     if (variants.length === 0) return undefined;
 
     const selectedId = referenceSheet?.selected_image_id;
-    if (selectedId) return variants.find((variant: any) => variant?.id === selectedId)?.url;
-    return variants[0]?.url;
+    const selectedUrl = selectedId
+        ? variants.find((variant: any) => variant?.id === selectedId)?.url
+        : undefined;
+    return selectedUrl || variants.find((variant: any) => variant?.url)?.url;
 }
 
 
