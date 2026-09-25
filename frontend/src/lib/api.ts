@@ -16,6 +16,17 @@ import {
     type DirectorProfileDraftState,
     type DirectorProfileJobStatusListener,
 } from "./directorProfile";
+import {
+    confirmDirectorShootingPlan,
+    generateDirectorShootingPlan,
+    getDirectorShootingPlan,
+    getDirectorShootingPlanRevision,
+    listDirectorShootingPlanRevisions,
+    restoreDirectorShootingPlanRevision,
+    saveDirectorShootingPlanDraft,
+    type DirectorShootingPlan,
+    type DirectorShootingPlanJobListener,
+} from "./directorShootingPlan";
 import type {
     ScriptFactLedgerDraft,
     ScriptFactLedgerEntry,
@@ -1033,6 +1044,40 @@ export const api = {
         const res = await axios.get(`${API_URL}/projects/${scriptId}/director-profile/revisions`);
         return res.data;
     },
+
+    generateDirectorShootingPlan: (scriptId: string, onStatus?: DirectorShootingPlanJobListener) =>
+        generateDirectorShootingPlan(API_URL, scriptId, onStatus),
+
+    getDirectorShootingPlan: (scriptId: string) =>
+        getDirectorShootingPlan(API_URL, scriptId),
+
+    saveDirectorShootingPlanDraft: (
+        scriptId: string,
+        sourceRevision: number,
+        expectedDraftRevision: number,
+        plan: DirectorShootingPlan,
+    ) => saveDirectorShootingPlanDraft(API_URL, scriptId, sourceRevision, expectedDraftRevision, plan),
+
+    confirmDirectorShootingPlan: (
+        scriptId: string,
+        expectedCurrentRevision: number,
+        expectedDraftRevision: number,
+        plan: DirectorShootingPlan,
+    ) => confirmDirectorShootingPlan(
+        API_URL, scriptId, expectedCurrentRevision, expectedDraftRevision, plan,
+    ),
+
+    listDirectorShootingPlanRevisions: (scriptId: string) =>
+        listDirectorShootingPlanRevisions(API_URL, scriptId),
+
+    getDirectorShootingPlanRevision: (scriptId: string, revision: number) =>
+        getDirectorShootingPlanRevision(API_URL, scriptId, revision),
+
+    restoreDirectorShootingPlanRevision: (
+        scriptId: string,
+        revision: number,
+        expectedDraftRevision: number,
+    ) => restoreDirectorShootingPlanRevision(API_URL, scriptId, revision, expectedDraftRevision),
 
     getScriptFactLedgerDraft: async (scriptId: string): Promise<ScriptFactLedgerDraft> => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}/fact-ledger/draft`);

@@ -31,7 +31,7 @@ beforeEach(() => {
     });
 });
 
-it("provides keyboard-operable Director tabs and keeps sample notes out of the formal shot plan", () => {
+it("provides keyboard-operable Director tabs and keeps sample notes in the reference section", () => {
     render(
         <NextIntlClientProvider locale="en" messages={messages}>
             <ArtDirection />
@@ -44,9 +44,12 @@ it("provides keyboard-operable Director tabs and keeps sample notes out of the f
 
     fireEvent.keyDown(tabs, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Shooting plan" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "A formal shooting plan is not available yet" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Director shooting plan" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate plan draft" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create blank plan" })).toBeVisible();
+    fireEvent.click(screen.getByText("Director sample-scene notes"));
     expect(screen.getByRole("heading", { name: "Scene 9" })).toBeVisible();
-    expect(screen.getByText("Reference only")).toBeVisible();
+    expect(screen.getByText(/These notes are reference material/)).toBeVisible();
 
     fireEvent.keyDown(tabs, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Style selection" })).toHaveAttribute("aria-selected", "true");
