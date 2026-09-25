@@ -83,6 +83,8 @@ export interface Character {
     gender?: string;
     clothing?: string;
     visual_weight?: number;
+    persona?: string;
+    base_character_id?: string | null;
 
     // Legacy fields
     image_url?: string;
@@ -249,9 +251,78 @@ export interface DirectorProfile {
     scene_summaries?: Record<string, unknown>[];
     /** Source-linked cross-scene canon ledger; bounded by the backend contract. */
     canon_state?: Record<string, unknown>;
+    /** Canonical phase/event map used by the visual Director story editor. */
+    story_map?: DirectorStoryMap | null;
     revision: number;
     content_hash: string;
     confirmed_at: number;
+}
+
+export type DirectorEvidenceStatus = "explicit" | "interpretation" | "uncertain" | "conflicted";
+
+export interface DirectorStoryPerson {
+    person_id: string;
+    display_name: string;
+    variant_character_ids: string[];
+}
+
+export interface DirectorStoryEvent {
+    event_id: string;
+    order: number;
+    title: string;
+    description: string;
+    character_ids: string[];
+    dramatic_function: string;
+    source_fact_ids: string[];
+    evidence_status: DirectorEvidenceStatus;
+}
+
+export interface DirectorStoryPhase {
+    phase_id: string;
+    order: number;
+    label: string;
+    time_anchor: string;
+    events: DirectorStoryEvent[];
+}
+
+export interface DirectorRelationshipState {
+    phase_id: string;
+    state: string;
+    trigger_event_ids: string[];
+    source_fact_ids: string[];
+    evidence_status: DirectorEvidenceStatus;
+}
+
+export interface DirectorRelationshipArc {
+    relationship_id: string;
+    person_ids: [string, string];
+    label: string;
+    legacy_summary: string;
+    states: DirectorRelationshipState[];
+}
+
+export interface DirectorStorylineMilestone {
+    event_id: string;
+    role: "setup" | "progress" | "turn" | "reveal" | "payoff" | "open" | "close";
+    note: string;
+}
+
+export interface DirectorStoryThread {
+    thread_id: string;
+    label: string;
+    person_ids: string[];
+    milestones: DirectorStorylineMilestone[];
+}
+
+export interface DirectorStoryMap {
+    schema_version: 1;
+    source_revision: number;
+    source_revision_id: string;
+    fact_ledger_revision: number | null;
+    people: DirectorStoryPerson[];
+    phases: DirectorStoryPhase[];
+    relationship_arcs: DirectorRelationshipArc[];
+    story_threads: DirectorStoryThread[];
 }
 
 export interface DirectorProfileRevision {
@@ -273,6 +344,29 @@ export interface ScriptFactLedgerEntry {
     value: Record<string, unknown>;
     evidence_status: "confirmed" | "uncertain" | "conflicted" | "rejected";
     conflict_group_id?: string | null;
+}
+
+export interface ScriptFactLedgerEvidenceSpan {
+    start: number;
+    end: number;
+    text: string;
+}
+
+export interface ScriptFactLedgerQueryEntry extends ScriptFactLedgerEntry {
+    evidence: ScriptFactLedgerEvidenceSpan[];
+}
+
+export interface ScriptFactLedgerQueryResult {
+    project_id: string;
+    ledger_revision: number;
+    source_revision: number;
+    source_revision_id: string;
+    source_version: string;
+    offset_unit: "unicode_codepoint_half_open";
+    facts: ScriptFactLedgerQueryEntry[];
+    offset: number;
+    total_facts: number;
+    truncated: boolean;
 }
 
 export interface ScriptFactLedgerDraft {

@@ -37,8 +37,15 @@ it("keeps Director imports uncertain and separates saving a draft from confirmin
     });
     const confirm = vi.spyOn(api, "confirmScriptFactLedger").mockResolvedValue({});
     vi.spyOn(api, "getScriptFactLedger").mockResolvedValue({
+        project_id: "film",
         ledger_revision: 1,
         source_revision: 3,
+        source_revision_id: "source-r3:test",
+        source_version: "test",
+        offset_unit: "unicode_codepoint_half_open",
+        offset: 0,
+        total_facts: 1,
+        truncated: false,
         facts: [{ ...facts[0], evidence: [] }],
     });
 

@@ -16,12 +16,12 @@
 - `DirectorProfile.timeline`、`relationships`、`key_events`、`sample_plan` 在前端和后端均为开放对象数组，缺少稳定的领域字段约束。
 - 当前常见 relationship 形状包含 `pair / initial / change / final`，但没有必需的 `phase_id` 或带来源的状态转换，因此不足以推断精确的人物关系时间图。
 - 后端现已加入可选的严格 `DirectorProfile.story_map`；phases/events、按阶段的 relationship states、story threads 和角色变体引用都经过 Pydantic 约束。pipeline 在保存/确认时绑定当前剧本文本 revision、稳定来源 ID 和有效角色变体，并验证关系/事件引用及可选 Fact Ledger ID。旧草稿的空 `story_map` 不进入旧内容 hash。
-- 前端当前仍编辑旧 timeline/relationships；story map 规范视图和 Fact Ledger 证据选择尚未接入，因此新增后端契约目前不改变旧项目的呈现方式。
+- 前端已接入 `story_map` 可视编辑：阶段/事件时间轴、人物关系图与按阶段关系状态、剧情线泳道、角色变体选择和 Fact Ledger 证据选择共享同一规范结构。旧项目需由用户显式创建故事地图；旧关系摘要不会自动改写成阶段状态。
 - Story map 草稿允许暂缺阶段名、事件描述或显式事实引用，便于用户分步编辑；确认时要求至少一个有名阶段、至少一个有描述的事件，并要求标为 `explicit` 的事件/关系状态引用已确认事实。
 - `sample_plan` 当前用于少量场次示例，含 `range / purpose / focus / asset_need` 等描述；它不等于 scene/beat/shot 拍摄计划，也没有镜头时长及 shot ID。
 - `ScriptFactLedgerPanel` 已提供独立的草稿保存、确认、历史版本与原文证据接口，但其事实编辑入口目前也是 JSON textarea。
 - 风格选择已具备独立的目录、预览、项目保存、系列继承/覆盖行为；它目前与 Director Profile 共存于 `art_direction`。
-- 现有 Director Profile 历史只对确认版本归档。原始 Profile 分析和返修草稿离开当前组件后没有服务端持久化保证。
+- Director Profile 草稿有独立的服务端保存与 revision 检查；确认版本另行归档。原始分析和返修结果在用户保存前仍只是当前工作区草稿。
 
 ## 直接推论
 
@@ -180,11 +180,12 @@
 
 ## 实施记录（2026-09-26）
 
-- 已提交 `fb11cc60`：Director 工作台三页签、故事理解结构化字段编辑、阶段列表式时间轴、人物关系图与可折叠高级 JSON。关系图只依据旧 Profile 的人物关系对绘制；旧 `initial/change/final` 仍不标成精确时间状态。
-- 已完成并待单独提交：Director Profile 草稿现在嵌入 Script JSON 持久化，支持按 expected draft revision 保存；草稿绑定 source revision。确认前若 source 或 draft revision 已变化，API 返回冲突；确认动作先保存可见修改，再确认其确切草稿版本。项目常规读接口不携带草稿正文，由独立 draft API 读取。
-- UI 的故事理解可视编辑仍写入现有 `DirectorProfile` 数据形状，尚未迁移到独立的 `DirectorInterpretation` schema；阶段和关系仍没有稳定 `phase_id/event_id` 与原文范围字段。
-- “拍摄计划”页签目前是明确的空态和旧 `sample_plan` 参考展示，不生成、不编辑、不确认正式 scene/beat/shot 计划。它不会把旧场次示例计作镜头或视频任务。
-- 风格选择复用原有项目/系列风格保存功能。Director 页签支持方向键切换；UI 测试覆盖编辑、人物关系图、草稿保存与确认分离。前端 typecheck/build 与 `tests/test_director_profile.py` 已通过。
+- 已提交 `fb11cc60`：Director 工作台三页签、故事理解结构化字段编辑、旧版阶段时间轴、人物关系图与可折叠高级 JSON。
+- 已提交 `7076ede7`：Director Profile 草稿服务端持久化和 expected draft revision 并发检查。草稿绑定 source revision；确认动作先保存可见修改，再确认该草稿版本。
+- 已提交 `65236503`、`6f69ae23`：增加严格、版本化的 `story_map` 契约与有界下游投影；草稿允许渐进完善，确认时校验必填阶段/事件和显式证据引用。
+- 本次前端切片接入阶段/事件编辑、阶段顺序调整、关系图及分阶段关系状态、剧情线泳道、角色/变体绑定和固定 Fact Ledger 证据选择。旧 `timeline`、`relationships`、`key_events` 保留为折叠摘要；从旧数据创建地图需要用户显式操作，不推断旧关系摘要对应哪个剧情阶段。保存草稿和确认仍走现有 revision 链。
+- UI 运行时校验拒绝缺数组或字段不全的 story map；删除阶段/事件时同步清理关系状态、触发事件、剧情线里程碑和不再使用的账本 pin。阶段/事件追加顺序从当前最大 order 继续，避免旧数据有间隙时产生重复顺序值。
+- “拍摄计划”仍是空态和旧 `sample_plan` 参考展示，不生成、不编辑、不确认正式 scene/beat/shot 计划；风格选择仍复用原有项目/系列保存功能。当前阶段不含时间轴筛选/缩放、拖放、原文跳转、独立 `DirectorInterpretation` 资源或 RAG。
 
 story_map 完成后，拍摄计划仍需新增独立 shooting-plan schema 与草稿/确认版本接口，再实现 scene → beat → shot 可视化编辑与生成；只有在对应的 Assets/Storyboard 消费和 lineage 已明确后，才把确认计划接入下游生成。
 
@@ -207,13 +208,13 @@ story_map 完成后，拍摄计划仍需新增独立 shooting-plan schema 与草
 3. 事件和关系状态分别记录原文/事实引用及证据状态。可见状态区分剧本明确、导演解释、未确认、冲突；自由文本来源备注不能伪装成精确 source range。所有精确范围绑定剧本 source revision。
 4. 剧情时间轴使用阶段/事件顺序；拍摄计划的 scene/beat/shot 时间轴使用镜头/成片时长。两者在数据模型、坐标刻度和用户操作上保持独立。
 5. 旧 Profile 的 `timeline` 和 `relationships` 继续可读。旧“初始/变化/结局”只作为 legacy summary；不得自动转换成带具体 `phase_id` 的关系状态。只有用户明确重新分析或在新地图里确认后才进入规范 `story_map`。
-6. UI 采用可筛选的多轨事件时间轴、人物关系图 + 按阶段展开的关系状态详情，以及线索/剧情线泳道。选择图节点/边或时间轴事件后，在同一详情面板编辑；键盘可操作的卡片列表是图形编辑的等价路径。力导向图不是唯一视图，也不将拖动节点位置解释为剧情变更。
-7. 事件、关系状态、线索节点提供到来源证据的展开/跳转。没有来源引用的 AI 解释应明确显示“未链接原文”，不能因此阻止用户保存导演解释，但不能标记成剧本事实。
+6. 当前 UI 采用按阶段/事件顺序排列的时间轴卡片、可选关系边与按阶段关系状态详情，以及按阶段排列的剧情线泳道。图边选择会定位到对应关系编辑区；事件卡片展开后直接编辑。所有操作均有键盘可用的按钮、表单控件或列表路径。当前不提供时间轴缩放、拖放重排或人物筛选；排序使用显式上移/下移操作。
+7. 事件和关系状态可引用固定 Fact Ledger 中的事实；证据选择器展示事实摘要、原文摘录和半开区间 offset。没有来源引用的导演解释标为“导演解读”，可随草稿保存但不能冒充剧本事实。当前展示证据位置但不跳转到剧本编辑器。
 
 ### 本迭代目标与边界
 
-- 目标：将规范 `story_map` 结构接入 Director 草稿、确认版本和现有 lineage；提供故事阶段/事件的可视编辑与阶段关系视图；保留 legacy profile 的只读兼容展示。
-- 成功条件：服务端拒绝重复/悬空 ID、无效关系参与者/阶段/事件引用、错误来源 revision 和不在固定账本中的 Fact ID；前端时间轴、关系图、剧情线过滤与详情编辑读写同一结构；保存草稿、刷新恢复和显式确认生效沿用既有并发/过期保护；窄屏和键盘可完成相同编辑。
+- 目标：将规范 `story_map` 结构接入 Director 草稿、确认版本和现有 lineage；提供故事阶段/事件的可视编辑、阶段关系视图与剧情线泳道；保留 legacy profile 的只读兼容展示。
+- 成功条件：服务端拒绝重复/悬空 ID、无效关系参与者/阶段/事件引用、错误来源 revision 和不在固定账本中的 Fact ID；前端时间轴、关系图、剧情线视图与结构化编辑读写同一结构；保存草稿、刷新恢复和显式确认生效沿用既有并发/过期保护；窄屏和键盘可完成相同编辑。
 - 暂不做：DirectorShootingPlan、beat/shot 生成、Assets/Storyboard 新 schema 消费、RAG 服务、全本逐事件事实抽取、把旧 profile 自动伪造成规范 story map。
 - 假设：当前 source revision 与 Fact Ledger 可作为证据权威；规范 story map 属于用户可修订的导演解释，不覆盖 Fact Ledger。
 - 风险边界：AI Reader 的章节泳道适合阅读已聚合事件；iFrame 需要可审阅的编辑计划，因此采用其筛选、折叠、交汇和 drill-down 概念，按 source revision、draft revision 与 explicit apply 约束数据。

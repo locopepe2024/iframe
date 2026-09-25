@@ -19,6 +19,7 @@ import {
 import type {
     ScriptFactLedgerDraft,
     ScriptFactLedgerEntry,
+    ScriptFactLedgerQueryResult,
     ScriptFactLedgerSnapshot,
 } from "@/store/projectStore";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
@@ -1075,8 +1076,8 @@ export const api = {
         ledgerRevision?: number,
         offset = 0,
         limit = 100,
-    ) => {
-        const res = await axios.get(`${API_URL}/projects/${scriptId}/fact-ledger`, {
+    ): Promise<ScriptFactLedgerQueryResult> => {
+        const res = await axios.get<ScriptFactLedgerQueryResult>(`${API_URL}/projects/${scriptId}/fact-ledger`, {
             params: {
                 source_revision: sourceRevision,
                 ledger_revision: ledgerRevision,

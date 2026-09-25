@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, expect, it, vi } from "vitest";
 import messages from "../../../messages/en.json";
 import { api } from "@/lib/api";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjectStore, type ScriptFactLedgerQueryResult } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
 import DirectorProfilePanel from "./DirectorProfilePanel";
 
@@ -26,6 +26,7 @@ beforeEach(() => {
         project_id: "film", draft_revision: 0, source_revision: null, draft: null, updated_at: null,
     });
     vi.spyOn(api, "listDirectorProfileRevisions").mockResolvedValue([]);
+    vi.spyOn(api, "listScriptFactLedgerRevisions").mockResolvedValue([]);
     vi.spyOn(api, "saveDirectorProfileDraft").mockImplementation(async (_projectId, sourceRevision, expectedDraftRevision, draft) => ({
         project_id: "film",
         draft_revision: expectedDraftRevision + 1,
@@ -63,6 +64,61 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     fireEvent.click(screen.getByRole("button", { name: "Confirm direction" }));
     await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile, undefined, 1));
     expect(api.saveDirectorProfileDraft).toHaveBeenCalledWith("film", 1, 0, profile);
+});
+
+it("loads the story map's pinned fact revision and displays exact source evidence for review", async () => {
+    const analyzed = {
+        ...profile,
+        story_map: {
+            schema_version: 1 as const,
+            source_revision: 1,
+            source_revision_id: "source-r1:test",
+            fact_ledger_revision: 2,
+            people: [],
+            phases: [{
+                phase_id: "phase-1", order: 0, label: "University", time_anchor: "", events: [{
+                    event_id: "event-1", order: 0, title: "First", description: "They meet",
+                    character_ids: [], dramatic_function: "", source_fact_ids: [], evidence_status: "interpretation" as const,
+                }],
+            }],
+            relationship_arcs: [],
+            story_threads: [],
+        },
+    };
+    const result: ScriptFactLedgerQueryResult = {
+        project_id: "film",
+        ledger_revision: 2,
+        source_revision: 1,
+        source_revision_id: "source-r1:test",
+        source_version: "test",
+        offset_unit: "unicode_codepoint_half_open",
+        facts: [{
+            fact_id: "fact-meet", kind: "event", subject_ids: [], phase: null,
+            source_revision: 1, source_revision_id: "source-r1:test", source_ranges: [{ start: 0, end: 25 }],
+            value: { summary: "They meet in the library" }, evidence_status: "confirmed", conflict_group_id: null,
+            evidence: [{ start: 0, end: 25, text: "They meet in the university library." }],
+        }],
+        offset: 0,
+        total_facts: 1,
+        truncated: false,
+    };
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue(analyzed);
+    vi.spyOn(api, "listScriptFactLedgerRevisions").mockResolvedValue([
+        { revision: 2, source_revision: 1, source_revision_id: "source-r1:test", fact_count: 1, confirmed_at: 10 },
+    ]);
+    const getLedger = vi.spyOn(api, "getScriptFactLedger").mockResolvedValue(result);
+
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: /First/ }));
+    fireEvent.click(screen.getByText(/Script evidence/));
+
+    await waitFor(() => expect(getLedger).toHaveBeenCalledWith("film", 1, 2, 0, 100));
+    expect(await screen.findByText(/They meet in the university library/)).toBeInTheDocument();
 });
 
 it("saves an editable Director draft without making it active", async () => {

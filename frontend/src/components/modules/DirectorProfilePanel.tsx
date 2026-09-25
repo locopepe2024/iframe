@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
-import { useProjectStore, type DirectorProfile, type DirectorProfileRevision } from "@/store/projectStore";
+import {
+    useProjectStore,
+    type DirectorProfile,
+    type DirectorProfileRevision,
+    type ScriptFactLedgerQueryResult,
+    type ScriptFactLedgerSnapshot,
+} from "@/store/projectStore";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
@@ -48,10 +54,63 @@ export default function DirectorProfilePanel() {
     const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
     const [draftContextSourceRevision, setDraftContextSourceRevision] = useState<number | null>(null);
     const [savedDraftText, setSavedDraftText] = useState(() => editableProfile(confirmed));
+    const [factEvidence, setFactEvidence] = useState<ScriptFactLedgerQueryResult | null>(null);
+    const [factsLoading, setFactsLoading] = useState(false);
+    const [factsError, setFactsError] = useState("");
+    const [factRefreshToken, setFactRefreshToken] = useState(0);
     const sourceRevision = currentProject?.source_revision ?? 1;
     const isDirty = draftText !== savedDraftText;
     const hasStaleDraft = draftContextSourceRevision !== null && draftContextSourceRevision !== sourceRevision;
     const needsDraftSave = isDirty || draftContextSourceRevision !== draftSourceRevision;
+    const requestedFactLedgerRevision = useMemo(() => {
+        try {
+            const parsed = JSON.parse(draftText) as { story_map?: { fact_ledger_revision?: number | null } };
+            return parsed.story_map?.fact_ledger_revision ?? null;
+        } catch {
+            return null;
+        }
+    }, [draftText]);
+
+    useEffect(() => {
+        if (!currentProject) {
+            setFactEvidence(null);
+            return;
+        }
+        let active = true;
+        setFactsLoading(true);
+        setFactsError("");
+        void (async () => {
+            const revisions: ScriptFactLedgerSnapshot[] = await api.listScriptFactLedgerRevisions(currentProject.id);
+            const currentRevisions = revisions
+                .filter(item => item.source_revision === sourceRevision)
+                .sort((a, b) => b.revision - a.revision);
+            const snapshot = currentRevisions.find(item => item.revision === requestedFactLedgerRevision)
+                ?? currentRevisions[0];
+            if (!snapshot) {
+                if (active) setFactEvidence(null);
+                return;
+            }
+            const firstPage = await api.getScriptFactLedger(currentProject.id, sourceRevision, snapshot.revision, 0, 100);
+            const offsets = [];
+            for (let offset = 100; offset < Math.min(firstPage.total_facts, 500); offset += 100) offsets.push(offset);
+            const nextPages = await Promise.all(offsets.map(offset =>
+                api.getScriptFactLedger(currentProject.id, sourceRevision, snapshot.revision, offset, 100),
+            ));
+            if (active) setFactEvidence({
+                ...firstPage,
+                facts: [firstPage, ...nextPages].flatMap(page => page.facts),
+                truncated: firstPage.total_facts > 500,
+            });
+        })().catch(() => {
+            if (active) {
+                setFactEvidence(null);
+                setFactsError(t("directorEditor.storyMap.factLoadFailed"));
+            }
+        }).finally(() => {
+            if (active) setFactsLoading(false);
+        });
+        return () => { active = false; };
+    }, [currentProject?.id, sourceRevision, requestedFactLedgerRevision, factRefreshToken, t]);
 
     useEffect(() => {
         const fallback = editableProfile(confirmed);
@@ -344,6 +403,13 @@ export default function DirectorProfilePanel() {
                             return (
                                 <DirectorInterpretationVisualEditor
                                     profile={parseDraft()}
+                                    sourceRevision={sourceRevision}
+                                    characters={currentProject?.characters ?? []}
+                                    facts={factEvidence?.facts ?? []}
+                                    factLedgerRevision={factEvidence?.ledger_revision ?? null}
+                                    factsLoading={factsLoading}
+                                    factsError={factsError}
+                                    onReloadFacts={() => setFactRefreshToken(token => token + 1)}
                                     onChange={value => setDraftText(JSON.stringify(value, null, 2))}
                                 />
                             );
