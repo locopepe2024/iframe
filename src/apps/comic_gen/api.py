@@ -49,7 +49,7 @@ from .pipeline import (
     AssemblyPlanValidationError,
     AssemblyPlanConflictError,
 )
-from .structured_evidence import query_asset_mentions, source_version
+from .structured_evidence import query_asset_mentions, query_director_facts, source_version
 from .models import (
     ArtDirection,
     DirectorProfile,
@@ -4616,6 +4616,28 @@ def list_director_profile_revisions(
     if not script:
         raise HTTPException(404, "Project not found")
     return script.director_profile_revisions
+
+
+@app.get("/projects/{script_id}/director-evidence")
+def get_director_evidence(
+    script_id: str,
+    source_revision: int,
+    category: Optional[str] = None,
+    subject: Optional[str] = None,
+    limit: int = 50,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return query_director_facts(
+        script,
+        source_revision,
+        category=category,
+        subject=subject,
+        limit=max(1, min(limit, 100)),
+    )
 
 
 @app.post("/projects/{script_id}/director-profile/apply", response_model=Script)

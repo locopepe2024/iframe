@@ -109,6 +109,10 @@ find_source_ranges(flow_id, source_revision_id, query, filters={scene, character
 
 边界：这个切片只记录原文版本，不把现有 `canon_state` 自动认定为经证据核准的事实账本；文本变化仅标记 Director/下游待复核，不自动改写已批准导演决定。后续 `ScriptFactLedger` 必须引用明确的 source revision 和字符范围，并在审核后才作为下游事实输入。验收：同文保存幂等；不同文本可读取旧版；reparse 后版本及 Director 历史保留；旧项目可无损迁移。
 
+### Director canon 查询适配器（2026-09-25）
+
+当前已批准的 `DirectorProfile.canon_state` 可按类别、主体及当前 ScriptSource revision 查询，返回原始条目、显式状态、来源绑定情况和内容 hash。source revision 不匹配时拒绝查询；未绑定来源的条目明确计数，不因为位于已确认 Profile 内就升级为剧本事实。此接口是现有结构化内容的查询适配器，尚不是独立的 `ScriptFactLedger`，也不替代逐条 source range 校验、冲突裁决和用户批准。Assets/Storyboard 目前尚未消费该接口；接入前必须先完成事实账本与导演计划的批准及版本引用。
+
 验收以行为为准：同一查询在固定 revision 下结果稳定；剧本修改后旧查询可复现旧证据，新查询只读新证据；角色设计与分镜草稿能显示准确来源；冲突/未知项不被默认当作事实；局部返修不需要发送整集原文。
 
 ## What would verify it

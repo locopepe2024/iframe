@@ -7,6 +7,17 @@ from fastapi import HTTPException
 
 from .models import Script
 
+DIRECTOR_FACT_CATEGORIES = {
+    "characters",
+    "relationships",
+    "world_rules",
+    "timeline",
+    "events",
+    "open_threads",
+    "conflicts",
+    "uncertainties",
+}
+
 
 def source_version(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -79,4 +90,58 @@ def query_asset_mentions(
         "variant_ambiguous": variant_ambiguous,
         "mentions": mentions,
         "truncated": len(mentions) == limit and text.find(matched_name, offset) >= 0,
+    }
+
+
+def query_director_facts(
+    script: Script,
+    expected_source_revision: int,
+    category: Optional[str] = None,
+    subject: Optional[str] = None,
+    limit: int = 50,
+) -> dict:
+    """Return confirmed Director canon entries without semantic retrieval.
+
+    Entries remain evidence records: source refs and explicit status are
+    preserved, while missing source bindings are surfaced as unbound rather
+    than silently treated as current-script facts.
+    """
+    if expected_source_revision != script.source_revision:
+        raise HTTPException(409, "Script source revision changed; refresh evidence")
+    if category is not None and category not in DIRECTOR_FACT_CATEGORIES:
+        raise HTTPException(422, "Unsupported Director fact category")
+    profile = script.art_direction.director_profile if script.art_direction else None
+    state = profile.canon_state if profile else {}
+    categories = [category] if category else sorted(DIRECTOR_FACT_CATEGORIES)
+    facts = []
+    unbound_count = 0
+    for current_category in categories:
+        for item in state.get(current_category, []):
+            if not isinstance(item, dict):
+                continue
+            item_subject = str(item.get("subject", ""))
+            if subject and subject not in item_subject:
+                continue
+            bound_revision = item.get("source_revision")
+            if bound_revision in (None, ""):
+                unbound_count += 1
+            elif int(bound_revision) != expected_source_revision:
+                continue
+            facts.append({
+                "category": current_category,
+                "fact": dict(item),
+                "source_revision": bound_revision,
+                "evidence_status": item.get("status", "uncertain"),
+            })
+            if len(facts) >= limit:
+                break
+        if len(facts) >= limit:
+            break
+    return {
+        "project_id": script.id,
+        "source_revision": expected_source_revision,
+        "source_version": source_version(script.original_text),
+        "facts": facts,
+        "unbound_fact_count": unbound_count,
+        "truncated": len(facts) >= limit,
     }

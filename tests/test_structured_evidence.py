@@ -2,7 +2,8 @@ import pytest
 from fastapi import HTTPException
 
 from src.apps.comic_gen.models import Character, Prop, Scene, Script
-from src.apps.comic_gen.structured_evidence import query_asset_mentions, source_version
+from src.apps.comic_gen.structured_evidence import query_asset_mentions, query_director_facts, source_version
+from src.apps.comic_gen.models import ArtDirection, DirectorProfile
 
 
 def make_script(text):
@@ -82,3 +83,30 @@ def test_source_revision_list_omits_text_and_legacy_current_source_is_readable(m
     assert "text" not in revisions[0]
     assert revisions[0]["content_hash"] == source_version(script.original_text)
     assert api.get_source_revision(script.id, 1, user=None).text == script.original_text
+
+
+def test_director_facts_are_revision_pinned_and_preserve_uncertainty():
+    script = make_script("周涵走向电影院。")
+    script.source_revision = 1
+    script.art_direction = ArtDirection(
+        selected_style_id="director",
+        style_config={},
+        director_profile=DirectorProfile(canon_state={
+            "characters": [
+                {"fact_id": "c1", "subject": "周涵", "value": "大学时期", "source_revision": 1, "status": "active"},
+                {"fact_id": "c2", "subject": "沈夏", "value": "时期未确认", "status": "uncertain"},
+            ],
+        }),
+    )
+
+    result = query_director_facts(script, 1, category="characters", subject="周涵")
+    assert [item["fact"]["fact_id"] for item in result["facts"]] == ["c1"]
+    assert result["facts"][0]["source_revision"] == 1
+    assert result["unbound_fact_count"] == 0
+
+    all_facts = query_director_facts(script, 1, category="characters")
+    assert all_facts["unbound_fact_count"] == 1
+
+    with pytest.raises(HTTPException) as error:
+        query_director_facts(script, 2)
+    assert error.value.status_code == 409
