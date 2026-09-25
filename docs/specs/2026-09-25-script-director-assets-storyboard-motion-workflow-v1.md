@@ -35,18 +35,34 @@ Script → Director → Assets → Storyboard → Motion
 
 禁止：补写未出现的外观、情绪、动机、灯光或镜头。
 
-### 2. Director：叙事和镜头规划层
+### 2. Director：剧本阐释与拍摄规划层
 
-职责：通读剧本并决定“拍什么”和“如何组织镜头”。这是当前工作流缺失的中间层。
+职责：在 Script 提供的事实账本上，先决定“这个故事如何理解、要引导观众经历什么”，再决定“如何拆场和组织镜头”。Director 不是从剧本直接跳到 shot list，而是两个先后衔接、分别可审阅和版本化的产物。
 
-输出必须包含：
+#### DirectorInterpretation：导演阐释
 
-- `scene_plan[]`：场景边界、时间、地点、人物、情绪、预计时长；
-- `beat_plan[]`：场景内动作节拍及其顺序；
-- `shot_plan[]`：将多个节拍合并为镜头后的正式镜头计划；
-- 每个 shot 的预计时长、切镜理由、景别、机位、构图和运镜；
-- 场景连续性：人物朝向、位置、道具状态、光线和时间变化；
-- 未确定信息和导演假设，分别标记为 `unresolved` 和 `hypothesis`。
+回答“这故事讲什么，导演打算怎样引导观众理解和感受”。至少包含：
+
+- 核心主题、戏剧主线、叙事重点和希望观众带走的感受；
+- 人物目标、人物弧光、关系变化与冲突结构；
+- 全片/全集情绪曲线、关键转折及并行时间线；
+- 线索线、反复意象及其铺设、揭示、回收位置；
+- 要突出、压低、延迟揭示或保留暧昧的剧情信息及理由；
+- 整体风格，以及表演、视听、节奏和剪辑原则；
+- ScriptFactLedger 来源、导演解释、假设和待用户决策项。
+
+ScriptFactLedger 由 Script 阶段维护。Director 可以判断事实的戏剧意义，但不能把解释或假设写回为原文事实。
+
+#### DirectorShootingPlan：拍摄计划
+
+用户审阅并批准导演阐释后，再将创作判断落实为拍摄拆解：
+
+- `scene_plan[]`：场景边界、时间、地点、人物、戏剧目的、情绪和预计时长；
+- `beat_plan[]`：场景内动作/戏剧节拍及顺序；
+- `shot_plan[]`：将一个或多个节拍组合成正式镜头；
+- 每个 shot 的时长、切镜理由、景别、机位、构图和运镜；
+- 场景连续性：人物位置/朝向、道具状态、光线和时间变化；
+- 对已批准 `DirectorInterpretation` revision 的引用，以及未决项/假设标记。
 
 核心规则：
 
@@ -60,6 +76,7 @@ Script → Director → Assets → Storyboard → Motion
 
 ```json
 {
+  "interpretation_ref": "director-interpretation-rev-1",
   "scene_plan": [{
     "scene_id": "scene-01",
     "source_refs": ["source:chars-0-420"],
@@ -90,6 +107,14 @@ Script → Director → Assets → Storyboard → Motion
 }
 ```
 
+#### 人机审阅门
+
+1. 用户校对/批准 ScriptFactLedger，解决事实抽取错误和来源冲突。
+2. 用户审阅/修改/批准 DirectorInterpretation，确认导演如何理解人物、冲突、情感、线索和剧情重点。
+3. 用户审阅/修改/批准 DirectorShootingPlan，确认划场、beat-to-shot 组合、镜头数与时长。
+
+保存草稿不等于批准生效。下游产物必须引用确切的已批准版本；上游修订只标记受影响的下游版本过期，由用户决定局部返修或重做。
+
 ### 3. Assets：导演约束下的视觉资产层
 
 职责：把 Script 中的实体转成可复用的视觉资产，并保留 Director 对它们的约束。
@@ -101,7 +126,7 @@ Script → Director → Assets → Storyboard → Motion
 - 时期/身份/服装变体；
 - 导演确认的表演边界：可表达的情绪、姿态倾向、关系状态；
 - 不同场景下的可见状态，不把一次性动作写进长期角色外观；
-- `director_profile_revision` 和来源 `source_refs`。
+- `director_interpretation_revision`、`director_shooting_plan_revision` 和来源 `source_refs`。
 
 场景资产必须包含：
 
@@ -109,6 +134,7 @@ Script → Director → Assets → Storyboard → Motion
 - 固定空间结构和关键布景；
 - 可复用光线/色彩基线；
 - 导演指定的连续性约束。
+- 对应的 `DirectorInterpretation` 和 `DirectorShootingPlan` revisions，保证资产定义能追溯其戏剧用途、人物阶段和场景规划。
 
 道具资产必须包含：
 
@@ -124,7 +150,7 @@ Script → Director → Assets → Storyboard → Motion
 输入只能是：
 
 - 已确认的 `shot_plan`；
-- 对应 Director 约束；
+- 对应已批准的 `DirectorInterpretation` 和 `DirectorShootingPlan`；
 - 对应 Assets 及其时期变体；
 - 原文对白和环境音事实。
 
@@ -138,7 +164,7 @@ Script → Director → Assets → Storyboard → Motion
 - 构图：景别、机位、画面位置；
 - 运镜：类型、方向、速度；
 - 时长、对白、说话人、环境音；
-- `shot_plan_id`、`director_profile_revision`、`source_refs`。
+- `shot_plan_id`、`director_interpretation_revision`、`director_shooting_plan_revision`、`source_refs`。
 
 Storyboard 可以扩写描述，但不能新增 Script 未支持且 Director 未标记为假设的剧情事实。
 
@@ -161,7 +187,12 @@ Storyboard 可以扩写描述，但不能新增 Script 未支持且 Director 未
 
 ```text
 script_ready
-director_planning
+script_facts_review
+director_interpretation_draft
+director_interpretation_review
+director_interpretation_approved
+director_shooting_plan_draft
+director_shooting_plan_review
 director_ready
 assets_planning
 assets_ready
@@ -180,7 +211,7 @@ failed
 现有 158 条记录不能直接视为已确认镜头。迁移时应：
 
 1. 保留原始文本和旧 frame 作为审计输入；
-2. 重新运行 Director，生成场景计划、动作节拍计划和 shot plan；
+2. 重新运行 Director：先生成并审阅导演阐释，再生成场景计划、动作节拍计划和 shot plan；
 3. 将旧 frame 映射到 `beat_id`，不得自动等同于 `shot_id`；
 4. 合并同一连续镜头内的动作；
 5. 由 Storyboard 阶段重新生成完整镜头描述；
@@ -188,7 +219,8 @@ failed
 
 ## 成功标准
 
-- Director 能输出独立的场景计划和 shot plan；
+- Director 能输出可审阅的阐释（主题、人物、冲突、情绪、时间线/线索线、风格和剧情重点）及独立的场景/beat/shot plan；
+- ScriptFactLedger、DirectorInterpretation、DirectorShootingPlan 可分别修订、批准，并保留明确的来源和依赖版本；
 - 一个 shot 可以承载多个动作节拍；
 - 158 条旧记录经过审计后能区分“保留、合并、重复、缺失”；
 - StoryboardFrame 数量等于确认后的 shot plan 数量；
