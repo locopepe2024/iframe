@@ -204,7 +204,7 @@ def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = '{"frames":[{"action_summary":"修订镜头"}]}'
+    processor.llm.chat.return_value = '{"frames":[{"scene_ref_name":"直播间","action_summary":"修订镜头","visual_atmosphere":"安静的直播间，暖色空气","character_acting":"主播抬眼看向镜头，手指停住","key_action_physics":"产品在桌面缓慢转动","lighting":{"direction":"左侧","quality":"soft","color_temp":"warm","description":"柔和侧光覆盖人物面部"}}]}'
     draft = [{"action_summary": "原镜头", "duration": 5}]
 
     result = processor.refine_storyboard_analysis(
@@ -233,7 +233,7 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = '{"frames":[{"action_summary":"角色推门进入"}]}'
+    processor.llm.chat.return_value = '{"frames":[{"scene_ref_name":"走廊","action_summary":"角色推门进入","visual_atmosphere":"狭窄走廊，空气沉闷","character_acting":"角色屏住呼吸，手臂用力推门","key_action_physics":"门轴发出轻响并向内旋开","lighting":{"direction":"门外","quality":"hard","color_temp":"cool","description":"门缝切入冷光"}}]}'
     visual_style = {
         "selected_style_id": "film-noir",
         "style_config": {"positive_prompt": "黑白电影质感", "negative_prompt": "彩色"},
@@ -252,6 +252,15 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
     assert "跨帧保持稳定" in prompt
     assert "空间方位" in prompt and "对白原文" in prompt
     assert result[0]["action_summary"] == "角色推门进入"
+
+
+def test_storyboard_parser_rejects_action_only_frames():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    assert processor._parse_storyboard_json(
+        '{"frames":[{"scene_ref_name":"走廊","action_summary":"推门"}]}'
+    ) is None
 
 
 def test_long_storyboard_preview_resumes_ordered_source_batches():

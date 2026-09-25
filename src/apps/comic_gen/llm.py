@@ -551,6 +551,10 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
     "character_ref_names": ["角色名"],
     "prop_ref_names": ["道具名"],
     "action_summary": "一句话概括这帧发生什么（含角色动作 + 物理事件 + 神态表情）",
+    "visual_atmosphere": "环境与氛围：地点可见细节、天气/时间、色调和空间空气感（不少于 20 字）",
+    "character_acting": "角色表演：每个可见角色的表情、视线、姿态和身体动作（不少于 20 字）",
+    "key_action_physics": "关键动作物理：接触、力度、速度、材质变化或运动轨迹（无物理变化时说明状态）",
+    "lighting": {"direction": "主光方向", "quality": "soft/hard", "color_temp": "warm/neutral/cool", "description": "光影落点、明暗关系和质感"},
     "shot_size": "中景",
     "camera_angle": "平视",
     "camera_movement": "静止",
@@ -1620,6 +1624,16 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             frames = result.get("frames", []) if isinstance(result, dict) else None
             if not isinstance(frames, list) or not frames or not all(isinstance(frame, dict) for frame in frames):
                 logger.warning("Parsed JSON successfully but 'frames' array is empty")
+                return None
+            missing = []
+            for index, frame in enumerate(frames, 1):
+                required = ("scene_ref_name", "action_summary", "visual_atmosphere",
+                            "character_acting", "key_action_physics", "lighting")
+                absent = [field for field in required if not frame.get(field)]
+                if absent:
+                    missing.append(f"frame {index}: {', '.join(absent)}")
+            if missing:
+                logger.warning("Storyboard frames missing visual atoms: %s", "; ".join(missing[:5]))
                 return None
             logger.info(f"Storyboard Analysis generated {len(frames)} frames")
             return frames

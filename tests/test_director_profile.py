@@ -532,7 +532,13 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps({"frames": [{"action_summary": "离校"}]})
+    processor.llm.chat.return_value = json.dumps({"frames": [{
+        "scene_ref_name": "场景21", "action_summary": "离校",
+        "visual_atmosphere": "冷灰校园，傍晚空气沉静",
+        "character_acting": "周涵低头收拾书包，目光克制而疲惫",
+        "key_action_physics": "他提起书包，肩带因重量轻微绷紧",
+        "lighting": {"direction": "侧后方", "quality": "soft", "color_temp": "cool", "description": "冷色侧光拉长影子"},
+    }]})
     payload = {
         **profile_payload(),
         "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电；用户要求：首尾框架式回忆，约60秒。",
@@ -550,7 +556,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     )
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
-    assert result == [{"action_summary": "离校"}]
+    assert result[0]["action_summary"] == "离校"
     assert "只保留中国背景" in prompt
     assert "confirmed_director_execution_summary" in prompt
     assert "不要注入下游" not in prompt
