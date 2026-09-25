@@ -78,8 +78,11 @@ def structured_profile_payload():
 
 def make_pipeline():
     from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from threading import RLock
 
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = RLock()
+    pipeline.asset_generation_tasks = {}
     script = Script(
         id="film", title="隔岸不观火", original_text="场景21至44",
         created_at=1, updated_at=1,

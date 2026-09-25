@@ -44,7 +44,53 @@ def test_failure_is_explicit_and_retryable(tmp_path):
         assert wait_done(store, job)['status'] == 'failed'
         retry = store.start('owner', 'project', 'key', lambda: {})
         assert retry['id'] != job['id']
-        assert wait_done(store, retry)['status'] == 'completed'
+    assert wait_done(store, retry)['status'] == 'completed'
+
+
+def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):
+    path = tmp_path / 'jobs.db'
+    store = ExtractionJobs(path)
+    with store.connect() as db:
+        db.execute(
+            "INSERT INTO jobs (id, owner, project, fingerprint, status, created, result, error) "
+            "VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
+            ('interrupted', 'owner', 'project', 'key', 'running', time.time()),
+        )
+
+    assert store.recover_interrupted() == 1
+    assert store.get('owner', 'project', 'interrupted')['status'] == 'failed'
+    retry = store.start('owner', 'project', 'key', lambda: {'frames': []})
+    assert retry['id'] != 'interrupted'
+    assert wait_done(store, retry)['status'] == 'completed'
+
+
+def test_timed_out_storyboard_job_can_retry_and_late_result_is_discarded(tmp_path):
+    gate = Event()
+    started = Event()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def slow_work():
+            started.set()
+            gate.wait(2)
+            return {'frames': ['stale']}
+
+        old = store.start('owner', 'project', 'storyboard:revision', slow_work)
+        assert started.wait(1)
+        with store.connect() as db:
+            db.execute('UPDATE jobs SET created=? WHERE id=?', (time.time() - 1801, old['id']))
+
+        try:
+            expired = store.get('owner', 'project', old['id'])
+            assert expired['status'] == 'failed'
+            assert '超时' in expired['error']
+            retry = store.start('owner', 'project', 'storyboard:revision', lambda: {'frames': ['fresh']})
+            assert retry['id'] != old['id']
+            assert wait_done(store, retry)['result'] == {'frames': ['fresh']}
+        finally:
+            gate.set()
+
+    assert store.get('owner', 'project', old['id'])['status'] == 'failed'
 
 
 def test_lifo_latest_wins_queue_discards_older_director_revisions(tmp_path):

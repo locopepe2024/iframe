@@ -15,6 +15,7 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
 RETENTION = 86400
+STORYBOARD_TIMEOUT = 30 * 60
 
 
 class ExtractionJobs:
@@ -48,6 +49,24 @@ class ExtractionJobs:
         db.execute('CREATE INDEX IF NOT EXISTS extraction_owner_project ON jobs(owner, project, fingerprint, created)')
         return db
 
+    def recover_interrupted(self):
+        """Close rows whose in-process workers disappeared on server restart."""
+        with closing(self.connect()) as db, db:
+            cursor = db.execute(
+                "UPDATE jobs SET status='failed', result=NULL, error=? "
+                "WHERE status IN ('running', 'queued')",
+                ('分析任务因服务重启而中断，请重试。',),
+            )
+            return cursor.rowcount
+
+    @staticmethod
+    def _expire_storyboard_jobs(db, now):
+        db.execute(
+            "UPDATE jobs SET status='failed', result=NULL, error=? "
+            "WHERE status='running' AND fingerprint LIKE 'storyboard:%' AND created<?",
+            ('分镜分析超时，请重试。', now - STORYBOARD_TIMEOUT),
+        )
+
     @staticmethod
     def public(row):
         superseded = bool(row['superseded']) if 'superseded' in row.keys() else False
@@ -67,6 +86,7 @@ class ExtractionJobs:
         now = time.time()
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
+            self._expire_storyboard_jobs(db, now)
             db.execute("DELETE FROM jobs WHERE status!='running' AND created<?", (now - RETENTION,))
             prior = db.execute("SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint=? AND status IN ('running','completed') ORDER BY created DESC LIMIT 1", (owner, project, fingerprint)).fetchone()
             if prior:
@@ -205,6 +225,7 @@ class ExtractionJobs:
 
     def get(self, owner, project, job_id):
         with closing(self.connect()) as db, db:
+            self._expire_storyboard_jobs(db, time.time())
             row = db.execute('SELECT * FROM jobs WHERE id=? AND owner=? AND project=?', (job_id, owner, project)).fetchone()
             if not row:
                 raise HTTPException(404, 'Analysis task not found')

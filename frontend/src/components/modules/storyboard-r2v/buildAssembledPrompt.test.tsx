@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 
 import { buildGenerationPrompt, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
+import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 
 const shot: ShotNode = {
@@ -53,4 +54,44 @@ it("lets a shot replace inherited negative constraints", () => {
     expect(resolveNegativePrompt("global negative", "model negative", "bright daylight")).toBe("bright daylight");
     expect(resolveNegativePrompt("global negative", "model negative")).toBe("global negative, model negative");
     expect(resolveStylePrompt("global style", undefined, "night light")).toBe("global style, night light");
+});
+
+it("resolves a series art direction for storyboard frames when the project inherits it", () => {
+    expect(resolveStoryboardStyle(
+        { series_id: "series-1" },
+        {
+            id: "series-1",
+            art_direction: { style_config: { positive_prompt: "全片胶片质感", negative_prompt: "过饱和" } },
+        },
+    )).toEqual({ positivePrompt: "全片胶片质感", negativePrompt: "过饱和" });
+
+    expect(resolveStoryboardStyle(
+        { series_id: "series-2", style_prompt: "项目旧版风格" },
+        { id: "series-1", art_direction: { style_config: { positive_prompt: "不可串用的系列风格" } } },
+    )).toEqual({ positivePrompt: "项目旧版风格", negativePrompt: "" });
+});
+
+it("keeps project art direction above the series and uses legacy style when neither exists", () => {
+    expect(resolveStoryboardStyle(
+        {
+            series_id: "series-1",
+            art_direction: { style_config: { positive_prompt: "项目风格", negative_prompt: "项目负向" } },
+        },
+        { id: "series-1", art_direction: { style_config: { positive_prompt: "系列风格" } } },
+    )).toEqual({ positivePrompt: "项目风格", negativePrompt: "项目负向" });
+    expect(resolveStoryboardStyle({ style_prompt: "手绘水彩", style_preset: "realistic" })).toEqual({
+        positivePrompt: "realistic style, 手绘水彩",
+        negativePrompt: "",
+    });
+});
+
+it("loads a missing inherited series style before rendering", async () => {
+    const loadSeries = async (id: string) => ({
+        id,
+        art_direction: { style_config: { positive_prompt: "系列统一风格", negative_prompt: "" } },
+    });
+    await expect(resolveStoryboardStyleForRender({ series_id: "series-1" }, null, loadSeries)).resolves.toEqual({
+        positivePrompt: "系列统一风格",
+        negativePrompt: "",
+    });
 });
