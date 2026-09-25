@@ -1577,6 +1577,12 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
 任何回忆/闪回子类型或剪辑结构都必须以 execution_summary 中明确标记的“用户要求”为准；
 未标注时不得自行套用，且回忆内容必须能在原文中找到。
 """ % json.dumps(execution_context, ensure_ascii=False, indent=2)
+            if execution_context.get("script_fact_ledger"):
+                system_prompt += (
+                    "\n事实账本是用户确认的来源索引：confirmed 可按其 source_ranges 引用；uncertain "
+                    "和 conflicted 只提示核查方向，不得写成已证实剧情；rejected 不应使用。若账本状态为 stale "
+                    "或 unavailable，不得沿用其中事实。\n"
+                )
 
         try:
             content = self.llm.chat(
@@ -1664,9 +1670,16 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
+            execution_context = director_execution_payload(director_profile)
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
-                director_execution_payload(director_profile), ensure_ascii=False, indent=2
+                execution_context, ensure_ascii=False, indent=2
             ) + "\n</confirmed_director_execution_summary>"
+            if execution_context.get("script_fact_ledger"):
+                baseline += (
+                    "\n事实账本是用户确认的来源索引：confirmed 可按 source_ranges 引用；uncertain "
+                    "和 conflicted 只提示核查方向，不得写成已证实剧情；rejected 不应使用。若账本为 stale "
+                    "或 unavailable，不得沿用其中事实。\n"
+                )
             baseline += (
                 "\n场景级 scene_summaries 是局部连续性记忆。修订镜头时优先按 scene_ref "
                 "匹配对应 summary，并保持 state_out → state_in 的因果衔接；缺少匹配项时只能 "

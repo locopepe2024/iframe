@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi import HTTPException
 
@@ -83,6 +84,13 @@ def test_source_revision_list_omits_text_and_legacy_current_source_is_readable(m
     assert "text" not in revisions[0]
     assert revisions[0]["content_hash"] == source_version(script.original_text)
     assert api.get_source_revision(script.id, 1, user=None).text == script.original_text
+    public_project = api._script_response_dump(script)
+    assert "source_revisions" not in public_project
+    assert "fact_ledger_revisions" not in public_project
+    assert public_project["source_revision"] == script.source_revision
+    list_payload = json.loads(api.signed_response([script]).body)
+    assert "source_revisions" not in list_payload[0]
+    assert "fact_ledger_revisions" not in list_payload[0]
 
 
 def test_director_facts_are_revision_pinned_and_preserve_uncertainty():

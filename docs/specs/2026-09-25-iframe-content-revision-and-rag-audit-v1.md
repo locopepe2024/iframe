@@ -2,9 +2,9 @@
 
 ## 范围与结论
 
-本审计只检查当前本地代码中的内容持久化、revision/hash、Director 产物和文本检索路径，不代表线上部署状态。当前功能代码基线为 `7f2c892b`，之后 HEAD 的提交只改架构文档；线上 `7a85c231` 的运行实现不在本地分支祖先链中。
+本审计只检查本地代码中的内容持久化、revision/hash、Director 产物和文本检索路径，不代表线上部署状态。当前分支为 `feature/iframe-3d-director-v1`，HEAD 为 `7d0f5046`；工作区另有未提交的 source revision、Director archive、ScriptFactLedger 审阅和产物 lineage 变更。线上 `7a85c231` 的运行实现不在本地分支祖先链中。
 
-**结论**：当前 iFrame 以结构化 Pydantic 模型为业务数据形状，再把项目/剧集序列化为 JSON 文件保存；异步分析任务状态另存 SQLite。它有少数用途明确的 revision/hash 和缓存失效标记，但没有统一的不可变内容版本、artifact lineage 或按依赖关系传播 stale 的通用机制。没有发现 Director 使用 embedding/向量相似度检索剧本的实现。
+**结论**：当前 iFrame 以结构化 Pydantic 模型为业务数据形状，再把项目/剧集序列化为 JSON 文件保存；异步分析任务状态另存 SQLite。近期工作区改动补入了原文版本、导演档案、事实账本审阅与下游 lineage，但它们仍是在现有 Script 文档上的分层机制，不是统一 artifact store，也没有完整依赖图和通用 stale 传播。没有发现 Director 使用 embedding/向量相似度检索剧本的实现。
 
 ## Observed
 
@@ -18,9 +18,10 @@
 
 | 内容 | 当前机制 | 代码事实/边界 |
 |---|---|---|
-| 剧本文本 | `updated_at` | 文本更新 API 原位改写 `original_text` 并保存，不递增内容 revision；该接口明确不触发实体重解析 |
-| Director Profile | `revision`、`content_hash`、`confirmed_at` | Apply 根据当前 profile 计算编号/hash 并覆盖 `ArtDirection.director_profile`；模型中只保存当前 profile，不保存可查询的历史 revision 列表 |
-| 角色/场景/道具/分镜 | Director revision/hash 快照及 `director_review_required` | 生成资产/分镜时记录使用的 Profile revision/hash；Profile 改变时将项目内角色、场景、道具和 frames 标为需复核，属于粗粒度标记，不是依赖图 stale 传播 |
+| 剧本文本 | 工作区新增 `source_revision`、`source_revisions` | 文本改变会归档正文、SHA-256 和创建时间；`original_text` 仍是当前读模型。原文历史嵌在 Script JSON，不是独立 source store |
+| Director Profile | 工作区新增 `revision`、`content_hash`、`confirmed_at` 与历史 snapshots | Apply 更新当前 Profile 并追加不可变确认快照；仍是 ArtDirection 内嵌模型，不是独立 Director artifact store |
+| ScriptFactLedger | 工作区新增 draft、确认 revision、来源范围及 evidence status | 草稿保存与确认生效分离；确认项要求可校验原文范围。历史与当前事实均嵌在 Script JSON |
+| 角色/场景/道具/分镜 | 既有 Director revision/hash 标记；本轮工作区新增 `generation_lineage` | 新产物记录 source、Director、ledger revision 与实际注入的 fact IDs。Storyboard preview pin lineage 并在 Apply/Refine 检查上游 revision；旧产物为空或 legacy_unpinned，不推断历史版本。该机制仍不包含实体定义、模型、风格与外部参考的完整输入快照 |
 | 分镜内容 | `id`、`updated_at`、生成状态等 | Storyboard apply 创建新 frame ID 并替换当前 `script.frames`；未发现通用的 frame content revision 或历史 artifact store |
 | “上集摘要”/“下集 hook” | 文本长度 + MD5 短 hash | 用于判断缓存输入文本是否变化；这是局部缓存失效标记，不是 Script revision 或内容历史 |
 | Director 分析/返修 | job fingerprint、job ID、状态和结果 | Job fingerprint 用于相同输入任务去重/复用；job 结果不等同于已批准、带父版本的 Director artifact |
@@ -40,8 +41,8 @@
 ## Direct implication
 
 1. 用户记忆的方向基本正确：现有主数据是结构化存储；Director 分析主要通过 prompt 输入剧本和结构化实体，不靠 RAG 搜回相关段落。
-2. 不能把 `revision` 字段的存在等同于内容历史。Director Profile 有当前版本号和内容 hash，但上游剧本、分镜 frame 和其他产物没有与之对等的统一 revision/archive 机制。
-3. 当前 Director revision/hash 主要用于标记下游“用过哪个 profile”及要求复核；它尚未表达“此 Director artifact 基于哪个 Script revision、经谁批准、被哪些具体下游产物引用”。
+2. 不能把 `revision` 字段的存在等同于完整内容历史。原文、Director Profile 和账本现有各自的快照，但仍嵌在 Script JSON，尚无统一 artifact store。
+3. 新增 source/Director/ledger revision 与产物 lineage 已能表达部分上游引用；它仍未表达完整生成输入、批准人身份和通用依赖边，不能等同完整 artifact lineage 系统。
 4. 长文本分块摘要有助于限制单次输入规模，但它与来源可追溯性、跨段事实核验和 Director 全局阐释版本是不同问题。
 5. 对 Director 设计的首要架构工作应是明确结构化事实、阐释和拍摄计划的产物边界与版本/审批 lineage；RAG 不应先于这层权威结构，但 Assets/Storyboard 的局部证据需求说明检索能力应纳入分层架构，而不是被排除在外。
 
@@ -111,9 +112,35 @@ find_source_ranges(flow_id, source_revision_id, query, filters={scene, character
 
 ### Director canon 查询适配器（2026-09-25）
 
-当前已批准的 `DirectorProfile.canon_state` 可按类别、主体及当前 ScriptSource revision 查询，返回原始条目、显式状态、来源绑定情况和内容 hash。source revision 不匹配时拒绝查询；未绑定来源的条目明确计数，不因为位于已确认 Profile 内就升级为剧本事实。此接口是现有结构化内容的查询适配器，尚不是独立的 `ScriptFactLedger`，也不替代逐条 source range 校验、冲突裁决和用户批准。Assets/Storyboard 目前尚未消费该接口；接入前必须先完成事实账本与导演计划的批准及版本引用。
+已批准的 `DirectorProfile.canon_state` 可按类别、主体及当前 ScriptSource revision 查询，返回原始条目、显式状态、来源绑定情况和内容 hash。source revision 不匹配时拒绝查询；未绑定来源的条目明确计数，不因为位于已确认 Profile 内就升级为剧本事实。此 canon 查询接口仍不是 `ScriptFactLedger`。工作区中新加的 Assets/Storyboard context 使用的是经用户确认的 ScriptFactLedger，不把 canon 查询结果隐式提升为事实。
+
+### ScriptFactLedger 审阅与下游 context（2026-09-25）
+
+已在 `Script` 文档内加入当前事实草稿、当前确认账本和不可变确认 revision。事实字段为 `fact_id`、`kind`、`subject_ids`、`phase`、`source_revision`、`source_revision_id`、`source_ranges`、`value`、`evidence_status`、`conflict_group_id`。source range 使用从 0 开始的 Unicode code point 和左闭右开区间。确认时服务端校验 revision、唯一 ID、range 边界；状态为 confirmed 的事实必须带非空来源范围。查询会返回精确原文片段，且允许按旧的 ledger/source revision 回看。
+
+导演工作台提供候选导入、JSON 编辑、草稿保存和单独确认操作。Director canon 导入会被转换为 uncertain 候选且清空精确范围；只有用户补足来源并确认后才形成有效 ledger revision。草稿保存使用 expected draft revision，确认使用 expected ledger revision，避免并发覆盖。剧本改动使旧账本保持可审计，但下游 context 标记其 stale 并排除事实内容。
+
+Assets context 按 asset ID 过滤；Storyboard context 对应输入文本在原文中的唯一范围，长文本分块时按 chunk source range 过滤。没有唯一文本匹配时不猜范围，改用全局有界账本投影。下游携带 revision 与状态，提示词明确 uncertain/conflicted 不得写成已证实剧情。旧项目没有 ledger 时维持兼容，不强制阻断既有生成。
+
+当前 JSON 编辑器是可审阅的第一版，不是可视化 source-range 选择器，也没有自动从剧本抽取并校对事实。自动提取、冲突组决策、便于用户点击原文标注的编辑器，以及按实体类别筛选事实仍是后续工作。该实现验证的是版本与证据边界，不证明模型会完全遵循事实状态。
 
 验收以行为为准：同一查询在固定 revision 下结果稳定；剧本修改后旧查询可复现旧证据，新查询只读新证据；角色设计与分镜草稿能显示准确来源；冲突/未知项不被默认当作事实；局部返修不需要发送整集原文。
+
+### Assets / Storyboard 产物 lineage（2026-09-25，实施切片）
+
+**改动前的问题边界（代码事实）**：生成提示词能读到确认账本和导演执行摘要，但新资产/分镜只持久化 Director Profile revision/hash，无法从产物判断它使用的剧本与事实账本版本。Storyboard 草稿 job fingerprint 也没有 pin source/ledger revision，Apply 可以发生在输入版本已变化之后。
+
+**设计决定**：为新生成的 Character/Scene/Prop 与 StoryboardFrame 增加一个可选、结构一致的 `generation_lineage`，包含 `source_revision` / `source_revision_id`、Director Profile revision/hash、Fact Ledger revision/source ID/status、生成上下文投影中的 `fact_ids`、可精确确认时的原文范围，以及 `pinned` 或 `legacy_unpinned` 状态。旧资产和旧帧字段为空，读兼容不回填推断值。Series 资产没有 Script parent 时 source lineage 为空。StoryboardApply 会把本次审核批次范围的 lineage 复制到该批所有帧；它目前不是逐帧 prompt transcript，也不证明每个 chunk 实际拿到的每条事实 ID。
+
+Storyboard 预览 job 返回 `{ frames, lineage }`；revision lineage 进入 fingerprint。显式 Apply/Refine 将同一 lineage 带回服务端，服务端比较当前上游 revision 并在不一致时返回 409，不将旧草稿标记成新版本产物。Apply 将服务端重建并验证的 lineage 写进全部正式帧，避免信任浏览器提交的 fact IDs 和 source ranges。旧客户端不传 lineage 时保持兼容，但产物明确标为 `legacy_unpinned`。直接生成并立即 Apply 的旧接口在一次 pipeline 调用内捕获 lineage 并写入帧。
+
+资产 lineage 在实际拼装提示词时捕获，成功生成后与该次输入一同写回目标资产；异步排队不提前虚构使用版本。该切片记录所依赖的 source/Director/ledger 版本，不声称锁定了角色说明编辑、风格配置、模型目录或外部参考素材等尚无独立 revision 的全部输入。
+
+**边界**：不引入全局 artifact store、通用依赖图、自动 stale 级联或 RAG；本次也不拆 DirectorInterpretation/DirectorShootingPlan。只确保该切片新增的源/导演/账本 lineage 在产物生成与 Apply 边界不被静默错标。
+
+**成功标准**：资产记录提示词使用的 Director/ledger revision 与事实投影 IDs；预览返回固定批次 lineage 并参与 job 去重；source、Director 或 ledger 变更后旧分镜草稿不能作为 current pinned 产物 Apply/Refine；成功 Apply 后正式帧保留批次 lineage；缺少 lineage 的历史记录仍可读取且不被伪造版本；相关后端、前端 API、组件测试、typecheck 和静态检查通过。
+
+**受影响路径**：`src/apps/comic_gen/models.py`、`pipeline.py`、`api.py`、`frontend/src/lib/storyboardAnalysis.ts`、`frontend/src/lib/api.ts`、`frontend/src/components/modules/StoryboardR2V.tsx`、相关后端/前端测试及本审计文档。
 
 ## What would verify it
 

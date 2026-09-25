@@ -8,6 +8,7 @@ import { useProjectStore, type DirectorProfile, type DirectorProfileRevision } f
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
+import ScriptFactLedgerPanel from "./ScriptFactLedgerPanel";
 
 const editableProfile = (profile?: DirectorProfile) => {
     if (!profile) return "";
@@ -155,6 +156,7 @@ export default function DirectorProfilePanel() {
             : "border-red-500/30 bg-red-500/10 text-red-300";
 
     return (
+        <>
         <section className="border-b border-border pb-8" aria-labelledby="director-profile-title">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <div>
@@ -264,5 +266,13 @@ export default function DirectorProfilePanel() {
                 </div>
             )}
         </section>
+        {currentProject && (
+            <ScriptFactLedgerPanel
+                projectId={currentProject.id}
+                sourceRevision={currentProject.source_revision ?? 1}
+                directorProfile={confirmed}
+            />
+        )}
+        </>
     );
 }

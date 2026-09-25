@@ -2,10 +2,28 @@ import axios from "axios";
 
 export type StoryboardDraftFrame = Record<string, any>;
 
+export interface StoryboardAnalysisLineage {
+    status: "pinned" | "legacy_unpinned";
+    source_revision?: number | null;
+    source_revision_id?: string | null;
+    director_profile_revision?: number | null;
+    director_profile_hash?: string | null;
+    fact_ledger_revision?: number | null;
+    fact_ledger_source_revision_id?: string | null;
+    fact_ledger_status: "none" | "current" | "stale" | "unavailable";
+    fact_ids: string[];
+    source_ranges: { start: number; end: number }[];
+}
+
+export interface StoryboardAnalysisDraft {
+    frames: StoryboardDraftFrame[];
+    lineage: StoryboardAnalysisLineage;
+}
+
 interface StoryboardJob {
     id: string;
     status: "queued" | "running" | "completed" | "failed" | "superseded";
-    result: { frames: StoryboardDraftFrame[] } | null;
+    result: StoryboardAnalysisDraft | null;
     error?: string;
     progress?: { completed: number; total: number } | null;
 }
@@ -16,7 +34,7 @@ const transient = (error: unknown) => axios.isAxiosError(error) &&
     (!error.response || [408, 429, 502, 503, 504].includes(error.response.status));
 
 async function runStoryboardJob(endpoint: string, pollBase: string, payload: unknown,
-                                onProgress?: (completed: number, total: number) => void) {
+                                onProgress?: (completed: number, total: number) => void): Promise<StoryboardAnalysisDraft> {
     let submitted: StoryboardJob | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -48,7 +66,15 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
     if (job.status !== "completed" || !job.result?.frames) {
         throw new Error(job.error || "Storyboard analysis failed");
     }
-    return job.result.frames;
+    return {
+        frames: job.result.frames,
+        lineage: job.result.lineage ?? {
+            status: "legacy_unpinned",
+            fact_ledger_status: "none",
+            fact_ids: [],
+            source_ranges: [],
+        },
+    };
 }
 
 export function analyzeStoryboardPreview(baseUrl: string, projectId: string, text: string,
@@ -62,10 +88,11 @@ export async function applyStoryboardDraft(
     projectId: string,
     text: string,
     draft: StoryboardDraftFrame[],
+    lineage: StoryboardAnalysisLineage,
 ) {
     const response = await axios.post(
         `${baseUrl}/projects/${projectId}/storyboard-analysis/apply`,
-        { text, draft },
+        { text, draft, lineage },
     );
     return response.data;
 }
@@ -77,7 +104,7 @@ export async function analyzeAndApplyStoryboard(
     text: string,
 ) {
     const draft = await analyzeStoryboardPreview(baseUrl, projectId, text);
-    return applyStoryboardDraft(baseUrl, projectId, text, draft);
+    return applyStoryboardDraft(baseUrl, projectId, text, draft.frames, draft.lineage);
 }
 
 export function refineStoryboardPreview(
@@ -86,7 +113,8 @@ export function refineStoryboardPreview(
     text: string,
     draft: StoryboardDraftFrame[],
     instructions: string[],
+    lineage: StoryboardAnalysisLineage,
 ) {
     const base = `${baseUrl}/projects/${projectId}/storyboard-analysis-jobs`;
-    return runStoryboardJob(`${base}/refine`, base, { text, draft, instructions });
+    return runStoryboardJob(`${base}/refine`, base, { text, draft, instructions, lineage });
 }

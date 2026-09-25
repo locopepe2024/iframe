@@ -7,7 +7,17 @@ import pytest
 from fastapi import HTTPException
 
 from src.apps.comic_gen.extraction_jobs import ExtractionJobs
-from src.apps.comic_gen.models import ArtDirection, Character, DirectorProfile, Scene, Script, StoryboardFrame
+from src.apps.comic_gen.models import (
+    ArtifactLineage,
+    ArtDirection,
+    Character,
+    DirectorProfile,
+    Scene,
+    Script,
+    ScriptFactLedgerEntry,
+    SourceRange,
+    StoryboardFrame,
+)
 from src.apps.identity import UserContext
 
 
@@ -30,6 +40,10 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
     )
     first = [{"action_summary": "主播举起产品", "duration": 5}]
     refined = [{"action_summary": "主播先看镜头，再举起产品", "duration": 5}]
+    lineage = ArtifactLineage(
+        status="pinned", source_revision=1, source_revision_id="source-r1:hash",
+        fact_ledger_status="none", source_ranges=[SourceRange(start=0, end=6)],
+    )
     captured = {}
     pipeline = SimpleNamespace(
         scripts={"project": source},
@@ -44,9 +58,11 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
             "selected_style_id": "film-noir",
             "style_config": {"positive_prompt": "黑白电影质感"},
         },
+        storyboard_analysis_lineage=lambda project, text: lineage,
+        validate_storyboard_lineage=lambda project, text, pinned: None,
         preview_storyboard_analysis=lambda project, text, **kwargs: first,
-        refine_storyboard_analysis=lambda project, text, draft, instructions: (
-            captured.update(text=text, draft=draft, instructions=instructions) or refined
+        refine_storyboard_analysis=lambda project, text, draft, instructions, lineage=None: (
+            captured.update(text=text, draft=draft, instructions=instructions, lineage=lineage) or refined
         ),
     )
     user = UserContext("user", "owner", "", "")
@@ -62,6 +78,7 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         )
         initial_done = wait_done(jobs, initial)
         assert initial_done["result"]["frames"] == first
+        assert initial_done["result"]["lineage"] == lineage.model_dump()
         assert source.frames == []
         with pytest.raises(HTTPException) as denied:
             api.storyboard_analysis_status("project", initial["id"], other)
@@ -70,7 +87,8 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         revision = api.start_storyboard_analysis_refinement(
             "project",
             api.StoryboardAnalysisRefineRequest(
-                text="source", draft=first, instructions=["保留产品特写", "先增加眼神动作"]
+                text="source", draft=first, instructions=["保留产品特写", "先增加眼神动作"],
+                lineage=lineage,
             ),
             user,
         )
@@ -81,8 +99,94 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         "text": "source",
         "draft": first,
         "instructions": ["保留产品特写", "先增加眼神动作"],
+        "lineage": lineage,
     }
     assert source.frames == []
+
+
+def test_pinned_storyboard_apply_records_lineage_and_rejects_changed_source():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline, StaleStoryboardDraftError
+
+    script = Script(
+        id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+        characters=[Character(id="host", name="主播", description="")],
+        scenes=[Scene(id="studio", name="直播间", description="")],
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    from threading import RLock
+    pipeline._save_lock = RLock()
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_episode_assets = lambda current: {
+        "characters": script.characters, "scenes": script.scenes, "props": [],
+    }
+    pipeline.stamp_owned_children = Mock()
+    pipeline._save_data = Mock()
+    pipeline.script_processor = Mock()
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [], "props": []}, "prompt"
+    )
+
+    lineage = pipeline.storyboard_analysis_lineage("project", "source")
+    draft = [{
+        "scene_ref_name": "直播间", "character_ref_names": ["主播"],
+        "prop_ref_names": [], "action_summary": "举起产品", "duration": 5,
+    }]
+    result = pipeline.analyze_text_to_frames("project", "source", draft, lineage)
+
+    assert result.frames[0].generation_lineage.source_revision_id == lineage.source_revision_id
+    assert result.frames[0].generation_lineage.source_ranges == [SourceRange(start=0, end=6)]
+
+    pipeline.update_script_text("project", "source changed")
+    with pytest.raises(StaleStoryboardDraftError, match="source_revision"):
+        pipeline.analyze_text_to_frames("project", "source", draft, lineage)
+
+
+def test_storyboard_apply_maps_stale_lineage_to_http_conflict(monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.pipeline import StaleStoryboardDraftError
+
+    pipeline = SimpleNamespace(analyze_text_to_frames=Mock(
+        side_effect=StaleStoryboardDraftError("Storyboard draft lineage is stale")
+    ))
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    with pytest.raises(HTTPException) as conflict:
+        api.apply_storyboard_analysis(
+            "project",
+            api.StoryboardAnalysisApplyRequest(text="source", draft=[{"action_summary": "act"}]),
+            UserContext("user", "owner", "", ""),
+        )
+
+    assert conflict.value.status_code == 409
+
+
+def test_storyboard_refine_maps_stale_lineage_to_http_conflict(monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.pipeline import StaleStoryboardDraftError
+
+    def reject_stale(*_args):
+        raise StaleStoryboardDraftError("Storyboard draft lineage is stale")
+
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(
+        validate_storyboard_lineage=reject_stale,
+    ))
+
+    with pytest.raises(HTTPException) as conflict:
+        api.start_storyboard_analysis_refinement(
+            "project",
+            api.StoryboardAnalysisRefineRequest(
+                text="source", draft=[{"action_summary": "act"}],
+                instructions=["tighten the shot"],
+                lineage=ArtifactLineage(
+                    status="pinned", source_revision=1,
+                    source_revision_id="source-r1:hash", fact_ledger_status="none",
+                ),
+            ),
+            UserContext("user", "owner", "", ""),
+        )
+
+    assert conflict.value.status_code == 409
 
 
 def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
@@ -122,8 +226,10 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
     assert len(result.frames) == 1
     assert result.frames[0].action_description == "主播举起产品"
     assert result.frames[0].character_ids == ["host"]
-    assert result.frames[0].director_profile_revision == 4
-    assert result.frames[0].director_profile_hash == "director-4"
+    assert result.frames[0].director_profile_revision is None
+    assert result.frames[0].director_profile_hash is None
+    assert result.frames[0].generation_lineage.status == "legacy_unpinned"
+    assert result.frames[0].director_review_required is True
     pipeline._save_data.assert_called_once()
 
 
@@ -292,6 +398,49 @@ def test_long_storyboard_preview_resumes_ordered_source_batches():
     pipeline.script_processor.analyze_to_storyboard.assert_not_called()
 
 
+def test_long_storyboard_without_unique_source_match_uses_global_ledger_context():
+    from threading import RLock
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    original = "原文段落。" * 1400
+    unrelated = "另一份输入。" * 700
+    script = Script(id="project", title="Story", original_text=original,
+                    created_at=1, updated_at=1)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = RLock()
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline._save_data = Mock()
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [], "props": []}, "prompt"
+    )
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.side_effect = lambda text, *_args, **_kwargs: [
+        {"action_summary": text[:8]}
+    ]
+    pipeline.apply_fact_ledger("project", 1, 0, [ScriptFactLedgerEntry(
+        fact_id="late-source-fact", kind="continuity", source_revision=1,
+        source_ranges=[SourceRange(start=len(original) - 5, end=len(original) - 1)],
+        value={"state": "late-scene"}, evidence_status="confirmed",
+    )])
+
+    frames = pipeline.preview_storyboard_analysis(
+        "project", unrelated, load_batches=lambda: {},
+        save_batch=lambda *_args: True,
+    )
+
+    assert len(frames) > 1
+    contexts = [
+        call.kwargs["director_profile"]["script_fact_ledger"]
+        for call in pipeline.script_processor.analyze_to_storyboard.call_args_list
+    ]
+    assert all(context["status"] == "current" for context in contexts)
+    assert all(
+        [fact["fact_id"] for fact in context["facts"]] == ["late-source-fact"]
+        for context in contexts
+    )
+
+
 def test_episode_length_storyboard_job_retries_only_missing_batches_after_store_reload(tmp_path):
     from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -303,7 +452,7 @@ def test_episode_length_storyboard_job_retries_only_missing_batches_after_store_
     pipeline.storyboard_analysis_context = lambda project: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
-    pipeline.director_execution_context = lambda current: None
+    pipeline.director_execution_context = lambda current, **_kwargs: None
     pipeline.storyboard_visual_style = lambda current: {}
     pipeline.script_processor = Mock()
     calls = []

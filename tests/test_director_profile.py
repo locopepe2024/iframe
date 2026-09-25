@@ -541,6 +541,16 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     }]})
     payload = {
         **profile_payload(),
+        "script_fact_ledger": {
+            "status": "current",
+            "ledger_revision": 2,
+            "source_revision": 1,
+            "facts": [{
+                "fact_id": "fact-1",
+                "evidence_status": "uncertain",
+                "value": {"claim": "季节未确认"},
+            }],
+        },
         "execution_summary": "只保留中国背景、关系疏离、冷灰视觉和未接来电；用户要求：首尾框架式回忆，约60秒。",
         "scene_summaries": [{
             "scene_ref": "场景21",
@@ -565,6 +575,8 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "state_out" in prompt
     assert "首尾框架式回忆" in prompt
     assert "未标注时不得自行套用" in prompt
+    assert '"script_fact_ledger"' in prompt
+    assert "uncertain 和 conflicted 只提示核查方向" in prompt
 
 
 def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style():
@@ -680,7 +692,51 @@ def test_asset_prompt_context_contains_director_profile():
     assert '"timeline"' not in context
 
 
+def test_version_pinned_fact_ledger_context_filters_by_source_range_and_subject():
+    from src.apps.comic_gen.models import ScriptFactLedgerEntry, SourceRange
+
+    pipeline, script = make_pipeline()
+    script.original_text = "场景21至44"
+    script.art_direction.director_profile = DirectorProfile(
+        **profile_payload(), revision=1, content_hash="profile-1", confirmed_at=10,
+    )
+    facts = [
+        ScriptFactLedgerEntry(
+            fact_id="shen-fact", kind="character", subject_ids=["shen"],
+            source_revision=1, source_ranges=[SourceRange(start=0, end=2)],
+            value={"state": "at campus"}, evidence_status="confirmed",
+        ),
+        ScriptFactLedgerEntry(
+            fact_id="zhou-fact", kind="character", subject_ids=["zhou"],
+            source_revision=1, source_ranges=[SourceRange(start=5, end=6)],
+            value={"state": "leaving"}, evidence_status="confirmed",
+        ),
+        ScriptFactLedgerEntry(
+            fact_id="global-question", kind="uncertainty", subject_ids=[],
+            source_revision=1, value={"question": "season unknown"},
+            evidence_status="uncertain",
+        ),
+    ]
+    pipeline.apply_fact_ledger("film", 1, 0, facts)
+
+    context = pipeline.director_execution_context(
+        script, source_range=(0, 3), subject_ids=["shen"],
+    )
+    ledger = context["script_fact_ledger"]
+    assert ledger["status"] == "current"
+    assert {fact["fact_id"] for fact in ledger["facts"]} == {
+        "shen-fact", "global-question",
+    }
+
+    pipeline.update_script_text("film", "场景25周涵抵达北京")
+    stale_context = pipeline.director_execution_context(script)
+    assert stale_context["script_fact_ledger"]["status"] == "stale"
+    assert stale_context["script_fact_ledger"]["facts"] == []
+
+
 def test_asset_generation_receives_and_records_confirmed_director_profile():
+    from src.apps.comic_gen.models import ScriptFactLedgerEntry, SourceRange
+
     pipeline, script = make_pipeline()
     script.art_direction.director_profile = DirectorProfile(
         **profile_payload(), revision=2, content_hash="profile-2", confirmed_at=10,
@@ -689,6 +745,11 @@ def test_asset_generation_receives_and_records_confirmed_director_profile():
     pipeline.asset_generator = Mock()
     pipeline._find_asset_with_source = Mock(return_value=(character, script))
     pipeline._save_after_asset_mutation = Mock()
+    pipeline.apply_fact_ledger("film", 1, 0, [ScriptFactLedgerEntry(
+        fact_id="shen-fact", kind="character", subject_ids=[character.id],
+        source_revision=1, source_ranges=[SourceRange(start=0, end=2)],
+        value={"state": "大学时期"}, evidence_status="confirmed",
+    )])
 
     pipeline.generate_asset("film", character.id, "character", generation_type="full_body")
 
@@ -698,6 +759,12 @@ def test_asset_generation_receives_and_records_confirmed_director_profile():
     assert character.director_profile_revision == 2
     assert character.director_profile_hash == "profile-2"
     assert character.director_review_required is False
+    assert character.generation_lineage.status == "pinned"
+    assert character.generation_lineage.source_revision == 1
+    assert character.generation_lineage.director_profile_revision == 2
+    assert character.generation_lineage.fact_ledger_revision == 1
+    assert character.generation_lineage.fact_ids == ["shen-fact"]
+    assert character.generation_lineage.source_ranges == [SourceRange(start=0, end=2)]
 
 
 def test_director_source_split_preserves_exact_ranges_and_prefers_sentence_boundaries():

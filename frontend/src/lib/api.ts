@@ -6,6 +6,7 @@ import {
     applyStoryboardDraft as applyStoryboardDraftRequest,
     refineStoryboardPreview,
     type StoryboardDraftFrame,
+    type StoryboardAnalysisLineage,
 } from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
 import {
@@ -14,6 +15,11 @@ import {
     type DirectorProfileDraft,
     type DirectorProfileJobStatusListener,
 } from "./directorProfile";
+import type {
+    ScriptFactLedgerDraft,
+    ScriptFactLedgerEntry,
+    ScriptFactLedgerSnapshot,
+} from "@/store/projectStore";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
@@ -998,6 +1004,60 @@ export const api = {
         return res.data;
     },
 
+    getScriptFactLedgerDraft: async (scriptId: string): Promise<ScriptFactLedgerDraft> => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/fact-ledger/draft`);
+        return res.data;
+    },
+
+    saveScriptFactLedgerDraft: async (
+        scriptId: string,
+        sourceRevision: number,
+        expectedDraftRevision: number,
+        facts: ScriptFactLedgerEntry[],
+    ) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/fact-ledger/draft`, {
+            source_revision: sourceRevision,
+            expected_draft_revision: expectedDraftRevision,
+            facts,
+        });
+        return res.data;
+    },
+
+    confirmScriptFactLedger: async (
+        scriptId: string,
+        expectedRevision: number,
+        expectedDraftRevision: number,
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/fact-ledger/confirm`, {
+            expected_revision: expectedRevision,
+            expected_draft_revision: expectedDraftRevision,
+        });
+        return res.data;
+    },
+
+    listScriptFactLedgerRevisions: async (scriptId: string): Promise<ScriptFactLedgerSnapshot[]> => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/fact-ledger/revisions`);
+        return res.data;
+    },
+
+    getScriptFactLedger: async (
+        scriptId: string,
+        sourceRevision: number,
+        ledgerRevision?: number,
+        offset = 0,
+        limit = 100,
+    ) => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/fact-ledger`, {
+            params: {
+                source_revision: sourceRevision,
+                ledger_revision: ledgerRevision,
+                offset,
+                limit,
+            },
+        });
+        return res.data;
+    },
+
     getStylePresets: async () => {
         const res = await axios.get(`${API_URL}/art_direction/presets`);
         return res.data;
@@ -1166,10 +1226,16 @@ export const api = {
         text: string,
         draft: StoryboardDraftFrame[],
         instructions: string[],
-    ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
+        lineage: StoryboardAnalysisLineage,
+    ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions, lineage),
 
-    applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
-        return applyStoryboardDraftRequest(API_URL, scriptId, text, draft);
+    applyStoryboardDraft: async (
+        scriptId: string,
+        text: string,
+        draft: StoryboardDraftFrame[],
+        lineage: StoryboardAnalysisLineage,
+    ) => {
+        return applyStoryboardDraftRequest(API_URL, scriptId, text, draft, lineage);
     },
 
     /**

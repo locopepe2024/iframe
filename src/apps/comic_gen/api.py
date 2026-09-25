@@ -48,13 +48,22 @@ from .pipeline import (
     InvalidAssetReference,
     AssemblyPlanValidationError,
     AssemblyPlanConflictError,
+    StaleStoryboardDraftError,
 )
-from .structured_evidence import query_asset_mentions, query_director_facts, source_version
+from .structured_evidence import (
+    query_asset_mentions,
+    query_director_facts,
+    query_script_fact_ledger,
+    source_version,
+)
 from .models import (
     ArtDirection,
+    ArtifactLineage,
     DirectorProfile,
     DirectorProfileRevision,
     ScriptSourceRevision,
+    ScriptFactLedgerEntry,
+    ScriptFactLedgerRevisionSummary,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -284,11 +293,19 @@ def signed_response(data):
     if data is None:
         return JSONResponse(content=None)
     
-    # Convert Pydantic models to dict
-    if hasattr(data, "model_dump"):
+    # Keep immutable history snapshots behind their dedicated revision APIs;
+    # embedding them in every project response multiplies long-script payloads.
+    if isinstance(data, Script):
+        processed_data = _script_response_dump(data)
+    elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
     elif isinstance(data, list):
-        processed_data = [item.model_dump() if hasattr(item, "model_dump") else item for item in data]
+        processed_data = [
+            _script_response_dump(item)
+            if isinstance(item, Script)
+            else item.model_dump() if hasattr(item, "model_dump") else item
+            for item in data
+        ]
     else:
         processed_data = data
 
@@ -307,6 +324,19 @@ def signed_response(data):
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
+
+
+def _script_response_dump(script: Script) -> Dict[str, Any]:
+    return script.model_dump(exclude={
+        "source_revisions",
+        "director_profile_revisions",
+        "fact_ledger",
+        "fact_ledger_revisions",
+        "fact_ledger_draft",
+        "fact_ledger_draft_revision",
+        "fact_ledger_draft_source_revision",
+        "fact_ledger_draft_updated_at",
+    })
 
 
 def private_no_store_signed_response(data):
@@ -1948,7 +1978,7 @@ def get_project(script_id: str):
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    payload = script.model_dump()
+    payload = _script_response_dump(script)
 
     # Episode-local entries always carry source="episode".
     for asset_list in (payload.get("characters", []),
@@ -2754,15 +2784,18 @@ class StoryboardAnalysisRefineRequest(BaseModel):
     text: str
     draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
     instructions: List[str] = Field(min_length=1, max_length=12)
+    lineage: Optional[ArtifactLineage] = None
 
 
 class StoryboardAnalysisApplyRequest(BaseModel):
     text: str
     draft: List[Dict[str, Any]] = Field(min_length=1, max_length=200)
+    lineage: Optional[ArtifactLineage] = None
 
 
 def _storyboard_analysis_fingerprint(script_id: str, text: str,
-                                     draft=None, instructions=None) -> str:
+                                     draft=None, instructions=None,
+                                     lineage: Optional[ArtifactLineage] = None) -> str:
     script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
@@ -2775,6 +2808,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         instructions,
         prompt,
         director_profile.model_dump() if director_profile else None,
+        lineage.model_dump() if lineage else None,
         visual_style,
         llm.provider,
         llm._get_default_model(),
@@ -2790,7 +2824,10 @@ def start_storyboard_analysis(
     """Create or resume a durable storyboard draft without replacing frames."""
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
-    fingerprint = _storyboard_analysis_fingerprint(script_id, request.text)
+    lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+    fingerprint = _storyboard_analysis_fingerprint(
+        script_id, request.text, lineage=lineage,
+    )
     job_fingerprint = "storyboard:" + fingerprint
     from .llm import split_director_source
     total_batches = len(split_director_source(
@@ -2800,16 +2837,20 @@ def start_storyboard_analysis(
         user.owner_profile_id,
         script_id,
         job_fingerprint,
-        lambda job_id: {"frames": pipeline.preview_storyboard_analysis(
-            script_id, request.text,
-            load_batches=lambda: extraction_jobs.load_batches(
-                user.owner_profile_id, script_id, job_fingerprint
+        lambda job_id: {
+            "frames": pipeline.preview_storyboard_analysis(
+                script_id, request.text,
+                load_batches=lambda: extraction_jobs.load_batches(
+                    user.owner_profile_id, script_id, job_fingerprint
+                ),
+                save_batch=lambda index, source_ref, frames: extraction_jobs.save_batch(
+                    user.owner_profile_id, script_id, job_fingerprint, job_id,
+                    index, source_ref, frames,
+                ),
+                expected_lineage=lineage,
             ),
-            save_batch=lambda index, source_ref, frames: extraction_jobs.save_batch(
-                user.owner_profile_id, script_id, job_fingerprint, job_id,
-                index, source_ref, frames,
-            ),
-        )},
+            "lineage": lineage.model_dump(),
+        },
         pass_job_id=True,
         total_batches=total_batches,
     )
@@ -2825,16 +2866,28 @@ def start_storyboard_analysis_refinement(
     instructions = [item.strip() for item in request.instructions if item.strip()]
     if not instructions or any(len(item) > 2000 for item in instructions):
         raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
+    if request.lineage and request.lineage.status == "pinned":
+        try:
+            pipeline.validate_storyboard_lineage(script_id, request.text, request.lineage)
+        except StaleStoryboardDraftError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+    else:
+        lineage = ArtifactLineage(status="legacy_unpinned")
     fingerprint = _storyboard_analysis_fingerprint(
-        script_id, request.text, request.draft, instructions
+        script_id, request.text, request.draft, instructions, lineage,
     )
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
         "storyboard:" + fingerprint,
-        lambda: {"frames": pipeline.refine_storyboard_analysis(
-            script_id, request.text, request.draft, instructions
-        )},
+        lambda: {
+            "frames": pipeline.refine_storyboard_analysis(
+                script_id, request.text, request.draft, instructions,
+                lineage=lineage,
+            ),
+            "lineage": lineage.model_dump(),
+        },
     )
 
 
@@ -2857,8 +2910,12 @@ def apply_storyboard_analysis(
     del user  # Ownership is enforced by the studio request boundary.
     try:
         return signed_response(
-            pipeline.analyze_text_to_frames(script_id, request.text, request.draft)
+            pipeline.analyze_text_to_frames(
+                script_id, request.text, request.draft, request.lineage,
+            )
         )
+    except StaleStoryboardDraftError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
@@ -2875,6 +2932,8 @@ def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     try:
         updated_script = pipeline.analyze_text_to_frames(script_id, request.text)
         return signed_response(updated_script)
+    except StaleStoryboardDraftError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -4499,6 +4558,119 @@ class DirectorProfileRefineRequest(BaseModel):
 
 class DirectorProfileApplyRequest(BaseModel):
     draft: Dict[str, Any]
+
+
+class ScriptFactLedgerDraftRequest(BaseModel):
+    source_revision: int = Field(..., ge=1)
+    expected_draft_revision: int = Field(..., ge=0)
+    facts: List[ScriptFactLedgerEntry] = Field(..., max_length=500)
+
+
+class ScriptFactLedgerConfirmRequest(BaseModel):
+    expected_revision: int = Field(..., ge=0)
+    expected_draft_revision: int = Field(..., ge=0)
+
+
+@app.get("/projects/{script_id}/fact-ledger")
+def get_script_fact_ledger(
+    script_id: str,
+    source_revision: int,
+    ledger_revision: Optional[int] = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    user: UserContext = Depends(require_studio_user),
+):
+    del user  # Project ownership is enforced by enforce_studio_owner_boundary.
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return query_script_fact_ledger(script, source_revision, ledger_revision, offset, limit)
+
+
+@app.get("/projects/{script_id}/fact-ledger/revisions", response_model=List[ScriptFactLedgerRevisionSummary])
+def list_script_fact_ledger_revisions(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return [
+        ScriptFactLedgerRevisionSummary(
+            revision=item.revision,
+            source_revision=item.source_revision,
+            source_revision_id=item.source_revision_id,
+            fact_count=len(item.facts),
+            confirmed_at=item.confirmed_at,
+        )
+        for item in script.fact_ledger_revisions
+    ]
+
+
+@app.get("/projects/{script_id}/fact-ledger/draft")
+def get_script_fact_ledger_draft(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return {
+        "project_id": script.id,
+        "draft_revision": script.fact_ledger_draft_revision,
+        "source_revision": script.fact_ledger_draft_source_revision,
+        "facts": [fact.model_dump() for fact in script.fact_ledger_draft],
+        "updated_at": script.fact_ledger_draft_updated_at,
+    }
+
+
+@app.put("/projects/{script_id}/fact-ledger/draft")
+def save_script_fact_ledger_draft(
+    script_id: str,
+    request: ScriptFactLedgerDraftRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user  # Project ownership is enforced by enforce_studio_owner_boundary.
+    try:
+        updated = pipeline.save_fact_ledger_draft(
+            script_id,
+            request.source_revision,
+            request.expected_draft_revision,
+            request.facts,
+        )
+        return {
+            "project_id": updated.id,
+            "draft_revision": updated.fact_ledger_draft_revision,
+            "source_revision": updated.fact_ledger_draft_source_revision,
+            "facts": [fact.model_dump() for fact in updated.fact_ledger_draft],
+            "updated_at": updated.fact_ledger_draft_updated_at,
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 409 if "revision changed" in message.lower() else 422
+        raise HTTPException(status, message) from exc
+
+
+@app.post("/projects/{script_id}/fact-ledger/confirm", response_model=Script)
+def confirm_script_fact_ledger(
+    script_id: str,
+    request: ScriptFactLedgerConfirmRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        updated = pipeline.confirm_fact_ledger(
+            script_id,
+            request.expected_revision,
+            request.expected_draft_revision,
+        )
+        return signed_response(updated)
+    except ValueError as exc:
+        message = str(exc)
+        status = 409 if "revision changed" in message.lower() else 422
+        raise HTTPException(status, message) from exc
 
 
 @app.get("/projects/{script_id}/evidence/source")

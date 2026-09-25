@@ -22,7 +22,11 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
+    ArtifactLineage,
+    SourceRange,
     ScriptSourceRevision,
+    ScriptFactLedgerEntry,
+    ScriptFactLedgerRevision,
     AssemblyEditPlan,
     director_execution_payload,
     GlobalAssetLibrary,
@@ -59,6 +63,8 @@ logger = get_logger(__name__)
 
 # Allowed pattern for IDs used in file paths (UUID hex + hyphens)
 _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
+_DIRECTOR_PROFILE_UNSET = object()
+_DIRECTOR_CONTEXT_UNSET = object()
 
 
 def _validate_safe_id(value: str, label: str = "id") -> str:
@@ -120,6 +126,10 @@ class AssemblyPlanConflictError(ValueError):
     def __init__(self, message: str, current_revision: Optional[int] = None):
         self.current_revision = current_revision
         super().__init__(message)
+
+
+class StaleStoryboardDraftError(ValueError):
+    """Raised when a reviewed storyboard draft no longer matches its input lineage."""
 
 
 class ComicGenPipeline(StudioOwnerMixin):
@@ -726,13 +736,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         return True
 
     def update_script_text(self, script_id: str, text: str) -> Script:
-        script = self.scripts.get(script_id)
-        if not script:
-            raise ValueError("Script not found")
-        if self._record_source_text(script, text):
-            script.updated_at = time.time()
-        self._save_data()
-        return script
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if self._record_source_text(script, text):
+                script.updated_at = time.time()
+            self._save_data()
+            return script
 
     def reparse_project(self, script_id: str, text: str,
                         draft: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Script:
@@ -770,6 +781,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.original_text = existing_script.original_text
         new_script.source_revision = existing_script.source_revision
         new_script.source_revisions = [item.model_copy(deep=True) for item in existing_script.source_revisions]
+        new_script.fact_ledger_revision = existing_script.fact_ledger_revision
+        new_script.fact_ledger = [item.model_copy(deep=True) for item in existing_script.fact_ledger]
+        new_script.fact_ledger_revisions = [
+            item.model_copy(deep=True) for item in existing_script.fact_ledger_revisions
+        ]
+        new_script.fact_ledger_draft_revision = existing_script.fact_ledger_draft_revision
+        new_script.fact_ledger_draft_source_revision = existing_script.fact_ledger_draft_source_revision
+        new_script.fact_ledger_draft = [item.model_copy(deep=True) for item in existing_script.fact_ledger_draft]
+        new_script.fact_ledger_draft_updated_at = existing_script.fact_ledger_draft_updated_at
         new_script.director_profile_revisions = [
             item.model_copy(deep=True) for item in existing_script.director_profile_revisions
         ]
@@ -887,6 +907,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Determine effective style: Art Direction > passed style > legacy style
         effective_positive_prompt = ""
         effective_negative_prompt = negative_prompt or ""
+        director_profile = None
+        director_execution = None
 
         # Resolve art_direction: episode own > series inherited
         resolved_art_direction = script.art_direction
@@ -912,11 +934,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if script.style_prompt:
                     effective_positive_prompt += f", {script.style_prompt}"
 
-            director_context = self.director_prompt_context(script)
+            director_profile = self.effective_director_profile(script)
+            director_execution = self.director_execution_context(
+                script,
+                subject_ids=[asset_id],
+                director_profile=director_profile,
+            )
+            director_context = self.director_prompt_context(
+                script,
+                subject_ids=[asset_id],
+                director_profile=director_profile,
+                execution_context=director_execution,
+            )
             if director_context:
                 effective_positive_prompt = ". ".join(filter(None, [
                     effective_positive_prompt, director_context,
                 ]))
+        generation_lineage = self.generation_lineage(
+            script, director_profile, director_execution,
+        )
         
         if asset_type not in ("character", "scene", "prop"):
             raise ValueError(f"Invalid asset_type: {asset_type}")
@@ -1001,11 +1037,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 
             target_asset.status = GenerationStatus.COMPLETED
             target_asset.generation_error = None
-            director_profile = self.effective_director_profile(script)
-            if director_profile:
-                target_asset.director_profile_revision = director_profile.revision
-                target_asset.director_profile_hash = director_profile.content_hash
-                target_asset.director_review_required = False
+            target_asset.generation_lineage = generation_lineage.model_copy(deep=True)
+            target_asset.director_profile_revision = generation_lineage.director_profile_revision
+            target_asset.director_profile_hash = generation_lineage.director_profile_hash
+            target_asset.director_review_required = False
         except Exception as e:
             target_asset.status = GenerationStatus.FAILED
             target_asset.generation_error = str(e)
@@ -2171,23 +2206,199 @@ class ComicGenPipeline(StudioOwnerMixin):
             "style_prompt": script.style_prompt,
         }
 
-    def director_prompt_context(self, script: Script) -> str:
-        profile = self.effective_director_profile(script)
-        if not profile:
+    def director_prompt_context(
+        self,
+        script: Script,
+        subject_ids: Optional[List[str]] = None,
+        *,
+        director_profile: Any = _DIRECTOR_PROFILE_UNSET,
+        execution_context: Any = _DIRECTOR_CONTEXT_UNSET,
+    ) -> str:
+        profile = (
+            self.effective_director_profile(script)
+            if director_profile is _DIRECTOR_PROFILE_UNSET
+            else director_profile
+        )
+        if execution_context is _DIRECTOR_CONTEXT_UNSET:
+            execution_context = self.director_execution_context(script, subject_ids=subject_ids)
+        if not profile and not execution_context:
             return ""
-        payload = director_execution_payload(profile)
+        payload = execution_context or {}
         return (
-            f"Director profile revision: {profile.revision}. Treat this as confirmed narrative "
-            "context. Do not turn unresolved questions into facts. "
+            f"Director profile revision: {profile.revision if profile else 'none'}. Treat confirmed "
+            "director decisions as execution context. Script fact ledger entries carry explicit "
+            "evidence_status; uncertain or conflicted entries must not be treated as established facts. "
+            "Ranges use zero-based Unicode code points and [start, end). "
             + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         )
 
-    def director_execution_context(self, script: Script) -> Optional[Dict[str, Any]]:
-        """Return the bounded Director contract used by downstream design calls."""
+    def generation_lineage(
+        self,
+        script: Script,
+        director_profile: Optional[DirectorProfile] = None,
+        execution_context: Optional[Dict[str, Any]] = None,
+        source_range: Optional[Tuple[int, int]] = None,
+        *,
+        pinned: bool = True,
+    ) -> ArtifactLineage:
+        """Capture only revision references that were available to this generation call."""
+        if not pinned:
+            return ArtifactLineage(status="legacy_unpinned")
+
+        source_revision_id = self.source_revision_id(script, script.source_revision)
+        ledger = (execution_context or {}).get("script_fact_ledger") or {}
+        ledger_status = ledger.get("status", "none")
+        fact_ids: List[str] = []
+        source_ranges: List[SourceRange] = []
+        if source_range:
+            source_ranges.append(SourceRange(start=source_range[0], end=source_range[1]))
+        if ledger_status == "current":
+            for fact in ledger.get("facts", []):
+                if fact.get("fact_id"):
+                    fact_ids.append(fact["fact_id"])
+                for span in fact.get("source_ranges", []):
+                    source_ranges.append(SourceRange(**span))
+
+        unique_ranges = {
+            (span.start, span.end): span for span in source_ranges
+        }
+        return ArtifactLineage(
+            status="pinned",
+            source_revision=script.source_revision,
+            source_revision_id=source_revision_id,
+            director_profile_revision=(director_profile.revision if director_profile else None),
+            director_profile_hash=(director_profile.content_hash if director_profile else None),
+            fact_ledger_revision=ledger.get("ledger_revision"),
+            fact_ledger_source_revision_id=ledger.get("source_revision_id"),
+            fact_ledger_status=ledger_status,
+            fact_ids=list(dict.fromkeys(fact_ids))[:40],
+            source_ranges=list(unique_ranges.values())[:40],
+        )
+
+    def storyboard_analysis_lineage(self, script_id: str, text: str) -> ArtifactLineage:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        source_range = self._source_range_for_text(script, text)
         profile = self.effective_director_profile(script)
-        if not profile:
+        execution_context = self.director_execution_context(
+            script, source_range=source_range, director_profile=profile,
+        )
+        return self.generation_lineage(
+            script, profile, execution_context, source_range,
+        )
+
+    def validate_storyboard_lineage(
+        self,
+        script_id: str,
+        text: str,
+        lineage: ArtifactLineage,
+    ) -> None:
+        """Reject applying a pinned draft after any pinned upstream revision changes."""
+        if lineage.status != "pinned":
+            return
+        current = self.storyboard_analysis_lineage(script_id, text)
+        pinned_fields = (
+            "source_revision", "source_revision_id", "director_profile_revision",
+            "director_profile_hash", "fact_ledger_revision",
+            "fact_ledger_source_revision_id", "fact_ledger_status",
+        )
+        changed = [
+            field for field in pinned_fields
+            if getattr(lineage, field) != getattr(current, field)
+        ]
+        if changed:
+            raise StaleStoryboardDraftError(
+                "Storyboard draft lineage is stale; upstream revisions changed: "
+                + ", ".join(changed)
+            )
+
+    def director_execution_context(
+        self,
+        script: Script,
+        source_range: Optional[Tuple[int, int]] = None,
+        subject_ids: Optional[List[str]] = None,
+        director_profile: Any = _DIRECTOR_PROFILE_UNSET,
+    ) -> Optional[Dict[str, Any]]:
+        """Return bounded, version-pinned Director and approved fact context."""
+        profile = (
+            self.effective_director_profile(script)
+            if director_profile is _DIRECTOR_PROFILE_UNSET
+            else director_profile
+        )
+        ledger_context = self._fact_ledger_execution_context(
+            script,
+            source_range=source_range,
+            subject_ids=subject_ids,
+        )
+        if not profile and ledger_context is None:
             return None
-        return director_execution_payload(profile)
+        payload = director_execution_payload(profile) if profile else {}
+        if ledger_context is not None:
+            payload["script_fact_ledger"] = ledger_context
+        return payload
+
+    @staticmethod
+    def _fact_ledger_execution_context(
+        script: Script,
+        source_range: Optional[Tuple[int, int]] = None,
+        subject_ids: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Build a bounded projection of the approved ledger for one stage call."""
+        if not script.fact_ledger_revision:
+            return None
+        current = script.fact_ledger_revisions[-1] if script.fact_ledger_revisions else None
+        if current is None or current.revision != script.fact_ledger_revision:
+            return {
+                "status": "unavailable",
+                "ledger_revision": script.fact_ledger_revision or None,
+                "reason": "ledger_snapshot_missing",
+                "facts": [],
+            }
+        if current.source_revision != script.source_revision:
+            return {
+                "status": "stale",
+                "ledger_revision": current.revision,
+                "source_revision": current.source_revision,
+                "source_revision_id": current.source_revision_id,
+                "current_source_revision": script.source_revision,
+                "facts": [],
+            }
+        wanted = set(subject_ids or [])
+        facts = []
+        truncated = False
+        for fact in current.facts:
+            if fact.evidence_status == "rejected":
+                continue
+            if wanted and fact.subject_ids and not wanted.intersection(fact.subject_ids):
+                continue
+            if source_range and fact.source_ranges:
+                start, end = source_range
+                if not any(span.start < end and start < span.end for span in fact.source_ranges):
+                    continue
+            projected = fact.model_dump()
+            candidate = facts + [projected]
+            if len(candidate) > 40 or len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))) > 7200:
+                truncated = True
+                break
+            facts.append(projected)
+        return {
+            "status": "current",
+            "ledger_revision": current.revision,
+            "source_revision": current.source_revision,
+            "source_revision_id": current.source_revision_id,
+            "facts": facts,
+            "truncated": truncated,
+        }
+
+    @staticmethod
+    def _source_range_for_text(script: Script, text: str) -> Optional[Tuple[int, int]]:
+        if not text:
+            return None
+        first = script.original_text.find(text)
+        if first < 0 or script.original_text.find(text, first + 1) >= 0:
+            return None
+        return first, first + len(text)
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
         script, entities, _ = self.storyboard_analysis_context(script_id)
@@ -2266,6 +2477,148 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
+    def apply_fact_ledger(
+        self,
+        script_id: str,
+        source_revision: int,
+        expected_revision: int,
+        facts: List[ScriptFactLedgerEntry],
+    ) -> Script:
+        with self._save_lock:
+            return self._apply_fact_ledger_locked(
+                script_id, source_revision, expected_revision, facts
+            )
+
+    def _apply_fact_ledger_locked(
+        self,
+        script_id: str,
+        source_revision: int,
+        expected_revision: int,
+        facts: List[ScriptFactLedgerEntry],
+    ) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if source_revision != script.source_revision:
+            raise ValueError("Script source revision changed")
+        if expected_revision != script.fact_ledger_revision:
+            raise ValueError("Fact ledger revision changed")
+        ids = [fact.fact_id for fact in facts]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Fact IDs must be unique")
+        source_id = self.source_revision_id(script, source_revision)
+        normalized_facts = []
+        for fact in facts:
+            if fact.source_revision != source_revision:
+                raise ValueError(f"Fact {fact.fact_id} has a stale source revision")
+            if fact.source_revision_id not in (None, source_id):
+                raise ValueError(f"Fact {fact.fact_id} has a stale source revision id")
+            if fact.evidence_status == "confirmed" and not fact.source_ranges:
+                raise ValueError(f"Confirmed fact {fact.fact_id} requires a source range")
+            for span in fact.source_ranges:
+                if span.start == span.end or span.end > len(script.original_text):
+                    raise ValueError(f"Fact {fact.fact_id} has an invalid source range")
+            normalized_facts.append(fact.model_copy(update={"source_revision_id": source_id}))
+        if script.fact_ledger_revision and normalized_facts == script.fact_ledger:
+            return script
+        revision = script.fact_ledger_revision + 1
+        snapshot = ScriptFactLedgerRevision(
+            revision=revision,
+            source_revision=source_revision,
+            source_revision_id=source_id,
+            facts=[fact.model_copy(deep=True) for fact in normalized_facts],
+            confirmed_at=time.time(),
+        )
+        script.fact_ledger_revision = revision
+        script.fact_ledger = [fact.model_copy(deep=True) for fact in normalized_facts]
+        script.fact_ledger_revisions.append(snapshot)
+        script.director_review_required = True
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
+    @staticmethod
+    def source_revision_id(script: Script, revision: int) -> str:
+        source = next((item for item in script.source_revisions if item.revision == revision), None)
+        if source:
+            return source.source_revision_id
+        if revision == script.source_revision:
+            return ScriptSourceRevision(
+                revision=revision,
+                content_hash=source_version(script.original_text),
+                text=script.original_text,
+                created_at=script.created_at,
+            ).source_revision_id
+        raise ValueError("Script source revision not found")
+
+    def save_fact_ledger_draft(
+        self,
+        script_id: str,
+        source_revision: int,
+        expected_draft_revision: int,
+        facts: List[ScriptFactLedgerEntry],
+    ) -> Script:
+        with self._save_lock:
+            return self._save_fact_ledger_draft_locked(
+                script_id, source_revision, expected_draft_revision, facts
+            )
+
+    def _save_fact_ledger_draft_locked(
+        self,
+        script_id: str,
+        source_revision: int,
+        expected_draft_revision: int,
+        facts: List[ScriptFactLedgerEntry],
+    ) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if source_revision != script.source_revision:
+            raise ValueError("Script source revision changed")
+        if expected_draft_revision != script.fact_ledger_draft_revision:
+            raise ValueError("Fact ledger draft revision changed")
+        ids = [fact.fact_id for fact in facts]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Fact IDs must be unique")
+        source_id = self.source_revision_id(script, source_revision)
+        normalized_facts = []
+        for fact in facts:
+            if fact.source_revision != source_revision:
+                raise ValueError(f"Fact {fact.fact_id} has a stale source revision")
+            if fact.source_revision_id not in (None, source_id):
+                raise ValueError(f"Fact {fact.fact_id} has a stale source revision id")
+            if any(span.end > len(script.original_text) for span in fact.source_ranges):
+                raise ValueError(f"Fact {fact.fact_id} has an invalid source range")
+            normalized_facts.append(fact.model_copy(update={"source_revision_id": source_id}))
+        script.fact_ledger_draft_revision += 1
+        script.fact_ledger_draft_source_revision = source_revision
+        script.fact_ledger_draft = [fact.model_copy(deep=True) for fact in normalized_facts]
+        script.fact_ledger_draft_updated_at = time.time()
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def confirm_fact_ledger(
+        self,
+        script_id: str,
+        expected_revision: int,
+        expected_draft_revision: int,
+    ) -> Script:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if expected_draft_revision != script.fact_ledger_draft_revision:
+                raise ValueError("Fact ledger draft revision changed")
+            if script.fact_ledger_draft_source_revision != script.source_revision:
+                raise ValueError("Script source revision changed; refresh the fact ledger draft")
+            return self.apply_fact_ledger(
+                script_id,
+                script.fact_ledger_draft_source_revision,
+                expected_revision,
+                script.fact_ledger_draft,
+            )
+
     # === STORYBOARD DRAMATIZATION v2 ===
 
     def storyboard_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], str]:
@@ -2284,12 +2637,27 @@ class ComicGenPipeline(StudioOwnerMixin):
         return script, entities_json, prompt
 
     def preview_storyboard_analysis(self, script_id: str, text: str,
-                                    load_batches=None, save_batch=None) -> List[Dict[str, Any]]:
+                                    load_batches=None, save_batch=None,
+                                    expected_lineage: Optional[ArtifactLineage] = None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.director_execution_context(script)
+        source_range = self._source_range_for_text(script, text)
+        confirmed_director_profile = self.effective_director_profile(script)
+        director_profile = self.director_execution_context(
+            script,
+            source_range=source_range,
+            director_profile=confirmed_director_profile,
+        )
+        lineage = self.generation_lineage(
+            script, confirmed_director_profile, director_profile, source_range,
+        )
+        if expected_lineage:
+            self.validate_storyboard_lineage(script_id, text, expected_lineage)
+            lineage = expected_lineage
         visual_style = self.storyboard_visual_style(script)
         if len(text) <= 1800 or load_batches is None or save_batch is None:
+            if lineage.status == "pinned":
+                self.validate_storyboard_lineage(script_id, text, lineage)
             frames = self.script_processor.analyze_to_storyboard(
                 text, entities_json, custom_extraction_prompt=prompt,
                 director_profile=director_profile, visual_style=visual_style,
@@ -2299,6 +2667,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             chunks = split_director_source(
                 text, direct_max_chars=1800, target_chars=1600, max_chars=1800
             )
+            matched_range = self._source_range_for_text(script, text)
             cached = load_batches()
             frames = []
             for index, chunk in enumerate(chunks):
@@ -2306,10 +2675,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if prior and prior.get("source_ref") == chunk["source_ref"]:
                     batch_frames = prior["frames"]
                 else:
+                    if lineage.status == "pinned":
+                        self.validate_storyboard_lineage(script_id, text, lineage)
+                    chunk_source_range = (
+                        (
+                            matched_range[0] + chunk["char_start"],
+                            matched_range[0] + chunk["char_end"],
+                        )
+                        if matched_range else None
+                    )
                     batch_frames = self.script_processor.analyze_to_storyboard(
                         chunk["text"], entities_json,
                         custom_extraction_prompt=prompt,
-                        director_profile=director_profile,
+                        director_profile=self.director_execution_context(
+                            script,
+                            source_range=chunk_source_range,
+                            director_profile=confirmed_director_profile,
+                        ),
                         visual_style=visual_style,
                         previous_frames=frames[-3:],
                     )
@@ -2321,14 +2703,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frames.extend(batch_frames)
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
+        if lineage.status == "pinned":
+            self.validate_storyboard_lineage(script_id, text, lineage)
         return frames
 
     def refine_storyboard_analysis(self, script_id: str, text: str,
                                     draft: List[Dict[str, Any]],
-                                    instructions: List[str]) -> List[Dict[str, Any]]:
+                                    instructions: List[str],
+                                    lineage: Optional[ArtifactLineage] = None) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
-        director_profile = self.director_execution_context(script)
+        if lineage and lineage.status == "pinned":
+            self.validate_storyboard_lineage(script_id, text, lineage)
+        director_profile = self.director_execution_context(
+            script,
+            source_range=self._source_range_for_text(script, text),
+            director_profile=self.effective_director_profile(script),
+        )
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
             director_profile=director_profile,
@@ -2336,10 +2727,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
+        if lineage and lineage.status == "pinned":
+            self.validate_storyboard_lineage(script_id, text, lineage)
         return frames
 
     def analyze_text_to_frames(self, script_id: str, text: str,
-                               draft: Optional[List[Dict[str, Any]]] = None) -> Script:
+                               draft: Optional[List[Dict[str, Any]]] = None,
+                               lineage: Optional[ArtifactLineage] = None) -> Script:
         """
         Analyzes script text and generates storyboard frames using LLM.
         Replaces existing frames with newly generated ones.
@@ -2355,8 +2749,22 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # An explicit reviewed draft is applied exactly as shown and never
         # triggers a second analysis call.
+        source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
-        director_profile = self.director_execution_context(script)
+        director_profile = self.director_execution_context(
+            script,
+            source_range=source_range,
+            director_profile=confirmed_director_profile,
+        )
+        generated_lineage = self.generation_lineage(
+            script, confirmed_director_profile, director_profile, source_range,
+            pinned=draft is None or (lineage is not None and lineage.status == "pinned"),
+        )
+        if draft is not None and lineage and lineage.status == "pinned":
+            self.validate_storyboard_lineage(script_id, text, lineage)
+            # Rebuild trusted provenance server-side; the browser only submits
+            # revision preconditions and cannot invent fact IDs or source ranges.
+            generated_lineage = self.storyboard_analysis_lineage(script_id, text)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
@@ -2440,14 +2848,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                 speaker=frame_data.get("speaker"),
                 duration=frame_data.get("duration"),
                 director_profile_revision=(
-                    confirmed_director_profile.revision if confirmed_director_profile else None
+                    generated_lineage.director_profile_revision
                 ),
                 director_profile_hash=(
-                    confirmed_director_profile.content_hash if confirmed_director_profile else None
+                    generated_lineage.director_profile_hash
                 ),
+                director_review_required=(generated_lineage.status != "pinned"),
+                generation_lineage=generated_lineage.model_copy(deep=True),
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)
+
+        if generated_lineage.status == "pinned":
+            self.validate_storyboard_lineage(script_id, text, generated_lineage)
         
         # Replace existing frames with new ones
         script.frames = new_frames

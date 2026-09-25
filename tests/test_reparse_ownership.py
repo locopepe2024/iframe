@@ -8,7 +8,16 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from fastapi import HTTPException
-from src.apps.comic_gen.models import Script, Character, Scene, Prop, DirectorProfile, DirectorProfileRevision
+from src.apps.comic_gen.models import (
+    Script,
+    Character,
+    Scene,
+    Prop,
+    DirectorProfile,
+    DirectorProfileRevision,
+    ScriptFactLedgerEntry,
+    ScriptFactLedgerRevision,
+)
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.studio_access import verify_studio_resource_path
 
@@ -17,9 +26,23 @@ class ReparseOwnershipTest(unittest.TestCase):
     def test_source_revisions_are_idempotent_and_preserved_through_reparse(self):
         with tempfile.TemporaryDirectory() as root:
             pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+            fact = ScriptFactLedgerEntry(
+                fact_id="fact-1",
+                kind="character_state",
+                source_revision=1,
+                value={"state": "old source"},
+            )
             original = Script(id="project", title="Project", original_text="old",
                               created_at=1, updated_at=1,
                               owner_user_id="user-a", owner_profile_id="profile-a",
+                              fact_ledger_revision=1,
+                              fact_ledger=[fact],
+                              fact_ledger_revisions=[ScriptFactLedgerRevision(
+                                  revision=1, source_revision=1, facts=[fact], confirmed_at=1,
+                              )],
+                              fact_ledger_draft_revision=1,
+                              fact_ledger_draft_source_revision=1,
+                              fact_ledger_draft=[fact],
                               director_profile_revisions=[DirectorProfileRevision(
                                   revision=1, content_hash="confirmed", profile=DirectorProfile(),
                                   confirmed_at=1,
@@ -27,7 +50,7 @@ class ReparseOwnershipTest(unittest.TestCase):
             parsed = Script(id="parsed", title="Project", original_text="new",
                             created_at=2, updated_at=2)
             pipeline.scripts = {original.id: original}
-            pipeline._save_lock = threading.Lock()
+            pipeline._save_lock = threading.RLock()
             pipeline.series_store = {}
             pipeline.data_file = str(Path(root) / "projects.json")
             pipeline.script_processor = Mock()
@@ -43,6 +66,9 @@ class ReparseOwnershipTest(unittest.TestCase):
             self.assertEqual(result.source_revision, 2)
             self.assertEqual([item.text for item in result.source_revisions], ["old", "new"])
             self.assertEqual(result.director_profile_revisions[0].content_hash, "confirmed")
+            self.assertEqual(result.fact_ledger_revision, 1)
+            self.assertEqual(result.fact_ledger_revisions[0].facts[0].fact_id, "fact-1")
+            self.assertEqual(result.fact_ledger_draft_revision, 1)
 
     def test_cached_and_fresh_extraction_preserve_owner(self):
         for cached in (False, True):
@@ -57,7 +83,7 @@ class ReparseOwnershipTest(unittest.TestCase):
                                 scenes=[Scene(id="scene", name="S", description="")],
                                 props=[Prop(id="prop", name="P", description="")])
                 pipeline.scripts = {original.id: original}
-                pipeline._save_lock = threading.Lock()
+                pipeline._save_lock = threading.RLock()
                 pipeline.series_store = {}
                 pipeline.data_file = str(Path(root) / "projects.json")
                 pipeline.script_processor = Mock()
@@ -96,7 +122,7 @@ class ReparseOwnershipTest(unittest.TestCase):
                              created_at=2, updated_at=2,
                              characters=[Character(id="temporary", name="主播", description="马来女性")])
             pipeline.scripts = {original.id: original}
-            pipeline._save_lock = threading.Lock()
+            pipeline._save_lock = threading.RLock()
             pipeline.series_store = {}
             pipeline.data_file = str(Path(root) / "projects.json")
             pipeline.script_processor = Mock()

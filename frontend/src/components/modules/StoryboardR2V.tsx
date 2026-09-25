@@ -21,7 +21,10 @@ import {
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
 import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
-import type { StoryboardDraftFrame } from "@/lib/storyboardAnalysis";
+import type {
+    StoryboardAnalysisLineage,
+    StoryboardDraftFrame,
+} from "@/lib/storyboardAnalysis";
 import { toast } from "@/store/toastStore";
 import { Wand2 } from "lucide-react";
 import AssetDrawer from "./storyboard-r2v/AssetDrawer";
@@ -444,6 +447,7 @@ export default function StoryboardR2V() {
     const [generating, setGenerating] = useState(false);
     const [analysisProgress, setAnalysisProgress] = useState<{ completed: number; total: number } | null>(null);
     const [storyboardDraft, setStoryboardDraft] = useState<StoryboardDraftFrame[] | null>(null);
+    const [storyboardDraftLineage, setStoryboardDraftLineage] = useState<StoryboardAnalysisLineage | null>(null);
     const [storyboardDraftText, setStoryboardDraftText] = useState("");
     const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
     const [storyboardDraftBusy, setStoryboardDraftBusy] = useState(false);
@@ -531,11 +535,12 @@ export default function StoryboardR2V() {
         setAnalysisProgress(null);
         setBannerState("phase1");
         try {
-            const draft = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
+            const result = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
                 setAnalysisProgress({ completed, total });
             });
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
-            setStoryboardDraft(draft);
+            setStoryboardDraft(result.frames);
+            setStoryboardDraftLineage(result.lineage);
             setStoryboardDraftText(scriptText);
             setStoryboardFeedback([]);
             setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
@@ -550,28 +555,31 @@ export default function StoryboardR2V() {
     }, [currentProject, t]);
 
     const handleRefineStoryboardDraft = useCallback(async (instruction: string) => {
-        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText) return;
+        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
         const projectId = currentProject.id;
         const instructions = [...storyboardFeedback, instruction.trim()];
         setStoryboardDraftBusy(true);
         try {
             const revised = await api.refineStoryboardPreview(
-                projectId, storyboardDraftText, storyboardDraft, instructions,
+                projectId, storyboardDraftText, storyboardDraft, instructions, storyboardDraftLineage,
             );
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
-            setStoryboardDraft(revised);
+            setStoryboardDraft(revised.frames);
+            setStoryboardDraftLineage(revised.lineage);
             setStoryboardFeedback(instructions);
         } finally {
             setStoryboardDraftBusy(false);
         }
-    }, [currentProject?.id, storyboardDraft, storyboardDraftText, storyboardFeedback]);
+    }, [currentProject?.id, storyboardDraft, storyboardDraftText, storyboardDraftLineage, storyboardFeedback]);
 
     const handleApplyStoryboardDraft = useCallback(async () => {
-        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText) return;
+        if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
         const projectId = currentProject.id;
         setStoryboardDraftBusy(true);
         try {
-            const updated = await api.applyStoryboardDraft(projectId, storyboardDraftText, storyboardDraft);
+            const updated = await api.applyStoryboardDraft(
+                projectId, storyboardDraftText, storyboardDraft, storyboardDraftLineage,
+            );
             const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
             updateProject(projectId, updated);
             if (Array.isArray(updated?.frames)) {
@@ -580,6 +588,7 @@ export default function StoryboardR2V() {
                 setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
             }
             setStoryboardDraft(null);
+            setStoryboardDraftLineage(null);
             setStoryboardDraftText("");
             setStoryboardFeedback([]);
 
@@ -610,11 +619,12 @@ export default function StoryboardR2V() {
             setRefineProgress(null);
             setStoryboardDraftBusy(false);
         }
-    }, [currentProject, storyboardDraft, storyboardDraftText, updateProject, t]);
+    }, [currentProject, storyboardDraft, storyboardDraftText, storyboardDraftLineage, updateProject, t]);
 
     const handleDiscardStoryboardDraft = useCallback(() => {
         if (storyboardDraftBusy) return;
         setStoryboardDraft(null);
+        setStoryboardDraftLineage(null);
         setStoryboardDraftText("");
         setStoryboardFeedback([]);
     }, [storyboardDraftBusy]);

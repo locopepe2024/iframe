@@ -62,6 +62,19 @@ export interface VideoTask {
     reference_video_urls?: string[];  // Reference videos for R2V
 }
 
+export interface GenerationLineage {
+    status: "pinned" | "legacy_unpinned";
+    source_revision?: number | null;
+    source_revision_id?: string | null;
+    director_profile_revision?: number | null;
+    director_profile_hash?: string | null;
+    fact_ledger_revision?: number | null;
+    fact_ledger_source_revision_id?: string | null;
+    fact_ledger_status: "none" | "current" | "stale" | "unavailable";
+    fact_ids: string[];
+    source_ranges: { start: number; end: number }[];
+}
+
 export interface Character {
     id: string;
     name: string;
@@ -101,6 +114,7 @@ export interface Character {
     /** Explicit Asset Library cover; independent from generation-container selections. */
     cover_variant_id?: string | null;
     status?: string;
+    generation_lineage?: GenerationLineage | null;
     is_consistent?: boolean;
     full_body_updated_at?: number;
     three_view_updated_at?: number;
@@ -131,6 +145,7 @@ export interface Scene {
     cover_variant_id?: string | null;
     time_of_day?: string;
     lighting_mood?: string;
+    generation_lineage?: GenerationLineage | null;
     source?: "episode" | "series" | "global";
 }
 
@@ -147,6 +162,7 @@ export interface Prop {
     starred?: boolean;
     /** Explicit Asset Library cover; independent from generation-container selections. */
     cover_variant_id?: string | null;
+    generation_lineage?: GenerationLineage | null;
     source?: "episode" | "series" | "global";
 }
 
@@ -157,6 +173,7 @@ export interface StoryboardFrame {
     image_asset?: ImageAsset;
     rendered_image_url?: string;
     rendered_image_asset?: ImageAsset;
+    generation_lineage?: GenerationLineage | null;
     style_prompt_override?: string | null;
     lighting_override?: string | null;
     negative_prompt_override?: string | null;
@@ -245,6 +262,35 @@ export interface DirectorProfileRevision {
     source: "user_apply" | "migration";
 }
 
+export interface ScriptFactLedgerEntry {
+    fact_id: string;
+    kind: string;
+    subject_ids: string[];
+    phase?: string | null;
+    source_revision: number;
+    source_revision_id?: string | null;
+    source_ranges: { start: number; end: number }[];
+    value: Record<string, unknown>;
+    evidence_status: "confirmed" | "uncertain" | "conflicted" | "rejected";
+    conflict_group_id?: string | null;
+}
+
+export interface ScriptFactLedgerDraft {
+    project_id: string;
+    draft_revision: number;
+    source_revision: number | null;
+    facts: ScriptFactLedgerEntry[];
+    updated_at?: number | null;
+}
+
+export interface ScriptFactLedgerSnapshot {
+    revision: number;
+    source_revision: number;
+    source_revision_id?: string | null;
+    fact_count: number;
+    confirmed_at: number;
+}
+
 export type ModelSettings = FrontendModelSettings;
 
 export const ASPECT_RATIOS = [
@@ -320,6 +366,7 @@ export interface Project {
     id: string;
     title: string;
     originalText: string;
+    source_revision?: number;
     characters: Character[];
     scenes: Scene[];
     props: Prop[];

@@ -362,6 +362,36 @@ class VideoTask(BaseModel):
     )
     created_at: float = Field(default_factory=time.time)
 
+class SourceRange(BaseModel):
+    start: int = Field(..., ge=0)
+    end: int = Field(..., ge=0)
+
+    @model_validator(mode="after")
+    def validate_order(self):
+        if self.end < self.start:
+            raise ValueError("source range end must be >= start")
+        return self
+
+
+class ArtifactLineage(BaseModel):
+    """Revision references captured for one generation invocation.
+
+    Frames applied from one reviewed storyboard batch share its invocation
+    scope; this is not a per-shot prompt transcript.
+    """
+
+    status: Literal["pinned", "legacy_unpinned"] = "pinned"
+    source_revision: Optional[int] = Field(None, ge=1)
+    source_revision_id: Optional[str] = None
+    director_profile_revision: Optional[int] = Field(None, ge=1)
+    director_profile_hash: Optional[str] = None
+    fact_ledger_revision: Optional[int] = Field(None, ge=1)
+    fact_ledger_source_revision_id: Optional[str] = None
+    fact_ledger_status: Literal["none", "current", "stale", "unavailable"] = "none"
+    fact_ids: List[str] = Field(default_factory=list, max_length=40)
+    source_ranges: List[SourceRange] = Field(default_factory=list, max_length=40)
+
+
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     owner_user_id: Optional[str] = Field(None, description="Owner when stored in the personal asset library")
@@ -457,6 +487,7 @@ class Character(BaseModel):
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
+    generation_lineage: Optional[ArtifactLineage] = None
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
@@ -484,6 +515,7 @@ class Scene(BaseModel):
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
+    generation_lineage: Optional[ArtifactLineage] = None
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
@@ -512,6 +544,7 @@ class Prop(BaseModel):
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
+    generation_lineage: Optional[ArtifactLineage] = None
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
@@ -520,6 +553,7 @@ class StoryboardFrame(BaseModel):
     director_review_required: bool = Field(False, description="Frame predates the confirmed director profile")
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
+    generation_lineage: Optional[ArtifactLineage] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
@@ -760,8 +794,44 @@ class DirectorProfileRevision(BaseModel):
 class ScriptSourceRevision(BaseModel):
     revision: int = Field(..., ge=1)
     content_hash: str = Field(..., min_length=1)
+    source_revision_id: str = ""
     text: str
     created_at: float = Field(..., ge=0)
+
+    @model_validator(mode="after")
+    def set_stable_revision_id(self):
+        if not self.source_revision_id:
+            self.source_revision_id = f"source-r{self.revision}:{self.content_hash}"
+        return self
+
+
+class ScriptFactLedgerEntry(BaseModel):
+    fact_id: str = Field(..., min_length=1, max_length=120)
+    kind: str = Field(..., min_length=1, max_length=48)
+    subject_ids: List[str] = Field(default_factory=list, max_length=12)
+    phase: Optional[str] = Field(None, max_length=120)
+    source_revision: int = Field(..., ge=1)
+    source_revision_id: Optional[str] = Field(None, max_length=240)
+    source_ranges: List[SourceRange] = Field(default_factory=list, max_length=12)
+    value: Dict[str, Any] = Field(default_factory=dict)
+    evidence_status: Literal["confirmed", "uncertain", "conflicted", "rejected"] = "uncertain"
+    conflict_group_id: Optional[str] = Field(None, max_length=120)
+
+
+class ScriptFactLedgerRevision(BaseModel):
+    revision: int = Field(..., ge=1)
+    source_revision: int = Field(..., ge=1)
+    source_revision_id: Optional[str] = Field(None, max_length=240)
+    facts: List[ScriptFactLedgerEntry] = Field(default_factory=list, max_length=500)
+    confirmed_at: float = Field(..., ge=0)
+
+
+class ScriptFactLedgerRevisionSummary(BaseModel):
+    revision: int = Field(..., ge=1)
+    source_revision: int = Field(..., ge=1)
+    source_revision_id: Optional[str] = Field(None, max_length=240)
+    fact_count: int = Field(..., ge=0)
+    confirmed_at: float = Field(..., ge=0)
 
 
 _DIRECTOR_TEXT_FIELDS = (
@@ -1238,13 +1308,16 @@ def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, st
 def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> Dict[str, Any]:
     """Expose only the stable, bounded contract consumed downstream."""
     raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
-    return {
+    payload = {
         "revision": raw.get("revision", 1),
         "content_hash": raw.get("content_hash", ""),
         "execution_summary": build_director_execution_summary(raw),
         "scene_summaries": build_director_scene_summaries(raw),
         "canon_state": build_director_canon_state(raw),
     }
+    if "script_fact_ledger" in raw:
+        payload["script_fact_ledger"] = raw["script_fact_ledger"]
+    return payload
 
 
 def _normalize_director_object_list(value: Any) -> Any:
@@ -1667,6 +1740,13 @@ class Script(BaseModel):
     original_text: str = Field(..., description="The original novel text")
     source_revision: int = Field(1, ge=1)
     source_revisions: List[ScriptSourceRevision] = Field(default_factory=list)
+    fact_ledger_revision: int = Field(0, ge=0)
+    fact_ledger: List[ScriptFactLedgerEntry] = Field(default_factory=list)
+    fact_ledger_revisions: List[ScriptFactLedgerRevision] = Field(default_factory=list)
+    fact_ledger_draft_revision: int = Field(0, ge=0)
+    fact_ledger_draft_source_revision: Optional[int] = Field(None, ge=1)
+    fact_ledger_draft: List[ScriptFactLedgerEntry] = Field(default_factory=list)
+    fact_ledger_draft_updated_at: Optional[float] = None
     
     characters: List[Character] = Field(default_factory=list)
     scenes: List[Scene] = Field(default_factory=list)
