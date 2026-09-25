@@ -442,6 +442,7 @@ export default function StoryboardR2V() {
     // setShots() when the new frames come back.
     const [genDialogOpen, setGenDialogOpen] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [analysisProgress, setAnalysisProgress] = useState<{ completed: number; total: number } | null>(null);
     const [storyboardDraft, setStoryboardDraft] = useState<StoryboardDraftFrame[] | null>(null);
     const [storyboardDraftText, setStoryboardDraftText] = useState("");
     const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
@@ -527,9 +528,12 @@ export default function StoryboardR2V() {
             return;
         }
         setGenerating(true);
+        setAnalysisProgress(null);
         setBannerState("phase1");
         try {
-            const draft = await api.analyzeStoryboardPreview(projectId, scriptText);
+            const draft = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
+                setAnalysisProgress({ completed, total });
+            });
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
             setStoryboardDraft(draft);
             setStoryboardDraftText(scriptText);
@@ -541,6 +545,7 @@ export default function StoryboardR2V() {
             setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
         } finally {
             setGenerating(false);
+            setAnalysisProgress(null);
         }
     }, [currentProject, t]);
 
@@ -2002,7 +2007,9 @@ export default function StoryboardR2V() {
                             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 font-sans text-[0.8125rem] font-semibold text-on-accent shadow-[var(--btn-pri-glow),inset_0_1.5px_0_rgba(255,255,255,0.14)] transition-all duration-fast ease-out-quart hover:bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                         >
                             {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                            <span>{generating ? t("genInFlight") : t("genShots")}</span>
+                            <span>{generating ? (analysisProgress
+                                ? `${t("genInFlight")} ${analysisProgress.completed}/${analysisProgress.total}`
+                                : t("genInFlight")) : t("genShots")}</span>
                         </button>
                     </>
                 )}
@@ -2077,7 +2084,9 @@ export default function StoryboardR2V() {
                                     className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-primary text-white border border-primary/65 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 transition-colors text-[0.8125rem] font-semibold"
                                 >
                                     {generating ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-                                    {generating ? t("genInFlight") : t("emptyCTA")}
+                                    {generating ? (analysisProgress
+                                        ? `${t("genInFlight")} ${analysisProgress.completed}/${analysisProgress.total}`
+                                        : t("genInFlight")) : t("emptyCTA")}
                                 </button>
                                 <button
                                     type="button"

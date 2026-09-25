@@ -7,6 +7,7 @@ interface StoryboardJob {
     status: "queued" | "running" | "completed" | "failed" | "superseded";
     result: { frames: StoryboardDraftFrame[] } | null;
     error?: string;
+    progress?: { completed: number; total: number } | null;
 }
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -14,7 +15,8 @@ const JOB_TIMEOUT_MS = 30 * 60 * 1000;
 const transient = (error: unknown) => axios.isAxiosError(error) &&
     (!error.response || [408, 429, 502, 503, 504].includes(error.response.status));
 
-async function runStoryboardJob(endpoint: string, pollBase: string, payload: unknown) {
+async function runStoryboardJob(endpoint: string, pollBase: string, payload: unknown,
+                                onProgress?: (completed: number, total: number) => void) {
     let submitted: StoryboardJob | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -27,6 +29,7 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
     }
     if (!submitted?.id) throw new Error("Invalid storyboard analysis task response");
     let job = submitted;
+    if (job.progress) onProgress?.(job.progress.completed, job.progress.total);
     let failures = 0;
     const deadline = Date.now() + JOB_TIMEOUT_MS;
     while (job.status === "running" || job.status === "queued") {
@@ -36,6 +39,7 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
             const next = (await axios.get<StoryboardJob>(`${pollBase}/${job.id}`, { timeout: 15000 })).data;
             if (!next || next.id !== job.id) throw new Error("Invalid storyboard analysis task response");
             job = next;
+            if (job.progress) onProgress?.(job.progress.completed, job.progress.total);
             failures = 0;
         } catch (error) {
             if (!transient(error) || ++failures >= 5) throw error;
@@ -47,9 +51,10 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
     return job.result.frames;
 }
 
-export function analyzeStoryboardPreview(baseUrl: string, projectId: string, text: string) {
+export function analyzeStoryboardPreview(baseUrl: string, projectId: string, text: string,
+                                         onProgress?: (completed: number, total: number) => void) {
     const base = `${baseUrl}/projects/${projectId}/storyboard-analysis-jobs`;
-    return runStoryboardJob(base, base, { text });
+    return runStoryboardJob(base, base, { text }, onProgress);
 }
 
 export async function applyStoryboardDraft(

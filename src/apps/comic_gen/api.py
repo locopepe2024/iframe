@@ -2752,11 +2752,27 @@ def start_storyboard_analysis(
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
     fingerprint = _storyboard_analysis_fingerprint(script_id, request.text)
+    job_fingerprint = "storyboard:" + fingerprint
+    from .llm import split_director_source
+    total_batches = len(split_director_source(
+        request.text, direct_max_chars=1800, target_chars=1600, max_chars=1800
+    )) if len(request.text) > 1800 else 0
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
-        "storyboard:" + fingerprint,
-        lambda: {"frames": pipeline.preview_storyboard_analysis(script_id, request.text)},
+        job_fingerprint,
+        lambda job_id: {"frames": pipeline.preview_storyboard_analysis(
+            script_id, request.text,
+            load_batches=lambda: extraction_jobs.load_batches(
+                user.owner_profile_id, script_id, job_fingerprint
+            ),
+            save_batch=lambda index, source_ref, frames: extraction_jobs.save_batch(
+                user.owner_profile_id, script_id, job_fingerprint, job_id,
+                index, source_ref, frames,
+            ),
+        )},
+        pass_job_id=True,
+        total_batches=total_batches,
     )
 
 

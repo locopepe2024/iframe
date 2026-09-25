@@ -44,7 +44,7 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
             "selected_style_id": "film-noir",
             "style_config": {"positive_prompt": "黑白电影质感"},
         },
-        preview_storyboard_analysis=lambda project, text: first,
+        preview_storyboard_analysis=lambda project, text, **kwargs: first,
         refine_storyboard_analysis=lambda project, text, draft, instructions: (
             captured.update(text=text, draft=draft, instructions=instructions) or refined
         ),
@@ -124,6 +124,39 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
     assert result.frames[0].character_ids == ["host"]
     assert result.frames[0].director_profile_revision == 4
     assert result.frames[0].director_profile_hash == "director-4"
+    pipeline._save_data.assert_called_once()
+
+
+def test_applying_120_reviewed_shots_preserves_order_without_model_call():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    script = Script(id="project", title="Episode", original_text="source",
+                    created_at=1, updated_at=1, owner_profile_id="owner",
+                    scenes=[Scene(id="room", name="房间", description="")], frames=[])
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [{"id": "room", "name": "房间"}], "props": []}, "prompt"
+    )
+    pipeline.resolve_episode_assets = lambda current: {
+        "characters": [], "scenes": script.scenes, "props": [],
+    }
+    pipeline.stamp_owned_children = Mock()
+    pipeline._save_data = Mock()
+    pipeline.script_processor = Mock()
+    draft = [{"scene_ref_name": "房间", "character_ref_names": [],
+              "prop_ref_names": [], "action_summary": f"动作 {index}", "duration": 5,
+              "source_ref": f"source:chars-{index}-{index + 1}"}
+             for index in range(120)]
+
+    result = pipeline.analyze_text_to_frames("project", "source", draft)
+
+    assert len(result.frames) == 120
+    assert [frame.action_description for frame in result.frames] == [
+        f"动作 {index}" for index in range(120)
+    ]
+    pipeline.script_processor.analyze_to_storyboard.assert_not_called()
     pipeline._save_data.assert_called_once()
 
 
@@ -219,6 +252,101 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
     assert "跨帧保持稳定" in prompt
     assert "空间方位" in prompt and "对白原文" in prompt
     assert result[0]["action_summary"] == "角色推门进入"
+
+
+def test_long_storyboard_preview_resumes_ordered_source_batches():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    script = Script(id="project", title="Story", original_text="", created_at=1, updated_at=1)
+    pipeline.scripts = {script.id: script}
+    pipeline.storyboard_analysis_context = lambda project: (script, {"characters": [], "scenes": [], "props": []}, "prompt")
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.side_effect = lambda text, *_args, **_kwargs: [{"action_summary": text[:8]}]
+    source = "第一场。" * 1000
+    saved = {}
+    calls = []
+
+    def save(index, source_ref, frames):
+        saved[index] = {"source_ref": source_ref, "frames": frames}
+        calls.append(index)
+        return True
+
+    first = pipeline.preview_storyboard_analysis("project", source, load_batches=lambda: {}, save_batch=save)
+    assert len(first) > 1
+    assert calls == list(range(len(first)))
+    assert all(frame["source_ref"] == saved[index]["source_ref"] for index, frame in enumerate(first))
+
+    pipeline.script_processor.analyze_to_storyboard.reset_mock()
+    second = pipeline.preview_storyboard_analysis("project", source, load_batches=lambda: saved, save_batch=save)
+    assert second == first
+    pipeline.script_processor.analyze_to_storyboard.assert_not_called()
+
+
+def test_episode_length_storyboard_job_retries_only_missing_batches_after_store_reload(tmp_path):
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    source = "甲。" * 2645 + "甲"  # 5,291 characters, matching the observed episode scale.
+    script = Script(id="project", title="Episode", original_text=source,
+                    created_at=1, updated_at=1, owner_profile_id="owner", frames=[])
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [], "props": []}, "prompt"
+    )
+    pipeline.director_execution_context = lambda current: None
+    pipeline.storyboard_visual_style = lambda current: {}
+    pipeline.script_processor = Mock()
+    calls = []
+    failed_once = False
+
+    def generate(text, *_args, **_kwargs):
+        nonlocal failed_once
+        calls.append(text)
+        if len(calls) == 2 and not failed_once:
+            failed_once = True
+            raise RuntimeError("provider returned malformed JSON")
+        return [{"action_summary": text[:10]}]
+
+    pipeline.script_processor.analyze_to_storyboard.side_effect = generate
+    path = tmp_path / "episode-jobs.sqlite3"
+    fingerprint = "storyboard:episode-revision"
+
+    def submit(store):
+        return store.start(
+            "owner", "project", fingerprint,
+            lambda job_id: {"frames": pipeline.preview_storyboard_analysis(
+                "project", source,
+                load_batches=lambda: store.load_batches("owner", "project", fingerprint),
+                save_batch=lambda index, source_ref, frames: store.save_batch(
+                    "owner", "project", fingerprint, job_id, index, source_ref, frames
+                ),
+            )},
+            pass_job_id=True, total_batches=3,
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first_store = ExtractionJobs(path, executor=executor)
+        first = submit(first_store)
+        failed = wait_done(first_store, first)
+        assert failed["status"] == "failed"
+        assert failed["progress"] == {"completed": 1, "total": 3}
+        assert script.frames == []
+
+        restored_store = ExtractionJobs(path, executor=executor)
+        assert restored_store.recover_interrupted() == 0
+        retry = submit(restored_store)
+        completed = wait_done(restored_store, retry)
+
+    assert completed["status"] == "completed"
+    assert completed["progress"] == {"completed": 3, "total": 3}
+    assert len(calls) == 4  # Batch one once; batch two retries; batch three once.
+    frames = completed["result"]["frames"]
+    ranges = [tuple(map(int, frame["source_ref"].removeprefix("source:chars-").split("-")))
+              for frame in frames]
+    assert ranges[0][0] == 0 and ranges[-1][1] == len(source)
+    assert all(previous[1] == following[0] for previous, following in zip(ranges, ranges[1:]))
+    assert script.frames == []
 
 
 def test_rich_frame_prompt_keeps_project_style_and_continuity_constraints():

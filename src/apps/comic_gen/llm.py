@@ -1508,7 +1508,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
                               director_profile: Optional[Dict[str, Any]] = None,
-                              visual_style: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                              visual_style: Optional[Dict[str, Any]] = None,
+                              previous_frames: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -1542,6 +1543,20 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
+        if previous_frames:
+            # A compact handoff helps adjacent batches without resending the
+            # entire growing draft into every model request.
+            context = [
+                {key: frame.get(key) for key in (
+                    "scene_ref_name", "character_ref_names", "prop_ref_names",
+                    "action_summary", "dialogue", "speaker",
+                ) if frame.get(key) is not None}
+                for frame in previous_frames[-3:]
+            ]
+            system_prompt += (
+                "\n# 上一段最后的镜头（仅用于衔接，不得重复生成）\n"
+                + _prompt_json(context)
+            )
         if director_profile:
             execution_context = director_execution_payload(director_profile)
             system_prompt += """
@@ -1602,8 +1617,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
 
         try:
             result = json.loads(content.strip())
-            frames = result.get("frames", [])
-            if not frames:
+            frames = result.get("frames", []) if isinstance(result, dict) else None
+            if not isinstance(frames, list) or not frames or not all(isinstance(frame, dict) for frame in frames):
                 logger.warning("Parsed JSON successfully but 'frames' array is empty")
                 return None
             logger.info(f"Storyboard Analysis generated {len(frames)} frames")
