@@ -12,6 +12,9 @@ def media_kind(reference: str) -> str:
         return 'text'
     if extension in AUDIO_EXTENSIONS:
         return 'audio'
+    # Minimal container MIME databases do not always register WebP.
+    if extension == '.webp':
+        return 'image'
     mime = mimetypes.guess_type(unquote(urlsplit(reference).path))[0] or ""
     if mime.startswith("video/"):
         return "video"

@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { characterImageUrl } from "@/lib/characterImage";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -41,27 +42,6 @@ interface CastItem {
     referenceImageUrl?: string;     // 参考图（优先 reference_sheet → full_body fallback）
     status: "ready" | "pending" | "new";
     persona?: string;               // R2V v2 P1-a — characters only; groups visual variants of same person
-}
-
-/**
- * Resolve a character's primary reference image URL with legacy fallback.
- * Per design v2 (Q12-补充 A): new schema is `reference_sheet`; old
- * schema is `full_body / three_views / head_shot`. Read with fallback
- * so existing data keeps rendering during migration.
- */
-function resolveCharacterImage(c: any): string | undefined {
-    // New unified field (v2, not yet populated)
-    const sheet = c?.reference_sheet?.image_variants?.find(
-        (v: any) => v.id === c.reference_sheet.selected_image_id,
-    )?.url;
-    if (sheet) return sheet;
-    // Legacy AssetUnit v2: full_body selected variant
-    const fullBody = c?.full_body?.image_variants?.find(
-        (v: any) => v.id === c.full_body.selected_image_id,
-    )?.url;
-    if (fullBody) return fullBody;
-    // Legacy v1 url fields
-    return c?.full_body_image_url || c?.three_view_image_url || c?.headshot_image_url || c?.image_url;
 }
 
 function resolveSceneImage(s: any): string | undefined {
@@ -126,7 +106,7 @@ export default function Cast() {
         const propPool: any[] = currentProject?.props ?? [];
 
         const characters: CastItem[] = characterPool.map((c: any) => {
-            const imageUrl = resolveCharacterImage(c);
+            const imageUrl = characterImageUrl(c);
             return {
                 id: c.id,
                 name: c.name ?? c.id,
@@ -351,7 +331,7 @@ function AddCastPlaceholderModal({
             const result = await api.uploadFile(file);
             setImageUrl(result.url || "");
         } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || "Upload failed");
+            setError(err?.response?.data?.detail || err?.message || t("uploadFailed"));
         } finally {
             setUploading(false);
         }
@@ -381,7 +361,7 @@ function AddCastPlaceholderModal({
             reset();
             onClose();
         } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || "Create failed");
+            setError(err?.response?.data?.detail || err?.message || t("createFailed"));
         } finally {
             setSubmitting(false);
         }
@@ -911,7 +891,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                         {voiceId && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleInlinePreview(); }}
-                                aria-label={playing ? "Stop preview" : "Play preview"}
+                                aria-label={playing ? t("previewStop") : t("previewPlay")}
                                 className={`shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
                                     playing
                                         ? "border-primary bg-primary/15 text-primary"
@@ -968,7 +948,7 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
         let cancelled = false;
         api.getCharacterAppearances(seriesId, characterId)
             .then(d => { if (!cancelled) setData(d); })
-            .catch(err => { if (!cancelled) setError(err?.response?.data?.detail || err?.message || "Load failed"); })
+            .catch(err => { if (!cancelled) setError(err?.response?.data?.detail || err?.message || t("loadFailed")); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [seriesId, characterId]);
@@ -988,7 +968,7 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
                             {data?.character?.name || t("loading")}
                         </h3>
                         {data?.character?.persona && (
-                            <p className="text-xs text-text-secondary mt-0.5">Persona · {data.character.persona}</p>
+                            <p className="text-xs text-text-secondary mt-0.5">{t("personaLabel")} · {data.character.persona}</p>
                         )}
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-lg text-text-muted hover:text-foreground transition-colors">
@@ -1009,7 +989,10 @@ function CharacterHistoryPopover({ seriesId, characterId, onClose }: { seriesId:
                                 <div key={app.episode_id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-glass-border bg-glass">
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-medium text-foreground truncate">
-                                            EP{app.episode_number ?? "?"} · {app.episode_title}
+                                            {t("episodeLabel", {
+                                                number: app.episode_number ?? "?",
+                                                title: app.episode_title,
+                                            })}
                                         </p>
                                     </div>
                                     <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-pink-300">

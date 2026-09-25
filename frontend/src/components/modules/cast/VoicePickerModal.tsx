@@ -110,7 +110,7 @@ export default function VoicePickerModal({
                     setCustomVoices(customs);
                 }
             })
-            .catch((e) => { if (!cancelled) setError(e?.message || "Failed to load voices"); })
+            .catch((e) => { if (!cancelled) setError(e?.message || t("loadFailed")); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [isOpen, seriesId]);
@@ -189,7 +189,7 @@ export default function VoicePickerModal({
             setPlayingId(voiceId);
             await audio.play();
         } catch (e: any) {
-            setError(e?.message || "Preview failed");
+            setError(e?.message || t("previewFailed"));
         } finally {
             setPreviewingId(null);
         }
@@ -298,7 +298,7 @@ export default function VoicePickerModal({
                                     <h3 className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                         <Sparkles size={11} className="text-primary" />
                                         {t("recommended")}
-                                        <span className="text-text-muted/60">· {t("basedOnCharacter", { gender: characterGender || "?" })}</span>
+                                        <span className="text-text-muted/60">· {t("basedOnCharacter", { gender: localizedGender(characterGender, t) })}</span>
                                     </h3>
                                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                                         {recommended.map((v) => (
@@ -474,6 +474,16 @@ function VoiceGroup({
     );
 }
 
+function localizedGender(
+    gender: string | undefined,
+    t: (key: string) => string,
+): string {
+    const normalized = (gender || "").trim().toLowerCase();
+    if (normalized === "male" || normalized === "m" || gender === "男") return t("genderMale");
+    if (normalized === "female" || normalized === "f" || gender === "女") return t("genderFemale");
+    return gender?.trim() || t("genderUnknown");
+}
+
 function VoiceCard({
     voice,
     selected,
@@ -489,6 +499,7 @@ function VoiceCard({
     onSelect: () => void;
     onPreview: () => void;
 }) {
+    const t = useTranslations("voicePicker");
     return (
         <div
             onClick={onSelect}
@@ -504,15 +515,15 @@ function VoiceCard({
                         {voice.name}
                     </p>
                     <p className="mt-0.5 font-mono text-[0.59375rem] uppercase tracking-[0.14em] text-text-muted">
-                        {voice.gender}
+                        {localizedGender(voice.gender, t)}
                         {voice.dialect ? ` · ${voice.dialect}` : ""}
                         {voice.lang_primary ? ` · ${voice.lang_primary}` : ""}
-                        {voice.supports_instruction ? " · instr" : ""}
+                        {voice.supports_instruction ? ` · ${t("supportsInstruction")}` : ""}
                     </p>
                 </div>
                 <button
                     onClick={(e) => { e.stopPropagation(); onPreview(); }}
-                    aria-label={playing ? "Stop preview" : "Play preview"}
+                    aria-label={playing ? t("previewStop") : t("previewPlay")}
                     className={`shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
                         playing
                             ? "border-primary bg-primary/15 text-primary"
@@ -620,7 +631,7 @@ function CustomVoiceList({
                                     <div className="flex shrink-0 items-center gap-1">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onPreview(cv); }}
-                                            aria-label="Play preview"
+                                            aria-label={t("previewPlay")}
                                             className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
                                                 isPlaying
                                                     ? "border-primary bg-primary/15 text-primary"
@@ -631,7 +642,7 @@ function CustomVoiceList({
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onDelete(cv.id); }}
-                                            aria-label="Delete custom voice"
+                                            aria-label={t("deleteCustomVoice")}
                                             className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-glass-border bg-black/30 text-text-muted hover:border-danger/40 hover:bg-danger/10 hover:text-danger transition-colors"
                                         >
                                             <Trash2 size={11} />

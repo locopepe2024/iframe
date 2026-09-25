@@ -51,26 +51,34 @@ def _media(value: Optional[str]) -> Optional[str]:
 
 
 def _image_reference_url(value: str) -> str:
-    """Publish image references through managed storage; never inline bytes."""
+    """Publish image/video/audio references through managed storage.
+
+    The historical helper name is retained for callers, but every UniArt
+    reference modality uses the same URL-only boundary.  Local bytes and
+    filesystem paths never reach the provider request body.
+    """
     if value.startswith(("https://", "http://")):
         return value
     if value.startswith(("data:", "blob:")):
-        raise ValueError("UniArt image references require HTTP(S) material URLs")
+        raise ValueError("UniArt media references require HTTP(S) material URLs")
     from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:
-        raise RuntimeError("Image reference material storage is not configured")
+        raise RuntimeError("Media reference material storage is not configured")
     if is_object_key(value):
         key = value
     else:
         path = value if os.path.isfile(value) else os.path.join("output", value)
         if not os.path.isfile(path):
-            raise ValueError("Image edit material is not a resolved local file or HTTP(S) URL")
+            raise ValueError("Media material is not a resolved local file or HTTP(S) URL")
         key = uploader.upload_file(path, sub_path="image-edit-inputs")
         if not key:
             raise RuntimeError("Could not upload image edit material")
     url = uploader.sign_url_for_api(key)
     if not url or not url.startswith(("https://", "http://")):
+        # Keep the historical error text for image-edit callers; the helper is
+        # shared with video/audio references but this remains a stable API
+        # diagnostic consumed by the Studio image path.
         raise RuntimeError("Could not create image edit material URL")
     return url
 
@@ -83,6 +91,10 @@ def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, 
         # Preserve the provider's actionable error without logging the request
         # body (which may contain prompts or media references) or credentials.
         detail = _provider_error_detail(resp)
+        if resp.status_code in {400, 403} and _is_moderation_rejection(detail):
+            context = _moderation_context(path, body)
+            logger.warning("UniArt image request rejected by content moderation (%s)", context)
+            detail = f"{detail} [{context}]"
         raise RuntimeError(detail) from exc
     data = resp.json()
     task_id = data.get("task_id") or data.get("id")
@@ -126,6 +138,31 @@ def _provider_error_detail(resp: requests.Response) -> str:
     return f"UniArt request failed ({status}{code_part}): {message}{suffix}"
 
 
+def _image_reference_count(body: Dict[str, Any]) -> int:
+    """Count image inputs without exposing their URLs or request payload."""
+    images = body.get("images")
+    if isinstance(images, list):
+        return len(images)
+    count = 1 if body.get("image") else 0
+    references = body.get("reference_images")
+    if isinstance(references, list):
+        count += len(references)
+    return count
+
+
+def _is_moderation_rejection(detail: str) -> bool:
+    text = detail.lower()
+    return any(marker in text for marker in ("content moderation", "moderation", "safety policy", "content policy"))
+
+
+def _moderation_context(endpoint: str, body: Dict[str, Any]) -> str:
+    """Return safe diagnostic context for a provider moderation rejection."""
+    model = str(body.get("model") or "unknown")
+    references = _image_reference_count(body)
+    mode = "edit" if endpoint.rstrip("/").endswith("/edits") else "generation"
+    return f"model={model}, mode={mode}, reference_images={references}"
+
+
 def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, endpoint: str = "videos") -> Dict[str, Any]:
     """Observe an upstream task until it reaches a terminal state.
 
@@ -150,7 +187,28 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
         if resp.status_code >= 400:
             raise RuntimeError(_provider_error_detail(resp))
         resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            # A completed async task can briefly return an empty/non-JSON body
+            # while the gateway is publishing its terminal envelope. Treat it
+            # like the existing transient HTTP statuses; do not lose the
+            # provider task identity or submit a duplicate paid request.
+            logger.warning(
+                "[UniArt] task poll returned invalid JSON endpoint=%s task=%s",
+                endpoint,
+                task_id,
+            )
+            time.sleep(10)
+            continue
+        if not isinstance(data, dict):
+            logger.warning(
+                "[UniArt] task poll returned a non-object JSON envelope endpoint=%s task=%s",
+                endpoint,
+                task_id,
+            )
+            time.sleep(10)
+            continue
         status = str(data.get("status") or "").lower()
         if status in {"completed", "succeeded", "success"}:
             return data

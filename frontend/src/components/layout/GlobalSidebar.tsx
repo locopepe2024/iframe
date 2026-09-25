@@ -6,6 +6,7 @@ import clsx from "clsx";
 import IFrameBranding from "./IFrameBranding";
 import { isTauri } from "@/lib/transport";
 import PlaygroundSessionSubnav from "@/components/modules/playground/PlaygroundSessionSubnav";
+import { APP_VERSION_LABEL } from "@/generated/appVersion";
 
 export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "recreation" | "director3d" | "settings";
 
@@ -25,8 +26,6 @@ export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: s
   { id: "director3d", icon: Box, hash: "#/director" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];
-
-const APP_VERSION = "V0.1.0";
 
 function NavButton({
   active,
@@ -128,7 +127,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
           onClick={() => handleNav("settings", "#/settings")}
         />
         <div className="px-3 pt-2.5 font-mono text-[0.6875rem] tracking-wide text-text-muted">
-          {APP_VERSION}
+          {APP_VERSION_LABEL}
         </div>
       </div>
     </aside>

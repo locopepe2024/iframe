@@ -8,6 +8,7 @@ import {
     Check
 } from "lucide-react";
 import clsx from "clsx";
+import { APP_VERSION_LABEL } from "@/generated/appVersion";
 import { useTranslations } from "next-intl";
 import IFrameBranding from "./IFrameBranding";
 import type { BreadcrumbSegment } from "./BreadcrumbBar";
@@ -204,7 +205,7 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps, bread
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-accent" />
                     <div className="flex flex-col">
                         <span className="text-sm font-medium text-foreground truncate">{projectLabel ?? "Project Alpha"}</span>
-                        <span className="text-xs text-text-muted">{projectSubLabel ?? "v0.1.0"}</span>
+                        <span className="text-xs text-text-muted">{projectSubLabel ?? APP_VERSION_LABEL}</span>
                     </div>
                 </div>
             </div>

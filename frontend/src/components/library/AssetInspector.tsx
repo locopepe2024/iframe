@@ -4,11 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { X, Star, Download, Sparkles, Loader2, Globe } from "lucide-react";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
+import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
-import { api } from "@/lib/api";
+import { api, type AssetCoverSelectionResult } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
+import { getAssetUrl } from "@/lib/utils";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -33,6 +36,7 @@ interface AssetInspectorProps {
   starred: boolean;
   onClose: () => void;
   onToggleStar: () => void;
+  onCoverUpdated?: (result: AssetCoverSelectionResult) => void;
   /** 提升到全局成功后回调（父层刷新库以显示新入池资产）。可选。 */
   onPromoted?: () => void;
 }
@@ -90,9 +94,11 @@ export default function AssetInspector({
   starred,
   onClose,
   onToggleStar,
+  onCoverUpdated,
   onPromoted,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
+  const currentProject = useProjectStore((state) => state.currentProject);
   const TYPE_LABEL: Record<AssetTab, string> = {
     characters: t("characterLabel"),
     scenes: t("sceneLabel"),
@@ -116,10 +122,14 @@ export default function AssetInspector({
   const [extraVariants, setExtraVariants] = useState<ImageVariant[]>([]);
   const baseIds = new Set(baseVariants.map((v) => v.id));
   const variants = [...baseVariants, ...extraVariants.filter((v) => !baseIds.has(v.id))];
-  const defaultId = imageAsset?.selected_id ?? baseVariants[0]?.id ?? null;
+  const defaultId = (asset as { cover_variant_id?: string | null }).cover_variant_id
+    ?? imageAsset?.selected_id
+    ?? baseVariants[0]?.id
+    ?? null;
   const [activeVariantId, setActiveVariantId] = useState<string | null>(defaultId);
   const [generating, setGenerating] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [settingCover, setSettingCover] = useState(false);
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
   useEffect(() => {
@@ -160,7 +170,12 @@ export default function AssetInspector({
   }, []);
 
   const activeVariant = variants.find((v) => v.id === activeVariantId) ?? variants[0];
-  const heroUrl = activeVariant?.url ?? fallbackUrl(asset, type);
+  const selectedCoverId = (asset as { cover_variant_id?: string | null }).cover_variant_id
+    ?? imageAsset?.selected_id
+    ?? baseVariants[0]?.id
+    ?? null;
+  const activeVariantIsCover = !!activeVariant && activeVariant.id === selectedCoverId;
+  const heroUrl = getAssetUrl(activeVariant?.url ?? fallbackUrl(asset, type));
   const prompt = activeVariant?.prompt_used ?? "";
 
   // 元数据行（数据驱动）：先放现有四项，再在字段存在时追加 SEED/MODEL/SIZE。
@@ -199,8 +214,30 @@ export default function AssetInspector({
     }
   };
 
+  const handleSetAsCover = async () => {
+    if (sourceKind !== "project" || !activeVariant || activeVariantIsCover || settingCover || generating) return;
+    setSettingCover(true);
+    try {
+      const projectId = sourceId.replace(/^project-/, "");
+      const result = await api.setAssetCoverVariant(
+        projectId,
+        asset.id,
+        SINGULAR_TYPE[type] as "character" | "scene" | "prop",
+        activeVariant.id,
+      );
+      onCoverUpdated?.(result);
+      toast.success(t("coverUpdated"));
+    } catch (error) {
+      toast.error(t("coverUpdateFailed"), {
+        body: (error as any)?.response?.data?.detail || (error as Error)?.message,
+      });
+    } finally {
+      setSettingCover(false);
+    }
+  };
+
   // 生成更多变体：仅 project 资产可用（series 无生成端点）。复用按项目 batch 生成管线，
-  // 完成后 re-fetch 该项目，把新变体并入本地展示并高亮最新一张。
+  // 完成后优先使用任务返回的目标资产快照，并高亮最新一张。
   const handleGenerateVariants = async () => {
     if (sourceKind !== "project" || generating) return;
     const assetId = asset.id;
@@ -221,22 +258,40 @@ export default function AssetInspector({
         "",
         true,
         "",
-        VARIANT_BATCH
+        VARIANT_BATCH,
+        sourceKind === "project"
+          ? resolveAssetGenerationModel(
+              currentProject?.id === projectId
+                ? currentProject.model_settings?.t2i_model
+                : undefined,
+            )
+          : undefined,
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
+      let taskAsset: any;
       if (taskId) {
-        const done = await waitForAssetTask(
+        const completedTask = await waitForAssetTask(
           () => api.getTaskStatus(taskId),
           () => aliveRef.current && currentAssetIdRef.current === assetId,
           t("genFailed"),
         );
-        if (!done) return; // 已卸载
+        if (!completedTask) return; // 已卸载
+        if (
+          completedTask.asset_id === assetId
+          && completedTask.asset_type === SINGULAR_TYPE[type]
+          && completedTask.asset
+        ) {
+          taskAsset = completedTask.asset;
+        }
       }
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
-      const proj = await api.getProject(projectId);
-      const list: (Character | Scene | Prop)[] =
-        (type === "characters" ? proj?.characters : type === "scenes" ? proj?.scenes : proj?.props) ?? [];
-      const updated = list.find((a) => a.id === assetId);
+      let updated = taskAsset;
+      if (!updated) {
+        const proj = await api.getProject(projectId);
+        const list: (Character | Scene | Prop)[] =
+          (type === "characters" ? proj?.characters : type === "scenes" ? proj?.scenes : proj?.props) ?? [];
+        updated = list.find((a) => a.id === assetId);
+      }
       const freshVariants = (updated ? primaryImageAsset(updated, type)?.variants : undefined) ?? [];
       if (!aliveRef.current || currentAssetIdRef.current !== assetId) return;
       const added = freshVariants.filter((v) => !baseIds.has(v.id));
@@ -370,12 +425,23 @@ export default function AssetInspector({
                       on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
                     }`}
                   >
-                    <img src={v.url} alt={t("variantAlt")} className="w-full h-full object-cover" />
+                    <img src={getAssetUrl(v.url)} alt={t("variantAlt")} className="w-full h-full object-cover" />
                   </button>
                 );
               })}
             </div>
           </div>
+        )}
+
+        {sourceKind === "project" && activeVariant && !activeVariantIsCover && (
+          <button
+            type="button"
+            onClick={() => void handleSetAsCover()}
+            disabled={settingCover || generating}
+            className="w-full rounded-md border border-primary/40 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            {settingCover ? t("settingCover") : t("setAsCover")}
+          </button>
         )}
 
         {/* Metadata */}

@@ -44,7 +44,166 @@ def test_failure_is_explicit_and_retryable(tmp_path):
         assert wait_done(store, job)['status'] == 'failed'
         retry = store.start('owner', 'project', 'key', lambda: {})
         assert retry['id'] != job['id']
-        assert wait_done(store, retry)['status'] == 'completed'
+    assert wait_done(store, retry)['status'] == 'completed'
+
+
+def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):
+    path = tmp_path / 'jobs.db'
+    store = ExtractionJobs(path)
+    with store.connect() as db:
+        db.execute(
+            "INSERT INTO jobs (id, owner, project, fingerprint, status, created, result, error) "
+            "VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
+            ('interrupted', 'owner', 'project', 'key', 'running', time.time()),
+        )
+
+    assert store.recover_interrupted() == 1
+    assert store.get('owner', 'project', 'interrupted')['status'] == 'failed'
+    retry = store.start('owner', 'project', 'key', lambda: {'frames': []})
+    assert retry['id'] != 'interrupted'
+    assert wait_done(store, retry)['status'] == 'completed'
+
+
+def test_timed_out_storyboard_job_can_retry_and_late_result_is_discarded(tmp_path):
+    gate = Event()
+    started = Event()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def slow_work():
+            started.set()
+            gate.wait(2)
+            return {'frames': ['stale']}
+
+        old = store.start('owner', 'project', 'storyboard:revision', slow_work)
+        assert started.wait(1)
+        with store.connect() as db:
+            db.execute('UPDATE jobs SET created=? WHERE id=?', (time.time() - 1801, old['id']))
+
+        try:
+            expired = store.get('owner', 'project', old['id'])
+            assert expired['status'] == 'failed'
+            assert '超时' in expired['error']
+            retry = store.start('owner', 'project', 'storyboard:revision', lambda: {'frames': ['fresh']})
+            assert retry['id'] != old['id']
+            assert wait_done(store, retry)['result'] == {'frames': ['fresh']}
+        finally:
+            gate.set()
+
+    assert store.get('owner', 'project', old['id'])['status'] == 'failed'
+
+
+def test_storyboard_batches_survive_restart_and_reject_stale_workers(tmp_path):
+    path = tmp_path / 'jobs.db'
+    store = ExtractionJobs(path)
+    with store.connect() as db:
+        db.execute(
+            "INSERT INTO jobs (id, owner, project, fingerprint, status, created) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ('old', 'owner', 'project', 'storyboard:same', 'running', time.time()),
+        )
+    assert store.save_batch('owner', 'project', 'storyboard:same', 'old', 0, 'source:chars-0-4', [{'action_summary': 'first'}])
+    assert store.recover_interrupted() == 1
+    restored = ExtractionJobs(path)
+    assert restored.load_batches('owner', 'project', 'storyboard:same')[0]['frames'][0]['action_summary'] == 'first'
+    assert not restored.save_batch('owner', 'project', 'storyboard:same', 'old', 1, 'source:chars-4-8', [{'action_summary': 'late'}])
+    assert restored.load_batches('owner', 'project', 'storyboard:changed') == {}
+
+
+def test_storyboard_job_progress_and_resume_after_failed_batch(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def first(job_id):
+            assert store.save_batch('owner', 'project', 'storyboard:same', job_id, 0,
+                                    'source:chars-0-4', [{'action_summary': 'first'}])
+            raise RuntimeError('second batch failed')
+
+        job = store.start('owner', 'project', 'storyboard:same', first,
+                          pass_job_id=True, total_batches=2)
+        failed = wait_done(store, job)
+        assert failed['status'] == 'failed'
+        assert failed['progress'] == {'completed': 1, 'total': 2}
+        assert '已保存' in failed['error']
+
+        def resume(job_id):
+            cached = store.load_batches('owner', 'project', 'storyboard:same')
+            assert list(cached) == [0]
+            assert store.save_batch('owner', 'project', 'storyboard:same', job_id, 1,
+                                    'source:chars-4-8', [{'action_summary': 'second'}])
+            return {'frames': cached[0]['frames'] + [{'action_summary': 'second'}]}
+
+        retry = store.start('owner', 'project', 'storyboard:same', resume,
+                            pass_job_id=True, total_batches=2)
+        done = wait_done(store, retry)
+        assert done['status'] == 'completed'
+        assert done['progress'] == {'completed': 2, 'total': 2}
+        assert [frame['action_summary'] for frame in done['result']['frames']] == ['first', 'second']
+
+
+def test_expired_storyboard_worker_cannot_save_batch_without_polling(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    with store.connect() as db:
+        db.execute(
+            'INSERT INTO jobs (id, owner, project, fingerprint, status, created) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            ('expired', 'owner', 'project', 'storyboard:expired', 'running', time.time() - 1801),
+        )
+
+    assert not store.save_batch('owner', 'project', 'storyboard:expired', 'expired',
+                                0, 'source:chars-0-4', [{'action_summary': 'late'}])
+    assert store.get('owner', 'project', 'expired')['status'] == 'failed'
+    assert store.load_batches('owner', 'project', 'storyboard:expired') == {}
+
+
+def test_lifo_latest_wins_queue_discards_older_director_revisions(tmp_path):
+    first_started = Event()
+    release_first = Event()
+    calls = []
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'lifo-jobs.db', executor=executor)
+
+        def first_work():
+            calls.append('first')
+            first_started.set()
+            release_first.wait(10)
+            return {'version': 'first'}
+
+        first = store.start(
+            'owner', 'project', 'director-first', first_work,
+            queue_policy='fifo', queue_group='director',
+        )
+        assert first_started.wait(1)
+
+        older = store.start(
+            'owner', 'project', 'director-older',
+            lambda: calls.append('older') or {'version': 'older'},
+            queue_policy='lifo', queue_group='director',
+        )
+        latest = store.start(
+            'owner', 'project', 'director-latest',
+            lambda: calls.append('latest') or {'version': 'latest'},
+            queue_policy='lifo', queue_group='director',
+        )
+
+        assert older['status'] == 'queued'
+        assert latest['status'] == 'queued'
+        assert store.get('owner', 'project', older['id'])['status'] == 'superseded'
+
+        release_first.set()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            completed = store.get('owner', 'project', latest['id'])
+            if completed['status'] == 'completed':
+                break
+            time.sleep(.01)
+        else:
+            pytest.fail('latest Director revision did not finish')
+
+        assert calls == ['first', 'latest']
+        assert store.get('owner', 'project', first['id'])['status'] == 'superseded'
+        assert completed['result'] == {'version': 'latest'}
 
 
 def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monkeypatch):

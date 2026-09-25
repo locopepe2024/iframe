@@ -107,6 +107,9 @@ class LLMAdapter:
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         response_format: Optional[Dict[str, str]] = None,
+        *,
+        timeout_seconds: Optional[float] = None,
+        max_retries: Optional[int] = None,
     ) -> str:
         """
         Send a chat completion request and return the response content.
@@ -115,6 +118,10 @@ class LLMAdapter:
             messages: List of {"role": ..., "content": ...} dicts
             model: Model name override (uses provider default if None)
             response_format: Optional {"type": "json_object"} constraint
+            timeout_seconds: Optional per-request timeout. When omitted, the
+                OpenAI client's default is used.
+            max_retries: Optional per-request retry count. When omitted, the
+                OpenAI client's default is used.
 
         Returns:
             The assistant's response content as a string.
@@ -126,16 +133,25 @@ class LLMAdapter:
 
         # 显式 model override 路径：单次尝试，失败就抛。
         if model:
-            return self._chat_once(client, model, messages, response_format)
+            return self._chat_once(
+                client, model, messages, response_format,
+                timeout_seconds=timeout_seconds, max_retries=max_retries,
+            )
 
         # Provider 默认路径：DashScope 走 fallback chain，OpenAI 单次尝试。
         if self.provider == "openai":
-            return self._chat_once(client, self._get_default_model(), messages, response_format)
+            return self._chat_once(
+                client, self._get_default_model(), messages, response_format,
+                timeout_seconds=timeout_seconds, max_retries=max_retries,
+            )
 
         last_err: Optional[Exception] = None
         for idx, candidate in enumerate(self._DASHSCOPE_MODEL_FALLBACK_CHAIN):
             try:
-                return self._chat_once(client, candidate, messages, response_format)
+                return self._chat_once(
+                    client, candidate, messages, response_format,
+                    timeout_seconds=timeout_seconds, max_retries=max_retries,
+                )
             except RuntimeError as e:
                 # 仅在 "模型不存在 / 不可用" 类错误时回退；其他错误（鉴权、限流、网络）
                 # 直接抛，不浪费第二次重试。判定关键字宽松匹配 DashScope 文案。
@@ -162,6 +178,9 @@ class LLMAdapter:
         model: str,
         messages: List[Dict[str, str]],
         response_format: Optional[Dict[str, str]],
+        *,
+        timeout_seconds: Optional[float] = None,
+        max_retries: Optional[int] = None,
     ) -> str:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -171,7 +190,15 @@ class LLMAdapter:
             kwargs["response_format"] = response_format
 
         try:
-            response = client.chat.completions.create(**kwargs)
+            request_client = client
+            options: Dict[str, Any] = {}
+            if timeout_seconds is not None:
+                options["timeout"] = timeout_seconds
+            if max_retries is not None:
+                options["max_retries"] = max_retries
+            if options and hasattr(client, "with_options"):
+                request_client = client.with_options(**options)
+            response = request_client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"

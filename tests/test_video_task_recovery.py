@@ -25,11 +25,11 @@ report:
 
 import time
 import uuid
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
+from src.apps.comic_gen.models import AssetUnit, Character, Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.identity import UserContext
 from src.apps.studio_access import reset_studio_user, set_studio_user
@@ -140,6 +140,98 @@ def test_task_status_endpoint_falls_back_to_persisted_video_task(monkeypatch):
     monkeypatch.setattr(api, "signed_response", lambda value: value)
 
     assert api.get_task_status("video-complete") == status
+
+
+def test_task_status_returns_completed_asset_snapshot_without_loading_project(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {
+        "task_id": "asset-complete",
+        "status": "completed",
+        "script_id": "project",
+        "asset_id": "character",
+        "asset_type": "character",
+        "asset": {"id": "character", "reference_sheet": {"selected_image_id": "v1"}},
+        "asset_source": "episode",
+    }
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api.pipeline, "get_script", lambda _script_id: pytest.fail("full project lookup is not expected"))
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+
+    result = api.get_task_status("asset-complete")
+
+    assert result == status
+    assert "script" not in result
+
+
+def test_task_status_keeps_pending_asset_polls_unsigned(monkeypatch):
+    from src.apps.comic_gen import api
+
+    status = {"task_id": "asset-pending", "status": "processing", "asset_id": "character", "asset_type": "character"}
+    monkeypatch.setattr(api.pipeline, "get_asset_generation_task_status", lambda _task_id: status)
+    monkeypatch.setattr(api.pipeline, "get_script", lambda _script_id: pytest.fail("project lookup is not expected"))
+    monkeypatch.setattr(api, "signed_response", lambda _value: pytest.fail("pending status has no media to sign"))
+
+    assert api.get_task_status("asset-pending") == status
+
+
+def test_motion_reference_task_status_includes_only_target_asset_snapshot():
+    character = Character(
+        id="character",
+        name="Test",
+        description="A character",
+        full_body=AssetUnit(video_variants=[]),
+    )
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.asset_generation_tasks = {}
+    pipeline.video_generation_tasks = {
+        "motion-task": {
+            "script_id": script.id,
+            "asset_id": character.id,
+            "asset_type": "full_body",
+            "params": {"prompt": "motion", "audio_url": None, "duration": 5, "batch_size": 1},
+        },
+    }
+    pipeline.generate_motion_ref = lambda **_kwargs: script
+
+    pipeline.process_motion_ref_task(script.id, "motion-task")
+    status = pipeline.get_asset_generation_task_status("motion-task")
+
+    assert status["status"] == "completed"
+    assert status["asset_id"] == character.id
+    assert status["asset_type"] == "character"
+    assert status["asset_source"] == "episode"
+    assert status["asset"]["id"] == character.id
+    assert "script" not in status
+
+
+def test_full_body_motion_reference_uses_selected_canonical_reference_sheet():
+    character = Character(
+        id="character",
+        name="Test",
+        description="A character",
+        reference_sheet=AssetUnit(
+            image_variants=[
+                {"id": "old", "url": "old.png"},
+                {"id": "master", "url": "master.png"},
+            ],
+            selected_image_id="master",
+        ),
+    )
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.video_generator = Mock()
+    pipeline.video_generator.generate_i2v.return_value = {"video_url": "video.mp4"}
+    pipeline._save_data = Mock()
+
+    pipeline.generate_motion_ref(script.id, character.id, "full_body", prompt="motion")
+
+    assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "master.png"
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +485,8 @@ def test_storyboard_frame_workbench_fields_default_empty():
     assert frame.workbench_generate_count == 1
     assert frame.workbench_generate_audio is None
     assert frame.workbench_reference_variant_ids == {}
+    assert frame.workbench_pose_reference_variant_ids == {}
+    assert frame.workbench_director_snapshot_media_id is None
 
 
 def test_storyboard_frame_workbench_fields_round_trip():
@@ -406,6 +500,8 @@ def test_storyboard_frame_workbench_fields_round_trip():
         workbench_generate_count=4,
         workbench_generate_audio=False,
         workbench_reference_variant_ids={"product": ["front", "right", "front"]},
+        workbench_pose_reference_variant_ids={"character": ["pose-a", "pose-a", "pose-b"]},
+        workbench_director_snapshot_media_id=" snap-1 ",
     )
     revived = StoryboardFrame.model_validate(frame.model_dump())
     assert revived.workbench_tab_mode == "t2i_i2v"
@@ -414,6 +510,8 @@ def test_storyboard_frame_workbench_fields_round_trip():
     assert revived.workbench_generate_count == 4
     assert revived.workbench_generate_audio is False
     assert revived.workbench_reference_variant_ids == {"product": ["front", "right", "front"]}
+    assert revived.workbench_pose_reference_variant_ids == {"character": ["pose-a", "pose-a", "pose-b"]}
+    assert revived.workbench_director_snapshot_media_id == " snap-1 "
 
 
 def test_update_frame_workbench_persists_explicit_audio_false(pipeline):
@@ -441,6 +539,23 @@ def test_update_frame_workbench_sanitizes_reference_variant_ids(pipeline):
         )
     assert updated is not None
     assert updated.workbench_reference_variant_ids == {"product": ["front", "right"]}
+
+
+def test_update_frame_workbench_sanitizes_pose_evidence_and_snapshot(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1")
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench(
+            "p1", "f1",
+            workbench_pose_reference_variant_ids={
+                "character": ["pose-a", "pose-a", "", "pose-b"],
+                "": ["ignored"],
+            },
+            workbench_director_snapshot_media_id="  director-1  ",
+        )
+    assert updated is not None
+    assert updated.workbench_pose_reference_variant_ids == {"character": ["pose-a", "pose-b"]}
+    assert updated.workbench_director_snapshot_media_id == "director-1"
 
 
 def test_video_task_workbench_tab_default_none():

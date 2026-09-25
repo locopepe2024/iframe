@@ -14,7 +14,7 @@ Use this workflow when working in this repository and the user asks to publish w
 - Run sensitive-data checks before any push.
 - Commit messages must follow Conventional Commits.
 - Use `Owen <owen.fang1977@gmail.com>` as the git commit author for iFrame GitHub mirror submissions in this repo.
-- Open GitHub PRs with the `Star-Lotus` GitHub account; switch `gh` to `Star-Lotus` before running `gh pr create` when another account is active.
+- Open GitHub PRs with the `locopepe2024` GitHub account; switch `gh` to `locopepe2024` before running `gh pr create` when another account is active.
 
 Repository-specific constraints:
 
@@ -155,7 +155,7 @@ git push -u github <branch-name>
 Use GitHub CLI to open the PR:
 
 ```bash
-gh auth switch --hostname github.com --user Star-Lotus
+gh auth switch --hostname github.com --user locopepe2024
 ```
 
 ```bash

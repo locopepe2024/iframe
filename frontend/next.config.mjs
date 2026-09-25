@@ -2,6 +2,7 @@
 const isProd = process.env.NODE_ENV === 'production';
 const isDocker = process.env.DOCKER_BUILD === 'true';
 const isTauri = process.env.TAURI_BUILD === 'true';
+const previewBasePath = process.env.IFRAME_PREVIEW_BASE_PATH;
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
 
@@ -15,9 +16,9 @@ const nextConfig = {
         return config;
     },
     output: isProd ? 'export' : undefined,
-    distDir: isProd ? (isTauri ? 'out' : (isDocker ? 'out' : '../static')) : undefined,
-    basePath: isProd && !isDocker && !isTauri ? '/static' : undefined,
-    assetPrefix: isProd && !isDocker && !isTauri ? '/static' : undefined,
+    distDir: isProd ? (isTauri || isDocker || previewBasePath ? 'out' : '../static') : undefined,
+    basePath: isProd && !isDocker && !isTauri ? (previewBasePath || '/static') : undefined,
+    assetPrefix: isProd && !isDocker && !isTauri ? (previewBasePath || '/static') : undefined,
     // Dev-only: proxy /api-proxy/* to backend to avoid CORS issues (e.g. file downloads)
     async rewrites() {
         return isProd ? [] : [

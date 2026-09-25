@@ -7,6 +7,42 @@ from src.apps.comic_gen.models import Script, Character, Scene, Prop, Storyboard
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
+def test_asset_variant_content_serves_only_resolved_project_variant(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    image = tmp_path / 'owned.png'
+    image.write_bytes(b'png-bytes')
+    resolver = Mock(return_value=(str(image), {
+        'asset_type': 'character', 'asset_id': 'asset', 'variant_id': 'variant',
+    }))
+    fake_pipeline = Mock(get_script=Mock(return_value=SimpleNamespace(id='project')),
+                         _resolve_asset_library_reference=resolver)
+    monkeypatch.setattr(api, 'pipeline', fake_pipeline)
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+
+    response = api.get_asset_variant_content('project', 'character', 'asset', 'variant', user)
+
+    assert response.path == str(image)
+    assert response.headers['cache-control'] == 'private, no-store'
+    resolver.assert_called_once_with(fake_pipeline.get_script.return_value, {
+        'asset_type': 'character', 'asset_id': 'asset', 'variant_id': 'variant',
+    })
+
+
+def test_asset_variant_content_does_not_accept_unresolved_variant(monkeypatch):
+    from fastapi import HTTPException
+    from src.apps.comic_gen import api
+
+    fake_pipeline = Mock(get_script=Mock(return_value=SimpleNamespace(id='project')))
+    fake_pipeline._resolve_asset_library_reference.side_effect = api.InvalidAssetReference('not visible')
+    monkeypatch.setattr(api, 'pipeline', fake_pipeline)
+    user = UserContext(user_id='user', owner_profile_id='profile', display_name='User', access_token='token')
+
+    with pytest.raises(HTTPException) as error:
+        api.get_asset_variant_content('project', 'character', 'asset', 'foreign', user)
+    assert error.value.status_code == 404
+
+
 def test_workbench_import_resolves_owned_output_instead_of_preview_url(monkeypatch):
     from src.apps.comic_gen import api
 
@@ -98,6 +134,7 @@ def test_library_asset_rejects_unknown_material_origin():
 
 def pipeline(kind):
     p = ComicGenPipeline.__new__(ComicGenPipeline)
+    p._save_lock = threading.RLock()
     cls = {'character': Character, 'scene': Scene, 'prop': Prop}[kind]
     entity = cls(id='asset', name='Test', description='test', owner_user_id='owner', owner_profile_id='owner')
     script = Script(id='project', title='Test', original_text='test', created_at=1, updated_at=1,
@@ -117,11 +154,27 @@ def test_uploaded_reference_is_visible_selected_and_keeps_previous_variants(kind
     assert [v.url for v in variants] == ['first.png','second.png']
     assert (unit.selected_image_id if kind == 'character' else unit.selected_id) == variants[-1].id
     assert entity.image_url == 'second.png'
+    assert entity.status.value == 'completed'
     if kind != 'character':
         assert [v.url for v in entity.image_asset.variants] == ['first.png','second.png']
     p.select_asset_variant('project','asset',kind,variants[0].id, 'reference_sheet' if kind=='character' else None)
     assert entity.image_url == 'first.png'
     assert entity.owner_profile_id == 'owner'
+
+
+def test_pending_uploaded_reference_is_repaired_without_generation():
+    from src.apps.comic_gen.models import GlobalAssetLibrary
+
+    p, entity = pipeline('character')
+    p.library_store = GlobalAssetLibrary()
+    p.add_uploaded_asset_variant('project', 'character', entity.id, 'reference_sheet', 'uploaded.png')
+    entity.status = 'pending'
+    p._save_data.reset_mock()
+
+    p._migrate_uploaded_asset_statuses()
+
+    assert entity.status.value == 'completed'
+    p._save_data.assert_called_once()
 
 
 @pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
@@ -277,9 +330,15 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
         assert [c['id'] for c in result['characters']] == ['asset']
         char=result['characters'][0]
         assert char['source']=='global'
+        assert char['status']=='completed'
         variant=char['reference_sheet']['image_variants'][0]
         result=api.select_asset_variant('project',api.SelectVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id'],generation_type='reference_sheet'))
         assert result['characters'][0]['reference_sheet']['selected_image_id']==variant['id']
+        result=api.delete_asset_variant('project',api.DeleteVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id']))
+        assert [c['id'] for c in result['characters']] == ['asset']
+        assert result['characters'][0]['source'] == 'global'
+        assert result['characters'][0]['reference_sheet']['image_variants'] == []
+        assert result['characters'][0]['reference_sheet']['selected_image_id'] is None
         assert not p.scripts['project'].characters
     finally:
         reset_studio_user(token)
@@ -362,3 +421,21 @@ def test_cast_reference_generation_sends_valid_uniart_portrait_contract(tmp_path
     assert len(captured)==1
     assert len(entity.reference_sheet.image_variants)==1
     assert entity.status.value=='completed'
+
+
+def test_async_cast_generation_does_not_promote_uploaded_asset_to_reference_input(monkeypatch):
+    p, entity = pipeline('character')
+    p.add_uploaded_asset_variant('project', 'character', entity.id, 'reference_sheet', 'uploaded.png')
+    p.asset_generation_tasks = {}
+    p.asset_generator = Mock()
+    monkeypatch.setattr('src.apps.comic_gen.pipeline.runtime_uniart_for_owner', lambda *args: {})
+
+    _, task_id = p.create_asset_generation_task(
+        'project', entity.id, 'character',
+        generation_type='reference_sheet', model_name='uniart/gpt-image-2.5-flare-discount',
+    )
+    p.process_asset_generation_task(task_id)
+
+    call = p.asset_generator.generate_character.call_args
+    assert call.kwargs['reference_image_url'] is None
+    assert call.kwargs['use_reference_image'] is False

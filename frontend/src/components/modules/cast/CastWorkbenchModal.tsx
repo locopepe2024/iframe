@@ -20,21 +20,68 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { api } from "@/lib/api";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useLocale, useTranslations } from "next-intl";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
+import {
+    createSingleFlightTaskStatusPoller,
+    mergeAssetTaskResult,
+    normalizeTaskFailureDetail,
+} from "@/lib/assetTaskPolling";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
+import ReferencePromptEditor, {
+    type ReferenceCandidate,
+    type ReferenceSuggestion,
+} from "@/components/modules/playground/ReferencePromptEditor";
+
+const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
 
 export type CastKind = "character" | "scene" | "prop";
 
 // Module-level poll registry — survives modal close/reopen.
 export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
+const pendingSelections = new Map<string, string>();
+const selectionVersions = new Map<string, number>();
 
-function startAssetPoll(
+function selectionKey(projectId: string, kind: CastKind, entityId: string) {
+    return `${projectId}:${kind}:${entityId}`;
+}
+
+function withSelectedVariant(project: any, kind: CastKind, entityId: string, variantId: string): any {
+    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+    return {
+        ...project,
+        [field]: (project[field] || []).map((asset: any) => {
+            if (asset.id !== entityId) return asset;
+            const sheetVariant = kind === "character"
+                ? asset.reference_sheet?.image_variants?.find((item: any) => item.id === variantId)
+                : null;
+            if (sheetVariant) return {
+                ...asset,
+                reference_sheet: { ...asset.reference_sheet, selected_image_id: variantId },
+                image_url: sheetVariant.url,
+            };
+            const unit = kind === "character" ? asset.full_body_asset : asset.image_asset;
+            const variant = unit?.variants?.find((item: any) => item.id === variantId);
+            if (!variant) return asset;
+            if (kind === "character") return {
+                ...asset,
+                full_body_asset: { ...unit, selected_id: variantId },
+                full_body_image_url: variant.url,
+                image_url: variant.url,
+            };
+            return { ...asset, image_asset: { ...unit, selected_id: variantId }, image_url: variant.url };
+        }),
+    };
+}
+
+export function startAssetPoll(
     entityId: string,
     taskId: string,
     projectId: string,
@@ -44,41 +91,76 @@ function startAssetPoll(
     getStore: () => {
         updateProject: (id: string, data: any) => void;
         removeGeneratingTask: (assetId: string, generationType: string) => void;
+        getProject: (id: string) => any;
     },
     progressToastId?: string,
 ) {
     if (activePolls.has(entityId)) return;
-    const interval = setInterval(async () => {
-        try {
-            const status = await api.getTaskStatus(taskId);
+    let interval: ReturnType<typeof setInterval>;
+    const pollOnce = createSingleFlightTaskStatusPoller(
+        () => api.getTaskStatus(taskId),
+        (status) => status?.status === "completed" || status?.status === "failed",
+        (status) => {
+            const key = selectionKey(projectId, kind, entityId);
+            const selectionVersionBeforeRead = selectionVersions.get(key) || 0;
             if (status?.status === "completed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
-                const fresh = await api.getProject(projectId);
-                const { updateProject, removeGeneratingTask } = getStore();
-                updateProject(projectId, fresh);
+                const { updateProject, removeGeneratingTask, getProject } = getStore();
+                const current = getProject(projectId);
+                const currentEntity = current?.id === projectId
+                    ? (kind === "character" ? current.characters : kind === "scene" ? current.scenes : current.props)?.find((item: any) => item.id === entityId)
+                    : null;
+                const pending = pendingSelections.get(key);
+                const selected = pending || (selectionVersionBeforeRead !== (selectionVersions.get(key) || 0)
+                    ? readSelectedId(currentEntity, kind)
+                    : null);
+                const statusAssetId = status.asset_id || status.asset?.id;
+                const statusTypeMatches = kind === "character"
+                    ? ["character", "full_body", "head_shot"].includes(status.asset_type || "")
+                    : status.asset_type === kind;
+                const patch = statusAssetId === entityId && statusTypeMatches
+                    ? mergeAssetTaskResult(current, status)
+                    : null;
+                let merged = patch && current ? { ...current, ...patch } : null;
+                if (merged && selected) merged = withSelectedVariant(merged, kind, entityId, selected);
+                if (merged && patch) {
+                    const field = kind === "character" ? "characters" : kind === "scene" ? "scenes" : "props";
+                    updateProject(projectId, { [field]: merged[field] });
+                } else {
+                    console.error("Completed asset task did not include its target asset snapshot", taskId);
+                }
                 removeGeneratingTask(entityId, generationType);
-                const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
+                const entityPool = (kind === "character" ? merged?.characters : kind === "scene" ? merged?.scenes : merged?.props) || [];
                 const updatedEntity = entityPool.find((e: any) => e.id === entityId);
                 const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                if (updatedEntity) {
+                    toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
+                } else {
+                    toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
+                }
             } else if (status?.status === "failed") {
                 clearInterval(interval);
                 activePolls.delete(entityId);
                 if (progressToastId) toast.dismiss(progressToastId);
                 const { removeGeneratingTask } = getStore();
                 removeGeneratingTask(entityId, generationType);
-                toast.error(t("toastGenErr"), { body: status?.error || t("toastGenErrUnknown") });
+                toast.error(t("toastGenErr"), {
+                    body: normalizeTaskFailureDetail(status?.error) || t("toastGenErrUnknown"),
+                });
             }
-        } catch (err) {
+        },
+    );
+    interval = setInterval(() => {
+        void pollOnce().catch((err) => {
             clearInterval(interval);
             activePolls.delete(entityId);
             if (progressToastId) toast.dismiss(progressToastId);
             const { removeGeneratingTask } = getStore();
             removeGeneratingTask(entityId, generationType);
             toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
-        }
+        });
     }, 2500);
     activePolls.set(entityId, interval);
 }
@@ -98,12 +180,14 @@ interface ImageVariant {
     reference_distance?: string;
 }
 
-type CharacterTemplate = "simple" | "detailed" | "design_sheet";
+type ReferenceLibraryAsset = AssetReferenceIndexEntry;
+
+type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
     descKey: string;
-    compositionEn: string;
+    composition: string;
     negativeAppend: string;
     comingSoon?: boolean;
     exampleImage?: string;
@@ -111,21 +195,28 @@ const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     simple: {
         labelKey: "tplSimpleLabel",
         descKey: "tplSimpleDesc",
-        compositionEn: "Composition: character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left half: large head close-up portrait (shoulders up, sharp facial details, front-facing, detailed skin texture). Right half: three equally-sized full-body standing poses arranged side by side (front view, side view, back view), head-to-toe fully visible, relaxed neutral pose. Consistent soft studio lighting across all views, no harsh shadows, even illumination.",
+        composition: "构图：单张统一的角色参考图，无边框或分隔框，浅灰色中性背景。左半部分为头部近景肖像（肩部以上，正面朝向，面部细节清晰）；右半部分为三个等大的全身站立姿势，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然。所有视图使用统一的柔和摄影棚光线，避免硬阴影，光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
         exampleImage: "/assets/templates/simple-triview.png",
     },
     detailed: {
         labelKey: "tplDetailedLabel",
         descKey: "tplDetailedDesc",
-        compositionEn: "Composition: detailed character reference sheet, single unified image, seamless layout without borders or frames, neutral gray background. Left section: three full-body standing views side by side (front / side / back), head-to-toe visible, neutral relaxed pose. Upper right: large face close-up portrait (shoulders up, detailed skin texture, sharp eyes, pores visible). Lower right: three smaller head shots showing different angles (front, three-quarter, profile). Consistent soft studio lighting, no harsh shadows, even illumination across all panels.",
+        composition: "构图：单张统一的详细角色参考图，无边框或分隔框，浅灰色中性背景。左侧为三个并排的全身站立视图，依次展示正面、侧面和背面，从头到脚完整可见，姿势放松自然；右上为头部近景肖像（肩部以上，面部细节清晰）；右下为三个较小的头部角度特写，展示正面、四分之三侧面和侧面。所有视图使用统一的柔和摄影棚光线，避免硬阴影，整体光照均匀。",
         negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images",
+        exampleImage: "/assets/templates/detailed-reference.png",
+    },
+    face_focus: {
+        labelKey: "tplFaceFocusLabel",
+        descKey: "tplFaceFocusDesc",
+        composition: "构图：专业人脸设计参考板，单张统一画面，干净浅灰色中性背景。上排展示正面、左前45度、右前45度和侧面头部肖像；下排展示自然、微笑、严肃、惊讶四种表情特写，并加入眼睛、眉形、鼻型、嘴唇和发际线的清晰细节。保持同一角色的脸型、五官比例、肤色、发型和年龄一致，柔和均匀摄影棚光线，避免硬阴影和文字标注。",
+        negativeAppend: "text, labels, watermark, UI overlay, panel borders, frames, multiple separate images, inconsistent face, different person, deformed eyes, asymmetrical features",
         exampleImage: "/assets/templates/detailed-reference.png",
     },
     design_sheet: {
         labelKey: "tplDesignSheetLabel",
         descKey: "tplDesignSheetDesc",
-        compositionEn: "Composition: professional character design sheet, single unified image with dark cyberpunk-themed background (deep blue-black with subtle neon circuit patterns). Layout divided into labeled panels with thin border frames: - Top left: large dramatic character portrait (bust shot, three-quarter angle, moody rim lighting, glowing blue cybernetic eye) - Center: three full-body standing views (front / side / back) with labels \"正面\" \"侧面\" \"背面\" - Top right: 4 expression close-ups in a row (neutral, smirking, intense focus, combat rage), labeled \"表情特写\" - Bottom left: 3-4 detail close-up panels showing cybernetic eye mechanism, neck circuit tattoo, armor texture, weapon holster, labeled \"细节特写\" - Bottom right: character info panel with dark translucent background containing text fields (name, age, traits, abilities). Cinematic lighting, high detail, concept art quality, game character sheet aesthetic.",
+        composition: "构图：专业角色设定图，单张统一画面，深蓝黑色赛博朋克主题背景，带有低调的霓虹电路纹理。画面分为带细边框的标注区域：左上为大幅角色肖像（半身、四分之三角度、情绪化轮廓光）；中间为正面、侧面和背面三个全身站立视图；右上为四个表情特写；左下为眼部、颈部纹身、服装材质和装备等细节特写；右下为包含姓名、年龄、特征和能力的角色信息区。电影感光线，高细节，概念设计质量。",
         negativeAppend: "watermark, UI overlay, signature, low quality, distorted anatomy, multiple separate images",
         comingSoon: true,
         exampleImage: "/assets/templates/design-sheet.png",
@@ -139,12 +230,12 @@ function buildTemplate(kind: CastKind, entity: any, template?: CharacterTemplate
 
     if (kind === "character") {
         const tpl = CHARACTER_TEMPLATES[template || "simple"];
-        return `${charDesc}\n\n${tpl.compositionEn}`;
+        return `${charDesc}\n\n${tpl.composition}`;
     }
     if (kind === "scene") {
-        return `${name}${desc ? "：" + desc : ""}\n\nComposition: wide establishing shot of the environment on neutral gray background, single unified image, no figures in foreground. Emphasize atmosphere, architecture and terrain structure. Lighting and color palette match the scene mood. Soft volumetric lighting, depth of field.`;
+        return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的环境广角定调镜头，单张统一画面，前景不出现人物。突出氛围、建筑和地形结构，光线与色调贴合场景情绪，使用柔和的体积光和适度景深。`;
     }
-    return `${name}${desc ? "：" + desc : ""}\n\nComposition: product photography style on neutral gray background, single unified image, seamless layout without borders. Main view: object centered at slight angle. Secondary views: detail close-ups of material and texture. Clean even studio lighting, subtle shadow beneath object.`;
+    return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的产品摄影风格，单张统一画面，无边框或分隔框。主体以轻微侧角居中展示，并辅以材质和纹理的细节特写。使用干净均匀的摄影棚光线，在主体下方保留轻微自然阴影。`;
 }
 
 function getTemplateNegative(kind: CastKind, template?: CharacterTemplate): string {
@@ -174,6 +265,35 @@ function readVariants(entity: any, kind: CastKind): ImageVariant[] {
     return arr.map((v: any) => ({ id: v.id, url: v.url, is_favorited: v.is_favorited, reference_view_role: v.reference_view_role, reference_distance: v.reference_distance }));
 }
 
+/**
+ * The Cast gallery intentionally prefers the canonical character sheet, but
+ * an asset-library picker must expose every reusable character image variant.
+ * Older records may only have a full-body, three-view, or headshot container.
+ */
+function readLibraryVariants(entity: any, kind: CastKind): ImageVariant[] {
+    if (!entity) return [];
+    if (kind !== "character") return readVariants(entity, kind);
+
+    const containers = [
+        entity?.reference_sheet?.image_variants,
+        entity?.full_body_asset?.variants,
+        entity?.three_view_asset?.variants,
+        entity?.headshot_asset?.variants,
+    ];
+    const seen = new Set<string>();
+    return containers.flatMap((items: any[] | undefined) => (items || []).flatMap((v: any) => {
+        if (!v?.id || seen.has(v.id)) return [];
+        seen.add(v.id);
+        return [{
+            id: v.id,
+            url: v.url,
+            is_favorited: v.is_favorited,
+            reference_view_role: v.reference_view_role,
+            reference_distance: v.reference_distance,
+        }];
+    }));
+}
+
 function readSelectedId(entity: any, kind: CastKind): string | null {
     if (!entity) return null;
     if (kind === "character") {
@@ -186,6 +306,7 @@ function readSelectedId(entity: any, kind: CastKind): string | null {
 
 export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: CastWorkbenchModalProps) {
     const t = useTranslations("castWorkbench");
+    const locale = useLocale();
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const allProjects = useProjectStore((state) => state.projects);
@@ -206,32 +327,122 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         return pool.find((e: any) => e.id === entityId) ?? null;
     }, [currentProject, entityId, kind]);
 
-    const variants = useMemo(() => readVariants(entity, kind ?? "character"), [entity, kind]);
-    const selectedId = useMemo(() => readSelectedId(entity, kind ?? "character"), [entity, kind]);
+    const [deletedVariantIds, setDeletedVariantIds] = useState<string[]>([]);
+    const deletedVariantIdsRef = useRef(new Set<string>());
+    const variants = useMemo(() => readVariants(entity, kind ?? "character").filter((variant) => !deletedVariantIds.includes(variant.id)), [entity, kind, deletedVariantIds]);
+    const selectedId = useMemo(() => {
+        const selected = readSelectedId(entity, kind ?? "character");
+        return deletedVariantIds.includes(selected || "") ? variants.at(-1)?.id ?? null : selected;
+    }, [entity, kind, deletedVariantIds, variants]);
 
     const uploadInput = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
-    const [batchSize, setBatchSize] = useState(2);
+    const [batchSize, setBatchSize] = useState(1);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [positiveExpanded, setPositiveExpanded] = useState(false);
     const [negativeExpanded, setNegativeExpanded] = useState(false);
-    const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
+    const [modelPromptExpanded, setModelPromptExpanded] = useState(false);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
+    const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
+    // A selected/uploaded image is only an available candidate. It becomes a
+    // provider input after the user inserts its explicit @ token below.
+    const [availableReferences, setAvailableReferences] = useState<AssetLibraryReference[]>([]);
+    const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
-    // Effective t2i model — drives the "design_sheet" template gating: that
-    // template only works with gpt-image-2, so it stays locked unless the
-    // user has selected gpt-image-2 (override or project default).
-    const selectedModelId = modelOverride || currentProject?.model_settings?.t2i_model || "wan2.1-t2i";
-    const isGptImage2 = selectedModelId === "gpt-image-2";
+    const [submitting, setSubmitting] = useState(false);
+    const submissionInFlight = useRef(false);
+    const generationBusy = generating || submitting;
+    // Resolve the selected model against the current live catalog before both
+    // rendering and submitting. A project can retain a SKU that was removed
+    // upstream (for example `gpt-image-2.5-flare`); using that raw value here
+    // would bypass the refreshed selector and submit the retired SKU anyway.
+    const requestedModelId = modelOverride || currentProject?.model_settings?.t2i_model;
+    const selectedModelId = resolveAssetGenerationModel(requestedModelId);
+    const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const overlayMouseDown = useRef(false);
+
+    useEffect(() => {
+        deletedVariantIdsRef.current.clear();
+        setDeletedVariantIds([]);
+        setAvailableReferences([]);
+        setPromptReferences([]);
+        setMention(null);
+        setLibraryPickerOpen(false);
+    }, [entityId, kind]);
+
+    useEffect(() => {
+        if (!isOpen || !currentProject) {
+            setReferenceLibraryAssets([]);
+            return;
+        }
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id)
+            .then((index) => {
+                if (active) setReferenceLibraryAssets(index.assets.flatMap((asset) => {
+                    const variants = asset.variants.filter((variant) => !deletedVariantIdsRef.current.has(variant.id));
+                    return variants.length ? [{ ...asset, variants }] : [];
+                }));
+            })
+            .catch(() => {
+                if (active) setReferenceLibraryAssets([]);
+            });
+        return () => { active = false; };
+    }, [isOpen, currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+
+    const visibleReferenceLibraryAssets = useMemo(() => referenceLibraryAssets.flatMap((asset) => {
+        const variants = asset.variants.filter((variant) => !deletedVariantIds.includes(variant.id));
+        return variants.length ? [{ ...asset, variants }] : [];
+    }), [referenceLibraryAssets, deletedVariantIds]);
+
+    const visibleAvailableReferences = useMemo(() => availableReferences.flatMap((reference) => {
+        const asset = visibleReferenceLibraryAssets.find((item) =>
+            item.asset_type === reference.asset_type && item.asset_id === reference.asset_id,
+        );
+        const variant = asset?.variants.find((item) => item.id === reference.variant_id);
+        return asset && variant ? [{ reference, asset, variant }] : [];
+    }), [availableReferences, visibleReferenceLibraryAssets]);
+
+    const activePromptReferences = useMemo(() => promptReferences.filter((reference) =>
+        visibleAvailableReferences.some(({ reference: candidate }) => candidate.asset_type === reference.asset_type
+            && candidate.asset_id === reference.asset_id
+            && candidate.variant_id === reference.variant_id),
+    ), [visibleAvailableReferences, promptReferences]);
+
+    const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
+        const labels = new Set<string>();
+        return visibleAvailableReferences.flatMap(({ reference, asset, variant }, index) => {
+            const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const baseLabel = asset.variants.length > 1 ? `${asset.name} · ${variantLabel}` : asset.name;
+            let label = baseLabel;
+            let suffix = 2;
+            while (labels.has(label)) label = `${baseLabel} ${suffix++}`;
+            labels.add(label);
+            return [{
+                label,
+                previewUrl: getAssetUrl(variant.url),
+                sourceLabel: asset.source_scope,
+                variantLabel,
+                reference,
+            }];
+        });
+    }, [visibleAvailableReferences]);
+
+    const matchingReferenceCandidates = useMemo(() => referenceCandidates.filter((candidate) =>
+        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+    ), [mention, referenceCandidates]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -246,6 +457,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
     }, [isOpen, entity, kind, selectedTemplate]);
 
+    useEffect(() => {
+        setAvailableReferences([]);
+        setPromptReferences([]);
+        setMention(null);
+        setLibraryPickerOpen(false);
+    }, [currentProject?.id, entity?.id, kind]);
+
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
         api.getStylePresets().then((res: any) => setPresets(res?.presets || res || [])).catch(() => {});
@@ -257,6 +475,15 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const styleConfig = resolvedArtDirection?.style_config;
     const styleName = styleConfig?.name || "";
     const styleNegative = styleConfig?.negative_prompt || "";
+    const matchedStyle = styleConfig?.id
+        ? presets.find((preset: any) => preset.id === styleConfig.id)
+        : undefined;
+    const styleDisplayName = locale.startsWith("zh")
+        ? matchedStyle?.name_zh || (styleConfig?.is_custom || !styleConfig?.id ? styleName : t("styleConfigured"))
+        : styleName || matchedStyle?.name || "";
+    const styleDescription = locale.startsWith("zh")
+        ? matchedStyle?.subtitle_zh || matchedStyle?.description || ""
+        : matchedStyle?.description || "";
     // Resolve positive_prompt with preset fallback (series data often omits it)
     let stylePositive = styleConfig?.positive_prompt || "";
     if (!stylePositive && styleConfig?.id && presets.length > 0) {
@@ -275,6 +502,58 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleResetTemplate = () => {
         setPrompt(buildTemplate(kind, entity, selectedTemplate));
         setPromptDirty(false);
+        setPromptReferences([]);
+        setMention(null);
+    };
+
+    const addAvailableReference = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        const reference: AssetLibraryReference = {
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        };
+        setAvailableReferences((current) => {
+            const exists = current.some((item) => item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (exists || current.length >= 9) return current;
+            return [...current, reference];
+        });
+    };
+
+    const toggleAvailableReference = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        const reference: AssetLibraryReference = {
+            asset_type: asset.asset_type,
+            asset_id: asset.asset_id,
+            variant_id: variant.id,
+        };
+        setAvailableReferences((current) => {
+            const exists = current.some((item) => item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (exists) return current.filter((item) => !(item.asset_type === reference.asset_type
+                && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id));
+            if (current.length >= 9) return current;
+            return [...current, reference];
+        });
+    };
+
+    const retainUploadedVariantInIndex = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        setReferenceLibraryAssets((current) => {
+            const keyMatches = (item: ReferenceLibraryAsset) => item.asset_type === asset.asset_type
+                && item.asset_id === asset.asset_id;
+            const existing = current.find(keyMatches);
+            if (!existing) return [...current, { ...asset, variants: [variant] }];
+            if (existing.variants.some((item) => item.id === variant.id)) return current;
+            return current.map((item) => keyMatches(item)
+                ? { ...item, selected_variant_id: variant.id, variants: [...item.variants, variant] }
+                : item);
+        });
+    };
+
+    const removeAvailableReference = (reference: AssetLibraryReference) => {
+        setAvailableReferences((current) => current.filter((item) => !(item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id)));
+        setPromptReferences((current) => current.filter((item) => !(item.asset_type === reference.asset_type
+            && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id)));
     };
 
     const handleTemplateSwitch = (tpl: CharacterTemplate) => {
@@ -288,6 +567,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setSelectedTemplate(tpl);
             setPrompt(buildTemplate(kind, entity, tpl));
             setPromptDirty(false);
+            setPromptReferences([]);
+            setMention(null);
         }
     };
 
@@ -296,6 +577,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setSelectedTemplate(pendingTemplate);
         setPrompt(buildTemplate(kind, entity, pendingTemplate));
         setPromptDirty(false);
+        setPromptReferences([]);
+        setMention(null);
         setPendingTemplate(null);
     };
 
@@ -304,8 +587,26 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     };
 
     const handleGenerate = async () => {
+        if (submissionInFlight.current) return;
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        submissionInFlight.current = true;
+        setSubmitting(true);
+        try {
+        if (imageGenerationMode === "reference" && activePromptReferences.length === 0) {
+            toast.warning(t("referenceModeRequiresImage"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+            });
+            return;
+        }
+        if (imageGenerationMode === "text" && activePromptReferences.length > 0) {
+            toast.warning(t("referenceModeSelectExplicitly"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
@@ -328,10 +629,35 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 onClose();
                 return;
             }
+            const freshIndex = activePromptReferences.length > 0
+                ? await api.getAssetReferenceIndex(currentProject.id)
+                : null;
+            const staleReference = activePromptReferences.find((reference) => {
+                const indexedAsset = freshIndex?.assets.find((item) => item.asset_type === reference.asset_type
+                    && item.asset_id === reference.asset_id);
+                return !indexedAsset?.variants.some((variant) => variant.id === reference.variant_id);
+            });
+            if (staleReference) {
+                removeAvailableReference(staleReference);
+                toast.warning(t("toastReferenceStale"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                updateProject(currentProject.id, fresh);
+                return;
+            }
             updateProject(currentProject.id, fresh);
         } catch {
-            // Refresh failed — proceed with cached data; backend will reject
-            // if the entity truly is stale and the poll surfaces the error.
+            // A reference request must never fall through to submission when
+            // the fresh index could not be checked. The backend remains the
+            // final authority, but avoid sending a known potentially stale ID.
+            if (activePromptReferences.length > 0) {
+                toast.error(t("toastReferenceCheckFailed"), {
+                    projectId: currentProject.id,
+                    projectTitle: currentProject.title,
+                });
+                return;
+            }
         }
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
         addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);
@@ -354,8 +680,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 applyStyle,
                 [applyStyle ? styleNegative : "", getTemplateNegative(kind, selectedTemplate)].filter(Boolean).join(", "),
                 effectiveBatchSize,
-                modelOverride || currentProject.model_settings?.t2i_model,
+                selectedModelId,
                 aspectRatioOverride || undefined,
+                undefined,
+                imageGenerationMode === "reference"
+                    ? activePromptReferences
+                    : [],
+                imageGenerationMode,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -366,6 +697,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, () => ({
                     updateProject: useProjectStore.getState().updateProject,
                     removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
+                    getProject: (projectId) => {
+                        const state = useProjectStore.getState();
+                        return state.projects.find((project) => project.id === projectId)
+                            || (state.currentProject?.id === projectId ? state.currentProject : undefined);
+                    },
                 }), progressId);
             } else if (resp) {
                 toast.dismiss(progressId);
@@ -377,7 +713,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             toast.dismiss(progressId);
             removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
-            toast.error(t("toastGenErr"), { body: String(detail) });
+            toast.error(t("toastGenErr"), { body: normalizeTaskFailureDetail(detail) || t("toastGenErrUnknown") });
+        }
+        } finally {
+            submissionInFlight.current = false;
+            setSubmitting(false);
         }
     };
 
@@ -388,6 +728,31 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.uploadAsset(currentProject.id, kind, entity.id, file,
                 kind === "character" ? "reference_sheet" : "image");
             updateProject(currentProject.id, updated);
+            const updatedPool = kind === "character"
+                ? updated.characters
+                : kind === "scene"
+                    ? updated.scenes
+                    : updated.props;
+            const updatedEntity = updatedPool?.find((item: any) => item.id === entity.id);
+            const uploadedVariantId = readSelectedId(updatedEntity, kind);
+            const uploadedVariant = readLibraryVariants(updatedEntity, kind).find((item) => item.id === uploadedVariantId);
+            if (uploadedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: kind,
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: uploadedVariant.id,
+                    variants: [uploadedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, uploadedVariant);
+                addAvailableReference(
+                    indexedAsset,
+                    uploadedVariant,
+                );
+            }
+            setLibraryPickerOpen(false);
             setGalleryFilter("all");
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
@@ -397,29 +762,108 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
     };
 
-    const handleSelectVariant = async (variantId: string) => {
+    const handleSaveEditedVariant = async (file: File) => {
+        if (!currentProject || !editingVariant || kind !== "character") return;
+        setUploading(true);
         try {
-            const updated = await api.selectAssetVariant(
+            const updated = await api.uploadAsset(
                 currentProject.id,
-                entity.id,
-                kind,
-                variantId,
-                kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
+                "character",
+                entity!.id,
+                file,
+                "reference_sheet",
             );
             updateProject(currentProject.id, updated);
-            toast.success(t("toastSelected"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                autoCloseMs: 3000,
-            });
+            const updatedEntity = updated.characters?.find((item: any) => item.id === entity.id);
+            const editedVariantId = readSelectedId(updatedEntity, "character");
+            const editedVariant = readLibraryVariants(updatedEntity, "character").find((item) => item.id === editedVariantId);
+            if (editedVariant) {
+                const indexedAsset: ReferenceLibraryAsset = {
+                    asset_type: "character",
+                    asset_id: entity.id,
+                    name: entity.name,
+                    source_scope: "episode",
+                    source_container_id: currentProject.id,
+                    selected_variant_id: editedVariant.id,
+                    variants: [editedVariant],
+                };
+                retainUploadedVariantInIndex(indexedAsset, editedVariant);
+                addAvailableReference(
+                    indexedAsset,
+                    editedVariant,
+                );
+            }
+            setEditingVariant(null);
+            toast.success(t("uploadSuccess"));
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || "select failed";
-            toast.error(t("toastSelectErr"), {
-                projectId: currentProject.id,
-                projectTitle: currentProject.title,
-                body: String(detail),
-            });
+            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
+            toast.error(t("uploadFailed"), { body: String(detail) });
+            throw err;
+        } finally {
+            setUploading(false);
         }
+    };
+
+    const handleChooseLibraryVariant = (asset: ReferenceLibraryAsset, variant: ImageVariant) => {
+        toggleAvailableReference(asset, variant);
+    };
+
+    const handleSelectVariant = (variantId: string) => {
+        const projectId = currentProject.id;
+        const assetId = entity.id;
+        const key = selectionKey(projectId, kind, assetId);
+        const version = (selectionVersions.get(key) || 0) + 1;
+        selectionVersions.set(key, version);
+        pendingSelections.set(key, variantId);
+        const previousId = readSelectedId(entity, kind);
+        updateProject(projectId, withSelectedVariant(currentProject, kind, assetId, variantId));
+
+        // Serialize writes so a slow earlier selection cannot persist after a newer click.
+        selectionQueue.current = selectionQueue.current.then(async () => {
+            try {
+                const updated = await api.selectAssetVariant(
+                    projectId, assetId, kind, variantId,
+                    kind === "character" && entity.reference_sheet?.image_variants?.some((v: ImageVariant) => v.id === variantId) ? "reference_sheet" : undefined,
+                );
+                if (selectionVersions.get(key) !== version) return;
+                updateProject(projectId, updated);
+                const updatedPool = kind === "character" ? updated.characters : kind === "scene" ? updated.scenes : updated.props;
+                const updatedEntity = updatedPool?.find((item: any) => item.id === assetId) || entity;
+                const selectedVariant = readLibraryVariants(updatedEntity, kind).find((variant) => variant.id === variantId);
+                if (selectedVariant) {
+                    const indexedAsset: ReferenceLibraryAsset = {
+                        asset_type: kind,
+                        asset_id: assetId,
+                        name: entity.name,
+                        source_scope: "episode",
+                        source_container_id: projectId,
+                        selected_variant_id: selectedVariant.id,
+                        variants: [selectedVariant],
+                    };
+                    retainUploadedVariantInIndex(indexedAsset, selectedVariant);
+                    addAvailableReference(indexedAsset, selectedVariant);
+                }
+                toast.success(t("toastSelected"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    autoCloseMs: 3000,
+                });
+            } catch (err: any) {
+                if (selectionVersions.get(key) !== version) return;
+                const latest = useProjectStore.getState().currentProject;
+                if (latest?.id === projectId && previousId) {
+                    updateProject(projectId, withSelectedVariant(latest, kind, assetId, previousId));
+                }
+                const detail = err?.response?.data?.detail || err?.message || "select failed";
+                toast.error(t("toastSelectErr"), {
+                    projectId,
+                    projectTitle: currentProject.title,
+                    body: String(detail),
+                });
+            } finally {
+                if (selectionVersions.get(key) === version) pendingSelections.delete(key);
+            }
+        });
     };
 
     const handleToggleFavorite = async (variantId: string, currentFav: boolean) => {
@@ -438,14 +882,33 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleDeleteVariant = async (variantId: string) => {
         if (deletingVariantId || !window.confirm(t("confirmDeleteVariant"))) return;
         setDeletingVariantId(variantId);
+        deletedVariantIdsRef.current.add(variantId);
+        setDeletedVariantIds((current) => [...current, variantId]);
         try {
+            await selectionQueue.current;
             const updated = await api.deleteAssetVariant(currentProject.id, entity.id, kind, variantId);
             updateProject(currentProject.id, updated);
+            setAvailableReferences((current) => current.filter((item) => !(
+                item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
+            )));
+            setPromptReferences((current) => current.filter((item) => !(
+                item.asset_type === kind && item.asset_id === entity.id && item.variant_id === variantId
+            )));
+            setReferenceLibraryAssets((current) => current.flatMap((asset) => {
+                if (asset.asset_type !== kind || asset.asset_id !== entity.id) return [asset];
+                const remaining = asset.variants.filter((variant) => variant.id !== variantId);
+                return remaining.length > 0 ? [{ ...asset, variants: remaining }] : [];
+            }));
             toast.success(t("toastDeleted"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
         } catch (err: any) {
+            deletedVariantIdsRef.current.delete(variantId);
+            setDeletedVariantIds((current) => current.filter((id) => id !== variantId));
+            void api.getAssetReferenceIndex(currentProject.id).then((index) => {
+                setReferenceLibraryAssets(index.assets.filter((asset) => asset.variants.length > 0));
+            }).catch(() => {});
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
             toast.error(t("toastDeleteErr"), { body: String(detail) });
         } finally {
@@ -476,6 +939,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const filteredVariants = galleryFilter === "favorited"
         ? variants.filter(v => v.is_favorited)
         : variants;
+    const compositionSummary = kind === "character"
+        ? t(CHARACTER_TEMPLATES[selectedTemplate].descKey)
+        : t(kind === "scene" ? "promptHintScene" : "promptHintProp");
 
     // Per-kind accent — Tailwind JIT can't resolve dynamic `bg-${name}-500/15`,
     // so we ship full class strings per kind keyed off a static record.
@@ -588,7 +1054,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <p className="flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                         <Palette size={10} /> {t("styleAppliedFrom")}
                                     </p>
-                                    {styleName && (
+                                    {styleDisplayName && (
                                         <button
                                             onClick={() => setApplyStyle(!applyStyle)}
                                             className={`relative w-7 h-4 rounded-full transition-colors ${applyStyle ? "bg-primary/60" : "bg-elevated"}`}
@@ -597,45 +1063,72 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </button>
                                     )}
                                 </div>
-                                <p className="mt-1 text-[0.75rem] text-foreground">{styleName || t("styleNotSet")}</p>
-                                {!applyStyle && styleName && (
+                                <p className="mt-1 text-[0.75rem] text-foreground">{styleDisplayName || t("styleNotSet")}</p>
+                                {styleDescription && styleDisplayName && (
+                                    <p className="mt-0.5 text-[0.625rem] leading-relaxed text-text-secondary">
+                                        {styleDescription}
+                                    </p>
+                                )}
+                                {!applyStyle && styleDisplayName && (
                                     <p className="text-[0.625rem] text-amber-300/70 mt-0.5">{t("styleDisabledHint")}</p>
                                 )}
 
-                                {/* Positive prompt */}
-                                {applyStyle && stylePositive && (
-                                    <div className="mt-2.5 rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
-                                            {stylePositive}
-                                        </p>
-                                        {stylePositive.length > 80 && (
-                                            <button
-                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
-                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
-                                            >
-                                                {positiveExpanded ? t("collapse") : t("expand")}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
+                                {/* Provider-facing prompts stay available for advanced users, but are
+                                    hidden from the default customer view so the same description is not
+                                    displayed a second time in English. */}
+                                {applyStyle && (stylePositive || styleNegative) && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-expanded={modelPromptExpanded}
+                                            onClick={() => setModelPromptExpanded(!modelPromptExpanded)}
+                                            className="mt-2.5 inline-flex items-center gap-1 text-[0.625rem] text-text-muted hover:text-text-secondary transition-colors"
+                                        >
+                                            <span>{modelPromptExpanded ? t("hideModelPrompts") : t("showModelPrompts")}</span>
+                                            <span aria-hidden="true">{modelPromptExpanded ? "−" : "+"}</span>
+                                        </button>
+                                        {modelPromptExpanded && (
+                                            <div className="mt-1.5 space-y-2">
+                                                {/* Positive prompt */}
+                                                {stylePositive && (
+                                                    <div className="rounded-md bg-primary/5 border border-primary/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-primary/70 mb-1">{t("positiveLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!positiveExpanded ? "line-clamp-3" : ""}`}>
+                                                            {stylePositive}
+                                                        </p>
+                                                        {stylePositive.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPositiveExpanded(!positiveExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-primary/60 hover:text-primary/90 transition-colors"
+                                                            >
+                                                                {positiveExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                                {/* Negative prompt */}
-                                {applyStyle && styleNegative && (
-                                    <div className="mt-2 rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
-                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
-                                            {styleNegative}
-                                        </p>
-                                        {styleNegative.length > 80 && (
-                                            <button
-                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
-                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
-                                            >
-                                                {negativeExpanded ? t("collapse") : t("expand")}
-                                            </button>
+                                                {/* Negative prompt */}
+                                                {styleNegative && (
+                                                    <div className="rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
+                                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
+                                                        <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
+                                                            {styleNegative}
+                                                        </p>
+                                                        {styleNegative.length > 80 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setNegativeExpanded(!negativeExpanded)}
+                                                                className="mt-1 text-[0.625rem] text-red-400/60 hover:text-red-400/90 transition-colors"
+                                                            >
+                                                                {negativeExpanded ? t("collapse") : t("expand")}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
                             </div>
 
@@ -692,7 +1185,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                         </span>
                                                     )}
                                                     {isLocked && (
-                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">Soon</span>
+                                                        <span className="absolute top-1.5 right-1.5 text-[0.5625rem] text-text-muted font-mono uppercase">{t("comingSoon")}</span>
                                                     )}
                                                 </button>
                                             );
@@ -719,69 +1212,192 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 </div>
                             )}
 
-                            {/* Prompt textarea */}
+                            <div className="mb-4">
+                                <label className="block font-mono text-[0.625rem] uppercase tracking-[0.16em] text-text-muted mb-2">
+                                    {t("imageGenerationMode")}
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={t("imageGenerationMode")}>
+                                    {(["text", "reference"] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            aria-pressed={imageGenerationMode === mode}
+                                            disabled={generationBusy}
+                                            onClick={() => {
+                                                setImageGenerationMode(mode);
+                                            }}
+                                            className={`min-h-9 rounded px-3 py-2 text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                                                imageGenerationMode === mode
+                                                    ? "bg-primary/15 text-primary"
+                                                    : "text-text-muted hover:bg-hover-bg hover:text-foreground"
+                                            } disabled:opacity-40`}
+                                        >
+                                            {t(mode === "text" ? "textGenerationMode" : "referenceGenerationMode")}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-text-muted">
+                                    {t(imageGenerationMode === "text" ? "textGenerationModeHint" : "referenceGenerationModeHint")}
+                                </p>
+                            </div>
+
+                            {/* Prompt editor — the only place where an available
+                                reference becomes an explicit generation input. */}
                             <div className="flex items-center justify-between mb-2">
                                 <label className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                     {t("promptLabel")}
                                 </label>
-                                <button
-                                    onClick={handleResetTemplate}
-                                    disabled={generating}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-text-muted hover:text-foreground transition-colors disabled:opacity-30"
-                                    title={t("resetTemplateHint")}
-                                >
-                                    <RefreshCw size={11} />
-                                    {t("resetTemplate")}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLibraryPickerOpen(true)}
+                                        disabled={generationBusy || visibleReferenceLibraryAssets.length === 0}
+                                        aria-expanded={libraryPickerOpen}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30"
+                                    >
+                                        <Library size={11} />
+                                        {t("addReferenceImages")}
+                                    </button>
+                                    <button
+                                        onClick={handleResetTemplate}
+                                        disabled={generationBusy}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.6875rem] text-text-muted hover:text-foreground transition-colors disabled:opacity-30"
+                                        title={t("resetTemplateHint")}
+                                    >
+                                        <RefreshCw size={11} />
+                                        {t("resetTemplate")}
+                                    </button>
+                                </div>
                             </div>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => { setPrompt(e.target.value); setPromptDirty(true); }}
-                                disabled={generating}
-                                className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
-                            />
+                            {visibleAvailableReferences.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-1.5" aria-label={t("availableReferences")}>
+                                    {visibleAvailableReferences.map(({ reference, asset, variant }) => (
+                                        <span key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} className="inline-flex items-center gap-1 rounded border border-glass-border bg-black/20 px-2 py-1 text-[0.6875rem] text-text-secondary">
+                                            <Library size={11} />
+                                            {asset.name}{asset.variants.length > 1 ? ` · ${variant.reference_view_role || variant.reference_distance || variant.id}` : ""}
+                                            <button type="button" onClick={() => removeAvailableReference(reference)} aria-label={t("removeAvailableReference", { name: asset.name })} className="ml-0.5 rounded p-1 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+                                                <X size={10} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="relative rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 focus-within:border-primary/40">
+                                <ReferencePromptEditor
+                                    value={prompt}
+                                    candidates={referenceCandidates}
+                                    onChange={(value) => {
+                                        setPrompt(value);
+                                        setPromptDirty(true);
+                                    }}
+                                    onReferencesChange={setPromptReferences}
+                                    onMentionChange={setMention}
+                                    allowImplicitMentions={false}
+                                    pruneUnlistedReferences
+                                    editable={!generationBusy}
+                                    placeholder={t("promptLabel")}
+                                />
+                                {mention && (
+                                    <div role="listbox" aria-label={t("referenceSuggestionLabel")} className="absolute bottom-full left-0 z-50 mb-2 max-h-64 w-[min(100%,28rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
+                                        <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
+                                            {t("referenceSuggestionLabel")}
+                                        </div>
+                                        {matchingReferenceCandidates.length === 0 ? (
+                                            <div className="px-2 py-2 text-xs text-text-muted">
+                                                {referenceCandidates.length ? t("noMatchingReference") : t("noAvailableReferences")}
+                                            </div>
+                                        ) : matchingReferenceCandidates.map((candidate) => (
+                                            <button
+                                                key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                                type="button"
+                                                role="option"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => { mention.choose(candidate); setMention(null); }}
+                                                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                            >
+                                                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                                    {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" /> : <Library size={15} className="text-text-muted" />}
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-xs text-foreground">@{candidate.label}</span>
+                                                    {candidate.sourceLabel && <span className="block truncate text-[0.625rem] text-text-muted">{candidate.sourceLabel}</span>}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
                                 {(kind === "character"
-                                    ? ["full body", "close-up", "three-view", "dynamic pose", "soft lighting", "studio lighting", "white background", "detailed face"]
+                                    ? [
+                                        { key: "fullBody", value: "full body" },
+                                        { key: "closeUp", value: "close-up" },
+                                        { key: "threeView", value: "three-view" },
+                                        { key: "dynamicPose", value: "dynamic pose" },
+                                        { key: "softLighting", value: "soft lighting" },
+                                        { key: "studioLighting", value: "studio lighting" },
+                                        { key: "whiteBackground", value: "white background" },
+                                        { key: "detailedFace", value: "detailed face" },
+                                        { key: "faceDesign", value: "face design reference board" },
+                                    ]
                                     : kind === "scene"
-                                        ? ["wide angle", "establishing shot", "golden hour", "dramatic lighting", "aerial view", "depth of field", "atmospheric", "cinematic"]
-                                        : ["product shot", "white background", "multi-angle", "studio lighting", "macro detail", "floating", "transparent background", "clean"]
+                                        ? [
+                                            { key: "wideAngle", value: "wide angle" },
+                                            { key: "establishingShot", value: "establishing shot" },
+                                            { key: "goldenHour", value: "golden hour" },
+                                            { key: "dramaticLighting", value: "dramatic lighting" },
+                                            { key: "aerialView", value: "aerial view" },
+                                            { key: "depthOfField", value: "depth of field" },
+                                            { key: "atmospheric", value: "atmospheric" },
+                                            { key: "cinematic", value: "cinematic" },
+                                        ]
+                                        : [
+                                            { key: "productShot", value: "product shot" },
+                                            { key: "whiteBackground", value: "white background" },
+                                            { key: "multiAngle", value: "multi-angle" },
+                                            { key: "studioLighting", value: "studio lighting" },
+                                            { key: "macroDetail", value: "macro detail" },
+                                            { key: "floating", value: "floating" },
+                                            { key: "transparentBackground", value: "transparent background" },
+                                            { key: "clean", value: "clean" },
+                                        ]
                                 ).map((tag) => (
                                     <button
-                                        key={tag}
-                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag)}
-                                        disabled={generating}
+                                        key={tag.key}
+                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag.value)}
+                                        disabled={generationBusy}
                                         className="px-2.5 py-1 rounded border border-glass-border bg-glass text-[0.6875rem] text-text-muted hover:text-text-secondary hover:border-foreground/30 hover:bg-hover-bg transition-colors disabled:opacity-30"
                                     >
-                                        + {tag}
+                                        + {t(`quickTags.${tag.key}`)}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Final prompt preview — collapsible, scrollable */}
-                            {applyStyle && stylePositive && (
-                                <div className="mt-3 rounded-md bg-black/20 border border-glass-border">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFinalPreviewExpanded(!finalPreviewExpanded)}
-                                        className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-hover-bg transition-colors rounded-t-md"
-                                    >
-                                        <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">{t("finalPromptPreview")}</p>
-                                        <span className="text-[0.625rem] text-text-muted">{finalPreviewExpanded ? t("collapse") : t("expand")}</span>
-                                    </button>
-                                    {finalPreviewExpanded && (
-                                        <div className="px-3.5 pb-3 max-h-[200px] overflow-y-auto overscroll-contain">
-                                            <p className="text-[0.75rem] leading-relaxed">
-                                                <span className="text-foreground">{prompt.trim()}</span>
-                                                {prompt.trim() && <span className="text-text-muted">{", "}</span>}
-                                                <span className="text-primary/60">{stylePositive}</span>
-                                            </p>
-                                        </div>
+                            {/* Customer-facing summary: keep it short and readable. The full
+                                provider prompt remains in the editable field above and the
+                                style details are available only through the advanced disclosure. */}
+                            <div
+                                data-testid="cast-generation-summary"
+                                className="mt-3 rounded-md border border-glass-border bg-black/20 px-3.5 py-2.5"
+                            >
+                                <p className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
+                                    {t("customerSummaryTitle")}
+                                </p>
+                                <div className="mt-1.5 space-y-1 text-[0.75rem] leading-relaxed">
+                                    <p>
+                                        <span className="text-text-muted">{t("customerSummaryComposition")}：</span>
+                                        <span className="text-text-secondary">{compositionSummary}</span>
+                                    </p>
+                                    {applyStyle && styleDisplayName && (
+                                        <p>
+                                            <span className="text-text-muted">{t("customerSummaryStyle")}：</span>
+                                            <span className="text-primary/80">{styleDisplayName}</span>
+                                        </p>
                                     )}
                                 </div>
-                            )}
+                            </div>
 
                             {/* Generation config — unified section */}
                             <div className="mt-5 pt-4 border-t border-glass-border space-y-4">
@@ -799,7 +1415,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <button
                                                 key={n}
                                                 onClick={() => setBatchSize(n)}
-                                                disabled={generating}
+                                                disabled={generationBusy}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     batchSize === n
                                                         ? accent.batchActive
@@ -822,7 +1438,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <button
                                                 key={ratio}
                                                 onClick={() => setAspectRatioOverride(ratio === defaultAspectRatio ? null : ratio)}
-                                                disabled={generating}
+                                                disabled={generationBusy}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     effectiveAspectRatio === ratio
                                                         ? accent.batchActive
@@ -842,8 +1458,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </label>
                                     <GroupedModelGrid
                                         models={IMAGE_MODELS}
-                                        selectedId={modelOverride || currentProject.model_settings?.t2i_model || "wan2.1-t2i"}
-                                        onSelect={(id) => setModelOverride(id === (currentProject.model_settings?.t2i_model || "wan2.1-t2i") ? null : id)}
+                                        selectedId={selectedModelId}
+                                        onSelect={(id) => setModelOverride(id === selectedModelId ? null : id)}
                                     />
                                 </div>
                             </div>
@@ -851,11 +1467,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Generate CTA */}
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !prompt.trim()}
+                                disabled={generationBusy || !prompt.trim() || (imageGenerationMode === "reference" && activePromptReferences.length === 0)}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
-                                {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
-                                {generating
+                                {generationBusy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
+                                {generationBusy
                                     ? t("generating")
                                     : variants.length === 0
                                         ? t("generateFirst")
@@ -867,11 +1483,69 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                         <div className="flex flex-col p-5 overflow-y-auto custom-scrollbar bg-surface">
                             <input ref={uploadInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={t("uploadReference")}
                                 onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; void handleUpload(file); }} />
-                            <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()}
-                                className="glass-button mb-3 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
-                                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                {t(uploading ? "uploading" : "uploadReference")}
-                            </button>
+                            <div className="flex gap-2 mb-3">
+                                <button type="button" disabled={uploading || generationBusy} onClick={() => uploadInput.current?.click()}
+                                    className="glass-button flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 disabled:opacity-50">
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    {t(uploading ? "uploading" : "uploadReference")}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={generationBusy || visibleReferenceLibraryAssets.length === 0}
+                                    onClick={() => setLibraryPickerOpen((open) => !open)}
+                                    aria-expanded={libraryPickerOpen}
+                                    className={`glass-button inline-flex items-center justify-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 ${libraryPickerOpen ? "border-primary/60 text-primary" : ""}`}
+                                >
+                                    <Library size={16} />
+                                    {t("addReferenceImages")}
+                                </button>
+                            </div>
+                            {libraryPickerOpen && (
+                                <div data-testid="cast-library-reference-picker" role="region" aria-label={t("referencePickerTitle")} className="mb-4 max-h-[38vh] overflow-y-auto rounded-lg border border-glass-border bg-surface-inset p-3 custom-scrollbar">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div>
+                                            <p className="text-[0.75rem] font-medium text-foreground">{t("referencePickerTitle")}</p>
+                                            <p className="mt-0.5 text-[0.625rem] text-text-muted">{t("referencePickerHint")}</p>
+                                        </div>
+                                        <button type="button" onClick={() => setLibraryPickerOpen(false)} aria-label={t("closeLibraryReferencePicker")} className="p-1 text-text-muted hover:text-foreground">
+                                            <X size={13} />
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {visibleReferenceLibraryAssets.map((asset) => (
+                                            <div key={`${asset.asset_type}:${asset.asset_id}`}>
+                                                <div className="mb-1 flex items-center gap-1.5">
+                                                    <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>
+                                                    <span className="text-[0.5625rem] text-text-muted">· {t(`librarySource.${asset.source_scope}`)}</span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {asset.variants.map((variant) => {
+                                                        const active = visibleAvailableReferences.some(({ reference }) => reference.asset_type === asset.asset_type
+                                                            && reference.asset_id === asset.asset_id
+                                                            && reference.variant_id === variant.id);
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={variant.id}
+                                                                aria-label={t("addLibraryVariant", { name: asset.name })}
+                                                                onClick={() => handleChooseLibraryVariant(asset, variant)}
+                                                                className={`relative overflow-hidden rounded border text-left ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
+                                                            >
+                                                                <PreviewImage
+                                                                    src={getAssetUrl(variant.url)}
+                                                                    alt={`${asset.name} ${variant.id}`}
+                                                                    className="h-20 w-full object-cover"
+                                                                />
+                                                                {active && <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-white"><Check size={11} /></span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {/* Gallery header with filter tabs */}
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -905,7 +1579,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 )}
                             </div>
                             {filteredVariants.length === 0 && variants.length === 0 ? (
-                                <button type="button" disabled={uploading} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary">
+                                <button type="button" disabled={uploading || generationBusy} onClick={() => uploadInput.current?.click()} className="flex-1 grid place-items-center text-center text-text-muted rounded-lg border border-dashed border-glass-border hover:bg-hover-bg focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">
                                     <div className="max-w-xs">
                                         <div className="mx-auto w-12 h-12 grid place-items-center rounded-full border border-glass-border bg-glass mb-3">
                                             <Sparkles size={18} />
@@ -960,6 +1634,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 >
                                                     {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
+                                                {kind === "character" && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={uploading}
+                                                        onClick={(e) => { e.stopPropagation(); setEditingVariant(v); }}
+                                                        aria-label={t("editVariant")}
+                                                        title={t("editVariant")}
+                                                        className="absolute bottom-[68px] right-12 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-primary/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                )}
                                                 {/* Selected badge */}
                                                 {isSelected && (
                                                     <div className={`absolute top-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground shadow-md ${accent.selectBadge}`}>
@@ -1027,6 +1713,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     </footer>
                 </motion.div>
             </motion.div>
+            {editingVariant && kind === "character" && (
+                <ImageEditor
+                    source={api.assetVariantContentUrl(currentProject.id, "character", entity!.id, editingVariant.id)}
+                    title={`${entity?.name ?? "Character"} · ${t("editVariant")}`}
+                    onClose={() => setEditingVariant(null)}
+                    onSave={handleSaveEditedVariant}
+                />
+            )}
         </AnimatePresence>
     ), document.body);
 }

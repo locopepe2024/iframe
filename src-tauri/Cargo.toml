@@ -1,6 +1,6 @@
 [package]
 name = "iframe-studio"
-version = "0.1.0"
+version = "0.1.5"
 description = "iFrame Studio - AI Comic Video Production Platform"
 authors = ["iFrame Team"]
 edition = "2021"

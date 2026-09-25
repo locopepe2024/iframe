@@ -19,6 +19,28 @@ def test_image_ratio_quality_outbound(monkeypatch, ratio, tier, size, quality):
     assert captured['aspect_ratio'] == ratio
 
 
+def test_text_to_image_does_not_send_reference_material(monkeypatch):
+    captured = {}
+
+    def post(config, endpoint, body):
+        captured.update(endpoint=endpoint, body=body)
+        return {'data': [{'url': 'https://storage.example/result.png'}]}
+
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_download_result', lambda *args: None)
+
+    uniart.UniArtImageModel({}).generate(
+        'a neutral product still life',
+        'unused.png',
+        model_name='uniart/gpt-image-2.5-flare-discount',
+        size='1k',
+    )
+
+    assert captured['endpoint'] == '/images/generations'
+    assert 'images' not in captured['body']
+
+
+
 def test_image_edit_forwards_reference_and_semantic_size(monkeypatch, tmp_path):
     image = tmp_path / 'reference.png'
     image.write_bytes(b'image')

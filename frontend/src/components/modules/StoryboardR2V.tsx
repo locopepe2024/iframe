@@ -7,7 +7,8 @@ import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "luci
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api, crudApi, type VideoTask, type RefineSSEEvent } from "@/lib/api";
+import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
+import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -50,9 +51,28 @@ import {
 
 export default function StoryboardR2V() {
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
+    const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[] | undefined>();
+    const displayedStyle = currentProject
+        ? resolveStoryboardStyle(currentProject, currentSeries)
+        : { positivePrompt: "", negativePrompt: "" };
+    const loadGenerationStyle = useCallback(() => {
+        if (!currentProject) throw new Error("Project is unavailable");
+        return resolveStoryboardStyleForRender(currentProject, currentSeries, api.getSeries);
+    }, [currentProject, currentSeries]);
+
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.getAssetReferenceIndex !== "function") return;
+        let active = true;
+        void api.getAssetReferenceIndex(projectId)
+            .then((index) => { if (active) setAssetIndex(index.assets); })
+            .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
+        return () => { active = false; };
+    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
     // Derive shots from project frames. Workbench state (T2I 抽卡
     // history, last-active tab, batch count) now comes from backend-
@@ -422,6 +442,7 @@ export default function StoryboardR2V() {
     // setShots() when the new frames come back.
     const [genDialogOpen, setGenDialogOpen] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [analysisProgress, setAnalysisProgress] = useState<{ completed: number; total: number } | null>(null);
     const [storyboardDraft, setStoryboardDraft] = useState<StoryboardDraftFrame[] | null>(null);
     const [storyboardDraftText, setStoryboardDraftText] = useState("");
     const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
@@ -507,9 +528,12 @@ export default function StoryboardR2V() {
             return;
         }
         setGenerating(true);
+        setAnalysisProgress(null);
         setBannerState("phase1");
         try {
-            const draft = await api.analyzeStoryboardPreview(projectId, scriptText);
+            const draft = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
+                setAnalysisProgress({ completed, total });
+            });
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
             setStoryboardDraft(draft);
             setStoryboardDraftText(scriptText);
@@ -521,6 +545,7 @@ export default function StoryboardR2V() {
             setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
         } finally {
             setGenerating(false);
+            setAnalysisProgress(null);
         }
     }, [currentProject, t]);
 
@@ -870,11 +895,12 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
             const t2iPrompt = buildGenerationPrompt(
                 shot,
                 false,
                 videoConfig.model,
-                currentProject.art_direction?.style_config?.positive_prompt || "",
+                style.positivePrompt,
             )
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
@@ -886,7 +912,7 @@ export default function StoryboardR2V() {
                 t2iPrompt,
                 1,   // batchSize
                 resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     "",
                     shot.negativePromptOverride,
                 ),
@@ -918,7 +944,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, t2iStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, persistWorkbench]);
+    }, [shots, currentProject, persistWorkbench, loadGenerationStyle]);
 
     // Generate video for a shot
     const generateVideo = useCallback(async (index: number) => {
@@ -930,6 +956,7 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
             if (shot.tabMode === "direct_r2v") {
                 // R2V mode: use reference assets. We prefer the user's
                 // explicit R2V model choice (videoConfig.r2vModel) over
@@ -953,13 +980,13 @@ export default function StoryboardR2V() {
                     shot,
                     generateAudio,
                     routeModelId,
-                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                    style.positivePrompt,
                 );
                 const promptText = routeModelId.toLowerCase().includes("minimax-h3")
                     ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
                     : basePromptText;
                 const negativePrompt = resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     videoConfig.negativePrompt,
                     shot.negativePromptOverride,
                 );
@@ -984,6 +1011,11 @@ export default function StoryboardR2V() {
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
                     imageBased ? referenceUrls : undefined, // referenceImageUrls
+                    undefined, // ratio
+                    shot.tabMode,
+                    undefined, // watermark
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1045,10 +1077,10 @@ export default function StoryboardR2V() {
                     shot,
                     generateAudio,
                     videoConfig.model,
-                    currentProject.art_direction?.style_config?.positive_prompt || "",
+                    style.positivePrompt,
                 );
                 const negativePrompt = resolveNegativePrompt(
-                    currentProject.art_direction?.style_config?.negative_prompt || "",
+                    style.negativePrompt,
                     videoConfig.negativePrompt,
                     shot.negativePromptOverride,
                 );
@@ -1078,6 +1110,11 @@ export default function StoryboardR2V() {
                     videoConfig.movementAmplitude,
                     // HappyHorse
                     undefined,
+                    undefined, // ratio
+                    shot.tabMode,
+                    undefined, // watermark
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1095,7 +1132,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences]);
+    }, [shots, currentProject, videoConfig, resolveShotReferences, loadGenerationStyle]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls
@@ -1119,17 +1156,6 @@ export default function StoryboardR2V() {
         const generateAudio = storyboardGeneratedAudio(
             requestedModelId,
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-        );
-        const basePromptText = buildGenerationPrompt(
-            shot,
-            generateAudio,
-            requestedModelId,
-            currentProject.art_direction?.style_config?.positive_prompt || "",
-        );
-        const effectiveNegativePrompt = resolveNegativePrompt(
-            currentProject.art_direction?.style_config?.negative_prompt || "",
-            params?.negativePrompt ?? videoConfig.negativePrompt,
-            shot.negativePromptOverride,
         );
         const referenceSubmission = resolveShotReferences(shot);
         const requestedDuration = params?.duration ?? videoConfig.duration;
@@ -1221,6 +1247,15 @@ export default function StoryboardR2V() {
         ));
 
         try {
+            const style = await loadGenerationStyle();
+            const basePromptText = buildGenerationPrompt(
+                shot, generateAudio, requestedModelId, style.positivePrompt,
+            );
+            const effectiveNegativePrompt = resolveNegativePrompt(
+                style.negativePrompt,
+                params?.negativePrompt ?? videoConfig.negativePrompt,
+                shot.negativePromptOverride,
+            );
             // Build a per-call factory so the batch fires N parallel
             // requests through Promise.all — fail-fast on any one
             // failure leaves the others untouched on the backend (the
@@ -1260,6 +1295,8 @@ export default function StoryboardR2V() {
                         params?.ratio,
                         tabMode,
                         params?.watermark,
+                        shot.poseReferenceVariantIds,
+                        shot.directorSnapshotMediaId ?? undefined,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
                     return task?.id ?? null;
@@ -1298,6 +1335,8 @@ export default function StoryboardR2V() {
                     undefined,
                     tabMode,
                     params?.watermark,
+                    shot.poseReferenceVariantIds,
+                    shot.directorSnapshotMediaId ?? undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
                 return task?.id ?? null;
@@ -1346,7 +1385,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" as const } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences, missingRefsMessage, t]);
+    }, [shots, currentProject, videoConfig, resolveShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
     // Project-level task refresh: when any task on any shot is in
     // flight, refetch the whole project every 5s. The candidates
@@ -1968,7 +2007,9 @@ export default function StoryboardR2V() {
                             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 font-sans text-[0.8125rem] font-semibold text-on-accent shadow-[var(--btn-pri-glow),inset_0_1.5px_0_rgba(255,255,255,0.14)] transition-all duration-fast ease-out-quart hover:bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                         >
                             {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                            <span>{generating ? t("genInFlight") : t("genShots")}</span>
+                            <span>{generating ? (analysisProgress
+                                ? `${t("genInFlight")} ${analysisProgress.completed}/${analysisProgress.total}`
+                                : t("genInFlight")) : t("genShots")}</span>
                         </button>
                     </>
                 )}
@@ -2043,7 +2084,9 @@ export default function StoryboardR2V() {
                                     className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-primary text-white border border-primary/65 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 transition-colors text-[0.8125rem] font-semibold"
                                 >
                                     {generating ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-                                    {generating ? t("genInFlight") : t("emptyCTA")}
+                                    {generating ? (analysisProgress
+                                        ? `${t("genInFlight")} ${analysisProgress.completed}/${analysisProgress.total}`
+                                        : t("genInFlight")) : t("emptyCTA")}
                                 </button>
                                 <button
                                     type="button"
@@ -2082,12 +2125,13 @@ export default function StoryboardR2V() {
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}
-                            globalStylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
+                            globalStylePrompt={displayedStyle.positivePrompt}
                             index={index}
                             totalShots={shots.length}
                             characters={characters}
                             scenes={scenes}
                             props={props}
+                            assetIndex={assetIndex}
                             onUpdatePrompt={(prompt) => updatePrompt(index, prompt)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
                             durationEditorConfig={durationEditorCfg}
@@ -2435,6 +2479,7 @@ export default function StoryboardR2V() {
                 characters={characters}
                 scenes={scenes}
                 props={props}
+                assetIndex={assetIndex}
                 onSelectAsset={insertAssetFromDrawer}
                 selectedVariantIds={drawerState.targetShotIndex == null
                     ? {}

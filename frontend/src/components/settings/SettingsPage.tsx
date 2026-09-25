@@ -23,6 +23,7 @@ import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import IFrameBranding from "@/components/layout/IFrameBranding";
 import UpdateChecker from "./UpdateChecker";
 import SkillsSettings from "./SkillsSettings";
+import { APP_VERSION, APP_VERSION_LABEL } from "@/generated/appVersion";
 type SettingsCategory = "general" | "models" | "prompts" | "skills" | "apikeys" | "storage" | "about";
 import {
   FormRow,
@@ -32,8 +33,6 @@ import {
   ModeSegment,
   settingsInputClass,
 } from "./SettingsControls";
-
-const APP_VERSION = "V0.1.0";
 
 type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   DASHSCOPE_API_KEY: string;
@@ -882,7 +881,7 @@ export default function SettingsPage() {
   const renderAbout = () => {
     const ff = system?.ffmpeg;
     const aboutRows: { k: string; v: string; tone?: "ok" | "warn" }[] = [
-      { k: t("aboutAppVersion"), v: `iFrame Studio ${APP_VERSION}` },
+      { k: t("aboutAppVersion"), v: `iFrame Studio ${APP_VERSION_LABEL}` },
       { k: t("aboutBackendApi"), v: API_URL },
       { k: t("aboutDataDir"), v: dataDir || "—" },
       { k: t("logDirLabel"), v: logDir || "—" },
@@ -896,7 +895,7 @@ export default function SettingsPage() {
             “Powered by Lumenx & Uniart”
           </p>
           <div className="font-mono text-[0.625rem] tracking-[0.08em] text-text-muted uppercase">
-            VERSION {APP_VERSION.replace(/^[vV]/, "")}
+            VERSION {APP_VERSION}
           </div>
           <p className="text-[0.78125rem] text-text-secondary leading-relaxed max-w-md">
             {t("aboutTagline")}

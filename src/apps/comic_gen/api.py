@@ -24,7 +24,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from typing import Optional, Dict, List, Any, Tuple, Literal
+from typing import Optional, Dict, List, Any, Tuple, Literal, Union
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -39,8 +39,16 @@ import uuid
 import logging
 import re
 import traceback
+from urllib.parse import unquote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
-from .pipeline import ComicGenPipeline, LibraryAssetInUseError
+from .pipeline import (
+    ComicGenPipeline,
+    AssetGenerationInProgress,
+    LibraryAssetInUseError,
+    InvalidAssetReference,
+    AssemblyPlanValidationError,
+    AssemblyPlanConflictError,
+)
 from .structured_evidence import query_asset_mentions, source_version
 from .models import (
     ArtDirection,
@@ -52,17 +60,19 @@ from .models import (
     Series,
     StoryboardFrame,
     VideoTask,
+    AssemblyEditPlan,
+    AssetLibraryReference,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
-from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
-from ...utils.uniart_catalog import normalize_uniart_catalog
+from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
+from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="iFrame Studio API", version="0.1.0")
+app = FastAPI(title="iFrame Studio API", version="0.1.5")
 logger = logging.getLogger(__name__)
 
 # Setup logging to user directory
@@ -92,10 +102,12 @@ from ..studio_access import (
     studio_owner_dir,
     studio_uniart_config,
     verify_studio_media,
+    verify_studio_media_preview,
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
 from ..playground.api import _storage_for as playground_storage_for, router as playground_router
+from ...utils.media_thumbnails import create_media_thumbnail
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
 app.include_router(identity_router)
@@ -179,9 +191,15 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path.startswith("/recreation/")
         or path == "/library"
         or path.startswith("/library/")
+        or path == "/asset-index"
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")
+        # Prompt polishing resolves the model credentials and optional
+        # episode/series prompt context from the current Studio owner.  Keep
+        # these body-based endpoints inside the same request context even
+        # though the project id is not part of the URL.
+        or path in {"/video/polish_prompt", "/video/polish_r2v_prompt"}
     )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
@@ -289,17 +307,35 @@ def signed_response(data):
     return JSONResponse(content=processed_data)
 
 
+def private_no_store_signed_response(data):
+    """Return owner-scoped mutable data without allowing intermediary caching."""
+    response = signed_response(data)
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
 @app.get("/studio/media/{owner_key}/{relative_path:path}")
 def get_studio_media(
     owner_key: str,
     relative_path: str,
     expires: int = 0,
     signature: str = "",
+    preview: int = 0,
 ):
-    path = verify_studio_media(owner_key, relative_path, expires, signature)
+    if preview:
+        source_path = verify_studio_media_preview(owner_key, relative_path, preview, expires, signature)
+        owner_root = os.path.join("output", "users", owner_key, "studio")
+        try:
+            path = create_media_thumbnail(source_path, owner_root, preview)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=415, detail="A supported still image is required for preview") from exc
+        headers = {"Cache-Control": "private, max-age=1800"}
+    else:
+        path = verify_studio_media(owner_key, relative_path, expires, signature)
+        headers = None
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
-    return FileResponse(path)
+    return FileResponse(path, headers=headers, media_type="image/webp" if preview else None)
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
@@ -319,6 +355,9 @@ class GenerateAssetRequest(BaseModel):
     asset_type: str
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
+    reference: Optional[AssetLibraryReference] = None
+    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
+    image_generation_mode: Literal["text", "reference"] = "text"
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -491,6 +530,71 @@ def upload_asset(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_EDITOR_IMAGE_MAX_BYTES = 25 * 1024 * 1024
+
+
+@app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/variants/{variant_id}/content")
+def get_asset_variant_content(
+    script_id: str,
+    asset_type: str,
+    asset_id: str,
+    variant_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return an owner-visible image variant through the Studio origin.
+
+    Canvas editors cannot reliably read private COS images directly because a
+    displayable signed URL may still lack browser canvas CORS headers. Resolve
+    the stable variant ids server-side so this endpoint never becomes an
+    arbitrary URL proxy.
+    """
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        resolved, _ = pipeline._resolve_asset_library_reference(script, {
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "variant_id": variant_id,
+        })
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    if os.path.isfile(resolved):
+        if os.path.getsize(resolved) > _EDITOR_IMAGE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+        return FileResponse(resolved, headers=headers)
+
+    uploader = OSSImageUploader()
+    fetch_url = ""
+    if is_object_key(resolved):
+        fetch_url = uploader.sign_url_for_api(resolved)
+    elif resolved.startswith(("https://", "http://")) and uploader.is_configured:
+        parsed = urlparse(resolved)
+        probe = urlparse(uploader.sign_url_for_api("__iframe_editor_probe__"))
+        if parsed.hostname and parsed.hostname == probe.hostname:
+            fetch_url = uploader.sign_url_for_api(unquote(parsed.path.lstrip("/")))
+    if not fetch_url:
+        raise HTTPException(status_code=422, detail="Variant image storage is not editable")
+
+    try:
+        request = UrlRequest(fetch_url, headers={"User-Agent": "iFrame-Studio/1.0"})
+        with urlopen(request, timeout=30) as remote:
+            content_type = (remote.headers.get_content_type() or "").lower()
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=422, detail="Variant content is not an image")
+            data = remote.read(_EDITOR_IMAGE_MAX_BYTES + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Unable to read asset variant %s for editor: %s", variant_id, exc)
+        raise HTTPException(status_code=502, detail="Unable to load image for editing") from exc
+    if len(data) > _EDITOR_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 25 MiB")
+    return Response(data, media_type=content_type, headers=headers)
+
+
 class CreateProjectRequest(BaseModel):
     title: str
     text: str
@@ -588,6 +692,13 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 # New clients use short requests so an interrupted browser cannot cancel extraction.
 from .extraction_jobs import ExtractionJobs
 extraction_jobs = ExtractionJobs()
+
+
+@app.on_event("startup")
+def recover_interrupted_extraction_jobs():
+    recovered = extraction_jobs.recover_interrupted()
+    if recovered:
+        logger.warning("Recovered %s interrupted extraction jobs", recovered)
 
 
 def extraction_response(job, script_id):
@@ -728,6 +839,13 @@ class UpdateSeriesRequest(BaseModel):
     art_direction: Optional[ArtDirection] = None
 
 
+class AssemblyPlanEnvelope(BaseModel):
+    """Optional envelope for clients that keep the base revision separately."""
+
+    plan: AssemblyEditPlan
+    expected_revision: Optional[int] = Field(None, ge=1)
+
+
 @app.post("/series")
 def create_series(
     request: CreateSeriesRequest,
@@ -773,6 +891,85 @@ def get_series(series_id: str):
         for ep in episodes
     ]
     return signed_response(result)
+
+
+@app.get("/series/{series_id}/assembly-plan")
+def get_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the series Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_series(series_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Series not found")
+        return signed_response(pipeline.get_assembly_plan("series", series_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/series/{series_id}/assembly-plan")
+def put_series_assembly_plan(
+    series_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated series Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "series",
+            series_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/series/{series_id}/assembly-plan/render")
+def render_series_assembly_plan(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved series Assembly plan."""
+    if not pipeline.get_series(series_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Series not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "series",
+            series_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.put("/series/{series_id}")
@@ -937,12 +1134,19 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.apply_style,
             request.negative_prompt,
             request.batch_size,
-            request.model_name
+            request.model_name,
+            request.reference,
+            request.references,
+            request.image_generation_mode,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
         response_data["_task_id"] = task_id
         return signed_response(response_data)
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1770,6 +1974,105 @@ def get_project(script_id: str):
     return signed_response(payload)
 
 
+@app.get("/projects/{script_id}/asset-index")
+def get_project_asset_index(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the normalized effective asset view used by reference pickers."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.get_asset_reference_index(script_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/asset-index")
+def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
+    """Return the normalized cross-series/project/global asset view."""
+    return private_no_store_signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
+
+
+@app.get("/projects/{script_id}/assembly-plan")
+def get_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the project Assembly plan, or null for the legacy flow."""
+    try:
+        if not pipeline.get_script(script_id, user.owner_profile_id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        return signed_response(pipeline.get_assembly_plan("project", script_id))
+    except AssemblyPlanValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/projects/{script_id}/assembly-plan")
+def put_project_assembly_plan(
+    script_id: str,
+    payload: Union[AssemblyEditPlan, AssemblyPlanEnvelope],
+    user: UserContext = Depends(require_studio_user),
+):
+    """Persist a validated project Assembly plan without submitting Motion."""
+    plan = payload.plan if isinstance(payload, AssemblyPlanEnvelope) else payload
+    expected_revision = (
+        payload.expected_revision
+        if isinstance(payload, AssemblyPlanEnvelope)
+        else plan.revision
+    )
+    try:
+        saved = pipeline.save_assembly_plan(
+            "project",
+            script_id,
+            plan,
+            expected_revision=expected_revision,
+        )
+        return signed_response(saved)
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        if "not found" in str(exc).lower():
+            raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assembly-plan/render")
+def render_project_assembly_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Explicitly compile the saved project Assembly plan."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        rendered = pipeline.render_assembly_plan(
+            "project",
+            script_id,
+            user.owner_profile_id,
+        )
+        return signed_response({"url": rendered.merged_video_url})
+    except AssemblyPlanConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+            },
+        )
+    except AssemblyPlanValidationError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 
 @app.delete("/projects/{script_id}")
 def delete_project(script_id: str):
@@ -2425,6 +2728,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
+    visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         text,
@@ -2433,6 +2737,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         instructions,
         prompt,
         director_profile.model_dump() if director_profile else None,
+        visual_style,
         llm.provider,
         llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
@@ -2448,11 +2753,27 @@ def start_storyboard_analysis(
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
     fingerprint = _storyboard_analysis_fingerprint(script_id, request.text)
+    job_fingerprint = "storyboard:" + fingerprint
+    from .llm import split_director_source
+    total_batches = len(split_director_source(
+        request.text, direct_max_chars=1800, target_chars=1600, max_chars=1800
+    )) if len(request.text) > 1800 else 0
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
-        "storyboard:" + fingerprint,
-        lambda: {"frames": pipeline.preview_storyboard_analysis(script_id, request.text)},
+        job_fingerprint,
+        lambda job_id: {"frames": pipeline.preview_storyboard_analysis(
+            script_id, request.text,
+            load_batches=lambda: extraction_jobs.load_batches(
+                user.owner_profile_id, script_id, job_fingerprint
+            ),
+            save_batch=lambda index, source_ref, frames: extraction_jobs.save_batch(
+                user.owner_profile_id, script_id, job_fingerprint, job_id,
+                index, source_ref, frames,
+            ),
+        )},
+        pass_job_id=True,
+        total_batches=total_batches,
     )
 
 
@@ -2646,6 +2967,8 @@ class CreateVideoTaskRequest(BaseModel):
     movement_amplitude: Optional[str] = None
     # HappyHorse params
     reference_image_urls: List[str] = []  # Reference image URLs for HH R2V (max 9)
+    pose_reference_variant_ids: Dict[str, List[str]] = {}
+    director_snapshot_media_id: Optional[str] = None
     ratio: Optional[str] = None  # Aspect ratio for HH T2V/R2V
     # Watermark toggle (wan / kling / vidu / pixverse / happyhorse video).
     # None = leave to provider default; True/False = explicit user choice.
@@ -2718,6 +3041,8 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    workbench_director_snapshot_media_id: Optional[str] = None
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)
@@ -2738,6 +3063,8 @@ def update_frame_workbench(
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
             workbench_reference_variant_ids=request.workbench_reference_variant_ids,
+            workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
+            workbench_director_snapshot_media_id=request.workbench_director_snapshot_media_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2792,6 +3119,8 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
+                pose_reference_variant_ids=request.pose_reference_variant_ids,
+                director_snapshot_media_id=request.director_snapshot_media_id,
                 ratio=request.ratio,
                 watermark=request.watermark,
                 mode=request.mode,
@@ -2843,6 +3172,9 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.batch_size,
             request.model_name,
             request.aspect_ratio,
+            request.reference,
+            request.references,
+            request.image_generation_mode,
         )
         
         # Add background processing
@@ -2853,9 +3185,27 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
         response_data["_task_id"] = task_id
         return signed_response(response_data)
 
+    except InvalidAssetReference as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generation/clear", response_model=Script)
+def clear_asset_generation_state(script_id: str, asset_type: str, asset_id: str):
+    """Clear a failed/orphaned image-generation marker without deleting the asset."""
+    try:
+        pipeline.clear_asset_generation_state(script_id, asset_id, asset_type)
+        return get_project(script_id)
+    except ValueError as e:
+        status_code = 409 if "still processing" in str(e) else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to clear asset generation state")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2870,13 +3220,23 @@ def get_task_status(task_id: str):
 
     if status.get("video_url"):
         return signed_response(status)
-    
-    # If completed, return the updated script as well
-    if status["status"] == "completed":
+
+    # Asset tasks are polled frequently. Keep pending/processing responses
+    # cheap, and sign only the completed target-asset snapshot so the client
+    # can merge it without loading the full project.
+    if status.get("asset_id") and status.get("asset_type") in (
+        "character", "scene", "prop", "full_body", "head_shot"
+    ):
+        if status.get("status") == "completed" and status.get("asset"):
+            return signed_response(status)
+        return status
+
+    # Preserve the legacy completed-script payload for non-asset task callers.
+    if status.get("status") == "completed":
         script = pipeline.get_script(status["script_id"])
         if script:
-            status["script"] = signed_response(script).body.decode('utf-8')
-    
+            status["script"] = signed_response(script).body.decode("utf-8")
+
     return status
 
 
@@ -3021,6 +3381,10 @@ def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequ
 
 
 
+class SetAssetCoverRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1)
+
+
 class SelectVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
@@ -3043,6 +3407,19 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/cover")
+def set_asset_cover(script_id: str, asset_type: str, asset_id: str, request: SetAssetCoverRequest):
+    """Set one owned variant as the library cover without loading the project."""
+    try:
+        result = pipeline.set_asset_cover_variant(script_id, asset_id, asset_type, request.variant_id)
+        return private_no_store_signed_response(result)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to set asset library cover")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 class DeleteVariantRequest(BaseModel):
     asset_id: str
@@ -3078,13 +3455,16 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
 def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
-        updated_script = pipeline.delete_asset_variant(
+        pipeline.delete_asset_variant(
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id
         )
-        return signed_response(updated_script)
+        # Shared series/global assets are merged into a project only at read
+        # time. Returning the raw episode Script would temporarily remove the
+        # edited asset from the frontend and close its detail workbench.
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -4153,6 +4533,7 @@ def start_director_profile_analysis(
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {"profile": pipeline.preview_director_profile(script_id)},
+        queue_group="director",
     )
 
 
@@ -4172,6 +4553,8 @@ def start_director_profile_refinement(
         lambda: {"profile": pipeline.refine_director_profile(
             script_id, draft, instructions
         )},
+        queue_policy="lifo",
+        queue_group="director",
     )
 
 
@@ -4717,14 +5100,10 @@ def get_uniart_models():
     """
     runtime_config = studio_uniart_config()
     base = runtime_config["base_url"].rstrip("/")
-    key = runtime_config["api_key"]
-    req = UrlRequest(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {})
     try:
-        with urlopen(req, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        models = fetch_uniart_catalog(runtime_config)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    models = normalize_uniart_catalog(payload)
     return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
@@ -4799,7 +5178,9 @@ class SaveDocumentRequest(BaseModel):
 
 
 class DocumentSnapshotInfo(BaseModel):
+    project_id: str
     timestamp: str  # ISO format
+    created_at: str
     size_bytes: int
 
 
@@ -4818,15 +5199,67 @@ def _ensure_history_dir(project_dir: Path) -> Path:
     return history_dir
 
 
-def _create_snapshot(project_dir: Path) -> None:
-    """Create a timestamped snapshot of the current document.json."""
+def _snapshot_info(project_id: str, snapshot_path: Path) -> DocumentSnapshotInfo:
+    """Build the stable metadata returned to the editor for one snapshot."""
+    created_at = datetime.fromtimestamp(
+        snapshot_path.stat().st_mtime, timezone.utc
+    ).isoformat()
+    return DocumentSnapshotInfo(
+        project_id=project_id,
+        timestamp=snapshot_path.stem,
+        created_at=created_at,
+        size_bytes=snapshot_path.stat().st_size,
+    )
+
+
+def _create_snapshot(project_dir: Path, project_id: Optional[str] = None) -> Optional[DocumentSnapshotInfo]:
+    """Create a unique snapshot of the current document.json."""
     doc_path = project_dir / "document.json"
     if not doc_path.exists():
-        return
+        return None
     history_dir = _ensure_history_dir(project_dir)
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+    # Include microseconds so repeated saves in one second never overwrite a
+    # previous version. The collision loop also covers unusual filesystem clock
+    # resolution and makes the invariant explicit.
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S%fZ")
     snapshot_path = history_dir / f"{ts}.json"
+    while snapshot_path.exists():
+        ts = f"{ts}-{uuid.uuid4().hex[:8]}"
+        snapshot_path = history_dir / f"{ts}.json"
     shutil.copy2(str(doc_path), str(snapshot_path))
+    return _snapshot_info(project_id or project_dir.name, snapshot_path)
+
+
+def _document_response(project_id: str, content: dict, doc_path: Path) -> dict:
+    """Return one consistent document envelope for load and restore."""
+    updated_at = datetime.fromtimestamp(
+        doc_path.stat().st_mtime, timezone.utc
+    ).isoformat() if doc_path.exists() else None
+    return {
+        "project_id": project_id,
+        "content": content,
+        "updated_at": updated_at,
+    }
+
+
+def _legacy_script_document(project_id: str) -> dict:
+    """Convert an older project's plain script text into editor blocks."""
+    getter = getattr(pipeline, "get_script", None)
+    script = getter(project_id) if callable(getter) else None
+    text = getattr(script, "original_text", "") if script else ""
+    blocks = []
+    for line in (text or "").splitlines():
+        if line:
+            blocks.append({
+                "type": "action",
+                "content": [{"type": "text", "text": line}],
+            })
+    if not blocks and text:
+        blocks.append({
+            "type": "action",
+            "content": [{"type": "text", "text": text}],
+        })
+    return {"type": "doc", "content": blocks}
 
 
 @app.post("/projects/{project_id}/document")
@@ -4837,9 +5270,10 @@ def save_document(project_id: str, request: SaveDocumentRequest):
 
     doc_path = project_dir / "document.json"
 
+    snapshot = None
     # Optionally create a snapshot before overwriting
     if request.create_snapshot and doc_path.exists():
-        _create_snapshot(project_dir)
+        snapshot = _create_snapshot(project_dir, project_id)
 
     try:
         with open(doc_path, "w", encoding="utf-8") as f:
@@ -4847,7 +5281,18 @@ def save_document(project_id: str, request: SaveDocumentRequest):
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
 
-    return {"status": "ok", "size_bytes": doc_path.stat().st_size}
+    response = {
+        "status": "ok",
+        "project_id": project_id,
+        "size_bytes": doc_path.stat().st_size,
+        "updated_at": datetime.fromtimestamp(
+            doc_path.stat().st_mtime, timezone.utc
+        ).isoformat(),
+        "snapshot_created": snapshot is not None,
+    }
+    if snapshot is not None:
+        response["snapshot"] = snapshot.model_dump()
+    return response
 
 
 @app.get("/projects/{project_id}/document")
@@ -4857,7 +5302,10 @@ def load_document(project_id: str):
     doc_path = project_dir / "document.json"
 
     if not doc_path.exists():
-        return {"type": "doc", "content": []}
+        # Existing Studio projects predate document.json. Return their source
+        # script as an editable action document so opening the editor never
+        # silently drops the story opening.
+        return _document_response(project_id, _legacy_script_document(project_id), doc_path)
 
     try:
         with open(doc_path, "r", encoding="utf-8") as f:
@@ -4865,7 +5313,7 @@ def load_document(project_id: str):
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 @app.get("/projects/{project_id}/document/snapshots")
@@ -4881,10 +5329,7 @@ def list_document_snapshots(project_id: str):
     for f in history_dir.iterdir():
         if f.suffix == ".json" and f.is_file():
             snapshots.append(
-                DocumentSnapshotInfo(
-                    timestamp=f.stem,
-                    size_bytes=f.stat().st_size,
-                )
+                _snapshot_info(project_id, f)
             )
 
     # Sort by timestamp descending
@@ -4901,8 +5346,11 @@ def create_document_snapshot(project_id: str):
     if not doc_path.exists():
         raise HTTPException(status_code=404, detail="No document to snapshot")
 
-    _create_snapshot(project_dir)
-    return {"status": "ok"}
+    snapshot = _create_snapshot(project_dir, project_id)
+    return {
+        "status": "ok",
+        **(snapshot.model_dump() if snapshot else {}),
+    }
 
 
 @app.post("/projects/{project_id}/document/snapshots/{timestamp}/restore")
@@ -4918,13 +5366,16 @@ def restore_document_snapshot(project_id: str, timestamp: str):
     doc_path = project_dir / "document.json"
 
     try:
+        # Keep the document that is about to be replaced. This gives restore a
+        # reversible boundary and lets a user continue editing either branch.
+        _create_snapshot(project_dir, project_id)
         shutil.copy2(str(snapshot_path), str(doc_path))
         with open(doc_path, "r", encoding="utf-8") as f:
             content = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {e}")
 
-    return content
+    return _document_response(project_id, content, doc_path)
 
 
 # ═══════════════════════════════════════════════════════════════

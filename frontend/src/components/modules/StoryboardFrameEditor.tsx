@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Lock, Unlock, ChevronRight, Maximize2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, API_URL } from "@/lib/api";
+import { resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { VariantSelector } from "../common/VariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
@@ -17,7 +18,10 @@ interface StoryboardFrameEditorProps {
 export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: StoryboardFrameEditorProps) {
     const ts = useTranslations("storyboard");
     const currentProject = useProjectStore(state => state.currentProject);
+    const currentSeries = useProjectStore(state => state.currentSeries);
     const updateProject = useProjectStore(state => state.updateProject);
+    const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+    const selectionVersion = useRef(0);
 
     // Get the latest frame data from the store (instead of using stale prop)
     const frame = useMemo(() => {
@@ -66,8 +70,12 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
             // The api.renderFrame expects compositionData.
             // If we don't pass it, pipeline uses existing.
 
-            const globalStylePrompt = currentProject.art_direction?.style_config?.positive_prompt || "";
-            const globalNegativePrompt = currentProject.art_direction?.style_config?.negative_prompt || "";
+            const { positivePrompt: globalStylePrompt, negativePrompt: globalNegativePrompt } =
+                await resolveStoryboardStyleForRender(currentProject, currentSeries, async (seriesId) => {
+                    const series = await api.getSeries(seriesId);
+                    useProjectStore.getState().setCurrentSeries(series);
+                    return series;
+                });
             const effectivePrompt = [
                 resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride),
                 prompt,
@@ -89,23 +97,29 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         }
     };
 
-    const handleSelectVariant = async (variantId: string) => {
+    const handleSelectVariant = (variantId: string) => {
         if (!currentProject) return;
-        try {
+        const version = ++selectionVersion.current;
+        const operation = selectionQueue.current.then(async () => {
             const updatedProject = await api.selectAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
+            if (version === selectionVersion.current) updateProject(currentProject.id, updatedProject);
+        });
+        selectionQueue.current = operation.catch(() => {});
+        return operation.catch((error) => {
             console.error("Failed to select variant:", error);
-        }
+            throw error;
+        });
     };
 
     const handleDeleteVariant = async (variantId: string) => {
         if (!currentProject) return;
         try {
+            await selectionQueue.current;
             const updatedProject = await api.deleteAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            throw error;
         }
     };
 
@@ -141,6 +155,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                     {/* Left: Variant Selector */}
                     <div className="flex-1 bg-surface p-4 flex flex-col overflow-hidden relative">
                         <VariantSelector
+                            key={frame.id}
                             asset={frame.rendered_image_asset}
                             currentImageUrl={frame.rendered_image_url || frame.image_url}
                             onSelect={handleSelectVariant}

@@ -39,6 +39,18 @@ vi.mock('lucide-react', () => ({
     ChevronLeft: (props: any) => <span data-testid="icon-chevron-left" {...props} />,
     ChevronRight: (props: any) => <span data-testid="icon-chevron-right" {...props} />,
     Play: (props: any) => <span data-testid="icon-play" {...props} />,
+    Clapperboard: (props: any) => <span data-testid="icon-clapperboard" {...props} />,
+    AlertTriangle: (props: any) => <span data-testid="icon-alert-triangle" {...props} />,
+    Film: (props: any) => <span data-testid="icon-film" {...props} />,
+    Loader2: (props: any) => <span data-testid="icon-loader" {...props} />,
+    Layout: (props: any) => <span data-testid="icon-layout" {...props} />,
+    Check: (props: any) => <span data-testid="icon-check" {...props} />,
+    Clock: (props: any) => <span data-testid="icon-clock" {...props} />,
+    Music: (props: any) => <span data-testid="icon-music" {...props} />,
+    Sliders: (props: any) => <span data-testid="icon-sliders" {...props} />,
+    ArrowDown: (props: any) => <span data-testid="icon-arrow-down" {...props} />,
+    ArrowUp: (props: any) => <span data-testid="icon-arrow-up" {...props} />,
+    Save: (props: any) => <span data-testid="icon-save" {...props} />,
 }));
 
 // Mock AssetCard
@@ -55,8 +67,11 @@ const mockUpdateSeries = vi.fn();
 const mockCreateProject = vi.fn();
 const mockAddEpisodeToSeries = vi.fn();
 const mockCreateEpisodeForSeries = vi.fn();
+const mockSaveAssemblyPlan = vi.fn();
+const mockRenderAssemblyPlan = vi.fn();
 
 vi.mock('@/lib/api', () => ({
+    API_URL: 'http://localhost:17177',
     api: {
         getSeries: (...args: any[]) => mockGetSeries(...args),
         getSeriesEpisodes: (...args: any[]) => mockGetSeriesEpisodes(...args),
@@ -64,6 +79,8 @@ vi.mock('@/lib/api', () => ({
         createProject: (...args: any[]) => mockCreateProject(...args),
         addEpisodeToSeries: (...args: any[]) => mockAddEpisodeToSeries(...args),
         createEpisodeForSeries: (...args: any[]) => mockCreateEpisodeForSeries(...args),
+        saveAssemblyPlan: (...args: any[]) => mockSaveAssemblyPlan(...args),
+        renderAssemblyPlan: (...args: any[]) => mockRenderAssemblyPlan(...args),
     },
 }));
 
@@ -413,6 +430,42 @@ describe('SeriesDetailPage', () => {
             fireEvent.click(screen.getByText('添加集数'));
             const confirmBtn = screen.getByText('确定');
             expect(confirmBtn).toBeDisabled();
+        });
+    });
+
+    describe('Series Assembly render', () => {
+        it('renders the saved series plan and exposes the MP4 download', async () => {
+            const assemblyPlan = {
+                id: 'assembly-series-1',
+                scope: 'series',
+                target_duration_ms: 60_000,
+                revision: 1,
+                provenance: {},
+                lanes: [{
+                    id: 'video-main',
+                    kind: 'video',
+                    allow_overlap: false,
+                    label: 'Video',
+                    clips: [],
+                }],
+                markers: [],
+            };
+            mockGetSeries.mockResolvedValue({ ...mockSeries, assembly_plan: assemblyPlan });
+            mockRenderAssemblyPlan.mockResolvedValue({ url: 'video/series-sample.mp4' });
+
+            renderPage();
+            await waitFor(() => expect(screen.getByText('系列剪辑')).toBeInTheDocument());
+            fireEvent.click(screen.getByText('系列剪辑'));
+            const renderButton = await screen.findByRole('button', { name: '渲染样片' });
+            fireEvent.click(renderButton);
+
+            await waitFor(() => {
+                expect(mockRenderAssemblyPlan).toHaveBeenCalledWith('series', 'series-1');
+            });
+            expect(await screen.findByRole('link', { name: '下载 MP4' })).toHaveAttribute(
+                'href',
+                expect.stringContaining('video/series-sample.mp4'),
+            );
         });
     });
 });

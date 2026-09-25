@@ -3,12 +3,16 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { Image as ImageIcon, Play, ChevronRight } from "lucide-react";
+import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Series, Character, Scene, Prop, Project } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
+import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
+import { buildDraftSeriesAssemblyPlan, hasAssemblyPlanChanges } from "@/components/modules/assemblyEditPlan";
+import type { AssemblyEditPlan } from "@/lib/api";
+import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -34,6 +38,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [showImportAssets, setShowImportAssets] = useState(false);
+  const [assemblyPlan, setAssemblyPlan] = useState<AssemblyEditPlan | null>(null);
 
   const t = useTranslations("series");
   const tc = useTranslations("common");
@@ -54,6 +59,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         ]);
         setSeries(seriesData);
         setEpisodes(episodesData);
+        setAssemblyPlan(seriesData.assembly_plan ?? null);
         setEditTitle(seriesData.title);
       } catch (error) {
         console.error("Failed to fetch series data:", error);
@@ -123,6 +129,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       ]);
       setSeries(seriesData);
       setEpisodes(episodesData);
+      setAssemblyPlan(seriesData.assembly_plan ?? null);
     } catch (error) {
       console.error("Failed to refresh series data:", error);
     }
@@ -197,6 +204,14 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
               seriesId={seriesId}
               onSaved={refreshSeriesData}
             />
+          ) : activeItem.kind === "assembly" ? (
+            <SeriesAssemblyPanel
+              key="series-assembly"
+              series={series}
+              episodes={episodes}
+              plan={assemblyPlan}
+              onChange={setAssemblyPlan}
+            />
           ) : activeItem.kind === "asset" ? (
             <AssetContentPanel
               key={`asset-${activeItem.tab}`}
@@ -235,6 +250,144 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         onImported={refreshSeriesData}
       />
     </main>
+  );
+}
+
+function SeriesAssemblyPanel({
+  series,
+  episodes,
+  plan,
+  onChange,
+}: {
+  series: Series;
+  episodes: Project[];
+  plan: AssemblyEditPlan | null;
+  onChange: (plan: AssemblyEditPlan | null) => void;
+}) {
+  const t = useTranslations("series");
+  const [draft, setDraft] = useState<AssemblyEditPlan | null>(plan);
+  const [saving, setSaving] = useState(false);
+  const [rendering, setRendering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderedUrl, setRenderedUrl] = useState<string | null>(series.merged_video_url ?? null);
+
+  useEffect(() => {
+    setDraft(plan);
+  }, [plan]);
+
+  useEffect(() => {
+    setRenderedUrl(series.merged_video_url ?? null);
+  }, [series.merged_video_url]);
+
+  const hasUnsavedChanges = hasAssemblyPlanChanges(draft, plan);
+
+  const readyCount = episodes.reduce((total, episode) => {
+    const tasks = episode.video_tasks ?? [];
+    return total + (episode.frames ?? []).filter((frame: any) => {
+      const selected = frame.selected_video_id
+        ? tasks.find((task: any) => task.id === frame.selected_video_id)
+        : tasks.find((task: any) => task.frame_id === frame.id && task.status === "completed" && task.video_url);
+      return Boolean(frame.dubbed_video_url || (selected?.status === "completed" && selected?.video_url));
+    }).length;
+  }, 0);
+
+  const handleSave = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await api.saveAssemblyPlan("series", series.id, draft);
+      setDraft(saved);
+      onChange(saved);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Series Assembly save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRender = async () => {
+    if (!draft || hasUnsavedChanges) return;
+    setRendering(true);
+    setRenderError(null);
+    try {
+      const rendered = await api.renderAssemblyPlan("series", series.id);
+      setRenderedUrl(rendered.url);
+    } catch (renderFailure) {
+      setRenderError(extractErrorDetail(renderFailure, "Series Assembly render failed"));
+    } finally {
+      setRendering(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-8 pt-6 pb-2">
+        <h2 className="text-xl font-display font-bold text-foreground">{t("assemblyTitle")}</h2>
+        <p className="mt-1 text-xs text-text-muted">{t("assemblySubtitle")}</p>
+      </div>
+      <AssemblyPlanPhase
+        project={null}
+        plan={draft}
+        isSaving={saving}
+        error={error}
+        readyCountOverride={readyCount}
+        onCreate={() => setDraft(buildDraftSeriesAssemblyPlan(series.id, episodes))}
+        onChange={setDraft}
+        onSave={handleSave}
+      />
+      {draft && (
+        <section className="shrink-0 border-t border-glass-border bg-surface px-8 py-4" aria-labelledby="series-assembly-render-title">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h3 id="series-assembly-render-title" className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Film size={15} className="text-primary" aria-hidden="true" />
+                {t("assemblyRenderTitle")}
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                {hasUnsavedChanges ? t("assemblySaveBeforeRender") : t("assemblyRenderHint")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {renderedUrl && (
+                <a
+                  href={getAssetUrl(renderedUrl)}
+                  download
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-glass-border bg-glass px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-hover-bg"
+                >
+                  <Download size={14} aria-hidden="true" />
+                  {t("assemblyDownload")}
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={handleRender}
+                disabled={rendering || hasUnsavedChanges}
+                aria-busy={rendering}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {rendering ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Film size={14} aria-hidden="true" />}
+                {rendering ? t("assemblyRendering") : t("assemblyRender")}
+              </button>
+            </div>
+          </div>
+          {renderError && (
+            <div role="alert" className="mt-3 flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/[0.06] px-3 py-2 text-xs text-red-200">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{renderError}</span>
+            </div>
+          )}
+          {renderedUrl && (
+            <video
+              src={getAssetUrl(renderedUrl)}
+              controls
+              className="mt-4 aspect-video max-h-64 w-full rounded-md bg-black object-contain"
+            />
+          )}
+        </section>
+      )}
+    </div>
   );
 }
 

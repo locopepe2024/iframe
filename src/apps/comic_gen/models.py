@@ -1,13 +1,51 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
+import hashlib
 import json
+import os
 import time
-from pydantic import BaseModel, Field
+import uuid
+from pydantic import BaseModel, Field, model_validator
 
 from ...utils.model_catalog import get_default_model_settings
 
 
 _DEFAULT_MODEL_SETTINGS = get_default_model_settings()
+
+
+DIRECTOR_EXECUTION_SUMMARY_ENV = "IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS"
+DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS = 7000
+DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS = 1000
+DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS = 16000
+# A refinement request still needs a small editable snapshot so manual changes
+# in the visible draft are not lost. It must not resend an unbounded legacy
+# profile, however; the model receives this snapshot and returns a delta.
+DIRECTOR_REFINE_CONTEXT_MAX_CHARS = 16000
+DIRECTOR_REFINE_PATCH_MAX_CHARS = 16000
+DIRECTOR_CANON_STATE_MAX_ITEMS = 32
+DIRECTOR_CANON_STATE_MAX_CHARS = 12000
+DIRECTOR_CANON_EXECUTION_MAX_ITEMS = 16
+DIRECTOR_CANON_EXECUTION_MAX_CHARS = 3600
+
+
+def _coerce_director_execution_summary_limit(raw_value: Optional[str]) -> int:
+    """Parse the configurable summary budget with safe process-level bounds."""
+    try:
+        value = int(raw_value or DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS)
+    except (TypeError, ValueError):
+        value = DIRECTOR_EXECUTION_SUMMARY_DEFAULT_MAX_CHARS
+    return max(
+        DIRECTOR_EXECUTION_SUMMARY_MIN_CHARS,
+        min(value, DIRECTOR_EXECUTION_SUMMARY_HARD_MAX_CHARS),
+    )
+
+
+# Read once at process startup so one request cannot change another request's
+# output contract. Set IFRAME_DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS in .env or
+# the service environment when a larger/smaller bounded context is desired.
+DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS = _coerce_director_execution_summary_limit(
+    os.getenv(DIRECTOR_EXECUTION_SUMMARY_ENV)
+)
 
 class AspectRatio(str, Enum):
     SQUARE = "1:1"
@@ -136,6 +174,22 @@ class ImageVariant(BaseModel):
     source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
     source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
     source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
+    reference_asset_type: Optional[Literal["character", "scene", "prop"]] = Field(
+        None,
+        description="Asset-library reference type used to generate this variant",
+    )
+    reference_asset_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference asset ID used to generate this variant",
+    )
+    reference_variant_id: Optional[str] = Field(
+        None,
+        description="Asset-library reference variant ID used to generate this variant",
+    )
+    reference_inputs: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Ordered stable asset-library inputs used to generate this variant",
+    )
     reference_view_role: Optional[str] = Field(
         None,
         description="Optional product view role such as front, right, three_quarter_right, or detail",
@@ -182,6 +236,57 @@ class AssetUnit(BaseModel):
     image_updated_at: float = Field(default_factory=time.time, description="Timestamp of last image update")
     video_updated_at: float = Field(0.0, description="Timestamp of last motion ref update")
 
+
+class PoseReferenceSelection(BaseModel):
+    """Durable pose evidence selected for one storyboard shot.
+
+    This is intentionally provider-neutral. It identifies project-owned
+    variants and a director snapshot without pretending either is ControlNet.
+    """
+
+    variant_ids: List[str] = Field(default_factory=list, description="Ordered pose/reference variant IDs")
+    director_snapshot_media_id: Optional[str] = Field(None, description="Durable media ID for a director-desk snapshot")
+
+
+class AssetLibraryReference(BaseModel):
+    """Stable identity of one reusable image variant from the asset library.
+
+    The browser submits only these IDs. The pipeline resolves the image
+    material against the current owner's project/series/global asset pools at
+    task execution time, so delivery URLs never become durable request state.
+    """
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str = Field(..., min_length=1)
+    variant_id: str = Field(..., min_length=1)
+
+
+class AssetReferenceIndexEntry(BaseModel):
+    """Normalized reusable asset entry projected for reference pickers."""
+
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    name: str
+    description: str = ""
+    starred: bool = False
+    source_scope: Literal["episode", "project", "series", "global"]
+    source_container_id: Optional[str] = None
+    source_name: Optional[str] = None
+    selected_variant_id: Optional[str] = None
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover; independent from generation-container selection."
+    )
+    variants: List[ImageVariant] = Field(default_factory=list)
+
+
+class AssetReferenceIndex(BaseModel):
+    """Versioned effective asset view for one project."""
+
+    schema_version: Literal[1] = 1
+    project_id: str
+    assets: List[AssetReferenceIndexEntry] = Field(default_factory=list)
+
+
 class VideoTask(BaseModel):
     id: str
     project_id: str
@@ -214,6 +319,14 @@ class VideoTask(BaseModel):
     movement_amplitude: Optional[str] = Field(None, description="Vidu movement amplitude: auto/small/medium/large")
     # HappyHorse params
     reference_image_urls: List[str] = Field(default_factory=list, description="Reference image URLs for HappyHorse R2V (max 9)")
+    pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Immutable semantic pose-reference selections used for this task",
+    )
+    director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable director-desk snapshot media ID used for this task",
+    )
     ratio: Optional[str] = Field(None, description="Aspect ratio for HappyHorse T2V/R2V: 16:9, 9:16, 1:1, 4:3, 3:4")
     audio_setting: Optional[str] = Field(None, description="Audio setting for HappyHorse V2V: auto/origin")
     # Watermark toggle — supported by wan/kling/vidu/pixverse/happyhorse video models.
@@ -276,6 +389,17 @@ class Character(BaseModel):
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
     )
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from generation-container selection."
+    )
+    makeup_reference: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Virtual actor identity/makeup reference images",
+    )
+    pose_references: Optional[AssetUnit] = Field(
+        default_factory=AssetUnit,
+        description="Reusable pose and gesture reference images for this actor",
+    )
 
     # === LEGACY (pre R2V v2): Asset Activation v2 — three separate units ===
     # Frontend now collapses to reference_sheet; legacy fields are read
@@ -329,6 +453,7 @@ class Character(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -344,6 +469,9 @@ class Scene(BaseModel):
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
     image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this scene")
@@ -352,6 +480,7 @@ class Scene(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -368,6 +497,9 @@ class Prop(BaseModel):
     bgm_url: Optional[str] = None
     image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
+    cover_variant_id: Optional[str] = Field(
+        None, description="Explicit Asset Library cover variant; independent from the selected image variant."
+    )
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this prop")
@@ -376,6 +508,7 @@ class Prop(BaseModel):
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
     status: GenerationStatus = GenerationStatus.PENDING
+    generation_error: Optional[str] = Field(None, description="Recoverable image generation failure detail")
     director_review_required: bool = False
     director_profile_revision: Optional[int] = None
     director_profile_hash: Optional[str] = None
@@ -508,6 +641,14 @@ class StoryboardFrame(BaseModel):
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",
     )
+    workbench_pose_reference_variant_ids: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Ordered per-shot pose reference variant IDs keyed by semantic asset ID",
+    )
+    workbench_director_snapshot_media_id: Optional[str] = Field(
+        None,
+        description="Durable media ID for the shot's 3D director snapshot",
+    )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"
@@ -574,6 +715,28 @@ class DirectorProfile(BaseModel):
     prohibitions: List[str] = Field(default_factory=list)
     unresolved_questions: List[str] = Field(default_factory=list)
     sample_plan: List[Dict[str, Any]] = Field(default_factory=list)
+    execution_summary: str = Field(
+        "",
+        max_length=DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+        description=(
+            "Bounded, source-grounded direction for downstream storyboard and "
+            "asset prompts. The full profile remains the audit/edit source."
+        ),
+    )
+    scene_summaries: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Compact scene-local continuity memory. Each entry should identify "
+            "a source scene marker and its local summary/state transition."
+        ),
+    )
+    canon_state: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Source-linked, versioned story facts used to prevent cross-scene "
+            "drift. This is an editable/auditable ledger, not a semantic proof."
+        ),
+    )
     revision: int = Field(1, ge=1)
     content_hash: str = ""
     confirmed_at: float = 0.0
@@ -593,10 +756,33 @@ _DIRECTOR_OBJECT_LIST_FIELDS = (
     "key_events",
     "sample_plan",
 )
+_DIRECTOR_SCENE_SUMMARY_FIELDS = ("scene_summaries",)
 _DIRECTOR_STRING_LIST_FIELDS = (
     "continuity_constraints",
     "prohibitions",
     "unresolved_questions",
+)
+
+_DIRECTOR_CANON_CATEGORIES = (
+    "characters",
+    "relationships",
+    "world_rules",
+    "timeline",
+    "events",
+    "open_threads",
+    "conflicts",
+    "uncertainties",
+)
+_DIRECTOR_CANON_STATUSES = {"active", "contradicted", "superseded", "uncertain"}
+_DIRECTOR_CANON_ITEM_FIELDS = (
+    "fact_id",
+    "kind",
+    "subject",
+    "value",
+    "source_refs",
+    "source_revision",
+    "status",
+    "supersedes_fact_id",
 )
 
 
@@ -612,6 +798,431 @@ def _director_value_as_text(value: Any) -> str:
         # Drafts normally come from JSON, but keep validation deterministic if
         # an in-process caller passes a non-JSON value.
         return str(value)
+
+
+DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS = 16
+DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 3200
+DIRECTOR_SCENE_REF_MAX_CHARS = 40
+DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS = 64
+DIRECTOR_SCENE_STATE_MAX_CHARS = 48
+
+
+def _bounded_director_text(value: Any, limit: int) -> str:
+    """Turn summary input into text with an explicit hard character bound."""
+    text = _director_value_as_text(value).strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _canon_state_serialized_length(state: Dict[str, Any]) -> int:
+    return len(json.dumps(state, ensure_ascii=False, separators=(",", ":")))
+
+
+def _canon_state_items(state: Dict[str, Any]):
+    for category in _DIRECTOR_CANON_CATEGORIES:
+        for index, item in enumerate(state.get(category, [])):
+            yield category, index, item
+
+
+def _canon_fact_id(category: str, item: Dict[str, Any]) -> str:
+    """Provide a stable structural id when a model omits one.
+
+    The id is derived only from the normalized fact payload. It is not a
+    semantic identity claim; a changed value naturally receives a new id and
+    can be linked to its predecessor with ``supersedes_fact_id``. The array
+    position is intentionally excluded so reordering facts does not create a
+    new identity on every refinement.
+    """
+    explicit = _bounded_director_text(item.get("fact_id"), 80)
+    if explicit:
+        return explicit
+    seed = json.dumps(
+        {
+            "category": category,
+            "kind": item.get("kind", ""),
+            "subject": item.get("subject", ""),
+            "value": item.get("value", ""),
+            "source_refs": item.get("source_refs", []),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"{category}:{hashlib.sha256(seed.encode()).hexdigest()[:12]}"
+
+
+def _normalize_director_canon_item(
+    category: str, item: Any, index: int
+) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        item = {"value": item}
+    normalized: Dict[str, Any] = {}
+    for field in ("kind", "subject", "value", "supersedes_fact_id"):
+        if field in item and item[field] not in (None, "", [], {}):
+            limit = {
+                "kind": 48,
+                "subject": 120,
+                "value": 420,
+                "supersedes_fact_id": 80,
+            }[field]
+            normalized[field] = _bounded_director_text(item[field], limit)
+
+    refs = item.get("source_refs")
+    if refs not in (None, "", [], {}):
+        if isinstance(refs, str):
+            refs = [refs]
+        if not isinstance(refs, list):
+            raise TypeError(f"canon_state.{category}.source_refs must be a list")
+        normalized["source_refs"] = [
+            _bounded_director_text(ref, 80)
+            for ref in refs[:6]
+            if _bounded_director_text(ref, 80)
+        ]
+
+    source_revision = item.get("source_revision")
+    if source_revision not in (None, "", [], {}):
+        try:
+            source_revision = int(source_revision)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"canon_state.{category}.source_revision must be an integer"
+            ) from exc
+        if source_revision > 0:
+            normalized["source_revision"] = source_revision
+
+    status = item.get("status")
+    if status in _DIRECTOR_CANON_STATUSES:
+        normalized["status"] = status
+
+    normalized["fact_id"] = _canon_fact_id(category, {**item, **normalized})
+    # Keep the identity first in serialized objects so compact projections are
+    # still useful if a later budget pass truncates the tail of an item.
+    return {
+        "fact_id": normalized.pop("fact_id"),
+        **normalized,
+    }
+
+
+def _fit_director_canon_state(
+    state: Dict[str, Any],
+    max_chars: int,
+) -> Dict[str, Any]:
+    """Bound canon state without silently changing fact meaning.
+
+    Long values and source references are shortened first. If the envelope is
+    still too large, the last normalized facts are removed; facts that remain
+    keep their identity and explicit status. This is a transport projection,
+    not a semantic merge.
+    """
+    if max_chars < 2:
+        # An empty JSON object is the smallest valid object projection.
+        return {}
+
+    while _canon_state_serialized_length(state) > max_chars:
+        candidates = [
+            (len(item.get(field, "")), category, index, field, None)
+            for category, index, item in _canon_state_items(state)
+            for field in ("value", "subject", "kind", "supersedes_fact_id")
+            if isinstance(item.get(field), str) and len(item[field]) > 24
+        ]
+        candidates.extend(
+            (len(ref), category, index, "source_refs", ref_index)
+            for category, index, item in _canon_state_items(state)
+            for ref_index, ref in enumerate(item.get("source_refs", []))
+            if isinstance(ref, str) and len(ref) > 24
+        )
+        if candidates:
+            _, category, index, field, ref_index = max(candidates)
+            item = state[category][index]
+            excess = _canon_state_serialized_length(state) - max_chars
+            if field == "source_refs":
+                current = len(item[field][ref_index])
+                target = max(1, current - max(1, excess))
+                item[field][ref_index] = _bounded_director_text(
+                    item[field][ref_index], target
+                )
+            else:
+                current = len(item[field])
+                target = max(1, current - max(1, excess))
+                item[field] = _bounded_director_text(item[field], target)
+            continue
+
+        # At this point only fixed envelope overhead remains. Drop the newest
+        # trailing fact; preserving a fact that cannot fit would violate the
+        # transport contract. The semantic source remains in the editable
+        # profile and can be regenerated into a later projection.
+        for category in reversed(_DIRECTOR_CANON_CATEGORIES):
+            items = state.get(category)
+            if not items:
+                continue
+            items.pop()
+            if not items:
+                del state[category]
+            break
+        else:
+            return {}
+    return state
+
+
+def normalize_director_canon_state(
+    value: Any,
+    *,
+    max_items: int = DIRECTOR_CANON_STATE_MAX_ITEMS,
+    max_chars: int = DIRECTOR_CANON_STATE_MAX_CHARS,
+) -> Dict[str, Any]:
+    """Normalize the source-linked canon ledger at the Director boundary.
+
+    Only known categories and explicitly supported fields survive. The helper
+    raises for malformed category/list shapes so API callers can return a
+    validation error instead of silently inventing or flattening story facts.
+    """
+    if value in (None, "", [], {}):
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("canon_state must be an object")
+
+    raw_categories: Dict[str, List[Any]] = {}
+    for category in _DIRECTOR_CANON_CATEGORIES:
+        raw = value.get(category, [])
+        if raw in (None, ""):
+            raw = []
+        if not isinstance(raw, list):
+            raise TypeError(f"canon_state.{category} must be a list")
+        raw_categories[category] = raw
+
+    # Round-robin selection prevents one large category from starving all
+    # other continuity dimensions before the character limit is reached.
+    normalized: Dict[str, List[Dict[str, Any]]] = {
+        category: [] for category in _DIRECTOR_CANON_CATEGORIES
+    }
+    for offset in range(max_items):
+        added = False
+        for category in _DIRECTOR_CANON_CATEGORIES:
+            items = raw_categories[category]
+            if offset >= len(items):
+                continue
+            normalized[category].append(
+                _normalize_director_canon_item(category, items[offset], offset)
+            )
+            added = True
+            if sum(len(items) for items in normalized.values()) >= max_items:
+                break
+        if not added or sum(len(items) for items in normalized.values()) >= max_items:
+            break
+
+    state = {category: items for category, items in normalized.items() if items}
+    return _fit_director_canon_state(state, max_chars)
+
+
+def merge_director_canon_state(base: Any, patch: Any) -> Dict[str, Any]:
+    """Structurally merge explicit canon facts by ``fact_id``.
+
+    A refinement may send only the category it changed. Existing categories
+    therefore remain intact, while an item with the same stable id is replaced.
+    New ids are appended; the server does not infer that an old fact is false.
+    Callers can express that relationship with ``status`` and
+    ``supersedes_fact_id``.
+    """
+    merged = normalize_director_canon_state(base or {})
+    incoming = normalize_director_canon_state(patch or {})
+    for category, items in incoming.items():
+        existing = merged.setdefault(category, [])
+        by_id = {item.get("fact_id"): index for index, item in enumerate(existing)}
+        for item in items:
+            fact_id = item.get("fact_id")
+            if fact_id in by_id:
+                existing[by_id[fact_id]] = item
+            else:
+                by_id[fact_id] = len(existing)
+                existing.append(item)
+    return _fit_director_canon_state(merged, DIRECTOR_CANON_STATE_MAX_CHARS)
+
+
+def build_director_canon_state(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the compact canon projection for downstream consumers."""
+    return normalize_director_canon_state(
+        profile.get("canon_state", {}),
+        max_items=DIRECTOR_CANON_EXECUTION_MAX_ITEMS,
+        max_chars=DIRECTOR_CANON_EXECUTION_MAX_CHARS,
+    )
+
+
+def build_director_execution_summary(profile: Dict[str, Any]) -> str:
+    """Return the bounded downstream projection for a Director profile.
+
+    A model-produced ``execution_summary`` is preferred.  Older persisted
+    profiles do not have that field, so the compatibility projection keeps the
+    most useful constraints and direction fields under the same hard bound.
+    This helper is deliberately deterministic; it is not presented as a
+    semantic replacement for a model-generated summary.
+    """
+    existing = profile.get("execution_summary")
+    if isinstance(existing, str) and existing.strip():
+        return _bounded_director_text(existing, DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS)
+
+    sections = (
+        ("SETTING", profile.get("setting"), 300),
+        ("TIMELINE", profile.get("timeline"), 400),
+        ("RELATIONSHIPS", profile.get("relationships"), 400),
+        ("KEY_EVENTS", profile.get("key_events"), 550),
+        (
+            "DIRECTION",
+            {
+                field: profile.get(field)
+                for field in _DIRECTOR_TEXT_FIELDS
+                if profile.get(field)
+            },
+            700,
+        ),
+        (
+            "GUARDRAILS",
+            {
+                field: profile.get(field)
+                for field in _DIRECTOR_STRING_LIST_FIELDS
+                if profile.get(field)
+            },
+            700,
+        ),
+        ("SAMPLE_PLAN", profile.get("sample_plan"), 500),
+    )
+    rendered = []
+    for label, value, limit in sections:
+        if value in (None, "", [], {}):
+            continue
+        rendered.append(f"{label}: {_bounded_director_text(value, limit)}")
+    return _bounded_director_text(
+        "\n".join(rendered), DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+    )
+
+
+def _director_first_text(item: Dict[str, Any], keys: tuple[str, ...]) -> str:
+    """Return the first non-empty scalar value from a scene-memory item."""
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, "", [], {}):
+            return _director_value_as_text(value)
+    return ""
+
+
+def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
+    """Project one model/user scene-memory item to the execution contract.
+
+    Scene memory is intentionally a projection rather than a second source of
+    truth. Unknown keys stay in the editable full profile, while downstream
+    receives only the four stable fields needed to bridge scene boundaries.
+    """
+    if not isinstance(item, dict):
+        item = {"summary": _director_value_as_text(item)}
+
+    scene_ref = _director_first_text(
+        item, ("scene_ref", "scene", "scene_id", "marker", "phase", "id")
+    ) or f"scene-{index + 1}"
+    summary = _director_first_text(
+        item,
+        ("summary", "local_summary", "event", "action", "change", "function", "description"),
+    )
+    if not summary:
+        # Keep a deterministic representation for legacy or unusual model
+        # shapes instead of fabricating a semantic interpretation.
+        summary = _director_value_as_text(item)
+
+    entry: Dict[str, str] = {
+        "scene_ref": _bounded_director_text(scene_ref, DIRECTOR_SCENE_REF_MAX_CHARS),
+        "summary": _bounded_director_text(
+            summary, DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS
+        ),
+    }
+    state_in = _director_first_text(
+        item, ("state_in", "entry_state", "continuity_in", "before")
+    )
+    state_out = _director_first_text(
+        item, ("state_out", "exit_state", "continuity_out", "after")
+    )
+    if state_in:
+        entry["state_in"] = _bounded_director_text(
+            state_in, DIRECTOR_SCENE_STATE_MAX_CHARS
+        )
+    if state_out:
+        entry["state_out"] = _bounded_director_text(
+            state_out, DIRECTOR_SCENE_STATE_MAX_CHARS
+        )
+    return entry
+
+
+def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Return bounded scene-local continuity memory for downstream prompts.
+
+    New Director responses should provide ``scene_summaries`` directly. For
+    legacy profiles, key events and timeline entries are projected into the
+    same shape. If neither exists, a single ``__global__`` fallback is used so
+    callers can distinguish missing scene-local evidence from an empty field.
+    The fallback is deliberately not presented as scene-specific truth.
+    """
+    source = profile.get("scene_summaries")
+    candidates: List[Any] = list(source) if isinstance(source, list) else []
+    if not candidates:
+        for field in ("key_events", "timeline"):
+            values = profile.get(field)
+            if isinstance(values, list):
+                candidates.extend(values)
+
+    if not candidates:
+        global_summary = build_director_execution_summary(profile)
+        if global_summary:
+            candidates = [{"scene_ref": "__global__", "summary": global_summary}]
+
+    result: List[Dict[str, str]] = [
+        _director_scene_memory_entry(item, index)
+        for index, item in enumerate(candidates[:DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS])
+    ]
+
+    # Keep all selected scene refs when possible. If verbose model text makes
+    # the envelope exceed its budget, shrink state fields first, then local
+    # summaries, and only then the ref. This avoids the more damaging behavior
+    # of dropping every scene after the first overlong entry.
+    def serialized_length() -> int:
+        return len(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16, "scene_ref": 8}
+    # Preserve the transition fields when compressing: a short state bridge is
+    # more useful for cross-scene continuity than a verbose local description.
+    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1, "scene_ref": 2}
+    while serialized_length() > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
+        shrinkable = [
+            (shrink_order[key], -len(entry[key]), index, key)
+            for index, entry in enumerate(result)
+            for key in ("state_in", "state_out", "summary", "scene_ref")
+            if key in entry and len(entry[key]) > minimum_lengths[key]
+        ]
+        if not shrinkable:
+            # The minima above are deliberately small enough that this should
+            # be unreachable, but preserve valid JSON if a future schema adds
+            # unexpected fixed overhead.
+            result = result[: max(1, len(result) - 1)]
+            break
+        _, _, index, key = min(shrinkable)
+        entry = result[index]
+        excess = serialized_length() - DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
+        current_length = len(entry[key])
+        target_length = max(minimum_lengths[key], current_length - max(1, excess))
+        if target_length <= 0:
+            entry.pop(key, None)
+        else:
+            entry[key] = _bounded_director_text(entry[key], target_length)
+    return result
+
+
+def director_execution_payload(profile: "DirectorProfile | Dict[str, Any]") -> Dict[str, Any]:
+    """Expose only the stable, bounded contract consumed downstream."""
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
+    return {
+        "revision": raw.get("revision", 1),
+        "content_hash": raw.get("content_hash", ""),
+        "execution_summary": build_director_execution_summary(raw),
+        "scene_summaries": build_director_scene_summaries(raw),
+        "canon_state": build_director_canon_state(raw),
+    }
 
 
 def _normalize_director_object_list(value: Any) -> Any:
@@ -659,11 +1270,212 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         if field in normalized:
             normalized[field] = _normalize_director_object_list(normalized[field])
 
+    for field in _DIRECTOR_SCENE_SUMMARY_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+
     for field in _DIRECTOR_STRING_LIST_FIELDS:
         if field in normalized:
             normalized[field] = _normalize_director_string_list(normalized[field])
 
+    if "canon_state" in normalized:
+        normalized["canon_state"] = normalize_director_canon_state(
+            normalized["canon_state"]
+        )
+
+    normalized["execution_summary"] = build_director_execution_summary(normalized)
+
     return normalized
+
+
+_DIRECTOR_PROFILE_FIELDS = (
+    "setting",
+    "timeline",
+    "relationships",
+    "key_events",
+    "emotional_arc",
+    "pacing",
+    "visual_language",
+    "performance_direction",
+    "dialogue_direction",
+    "sound_direction",
+    "continuity_constraints",
+    "prohibitions",
+    "unresolved_questions",
+    "sample_plan",
+    "execution_summary",
+    "scene_summaries",
+    "canon_state",
+)
+
+
+def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a partial Director revision without filling omitted fields.
+
+    Refinement responses are deltas.  In particular, do not call
+    ``build_director_execution_summary`` when ``execution_summary`` is absent:
+    doing so would turn an otherwise tiny patch into a synthesized copy of the
+    whole profile and reintroduce the response avalanche this contract avoids.
+    """
+    if not isinstance(patch, dict):
+        raise TypeError("Director refinement response must be a JSON object")
+
+    normalized: Dict[str, Any] = {
+        key: value for key, value in patch.items() if key in _DIRECTOR_PROFILE_FIELDS
+    }
+    for field in _DIRECTOR_TEXT_FIELDS:
+        if field in normalized:
+            normalized[field] = _director_value_as_text(normalized[field])
+
+    if "setting" in normalized and normalized["setting"] is None:
+        normalized["setting"] = {}
+    for field in _DIRECTOR_OBJECT_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_object_list(normalized[field])
+    if "scene_summaries" in normalized:
+        normalized["scene_summaries"] = _normalize_director_object_list(
+            normalized["scene_summaries"]
+        )
+    for field in _DIRECTOR_STRING_LIST_FIELDS:
+        if field in normalized:
+            normalized[field] = _normalize_director_string_list(normalized[field])
+    if "canon_state" in normalized:
+        normalized["canon_state"] = normalize_director_canon_state(
+            normalized["canon_state"]
+        )
+    if "execution_summary" in normalized:
+        normalized["execution_summary"] = _bounded_director_text(
+            normalized["execution_summary"], DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS
+        )
+    return normalized
+
+
+def merge_director_profile_patch(
+    base: Dict[str, Any], patch: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Apply a partial revision while dropping echoed unchanged fields.
+
+    A model that ignores the delta instruction may still echo the full profile.
+    Comparing fields before merging makes that failure mode idempotent: an
+    unchanged 20 KB timeline is not treated as a new revision and cannot grow
+    on every subsequent rethink. A genuinely changed patch is bounded so a
+    malformed response fails before it can become the next draft.
+    """
+    normalized_patch = normalize_director_profile_patch(patch)
+    changed: Dict[str, Any] = {}
+    for key, value in normalized_patch.items():
+        if key == "canon_state":
+            merged_canon = merge_director_canon_state(base.get(key, {}), value)
+            if merged_canon == normalize_director_canon_state(base.get(key, {})):
+                continue
+            changed[key] = merged_canon
+            continue
+        if key in base and base.get(key) == value:
+            continue
+        changed[key] = value
+    if len(json.dumps(changed, ensure_ascii=False, separators=(",", ":"))) > DIRECTOR_REFINE_PATCH_MAX_CHARS:
+        raise ValueError(
+            f"Director refinement patch exceeds {DIRECTOR_REFINE_PATCH_MAX_CHARS} characters"
+        )
+    merged = dict(base)
+    merged.update(changed)
+    return normalize_director_profile_draft(merged)
+
+
+def _compact_director_context_value(value: Any, limit: int) -> Any:
+    """Keep a JSON-shaped, bounded view of one editable profile field."""
+    if value in (None, "", [], {}):
+        return value
+    if isinstance(value, str):
+        return _bounded_director_text(value, limit)
+    if isinstance(value, dict):
+        compact: Dict[str, Any] = {}
+        for key, child in value.items():
+            compact[str(key)] = _compact_director_context_value(child, max(32, limit // 3))
+            if len(json.dumps(compact, ensure_ascii=False, separators=(",", ":"))) >= limit:
+                break
+        return compact
+    if isinstance(value, list):
+        compact_list: List[Any] = []
+        for child in value:
+            compact_list.append(_compact_director_context_value(child, max(48, limit // 3)))
+            if len(json.dumps(compact_list, ensure_ascii=False, separators=(",", ":"))) >= limit:
+                break
+        return compact_list
+    return _bounded_director_text(value, limit)
+
+
+def build_director_refinement_context(
+    profile: "DirectorProfile | Dict[str, Any]",
+) -> Dict[str, Any]:
+    """Build the bounded editable snapshot sent to a Director revision call.
+
+    The full draft remains on the client/server for editing and audit.  The
+    model sees the canonical execution layers plus short field snapshots, not
+    arbitrary legacy text.  This is an input bound; the delta response bound
+    is enforced separately by the refinement prompt and patch merge.
+    """
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else dict(profile)
+    scene_summaries = build_director_scene_summaries(raw)
+    scene_serialized_length = len(
+        json.dumps(scene_summaries, ensure_ascii=False, separators=(",", ":"))
+    )
+    canon_state = build_director_canon_state(raw)
+    canon_serialized_length = len(
+        json.dumps(canon_state, ensure_ascii=False, separators=(",", ":"))
+    )
+    summary_limit = max(
+        512,
+        min(
+            DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+            DIRECTOR_REFINE_CONTEXT_MAX_CHARS
+            - scene_serialized_length
+            - canon_serialized_length
+            - 128,
+        ),
+    )
+    context: Dict[str, Any] = {
+        "execution_summary": _bounded_director_text(
+            build_director_execution_summary(raw), summary_limit
+        ),
+        "scene_summaries": scene_summaries,
+        "canon_state": canon_state,
+    }
+    field_limits = {
+        "setting": 700,
+        "timeline": 700,
+        "relationships": 900,
+        "key_events": 1000,
+        "emotional_arc": 220,
+        "pacing": 220,
+        "visual_language": 260,
+        "performance_direction": 220,
+        "dialogue_direction": 220,
+        "sound_direction": 220,
+        "continuity_constraints": 600,
+        "prohibitions": 600,
+        "unresolved_questions": 600,
+        "sample_plan": 900,
+    }
+    for field, limit in field_limits.items():
+        if field in raw and raw[field] not in (None, "", [], {}):
+            context[field] = _compact_director_context_value(raw[field], limit)
+
+    # Keep the JSON envelope bounded even if a future field is added without a
+    # per-field limit. Optional editable snapshots are removed first; the
+    # execution summary and scene memory remain the canonical minimum context.
+    optional_fields = [
+        "sample_plan", "timeline", "relationships", "key_events", "setting",
+        "continuity_constraints", "prohibitions", "unresolved_questions",
+        "sound_direction", "dialogue_direction", "performance_direction",
+        "visual_language", "pacing", "emotional_arc",
+    ]
+    while len(json.dumps(context, ensure_ascii=False, separators=(",", ":"))) > DIRECTOR_REFINE_CONTEXT_MAX_CHARS:
+        removed = next((field for field in optional_fields if field in context), None)
+        if removed is None:
+            break
+        context.pop(removed)
+    return context
 
 
 class ArtDirection(BaseModel):
@@ -685,6 +1497,145 @@ class PromptConfig(BaseModel):
     # Polish 调用使用的 LLM 模型。空 = 用 LLMAdapter 默认（qwen3.6-plus）。
     # 显式覆盖时用于切到 vision-capable 或更便宜的模型（qwen3.6-flash、kimi-k2.6 等）。
     polish_model: str = Field("", description="Override LLM model id used for polish calls; empty = use system default")
+
+
+# ---------------------------------------------------------------------------
+# Assembly edit plan
+# ---------------------------------------------------------------------------
+# These models describe editorial intent and stable media identity.  They do
+# not contain signed delivery URLs and they never submit a provider task by
+# themselves.  The pipeline performs the owner/reference checks that require
+# access to the persisted project and series stores.
+
+ASSEMBLY_DEFAULT_TARGET_DURATION_MS = 60_000
+ASSEMBLY_MAX_TARGET_DURATION_MS = 3_600_000
+
+
+class AssemblyClip(BaseModel):
+    """One bounded source range placed on a timeline lane."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    timeline_start_ms: int = Field(..., ge=0)
+    timeline_end_ms: int = Field(..., gt=0)
+    source_start_ms: int = Field(0, ge=0)
+    source_end_ms: Optional[int] = Field(None, gt=0)
+
+    # Stable project/episode/frame/task identities.  ``source_project_id`` is
+    # the owning Script id; for a series plan this points at the episode
+    # project.  The optional episode field is retained as an explicit marker
+    # so a plan can preserve editorial context without relying on title text.
+    source_project_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_episode_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_frame_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_task_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_refs: List[str] = Field(default_factory=list, max_length=12)
+
+    label: Optional[str] = Field(None, max_length=200)
+    enabled: bool = True
+    gain: Optional[float] = Field(None, ge=0, le=2)
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.timeline_end_ms <= self.timeline_start_ms:
+            raise ValueError("timeline_end_ms must be greater than timeline_start_ms")
+        if self.source_end_ms is not None and self.source_end_ms <= self.source_start_ms:
+            raise ValueError("source_end_ms must be greater than source_start_ms")
+        return self
+
+
+class AssemblyLane(BaseModel):
+    """An ordered video/audio/editorial lane in an Assembly plan."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    kind: Literal["video", "dialogue", "bgm", "sfx", "markers"]
+    clips: List[AssemblyClip] = Field(default_factory=list, max_length=256)
+    # Overlap is explicit for audio lanes.  Video overlap is never accepted;
+    # markers are not rendered and are handled separately on the plan.
+    allow_overlap: bool = False
+    label: Optional[str] = Field(None, max_length=120)
+
+
+class AssemblyMarker(BaseModel):
+    """Non-rendering editorial evidence on the Assembly timeline."""
+
+    id: str = Field(..., min_length=1, max_length=120)
+    time_ms: int = Field(..., ge=0)
+    label: str = Field(..., min_length=1, max_length=240)
+    marker_type: Literal["episode", "memory", "story_node", "note"] = "note"
+    source_refs: List[str] = Field(default_factory=list, max_length=12)
+    source_episode_id: Optional[str] = Field(None, min_length=1, max_length=120)
+
+
+class AssemblyEditPlan(BaseModel):
+    """Versioned, owner-scoped swimlane plan for project or series Assembly."""
+
+    id: str = Field(
+        default_factory=lambda: f"assembly-{uuid.uuid4().hex}",
+        min_length=1,
+        max_length=120,
+    )
+    scope: Literal["project", "series"]
+    target_duration_ms: int = Field(
+        ASSEMBLY_DEFAULT_TARGET_DURATION_MS,
+        ge=1,
+        le=ASSEMBLY_MAX_TARGET_DURATION_MS,
+    )
+    revision: int = Field(1, ge=1)
+    # Provenance is intentionally descriptive; the persisted source of truth
+    # remains Director/Content IR and their source_refs, not this free-form
+    # dictionary.
+    source_revision: Optional[int] = Field(None, ge=1)
+    director_revision: Optional[int] = Field(None, ge=1)
+    content_ir_revision: Optional[int] = Field(None, ge=1)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    lanes: List[AssemblyLane] = Field(default_factory=list, max_length=8)
+    markers: List[AssemblyMarker] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_timeline(self):
+        lane_ids = [lane.id for lane in self.lanes]
+        if len(lane_ids) != len(set(lane_ids)):
+            raise ValueError("assembly lane ids must be unique")
+
+        clip_ids: set[str] = set()
+        for lane in self.lanes:
+            previous: List[AssemblyClip] = []
+            for clip in lane.clips:
+                if clip.id in clip_ids:
+                    raise ValueError(f"assembly clip id must be unique: {clip.id}")
+                clip_ids.add(clip.id)
+                if clip.timeline_end_ms > self.target_duration_ms:
+                    raise ValueError(
+                        f"clip {clip.id} ends after target_duration_ms"
+                    )
+                if lane.kind == "video" and not clip.source_refs:
+                    raise ValueError(
+                        f"video clip {clip.id} requires source_refs"
+                    )
+
+                # Clips are interpreted as half-open [start, end) ranges.
+                # Sorting is unnecessary for validation and would mutate the
+                # user's editorial order, so compare against prior clips.
+                overlapping = any(
+                    clip.timeline_start_ms < other.timeline_end_ms
+                    and other.timeline_start_ms < clip.timeline_end_ms
+                    for other in previous
+                )
+                if overlapping and (lane.kind == "video" or not lane.allow_overlap):
+                    raise ValueError(
+                        f"overlapping clips are not allowed in lane {lane.id}"
+                    )
+                previous.append(clip)
+
+        marker_ids = [marker.id for marker in self.markers]
+        if len(marker_ids) != len(set(marker_ids)):
+            raise ValueError("assembly marker ids must be unique")
+        for marker in self.markers:
+            if marker.time_ms > self.target_duration_ms:
+                raise ValueError(
+                    f"marker {marker.id} is after target_duration_ms"
+                )
+        return self
 
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
@@ -734,6 +1685,13 @@ class Script(BaseModel):
     mix_settings: Dict[str, int] = Field(
         default_factory=lambda: {"dialogue": 100, "bgm": 35, "sfx": 60},
         description="Per-track gain 0-100: dialogue / bgm / sfx",
+    )
+
+    # Optional v1 timeline.  None deliberately preserves the legacy frame-
+    # order merge path for projects that have not opted into Assembly edits.
+    assembly_plan: Optional[AssemblyEditPlan] = Field(
+        None,
+        description="Owner-scoped Assembly swimlane plan; None uses legacy merge",
     )
 
     # Series association
@@ -818,6 +1776,18 @@ class Series(BaseModel):
 
     # Episode references
     episode_ids: List[str] = Field(default_factory=list, description="Ordered list of Episode/Script IDs")
+
+    # Optional series-level timeline.  It may reference only episode projects
+    # registered in this series; pipeline validation enforces that boundary.
+    assembly_plan: Optional[AssemblyEditPlan] = Field(
+        None,
+        description="Series-level Assembly swimlane plan; None means no custom cut",
+    )
+
+    merged_video_url: Optional[str] = Field(
+        None,
+        description="Owner-scoped rendered artifact for the series Assembly plan",
+    )
 
     created_at: float
     updated_at: float

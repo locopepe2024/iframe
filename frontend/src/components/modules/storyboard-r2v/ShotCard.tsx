@@ -35,6 +35,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import { useProjectStore } from "@/store/projectStore";
 import { selectedVariantUrl } from "@/lib/characterImage";
+import type { AssetReferenceIndexEntry } from "@/lib/api";
 
 export interface ShotNode {
     id: string;
@@ -46,6 +47,8 @@ export interface ShotNode {
     generateAudio?: boolean;
     /** Explicit image variants selected from each semantic asset for this shot. */
     referenceVariantIds?: Record<string, string[]>;
+    poseReferenceVariantIds?: Record<string, string[]>;
+    directorSnapshotMediaId?: string | null;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy
@@ -128,6 +131,7 @@ interface ShotCardProps {
     characters: any[];
     scenes: any[];
     props: any[];
+    assetIndex?: AssetReferenceIndexEntry[];
     onUpdatePrompt: (prompt: string) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
     globalStylePrompt?: string;
@@ -185,6 +189,7 @@ export default function ShotCard({
     characters,
     scenes,
     props,
+    assetIndex,
     onUpdatePrompt,
     onUpdateField,
     globalStylePrompt = "",
@@ -960,6 +965,7 @@ export default function ShotCard({
                             characters={characters}
                             scenes={scenes}
                             props={props}
+                            assetIndex={assetIndex}
                             selectedVariantIds={shot.referenceVariantIds}
                             onInsertAsset={handleInsertAssetFromChip}
                             onToggleVariant={onToggleReferenceVariant}

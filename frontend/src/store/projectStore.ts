@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
+import type { AssemblyEditPlan } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
@@ -23,6 +24,9 @@ export interface ImageVariant {
     source_origin?: "upload" | "workbench" | "generation";
     source_generation_id?: string;
     source_output_id?: string;
+    reference_asset_type?: "character" | "scene" | "prop";
+    reference_asset_id?: string;
+    reference_variant_id?: string;
     reference_view_role?: string;
     reference_distance?: string;
     camera_yaw?: number;
@@ -78,6 +82,10 @@ export interface Character {
     // reference_sheet is the canonical character asset (new schema);
     // full_body_asset is legacy, kept only as a read fallback.
     reference_sheet?: AssetUnit;
+    /** Older compatibility payload; prefer reference_sheet/full_body_asset when both exist. */
+    full_body?: AssetUnit;
+    makeup_reference?: AssetUnit;
+    pose_references?: AssetUnit;
     full_body_asset?: ImageAsset;
     three_view_asset?: ImageAsset;
     headshot_asset?: ImageAsset;
@@ -90,6 +98,8 @@ export interface Character {
     voice_name?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     status?: string;
     is_consistent?: boolean;
     full_body_updated_at?: number;
@@ -103,7 +113,7 @@ export interface Character {
      *  Drives UI badges + the "high-cost action" confirm modal
      *  (A2 design decision). Not persisted; set fresh on every
      *  GET /projects/{id} response. */
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Scene {
@@ -117,9 +127,11 @@ export interface Scene {
     status?: string;
     locked?: boolean;
     starred?: boolean;
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
     time_of_day?: string;
     lighting_mood?: string;
-    source?: "episode" | "series";
+    source?: "episode" | "series" | "global";
 }
 
 export interface Prop {
@@ -133,7 +145,9 @@ export interface Prop {
     status?: string;
     locked?: boolean;
     starred?: boolean;
-    source?: "episode" | "series";
+    /** Explicit Asset Library cover; independent from generation-container selections. */
+    cover_variant_id?: string | null;
+    source?: "episode" | "series" | "global";
 }
 
 export interface StoryboardFrame {
@@ -150,6 +164,8 @@ export interface StoryboardFrame {
     locked?: boolean;
     workbench_generate_audio?: boolean | null;
     workbench_reference_variant_ids?: Record<string, string[]>;
+    workbench_pose_reference_variant_ids?: Record<string, string[]>;
+    workbench_director_snapshot_media_id?: string | null;
     // ... other fields
 }
 
@@ -210,6 +226,12 @@ export interface DirectorProfile {
     prohibitions: string[];
     unresolved_questions: string[];
     sample_plan: Record<string, unknown>[];
+    /** Bounded downstream contract; the full fields remain editable/auditable. */
+    execution_summary?: string;
+    /** Scene-local continuity memory used by storyboard/asset prompts. */
+    scene_summaries?: Record<string, unknown>[];
+    /** Source-linked cross-scene canon ledger; bounded by the backend contract. */
+    canon_state?: Record<string, unknown>;
     revision: number;
     content_hash: string;
     confirmed_at: number;
@@ -280,6 +302,8 @@ export interface Series {
      *  direct_r2v); 'i2v' = 画面优先 (new shots default t2i_i2v). */
     default_generation_mode?: "r2v" | "i2v";
     episode_ids: string[];
+    assembly_plan?: AssemblyEditPlan | null;
+    merged_video_url?: string | null;
     created_at: number;
     updated_at: number;
 }
@@ -298,6 +322,7 @@ export interface Project {
     updatedAt: string;
     aspectRatio?: string;
     style_preset?: string;
+    style_prompt?: string;
     art_direction?: ArtDirection;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
@@ -309,6 +334,7 @@ export interface Project {
     /** PR-3k · Assembly Mix phase fields */
     bgm_url?: string | null;
     mix_settings?: Record<string, number>;
+    assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
@@ -351,7 +377,7 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number }[];
+    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string }[];
     addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
 
@@ -797,10 +823,16 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
+            version: 2,
+            migrate: (persistedState: any) => ({
+                ...persistedState,
+                // Generation markers are runtime state. Older releases
+                // persisted markers without a backend task ID, which left
+                // assets stuck after a server restart.
+                generatingTasks: [],
+            }),
             partialize: (state) => ({
                 projects: state.projects,
-
-                generatingTasks: state.generatingTasks // Now persisting this to maintain state across refreshes
             }),
         }
     )

@@ -24,6 +24,15 @@ it("inserts one semantic asset while selecting multiple child views", () => {
                         { id: "close", url: "close.png", reference_distance: "close" },
                     ],
                 } }]}
+                assetIndex={[{
+                    asset_type: "prop", asset_id: "product", name: "穿心莲",
+                    source_scope: "series", selected_variant_id: "front",
+                    variants: [
+                        { id: "front", url: "front.png", reference_view_role: "front" },
+                        { id: "medium", url: "medium.png", reference_distance: "medium" },
+                        { id: "close", url: "close.png", reference_distance: "close" },
+                    ],
+                }]}
                 selectedVariantIds={{ product: ["front", "medium"] }}
                 onInsertAsset={insert}
                 onToggleVariant={toggle}
@@ -38,4 +47,34 @@ it("inserts one semantic asset while selecting multiple child views", () => {
     expect(screen.getByRole("button", { name: "close" }).getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: "close" }));
     expect(toggle).toHaveBeenCalledWith("product", "close", "front");
+});
+
+it("does not offer historical character variants as multiple storyboard references", () => {
+    const toggle = vi.fn();
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <AssetChipBar
+                characters={[{ id: "character", name: "谭瑞齐（归国时期）" }]}
+                scenes={[]}
+                props={[]}
+                assetIndex={[{
+                    asset_type: "character", asset_id: "character", name: "谭瑞齐（归国时期）",
+                    source_scope: "series", selected_variant_id: "current",
+                    variants: [
+                        { id: "current", url: "current.jpg" },
+                        { id: "old-1", url: "old-1.jpg" },
+                        { id: "old-2", url: "old-2.jpg" },
+                        { id: "old-3", url: "old-3.jpg" },
+                        { id: "old-4", url: "old-4.jpg" },
+                    ],
+                }]}
+                onInsertAsset={vi.fn()}
+                onToggleVariant={toggle}
+            />
+        </NextIntlClientProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Select reference views for 谭瑞齐（归国时期）" })).toBeNull();
+    expect(screen.getByRole("button", { name: "谭瑞齐（归国时期）" })).toBeTruthy();
+    expect(toggle).not.toHaveBeenCalled();
 });

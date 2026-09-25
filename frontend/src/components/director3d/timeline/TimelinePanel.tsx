@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { createIdleLocalAnimationImportState, createLocalAnimationImportErrorState, LOCAL_ANIMATION_MAX_BYTES, parseLocalAnimationManifest } from "../state/local-animation-import";
 import { useWorkbenchStore } from "../state/workbench-store";
 import type { TimelineTrackKind } from "../types";
 
@@ -29,6 +30,7 @@ const PROPERTY_KEYS: Record<TimelineTrackKind, string> = {
 
 export function TimelinePanel() {
   const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
+  const localAnimationImport = useWorkbenchStore((state) => state.localAnimationImport);
   const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
   const selectedCharacterId = useWorkbenchStore((state) => state.selectedCharacterId);
   const selectedCameraId = useWorkbenchStore((state) => state.selectedCameraId);
@@ -41,6 +43,9 @@ export function TimelinePanel() {
   const setPlayheadFrame = useWorkbenchStore((state) => state.setPlayheadFrame);
   const setTimelineDuration = useWorkbenchStore((state) => state.setTimelineDuration);
   const setTimelineFps = useWorkbenchStore((state) => state.setTimelineFps);
+  const setLocalAnimationImportState = useWorkbenchStore((state) => state.setLocalAnimationImportState);
+  const clearLocalAnimationImport = useWorkbenchStore((state) => state.clearLocalAnimationImport);
+  const applyLocalAnimationManifest = useWorkbenchStore((state) => state.applyLocalAnimationManifest);
   const addTimelineTrack = useWorkbenchStore((state) => state.addTimelineTrack);
   const removeTimelineTrack = useWorkbenchStore((state) => state.removeTimelineTrack);
   const upsertTimelineKeyframe = useWorkbenchStore((state) => state.upsertTimelineKeyframe);
@@ -52,10 +57,44 @@ export function TimelinePanel() {
   const [loop, setLoop] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [minimized, setMinimized] = useState(false);
+  const [localImportOpen, setLocalImportOpen] = useState(false);
+  const [readingLocalAnimation, setReadingLocalAnimation] = useState(false);
+  const localAnimationFileInput = useRef<HTMLInputElement>(null);
   const [trackKind, setTrackKind] = useState<TimelineTrackKind>("character_transform");
   const lastTick = useRef<number | null>(null);
   const maximumFrame = Math.max(1, Math.round(timeline.durationSeconds * timeline.fps) + 1);
 
+  const openLocalAnimationPicker = () => localAnimationFileInput.current?.click();
+  const closeLocalAnimationImport = () => {
+    setLocalImportOpen(false);
+    setReadingLocalAnimation(false);
+    clearLocalAnimationImport();
+  };
+  const handleLocalAnimationFile = async (file: File | undefined) => {
+    if (!file) return;
+    setLocalImportOpen(true);
+    setReadingLocalAnimation(true);
+    setLocalAnimationImportState({ ...createIdleLocalAnimationImportState(), status: "reading", fileName: file.name });
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setReadingLocalAnimation(false);
+      setLocalAnimationImportState(createLocalAnimationImportErrorState(file.name, "请选择 .json 白模动画 manifest；GLB、FBX、BVH 和视频文件暂不在本 V1 范围内。"));
+      return;
+    }
+    if (file.size > LOCAL_ANIMATION_MAX_BYTES) {
+      setReadingLocalAnimation(false);
+      setLocalAnimationImportState(createLocalAnimationImportErrorState(file.name, `文件不能超过 ${Math.round(LOCAL_ANIMATION_MAX_BYTES / 1024 / 1024)} MiB。`));
+      return;
+    }
+    try {
+      const raw = JSON.parse(await file.text()) as unknown;
+      const parsed = parseLocalAnimationManifest(raw, { availableCharacterIds: Object.keys(characters), sourceLabel: file.name });
+      setLocalAnimationImportState(parsed.state);
+    } catch (caught) {
+      setLocalAnimationImportState(createLocalAnimationImportErrorState(file.name, caught instanceof Error ? `JSON 读取失败：${caught.message}` : "JSON 读取失败。"));
+    } finally {
+      setReadingLocalAnimation(false);
+    }
+  };
   useEffect(() => {
     if (!playing) { lastTick.current = null; return; }
     let handle = 0;
@@ -110,12 +149,37 @@ export function TimelinePanel() {
     <div className="timeline-heading">
       <div><p className="kicker">Timeline</p><h3>有界时间线 · {timeline.durationSeconds.toFixed(2)}s / {timeline.fps}fps</h3></div>
       <div className="timeline-actions">
+        <button type="button" className="timeline-import-trigger" aria-expanded={localImportOpen} aria-controls="timeline-local-animation-import" onClick={() => { setLocalImportOpen(true); clearLocalAnimationImport(); }}>导入白模动画</button>
         <button type="button" aria-pressed={playing} onClick={() => setPlaying((value) => !value)}>{playing ? "暂停" : "播放"}</button>
         <label><input type="checkbox" checked={loop} onChange={(event) => setLoop(event.target.checked)}/> 循环</label>
-        <button type="button" onClick={() => setMinimized((value) => !value)}>{minimized ? "展开" : "最小化"}</button>
+        <button type="button" aria-expanded={!minimized} aria-controls="timeline-panel-content" onClick={() => setMinimized((value) => !value)}>{minimized ? "展开" : "最小化"}</button>
       </div>
     </div>
-    {!minimized && <>
+    {localImportOpen && <section id="timeline-local-animation-import" className="timeline-import-panel" aria-label="本地白模动画导入" aria-live="polite" hidden={minimized}>
+      <div className="timeline-import-heading">
+        <div><p className="kicker">Local animation</p><strong>本地白模动画</strong><small>仅读取 JSON manifest，不上传文件、不调用模型。</small></div>
+        <button type="button" className="timeline-import-close" onClick={closeLocalAnimationImport}>关闭</button>
+      </div>
+      <input ref={localAnimationFileInput} className="sr-only" type="file" aria-label="选择本地白模动画 JSON 文件" accept=".json,application/json" onChange={(event) => { void handleLocalAnimationFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      {(localAnimationImport.status === "idle" || localAnimationImport.status === "reading") && <div className="timeline-import-empty">
+        <p>选择一个包含人物姿态/变换关键帧的 `.json` 文件，先检查映射，再应用到当前时间线。</p>
+        <button type="button" className="timeline-import-select" onClick={openLocalAnimationPicker} disabled={readingLocalAnimation}>{readingLocalAnimation ? "读取中…" : "选择本地 JSON"}</button>
+        <small>支持当前白模 rig；目标角色可写当前角色 ID 或 A / B / C 槽位。</small>
+      </div>}
+      {localAnimationImport.status === "error" && <div className="timeline-import-result error">
+        <strong>无法导入</strong>
+        <ul>{localAnimationImport.errors.map((error) => <li key={error}>{error}</li>)}</ul>
+        <button type="button" onClick={openLocalAnimationPicker}>重新选择</button>
+      </div>}
+      {(localAnimationImport.status === "ready" || localAnimationImport.status === "applied") && localAnimationImport.manifest && <div className="timeline-import-result">
+        <div className="timeline-import-summary"><strong>{localAnimationImport.status === "applied" ? "已应用到时间线" : "导入预览"}</strong><span>{localAnimationImport.manifest.title}</span><small>{localAnimationImport.fileName} · {localAnimationImport.manifest.durationSeconds.toFixed(2)}s · {localAnimationImport.manifest.fps}fps · {localAnimationImport.tracks.length} 条轨道 · {localAnimationImport.totalKeyframes} 个关键帧</small></div>
+        <ul className="timeline-import-mappings">{localAnimationImport.characterMappings.map((mapping) => <li key={`${mapping.requestedId}-${mapping.characterId}`}>{mapping.requestedId} → {Object.values(characters).find((character) => character.characterId === mapping.characterId)?.label ?? mapping.characterId}</li>)}</ul>
+        {localAnimationImport.warnings.length > 0 && <ul className="timeline-import-warnings">{localAnimationImport.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+        {localAnimationImport.manifest.limitations.length > 0 && <p className="timeline-import-limitations">限制：{localAnimationImport.manifest.limitations.join("；")}</p>}
+        <div className="timeline-import-actions"><button type="button" onClick={openLocalAnimationPicker}>更换文件</button><button type="button" className="primary" onClick={applyLocalAnimationManifest} disabled={localAnimationImport.status === "applied"}>{localAnimationImport.status === "applied" ? "已应用" : "应用到时间线"}</button></div>
+      </div>}
+    </section>}
+    <div id="timeline-panel-content" hidden={minimized}>
       <div className="timeline-settings">
         <label>时长（秒）<input type="number" min="0.05" max="3600" step="0.05" value={timeline.durationSeconds} onChange={(event) => setTimelineDuration(Number(event.target.value))}/></label>
         <label>FPS<input type="number" min="1" max="120" step="1" value={timeline.fps} onChange={(event) => setTimelineFps(Number(event.target.value))}/></label>
@@ -139,6 +203,6 @@ export function TimelinePanel() {
           </div>)}</div>
         </li>)}
       </ol>
-    </>}
+    </div>
   </section>;
 }

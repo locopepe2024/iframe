@@ -2,12 +2,16 @@
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
+import subprocess
+import threading
 import time
 import warnings
 from fractions import Fraction
+from urllib.parse import urlsplit
 
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
@@ -19,10 +23,39 @@ from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
+from ...utils.model_catalog import load_generated_model_catalog
+from ...utils.uniart_catalog import fetch_uniart_catalog
 
-LEASE_SECONDS = 600
-KEYFRAME_LEASE_SECONDS = 3600
 
+_RECOVERY_LOCK = threading.RLock()
+_RECOVERY_TASKS: set[str] = set()
+_MEDIA_COMMAND_TIMEOUT_SECONDS = 600
+
+# These defaults are part of the recreation contract, rather than a provider
+# fallback.  They are kept in one place so the API, persisted tasks, and UI
+# can agree on what a newly-created task means.
+DEFAULT_RECREATION_VIDEO_MODEL = "uniart/minimax-h3-vip"
+DEFAULT_KEYFRAME_IMAGE_MODEL = "uniart/gpt-image-2"
+VERIFIED_RECREATION_VIDEO_MODELS = frozenset({DEFAULT_RECREATION_VIDEO_MODEL})
+
+
+def _static_uniart_models():
+    """Return the generated compatibility catalog without contacting UniArt."""
+    try:
+        catalog = load_generated_model_catalog()
+    except (OSError, ValueError, TypeError):
+        return []
+    models = catalog.get("models", {})
+    return [value for value in models.values() if isinstance(value, dict)]
+
+
+def _model_option(model):
+    """Expose only non-secret model metadata to the recreation UI."""
+    return {
+        key: model[key]
+        for key in ("id", "display_name", "description", "family", "capabilities", "duration", "params", "inputs")
+        if key in model
+    }
 
 class RecreationService:
     def __init__(self, user: UserContext):
@@ -32,6 +65,101 @@ class RecreationService:
         self.root = (Path(studio_owner_dir(user.owner_profile_id)) / "recreation").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
+    def _live_uniart_models(self):
+        """Read the current owner catalog when credentials are available.
+
+        Unit tests and offline local projects may intentionally have no
+        runtime credential; those callers use the generated compatibility
+        catalog instead. Once a credential is configured, a failed catalog
+        read is surfaced as a preflight error so a paid task is not created
+        against an unverified route.
+        """
+        from ..studio_access import runtime_uniart_for_owner
+
+        try:
+            config = runtime_uniart_for_owner(self.user.user_id, self.user.owner_profile_id)
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                return None
+            raise
+        except sqlite3.OperationalError as exc:
+            # A fresh/offline test or desktop profile can have an empty legacy
+            # config database before the user-config schema is initialized.
+            # Treat that state like "no credential"; other DB failures remain
+            # visible instead of silently widening the model gate.
+            if "no such table: user_configs" in str(exc):
+                return None
+            raise HTTPException(503, "UniArt model catalog configuration is unavailable") from exc
+        try:
+            return fetch_uniart_catalog(config)
+        except Exception as exc:
+            raise HTTPException(503, "UniArt model catalog is unavailable; retry preflight before generating") from exc
+
+    def _model_for_capability(self, model, capability, label):
+        model_id = str(model or "").strip()
+        if not model_id or not model_id.startswith("uniart/"):
+            raise HTTPException(422, f"{label} model is required")
+        live_models = self._live_uniart_models()
+        candidates = live_models if live_models is not None else _static_uniart_models()
+        selected = next((item for item in candidates if item.get("id") == model_id), None)
+        if not selected or capability not in (selected.get("capabilities") or []):
+            raise HTTPException(422, f"Selected {label} model is unavailable for {capability} in the current UniArt catalog")
+        return model_id
+
+    def _recreation_video_model(self, model):
+        model_id = str(model or "").strip()
+        # The prompt compiler currently proves only the MiniMax H3 native
+        # contract. Capability metadata alone is not evidence that another
+        # video family consumes the same labels or source-video mapping.
+        if model_id not in VERIFIED_RECREATION_VIDEO_MODELS:
+            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+        self._model_for_capability(model_id, "r2v", "video")
+        return model_id
+
+    def model_options(self):
+        """Return safe, recreation-eligible model options for the UI."""
+        source = "static"
+        try:
+            models = self._live_uniart_models()
+            if models is not None:
+                source = "live"
+        except HTTPException:
+            # A picker should remain usable when the account catalog is
+            # temporarily unavailable; paid plan/submit still fail closed via
+            # ``_live_uniart_models``.
+            models = None
+        candidates = models if models is not None else _static_uniart_models()
+        image_models = [
+            _model_option(item) for item in candidates
+            if str(item.get("id") or "").startswith("uniart/")
+            and "i2i" in (item.get("capabilities") or [])
+        ]
+        video_models = [
+            _model_option(item) for item in candidates
+            if item.get("id") in VERIFIED_RECREATION_VIDEO_MODELS
+            and "r2v" in (item.get("capabilities") or [])
+        ]
+        image_default = (
+            DEFAULT_KEYFRAME_IMAGE_MODEL
+            if any(item["id"] == DEFAULT_KEYFRAME_IMAGE_MODEL for item in image_models)
+            else image_models[0]["id"] if image_models else DEFAULT_KEYFRAME_IMAGE_MODEL
+        )
+        video_default = (
+            DEFAULT_RECREATION_VIDEO_MODEL
+            if any(item["id"] == DEFAULT_RECREATION_VIDEO_MODEL for item in video_models)
+            else video_models[0]["id"] if video_models else DEFAULT_RECREATION_VIDEO_MODEL
+        )
+        return {
+            "provider": "uniart",
+            "source": source,
+            "defaults": {
+                "image_model": image_default,
+                "video_model": video_default,
+            },
+            "image_models": image_models,
+            "video_models": video_models,
+        }
+
     @contextmanager
     def db(self):
         connection = sqlite3.connect("output/recreation.sqlite3", timeout=10)
@@ -39,8 +167,12 @@ class RecreationService:
             connection.execute("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS media_records (media_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, kind TEXT NOT NULL, display_name TEXT NOT NULL, storage_path TEXT NOT NULL, sha256 TEXT NOT NULL, metadata TEXT NOT NULL, created_at REAL NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS keyframe_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, data TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS recreation_generation_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, generation_id TEXT NOT NULL, data TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS recreation_assembly_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, generation_id TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE INDEX IF NOT EXISTS media_owner_project ON media_records(owner, project_id, created_at, media_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS keyframe_owner_project ON keyframe_tasks(owner, project_id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS generation_owner_project ON recreation_generation_tasks(owner, project_id, generation_id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS assembly_owner_project ON recreation_assembly_tasks(owner, project_id, generation_id)")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
@@ -68,6 +200,73 @@ class RecreationService:
         if not path.is_relative_to(self.root) or not path.is_file():
             raise ValueError("Source is missing or outside the project owner")
         return path
+
+    def _verified_source_path(self, record):
+        """Return the registered source or expose a retryable stale-state error.
+
+        Generation planning runs before a paid submission transaction.  A
+        missing or changed source must therefore be represented as a conflict
+        rather than escaping as an unhandled ``ValueError`` (which would turn
+        the submit endpoint into a 500 and obscure the recovery action).
+        """
+        try:
+            source = self._path(record["source_url"])
+            digest = fingerprint(source)
+        except ValueError as exc:
+            raise HTTPException(409, "Source is missing or changed; register the source again") from exc
+        if digest != record["source_fingerprint"]:
+            raise HTTPException(409, "Source is missing or changed; register the source again")
+        return source
+
+    def _verified_source_media(self, db, record):
+        """Return the immutable source media row and its verified local path.
+
+        ``source_url`` predates the media index and is retained for project
+        compatibility.  Ref2V submission uses the indexed media ID as the
+        durable identity, while both records and the bytes on disk must still
+        agree before a paid task is planned or submitted.
+        """
+        source_path = self._verified_source_path(record)
+        try:
+            source = self._media(db, record["source_media_id"])
+            indexed_path = self._path(source["storage_path"])
+            indexed_digest = fingerprint(indexed_path)
+        except (KeyError, ValueError, HTTPException) as exc:
+            raise HTTPException(409, "Source is missing or changed; register the source again") from exc
+        if (
+            source["kind"] != "source_video"
+            or source["storage_path"] != record.get("source_url")
+            or source["sha256"] != record.get("source_fingerprint")
+            or indexed_digest != record.get("source_fingerprint")
+        ):
+            raise HTTPException(409, "Source is missing or changed; register the source again")
+        return source, source_path
+
+    def _provider_media_ref(self, item):
+        """Resolve an indexed local media item to a provider-readable ref.
+
+        With COS/OSS configured the UniArt adapter uploads local paths and
+        signs them.  Deployments that intentionally keep media on the iFrame
+        disk may set ``UNIART_MEDIA_BASE_URL`` to the externally reachable
+        backend origin; in that mode we issue a short-lived owner-signed
+        ``/studio/media`` URL.  A bare local path remains an internal worker
+        reference and is never treated as a provider URL by the adapter.
+        """
+        path = self._path(item["storage_path"])
+        base = os.getenv("UNIART_MEDIA_BASE_URL", "").strip()
+        if not base:
+            return str(path)
+        parsed = urlsplit(base)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("UNIART_MEDIA_BASE_URL must be an HTTP(S) origin without credentials")
+        from ..studio_access import studio_media_url
+        try:
+            signed = studio_media_url(self.user.owner_profile_id, item["storage_path"], ttl_seconds=1800)
+        except HTTPException as exc:
+            raise ValueError("Local disk media requires LUMENX_MEDIA_SIGNING_KEY") from exc
+        if not signed.startswith("/studio/media/"):
+            raise ValueError("Local disk media could not be converted to a signed URL")
+        return base.rstrip("/") + signed
 
     def register(self, stream, filename: str):
         suffix = Path(filename).suffix.lower()
@@ -106,10 +305,20 @@ class RecreationService:
 
     def get(self, project_id):
         with self.db() as db:
+            # A disconnected browser must not change the lifecycle of a
+            # running analysis.  The worker or an explicit owner cancellation
+            # is responsible for reaching a terminal state.
+            return self._get(db, project_id)
+
+    def cancel_analysis(self, project_id, revision, analysis_id):
+        with self.db() as db:
             record = self._get(db, project_id)
-            if record["status"] in ("queued", "analyzing") and time.time() - record["started_at"] > LEASE_SECONDS:
-                record.update(status="failed", error="Analysis interrupted or timed out; retry available")
-                self._save(db, record)
+            if record["revision"] != revision or record.get("analysis_id") != analysis_id:
+                raise HTTPException(409, "Analysis changed; refresh before cancelling")
+            if record["status"] not in ("queued", "analyzing"):
+                raise HTTPException(409, "Analysis is no longer active")
+            record.update(status="cancelled", error="Analysis cancelled by user")
+            self._save(db, record)
             return record
 
     def list(self):
@@ -259,13 +468,15 @@ class RecreationService:
         return result
 
     def create_keyframe_task(self, project_id, shot_id, revision, analysis_id, reference_media_id,
-                             replacement_media_id, instruction, accept_cost):
+                             replacement_media_id, instruction, accept_cost,
+                             model=DEFAULT_KEYFRAME_IMAGE_MODEL):
         if not accept_cost:
             raise HTTPException(422, "Paid image generation requires explicit cost acceptance")
         if len(instruction) > 2000:
             raise HTTPException(422, "Keyframe instruction exceeds 2000 characters")
         if not TOKEN.sub("", instruction).strip():
             raise HTTPException(422, "Describe the exact object to replace before generating a corrected keyframe")
+        selected_model = self._model_for_capability(model, "i2i", "image")
         with self.db() as db:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["analysis_id"] != analysis_id or record["status"] != "confirmed" or not record.get("timeline"):
@@ -292,15 +503,7 @@ class RecreationService:
                 "AND json_extract(data, '$.status') IN ('pending','processing')",
                 (self.user.owner_profile_id, project_id, shot_id, revision),
             ).fetchall()
-            active = False
-            for active_id, payload in active_rows:
-                previous = json.loads(payload)
-                if time.time() - previous["updated_at"] > KEYFRAME_LEASE_SECONDS:
-                    previous.update(status="failed", error="Keyframe generation was interrupted; retry available", updated_at=time.time())
-                    db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
-                               (json.dumps(previous), active_id, self.user.owner_profile_id))
-                else:
-                    active = True
+            active = bool(active_rows)
             if active:
                 raise HTTPException(409, "A corrected keyframe task is already active for this shot")
             prompt = self._keyframe_prompt(compiled_instruction)
@@ -308,7 +511,7 @@ class RecreationService:
             task = {
                 "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
                 "revision": revision, "analysis_id": analysis_id, "status": "pending",
-                "model": "uniart/gpt-image-2", "reference_media_id": reference_media_id,
+                "model": selected_model, "reference_media_id": reference_media_id,
                 "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
                 "replacement_sha256": replacement["sha256"], "prompt": prompt,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -321,10 +524,31 @@ class RecreationService:
     def keyframe_task(self, task_id):
         with self.db() as db:
             task = self._task(db, task_id)
-            if task["status"] in ("pending", "processing") and time.time() - task["updated_at"] > KEYFRAME_LEASE_SECONDS:
-                task.update(status="failed", error="Keyframe generation was interrupted; retry available", updated_at=time.time())
-                db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
-                           (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_task(db, task)
+
+    def keyframe_tasks(self, project_id, shot_id=None):
+        with self.db() as db:
+            self._get(db, project_id)
+            conditions = ["owner=?", "project_id=?"]
+            params = [self.user.owner_profile_id, project_id]
+            if shot_id:
+                conditions.append("json_extract(data, '$.shot_id')=?")
+                params.append(shot_id)
+            rows = db.execute(
+                "SELECT data FROM keyframe_tasks WHERE " + " AND ".join(conditions) +
+                " ORDER BY json_extract(data, '$.created_at') DESC, task_id DESC",
+                params,
+            ).fetchall()
+            return [self._public_task(db, json.loads(row[0])) for row in rows]
+
+    def cancel_keyframe_task(self, task_id):
+        with self.db() as db:
+            task = self._task(db, task_id)
+            if task["status"] not in ("pending", "processing"):
+                raise HTTPException(409, "Keyframe task is no longer active")
+            task.update(status="cancelled", error="Keyframe generation cancelled by user", updated_at=time.time())
+            db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
+                       (json.dumps(task), task_id, self.user.owner_profile_id))
             return self._public_task(db, task)
 
     def process_keyframe_task(self, task_id, provider_config=None):
@@ -402,7 +626,7 @@ class RecreationService:
                     task = self._task(db, task_id)
                 except HTTPException:
                     return
-                if task["status"] != "completed":
+                if task["status"] not in ("completed", "cancelled"):
                     task.update(status="failed", error=str(exc)[:1000], updated_at=time.time())
                     db.execute("UPDATE keyframe_tasks SET data=? WHERE task_id=? AND owner=?",
                                (json.dumps(task), task_id, self.user.owner_profile_id))
@@ -433,10 +657,8 @@ class RecreationService:
             self._save(db, record)
         return record
 
-    def generation_plan(self, project_id, revision, model="uniart/minimax-h3-vip", audio_policy="silent", soundscape="", generation_durations=None):
-        # Until its native reference contract is verified, Seedance cannot pass H3 preflight.
-        if model != "uniart/minimax-h3-vip":
-            raise HTTPException(422, "Native recreation prompt contract is not verified for this model")
+    def generation_plan(self, project_id, revision, model=DEFAULT_RECREATION_VIDEO_MODEL, audio_policy="silent", soundscape="", generation_durations=None):
+        model = self._recreation_video_model(model)
         if audio_policy not in ("silent", "generated", "preserve_source"):
             raise HTTPException(422, "Unsupported audio policy")
         if audio_policy == "generated" and not soundscape.strip():
@@ -447,8 +669,7 @@ class RecreationService:
             record = self._get(db, project_id)
             if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
                 raise HTTPException(409, "Confirm the current timeline before preparing a plan")
-            if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
-                raise HTTPException(409, "Source fingerprint changed")
+            source_media, _source_path = self._verified_source_media(db, record)
             shots, blockers = [], []
             for index, shot in enumerate(record["timeline"]["shots"], 1):
                 description = shot.get("description", "").strip()
@@ -457,8 +678,8 @@ class RecreationService:
                 generation_duration = generation_durations.get(shot["id"])
                 if type(generation_duration) is not int or not 4 <= generation_duration <= 15:
                     missing.append("generation_duration_required")
-                if audio_policy == "preserve_source":
-                    missing.append("source_audio_assembly_pending")
+                if audio_policy == "preserve_source" and not record["analysis"].get("audio_streams"):
+                    missing.append("source_audio_unavailable")
                 if not description:
                     missing.append("description_required")
                 if not shot.get("reference_media_id"):
@@ -481,8 +702,15 @@ class RecreationService:
                     missing.append("generation_duration_too_short")
                 prompt = None
                 if not missing:
-                    prompt, errors = compile_h3(description, instruction, replacement=bool(shot.get("replacement_media_id")),
-                                                duration=generation_duration, audio_policy=audio_policy, soundscape=soundscape)
+                    prompt, errors = compile_h3(
+                        description,
+                        instruction,
+                        replacement=bool(shot.get("replacement_media_id")),
+                        duration=generation_duration,
+                        audio_policy=audio_policy,
+                        soundscape=soundscape,
+                        source_video=True,
+                    )
                     if errors:
                         missing.append("native_prompt_invalid")
                         prompt = None
@@ -492,10 +720,566 @@ class RecreationService:
                               "end_pts": shot["end_pts"], "target_duration": str(duration), "generation_duration": generation_duration,
                               "generate_audio": audio_policy == "generated", "images": images, "prompt": prompt})
             return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
-                    "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_labels", "guidance": guidance,
+                    "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_video_labels", "guidance": guidance,
+                    "source_video": {"media_id": source_media["media_id"], "sha256": source_media["sha256"], "label": "<Video 1>"},
                     "time_base": record["analysis"]["time_base"], "audio_policy": audio_policy, "ready": not blockers,
-                    "submission_enabled": False,
+                    "submission_enabled": True,
                     "blockers": blockers, "shots": shots}
+
+    def _generation_task(self, db, task_id):
+        row = db.execute(
+            "SELECT data FROM recreation_generation_tasks WHERE task_id=? AND owner=?",
+            (task_id, self.user.owner_profile_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Recreation generation task not found")
+        return json.loads(row[0])
+
+    def _public_generation_task(self, db, task):
+        result = {key: value for key, value in task.items() if key not in {"local_output_path"}}
+        result["output_media"] = self._media(db, task["output_media_id"]) if task.get("output_media_id") else None
+        return result
+
+    def submit_generation(self, project_id, revision, model="uniart/minimax-h3-vip", audio_policy="silent",
+                          soundscape="", generation_durations=None, accept_cost=False, seed=None):
+        if not accept_cost:
+            raise HTTPException(422, "Paid video generation requires explicit cost acceptance")
+        plan = self.generation_plan(project_id, revision, model, audio_policy, soundscape, generation_durations)
+        if not plan["ready"]:
+            reasons = "; ".join(
+                f"shot {item['shot_number']}: {','.join(item['reasons'])}"
+                for item in plan["blockers"]
+            )
+            raise HTTPException(422, f"Generation plan is not ready: {reasons}")
+        generation_id = uuid4().hex
+        now = time.time()
+        with self.db() as db:
+            record = self._get(db, project_id)
+            # The plan is compiled in a separate read transaction. Recheck
+            # every revision-bearing fact after acquiring the submission
+            # transaction so a timeline edit cannot create a stale paid task.
+            if (record["revision"] != revision or record["status"] != "confirmed" or
+                    not record.get("timeline") or record.get("analysis_id") != plan["analysis_id"]):
+                raise HTTPException(409, "Timeline changed; refresh before submitting generation")
+            source_media, _source_path = self._verified_source_media(db, record)
+            active = db.execute(
+                "SELECT COUNT(*) FROM recreation_generation_tasks WHERE owner=? AND project_id=? "
+                "AND json_extract(data, '$.status') IN ('pending','processing')",
+                (self.user.owner_profile_id, project_id),
+            ).fetchone()[0]
+            if active:
+                raise HTTPException(409, "A recreation video generation is already active for this project")
+            tasks = []
+            for shot in plan["shots"]:
+                task_id = uuid4().hex
+                inputs = []
+                for image in shot["images"]:
+                    item = self._image(db, image["media_id"])
+                    inputs.append({"media_id": item["media_id"], "role": image["label"], "sha256": item["sha256"]})
+                task = {
+                    "task_id": task_id, "generation_id": generation_id, "project_id": project_id,
+                    "shot_id": shot["shot_id"], "shot_number": shot["shot_number"],
+                    "revision": revision, "analysis_id": plan["analysis_id"], "status": "pending",
+                    "model": model, "prompt": shot["prompt"], "duration": shot["generation_duration"],
+                    "audio_policy": audio_policy, "generate_audio": shot["generate_audio"],
+                    "soundscape": soundscape, "seed": seed, "inputs": inputs,
+                    "source_media_id": source_media["media_id"],
+                    "source_fingerprint": source_media["sha256"],
+                    "provider_task_id": None, "output_media_id": None, "error": None,
+                    "created_at": now, "updated_at": now,
+                }
+                db.execute("INSERT INTO recreation_generation_tasks VALUES (?, ?, ?, ?, ?)",
+                           (task_id, self.user.owner_profile_id, project_id, generation_id, json.dumps(task)))
+                tasks.append(self._public_generation_task(db, task))
+            return {"generation_id": generation_id, "project_id": project_id, "revision": revision,
+                    "analysis_id": plan["analysis_id"], "model": model, "audio_policy": audio_policy,
+                    "tasks": tasks}
+
+    def generation_tasks(self, project_id, generation_id=None):
+        with self.db() as db:
+            self._get(db, project_id)
+            conditions = ["owner=?", "project_id=?"]
+            params = [self.user.owner_profile_id, project_id]
+            if generation_id:
+                conditions.append("generation_id=?")
+                params.append(generation_id)
+            rows = db.execute(
+                "SELECT data FROM recreation_generation_tasks WHERE " + " AND ".join(conditions) +
+                " ORDER BY json_extract(data, '$.shot_number'), json_extract(data, '$.created_at')",
+                params,
+            ).fetchall()
+            return [self._public_generation_task(db, json.loads(row[0])) for row in rows]
+
+    def generation_task(self, task_id):
+        with self.db() as db:
+            return self._public_generation_task(db, self._generation_task(db, task_id))
+
+    def recover_generation_tasks(self):
+        """Resume only provider tasks whose upstream ID was durably saved.
+
+        A task that was interrupted before the provider ID was persisted is
+        intentionally left for an explicit retry; silently resubmitting could
+        create a second paid upstream request.
+        """
+        with self.db() as db:
+            rows = db.execute(
+                "SELECT task_id, data FROM recreation_generation_tasks WHERE owner=? "
+                "AND json_extract(data, '$.status')='processing' "
+                "AND json_extract(data, '$.provider_task_id') IS NOT NULL",
+                (self.user.owner_profile_id,),
+            ).fetchall()
+        for task_id, _payload in rows:
+            with _RECOVERY_LOCK:
+                if task_id in _RECOVERY_TASKS:
+                    continue
+                _RECOVERY_TASKS.add(task_id)
+            thread = threading.Thread(target=self._recover_one, args=(task_id,), daemon=True)
+            thread.start()
+
+    def _recover_one(self, task_id):
+        try:
+            self.process_generation_task(task_id)
+        finally:
+            with _RECOVERY_LOCK:
+                _RECOVERY_TASKS.discard(task_id)
+
+    def cancel_generation_task(self, task_id):
+        with self.db() as db:
+            task = self._generation_task(db, task_id)
+            if task["status"] not in ("pending", "processing"):
+                raise HTTPException(409, "Recreation generation task is no longer active")
+            task.update(status="cancelled", error="Video generation cancelled by user", updated_at=time.time())
+            db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                       (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_generation_task(db, task)
+
+    def retry_generation_task(self, task_id, accept_cost=False):
+        if not accept_cost:
+            raise HTTPException(422, "Retrying video generation requires explicit cost acceptance")
+        with self.db() as db:
+            task = self._generation_task(db, task_id)
+            if task["status"] != "failed":
+                raise HTTPException(409, "Only a failed recreation generation task can be retried")
+            task.update(status="pending", provider_task_id=None, output_media_id=None, error=None, updated_at=time.time())
+            db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                       (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_generation_task(db, task)
+
+    def process_generation_task(self, task_id, provider_config=None):
+        folder = None
+        try:
+            with self.db() as db:
+                task = self._generation_task(db, task_id)
+                if task["status"] not in ("pending", "processing"):
+                    return
+                if task["status"] == "processing" and not task.get("provider_task_id"):
+                    task.update(status="failed", error="Worker interrupted before upstream task ID was saved; retry manually", updated_at=time.time())
+                    db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(task), task_id, self.user.owner_profile_id))
+                    return
+                if task["status"] == "pending":
+                    task.update(status="processing", updated_at=time.time())
+                    db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(task), task_id, self.user.owner_profile_id))
+                inputs = []
+                source = None
+                if not task.get("provider_task_id"):
+                    for input_ref in task["inputs"]:
+                        item = self._image(db, input_ref["media_id"])
+                        if item["sha256"] != input_ref["sha256"]:
+                            raise ValueError("Generation input fingerprint changed")
+                        inputs.append(item)
+                    source = self._media(db, task.get("source_media_id"))
+                    if source["kind"] != "source_video" or source["sha256"] != task.get("source_fingerprint"):
+                        raise ValueError("Generation source fingerprint changed")
+                    source_path = self._path(source["storage_path"])
+                    if fingerprint(source_path) != task.get("source_fingerprint"):
+                        raise ValueError("Generation source fingerprint changed")
+            from ...models.uniart import UniArtVideoModel
+            from ..studio_access import runtime_uniart_for_owner
+            config = provider_config if provider_config is not None else runtime_uniart_for_owner(
+                self.user.user_id, self.user.owner_profile_id)
+            folder = self.root / task["project_id"] / "generations" / task["task_id"]
+            folder.mkdir(parents=True, exist_ok=True)
+            output = folder / "result.mp4"
+
+            def save_provider_task(provider_task_id):
+                with self.db() as db:
+                    current = self._generation_task(db, task_id)
+                    if current["status"] == "processing":
+                        current.update(provider_task_id=provider_task_id, updated_at=time.time())
+                        db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                                   (json.dumps(current), task_id, self.user.owner_profile_id))
+
+            kwargs = {
+                "model": task["model"], "mode": "reference2video", "duration": task["duration"],
+                "resolution": "768p", "generate_audio": task["generate_audio"],
+                "on_task_submitted": save_provider_task,
+            }
+            if task.get("seed") is not None:
+                kwargs["seed"] = task["seed"]
+            if task.get("provider_task_id"):
+                kwargs["resume_task_id"] = task["provider_task_id"]
+            else:
+                kwargs["ref_image_urls"] = [self._provider_media_ref(item) for item in inputs]
+                kwargs["ref_video_urls"] = [self._provider_media_ref(source)]
+            UniArtVideoModel(config).generate(task["prompt"], str(output), **kwargs)
+            if not output.is_file():
+                raise ValueError("UniArt returned without a video file")
+            item = {
+                "media_id": uuid4().hex, "project_id": task["project_id"], "kind": "generated_video",
+                "display_name": f"Recreation shot {task['shot_number']} · {task['task_id'][:8]}",
+                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "sha256": fingerprint(output),
+                "metadata": {"generation_id": task["generation_id"], "task_id": task_id,
+                             "shot_id": task["shot_id"], "shot_number": task["shot_number"],
+                             "model": task["model"], "duration": task["duration"],
+                             "generate_audio": task["generate_audio"],
+                             "input_media_ids": [ref["media_id"] for ref in task["inputs"]]},
+                "created_at": time.time(),
+            }
+            with self.db() as db:
+                current = self._generation_task(db, task_id)
+                if current["status"] != "processing":
+                    raise ValueError("Generation task was cancelled while the provider was running")
+                db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (item["media_id"], self.user.owner_profile_id, task["project_id"], item["kind"],
+                            item["display_name"], item["storage_path"], item["sha256"],
+                            json.dumps(item["metadata"]), item["created_at"]))
+                current.update(status="completed", output_media_id=item["media_id"], error=None, updated_at=time.time())
+                db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(current), task_id, self.user.owner_profile_id))
+        except Exception as exc:
+            if folder:
+                shutil.rmtree(folder, ignore_errors=True)
+            with self.db() as db:
+                try:
+                    current = self._generation_task(db, task_id)
+                except HTTPException:
+                    return
+                if current["status"] not in ("completed", "cancelled"):
+                    current.update(status="failed", error=str(exc)[:1000], updated_at=time.time())
+                    db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(current), task_id, self.user.owner_profile_id))
+
+    def _assembly_task(self, db, task_id):
+        row = db.execute(
+            "SELECT data FROM recreation_assembly_tasks WHERE task_id=? AND owner=?",
+            (task_id, self.user.owner_profile_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Recreation assembly task not found")
+        return json.loads(row[0])
+
+    def _public_assembly_task(self, db, task):
+        result = {key: value for key, value in task.items() if key != "local_output_path"}
+        result["output_media"] = self._media(db, task["output_media_id"]) if task.get("output_media_id") else None
+        return result
+
+    @staticmethod
+    def _assembly_seconds(start_pts, end_pts, time_base):
+        duration = (end_pts - start_pts) * Fraction(time_base)
+        if duration <= 0:
+            raise ValueError("Timeline contains a non-positive shot duration")
+        return duration
+
+    @staticmethod
+    def _seconds_arg(value):
+        # Nine decimal places are enough for the source PTS contract while
+        # avoiding binary-float noise in FFmpeg command arguments.
+        return f"{float(value):.9f}"
+
+    @staticmethod
+    def _run_media_command(command, timeout=_MEDIA_COMMAND_TIMEOUT_SECONDS):
+        try:
+            result = subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(f"FFmpeg media command timed out after {timeout} seconds") from exc
+        except FileNotFoundError as exc:
+            raise ValueError("FFmpeg/FFprobe is unavailable") from exc
+        if result.returncode:
+            detail = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+            raise ValueError(f"FFmpeg media assembly failed: {detail[-1000:] or 'unknown error'}")
+        return result.stdout or b""
+
+    @classmethod
+    def _probe_assembly_media(cls, path):
+        raw = cls._run_media_command([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type",
+            "-of", "json", str(path),
+        ])
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            duration = float(payload["format"]["duration"])
+            streams = payload.get("streams") or []
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            raise ValueError("Generated video has incomplete media metadata") from exc
+        if duration <= 0:
+            raise ValueError("Generated video has no positive duration")
+        return {"duration": duration, "audio_streams": sum(s.get("codec_type") == "audio" for s in streams)}
+
+    @staticmethod
+    def _concat_list(path, files):
+        # Assembly folders use UUID-derived names, nevertheless escape the
+        # syntax so this remains safe if a future filename contains a quote.
+        lines = []
+        for item in files:
+            escaped = str(item).replace("'", "'\\''")
+            lines.append(f"file '{escaped}'")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _assembly_cancelled(self, task_id):
+        with self.db() as db:
+            task = self._assembly_task(db, task_id)
+            return task["status"] == "cancelled"
+
+    def submit_assembly(self, project_id, revision, generation_id):
+        if not generation_id:
+            raise HTTPException(422, "A completed generation is required before assembly")
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
+                raise HTTPException(409, "Timeline changed; refresh before assembling")
+            if fingerprint(self._path(record["source_url"])) != record["source_fingerprint"]:
+                raise HTTPException(409, "Source fingerprint changed; register the source again")
+            rows = db.execute(
+                "SELECT data FROM recreation_generation_tasks WHERE owner=? AND project_id=? AND generation_id=?",
+                (self.user.owner_profile_id, project_id, generation_id),
+            ).fetchall()
+            if not rows:
+                raise HTTPException(404, "Recreation generation not found")
+            generation_tasks = [json.loads(row[0]) for row in rows]
+            expected = record["timeline"]["shots"]
+            by_shot = {task.get("shot_id"): task for task in generation_tasks}
+            if len(by_shot) != len(expected) or any(shot["id"] not in by_shot for shot in expected):
+                raise HTTPException(409, "Generation does not cover the confirmed timeline")
+            if any(task.get("revision") != revision or task.get("analysis_id") != record["analysis_id"] for task in generation_tasks):
+                raise HTTPException(409, "Generation belongs to an earlier timeline revision")
+            if any(task.get("status") != "completed" or not task.get("output_media_id") for task in generation_tasks):
+                raise HTTPException(409, "Every shot generation must complete before assembly")
+            policies = {task.get("audio_policy") for task in generation_tasks}
+            if len(policies) != 1 or next(iter(policies)) not in ("silent", "generated", "preserve_source"):
+                raise HTTPException(422, "Generation tasks have inconsistent audio policies")
+            audio_policy = next(iter(policies))
+            if audio_policy == "preserve_source" and not record["analysis"].get("audio_streams"):
+                raise HTTPException(422, "The source video has no audio track to preserve")
+            segments = []
+            for index, shot in enumerate(expected, 1):
+                task = by_shot[shot["id"]]
+                media = self._media(db, task["output_media_id"])
+                if media["kind"] != "generated_video":
+                    raise HTTPException(409, f"Shot {index} output is not a generated video")
+                if fingerprint(self._path(media["storage_path"])) != media["sha256"]:
+                    raise HTTPException(409, f"Shot {index} generated video fingerprint changed")
+                target = self._assembly_seconds(shot["start_pts"], shot["end_pts"], record["analysis"]["time_base"])
+                segments.append({
+                    "shot_id": shot["id"], "shot_number": index,
+                    "start_pts": shot["start_pts"], "end_pts": shot["end_pts"],
+                    "target_seconds": str(target), "generation_task_id": task["task_id"],
+                    "generated_media_id": media["media_id"], "generated_sha256": media["sha256"],
+                })
+            active = db.execute(
+                "SELECT COUNT(*) FROM recreation_assembly_tasks WHERE owner=? AND project_id=? "
+                "AND generation_id=? AND json_extract(data, '$.status') IN ('pending','processing')",
+                (self.user.owner_profile_id, project_id, generation_id),
+            ).fetchone()[0]
+            if active:
+                raise HTTPException(409, "An assembly for this generation is already active")
+            now = time.time()
+            task = {
+                "task_id": uuid4().hex, "project_id": project_id, "generation_id": generation_id,
+                "revision": revision, "analysis_id": record["analysis_id"], "status": "pending",
+                "audio_policy": audio_policy, "source_media_id": record["source_media_id"],
+                "source_fingerprint": record["source_fingerprint"], "time_base": record["analysis"]["time_base"],
+                "segments": segments, "output_media_id": None, "error": None,
+                "created_at": now, "updated_at": now,
+            }
+            db.execute("INSERT INTO recreation_assembly_tasks VALUES (?, ?, ?, ?, ?)",
+                       (task["task_id"], self.user.owner_profile_id, project_id, generation_id, json.dumps(task)))
+            return self._public_assembly_task(db, task)
+
+    def assembly_task(self, task_id):
+        with self.db() as db:
+            return self._public_assembly_task(db, self._assembly_task(db, task_id))
+
+    def assembly_tasks(self, project_id, generation_id=None):
+        with self.db() as db:
+            self._get(db, project_id)
+            conditions = ["owner=?", "project_id=?"]
+            params = [self.user.owner_profile_id, project_id]
+            if generation_id:
+                conditions.append("generation_id=?")
+                params.append(generation_id)
+            rows = db.execute(
+                "SELECT data FROM recreation_assembly_tasks WHERE " + " AND ".join(conditions) +
+                " ORDER BY json_extract(data, '$.created_at') DESC, task_id DESC", params,
+            ).fetchall()
+            return [self._public_assembly_task(db, json.loads(row[0])) for row in rows]
+
+    def cancel_assembly_task(self, task_id):
+        with self.db() as db:
+            task = self._assembly_task(db, task_id)
+            if task["status"] not in ("pending", "processing"):
+                raise HTTPException(409, "Recreation assembly task is no longer active")
+            task.update(status="cancelled", error="Video assembly cancelled by user", updated_at=time.time())
+            db.execute("UPDATE recreation_assembly_tasks SET data=? WHERE task_id=? AND owner=?",
+                       (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_assembly_task(db, task)
+
+    def retry_assembly_task(self, task_id):
+        with self.db() as db:
+            task = self._assembly_task(db, task_id)
+            if task["status"] != "failed":
+                raise HTTPException(409, "Only a failed recreation assembly can be retried")
+            task.update(status="pending", output_media_id=None, error=None, updated_at=time.time())
+            db.execute("UPDATE recreation_assembly_tasks SET data=? WHERE task_id=? AND owner=?",
+                       (json.dumps(task), task_id, self.user.owner_profile_id))
+            return self._public_assembly_task(db, task)
+
+    def process_assembly_task(self, task_id):
+        folder = None
+        try:
+            with self.db() as db:
+                task = self._assembly_task(db, task_id)
+                if task["status"] != "pending":
+                    return
+                task.update(status="processing", updated_at=time.time())
+                db.execute("UPDATE recreation_assembly_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(task), task_id, self.user.owner_profile_id))
+                record = self._get(db, task["project_id"])
+                if record["revision"] != task["revision"] or record["analysis_id"] != task["analysis_id"] or record["status"] != "confirmed":
+                    raise ValueError("Timeline changed after assembly was submitted")
+                source = self._media(db, task["source_media_id"])
+                if source["sha256"] != task["source_fingerprint"] or fingerprint(self._path(source["storage_path"])) != task["source_fingerprint"]:
+                    raise ValueError("Source fingerprint changed; register the source again")
+                inputs = []
+                for segment in task["segments"]:
+                    media = self._media(db, segment["generated_media_id"])
+                    if media["kind"] != "generated_video" or media["sha256"] != segment["generated_sha256"]:
+                        raise ValueError(f"Shot {segment['shot_number']} generated video changed")
+                    inputs.append((segment, self._path(media["storage_path"])))
+                source_path = self._path(source["storage_path"])
+            if self._assembly_cancelled(task_id):
+                raise ValueError("Assembly task was cancelled")
+            folder = self.root / task["project_id"] / "assemblies" / task_id
+            segments_dir = folder / "segments"
+            audio_dir = folder / "audio"
+            segments_dir.mkdir(parents=True, exist_ok=True)
+            if task["audio_policy"] == "preserve_source":
+                audio_dir.mkdir(parents=True, exist_ok=True)
+            normalized = []
+            audio_segments = []
+            total_duration = 0.0
+            for segment, input_path in inputs:
+                target = float(Fraction(segment["target_seconds"]))
+                probe = self._probe_assembly_media(input_path)
+                if probe["duration"] + 0.02 < target:
+                    raise ValueError(
+                        f"Shot {segment['shot_number']} generated video is {probe['duration']:.3f}s, "
+                        f"shorter than the required {target:.3f}s; regenerate the shot"
+                    )
+                if task["audio_policy"] == "generated" and probe["audio_streams"] < 1:
+                    raise ValueError(f"Shot {segment['shot_number']} has no generated audio track")
+                output = segments_dir / f"shot-{segment['shot_number']:04d}.mp4"
+                command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(input_path),
+                           "-t", self._seconds_arg(target), "-map", "0:v:0", "-c:v", "libx264",
+                           "-pix_fmt", "yuv420p"]
+                if task["audio_policy"] == "generated":
+                    command += ["-map", "0:a:0", "-c:a", "aac", "-ar", "48000", "-ac", "2"]
+                else:
+                    command += ["-an"]
+                command.append(str(output))
+                self._run_media_command(command)
+                normalized.append(output)
+                if task["audio_policy"] == "preserve_source":
+                    audio_output = audio_dir / f"shot-{segment['shot_number']:04d}.m4a"
+                    start = (int(segment["start_pts"]) - int(record["analysis"]["start_pts"])) * Fraction(task["time_base"])
+                    audio_command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_path),
+                                     "-ss", self._seconds_arg(start), "-t", self._seconds_arg(target), "-map", "0:a:0",
+                                     "-vn", "-c:a", "aac", "-ar", "48000", "-ac", "2", str(audio_output)]
+                    self._run_media_command(audio_command)
+                    audio_probe = self._probe_assembly_media(audio_output)
+                    if audio_probe["audio_streams"] < 1 or audio_probe["duration"] + 0.02 < target:
+                        raise ValueError(f"Source audio is shorter than shot {segment['shot_number']} duration")
+                    audio_segments.append(audio_output)
+                total_duration += target
+                if self._assembly_cancelled(task_id):
+                    raise ValueError("Assembly task was cancelled")
+            video_list = folder / "video-list.txt"
+            self._concat_list(video_list, normalized)
+            video_only = folder / "video-only.mp4"
+            video_command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                             "-i", str(video_list), "-map", "0:v:0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", str(video_only)]
+            self._run_media_command(video_command)
+            output = folder / "final.mp4"
+            if task["audio_policy"] == "generated":
+                generated_list = folder / "generated-audio-list.txt"
+                # The normalized generated segments carry their own audio. A
+                # second concat pass with both streams keeps video/audio
+                # packet boundaries aligned after per-shot cropping.
+                self._concat_list(generated_list, normalized)
+                mux_command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                               "-i", str(generated_list), "-map", "0:v:0", "-map", "0:a:0", "-c:v", "libx264", "-c:a", "aac",
+                               "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(output)]
+                self._run_media_command(mux_command)
+            elif task["audio_policy"] == "preserve_source":
+                audio_list = folder / "audio-list.txt"
+                self._concat_list(audio_list, audio_segments)
+                source_audio = folder / "source-audio.m4a"
+                self._run_media_command(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                                         "-i", str(audio_list), "-c:a", "aac", "-ar", "48000", "-ac", "2", str(source_audio)])
+                self._run_media_command(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(video_only), "-i", str(source_audio),
+                                         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", str(output)])
+            else:
+                video_only.rename(output)
+            final_probe = self._probe_assembly_media(output)
+            if abs(final_probe["duration"] - total_duration) > 0.08:
+                raise ValueError(f"Assembled video duration {final_probe['duration']:.3f}s does not match timeline {total_duration:.3f}s")
+            if self._assembly_cancelled(task_id):
+                raise ValueError("Assembly task was cancelled")
+            item = {
+                "media_id": uuid4().hex, "project_id": task["project_id"], "kind": "final_video",
+                "display_name": f"Recreation final · {task['generation_id'][:8]}",
+                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "sha256": fingerprint(output),
+                "metadata": {"assembly_task_id": task_id, "generation_id": task["generation_id"],
+                             "source_media_id": task["source_media_id"], "source_fingerprint": task["source_fingerprint"],
+                             "audio_policy": task["audio_policy"], "revision": task["revision"],
+                             "shot_task_ids": [segment["generation_task_id"] for segment in task["segments"]],
+                             "shot_media_ids": [segment["generated_media_id"] for segment in task["segments"]],
+                             "duration": final_probe["duration"], "audio_streams": final_probe["audio_streams"]},
+                "created_at": time.time(),
+            }
+            with self.db() as db:
+                current = self._assembly_task(db, task_id)
+                if current["status"] != "processing":
+                    raise ValueError("Assembly task was cancelled while FFmpeg was running")
+                db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (item["media_id"], self.user.owner_profile_id, task["project_id"], item["kind"],
+                            item["display_name"], item["storage_path"], item["sha256"],
+                            json.dumps(item["metadata"]), item["created_at"]))
+                current.update(status="completed", output_media_id=item["media_id"], error=None, updated_at=time.time())
+                db.execute("UPDATE recreation_assembly_tasks SET data=? WHERE task_id=? AND owner=?",
+                           (json.dumps(current), task_id, self.user.owner_profile_id))
+        except Exception as exc:
+            if folder:
+                shutil.rmtree(folder, ignore_errors=True)
+            with self.db() as db:
+                try:
+                    current = self._assembly_task(db, task_id)
+                except HTTPException:
+                    return
+                if current["status"] not in ("completed", "cancelled"):
+                    current.update(status="failed", error=str(exc)[:1000], updated_at=time.time())
+                    db.execute("UPDATE recreation_assembly_tasks SET data=? WHERE task_id=? AND owner=?",
+                               (json.dumps(current), task_id, self.user.owner_profile_id))
 
     def reindex(self, project_id):
         with self.db() as db:
@@ -510,10 +1294,9 @@ class RecreationService:
             record = self._get(db, project_id)
             if record["revision"] != revision:
                 raise HTTPException(409, "Project changed; refresh before analyzing")
-            if record["status"] in ("queued", "analyzing") and time.time() - record["started_at"] <= LEASE_SECONDS:
+            if record["status"] in ("queued", "analyzing"):
                 raise HTTPException(409, "Analysis already in progress")
-            active = db.execute("SELECT COUNT(*) FROM projects WHERE json_extract(data, '$.status') IN ('queued','analyzing') AND json_extract(data, '$.started_at') > ?",
-                                (time.time() - LEASE_SECONDS,)).fetchone()[0]
+            active = db.execute("SELECT COUNT(*) FROM projects WHERE json_extract(data, '$.status') IN ('queued','analyzing')").fetchone()[0]
             if active >= 2:
                 raise HTTPException(429, "Analysis capacity is busy; retry later")
             attempt_id = uuid4().hex

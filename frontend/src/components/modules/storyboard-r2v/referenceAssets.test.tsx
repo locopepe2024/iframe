@@ -53,6 +53,29 @@ describe("storyboard multi-reference assets", () => {
         expect(result.groups[1].pictureNumbers).toEqual([2, 3, 4]);
     });
 
+    it("uses only the selected image for a character despite historical variants", () => {
+        const characterWithHistory = {
+            ...assets[0],
+            selectedId: "host-front",
+            variants: [
+                { id: "host-front", url: "host-front.jpg" },
+                { id: "host-old-1", url: "host-old-1.jpg" },
+                { id: "host-old-2", url: "host-old-2.jpg" },
+                { id: "host-old-3", url: "host-old-3.jpg" },
+                { id: "host-old-4", url: "host-old-4.jpg" },
+            ],
+        };
+
+        const result = resolveReferenceSubmission(
+            "[character:女主播]",
+            [characterWithHistory],
+            { host: ["host-old-1", "host-old-2"] },
+        );
+
+        expect(result.urls).toEqual(["host-front.jpg"]);
+        expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-front"]);
+    });
+
     it("binds all selected product pictures to one H3 subject and shifts later slots", () => {
         const result = resolveReferenceSubmission(
             "subject_definitions:\nold\n[character1:穿心莲] beside [character2:女主播] <Picture 2>",

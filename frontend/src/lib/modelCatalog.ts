@@ -147,11 +147,22 @@ interface ModelCatalog {
 
 const MODEL_CATALOG = rawCatalog as ModelCatalog;
 let UNIART_RUNTIME_ACTIVE = false;
+// When the live UniArt catalog is available it is the authority for UniArt
+// SKU visibility. Keep the IDs that came from that live snapshot separate
+// from the static compatibility catalog so a removed SKU cannot remain
+// selectable just because it was present in an older localStorage snapshot.
+let RUNTIME_UNIART_MODEL_IDS = new Set<string>();
 if (typeof window !== 'undefined') {
     try {
         const snapshot = JSON.parse(localStorage.getItem('lumenx_uniart_model_snapshot') || '{}');
-        UNIART_RUNTIME_ACTIVE = Array.isArray(snapshot.models) && snapshot.models.length > 0;
-        for (const entry of (snapshot.models || [])) {
+        const snapshotModels = Array.isArray(snapshot.models) ? snapshot.models : [];
+        UNIART_RUNTIME_ACTIVE = snapshotModels.length > 0;
+        RUNTIME_UNIART_MODEL_IDS = new Set(
+            snapshotModels
+                .map((entry: { id?: unknown }) => String(entry?.id || ''))
+                .filter((id: string) => id.startsWith('uniart/')),
+        );
+        for (const entry of snapshotModels) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
             const caps = Array.isArray(entry.capabilities) ? entry.capabilities : [];
@@ -181,6 +192,19 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];
         UNIART_RUNTIME_ACTIVE = models.length > 0;
+        const liveIds = new Set<string>(
+            models
+                .map((entry: { id?: unknown }) => String(entry?.id || ''))
+                .filter((id: string) => id.startsWith('uniart/')),
+        );
+        // Drop runtime entries from an older snapshot before installing the
+        // current list. Without this, a SKU removed upstream (for example an
+        // unpublished Flare alias) survives in the selector and is sent to a
+        // route that no longer exists for the account.
+        for (const id of Array.from(RUNTIME_UNIART_MODEL_IDS)) {
+            if (!liveIds.has(id)) delete MODEL_CATALOG.models[id];
+        }
+        RUNTIME_UNIART_MODEL_IDS = liveIds;
         for (const entry of models) {
             const id = String(entry.id || '');
             if (!id.startsWith('uniart/')) continue;
@@ -293,7 +317,7 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
         ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
         : null;
     return (
-        (!UNIART_RUNTIME_ACTIVE || model.provider === 'uniart') &&
+        (!UNIART_RUNTIME_ACTIVE || model.provider !== 'uniart' || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
         model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
         (!enabled || model.provider !== 'uniart' || enabled.includes(model.id)) &&
         model.status !== 'planned' &&
@@ -416,6 +440,20 @@ export function resolveModelId(
         warnModelFallback(group, requestedId, surface, fallbackId);
     }
     return fallbackId;
+}
+
+/**
+ * Resolve the model used by the legacy asset-generation surface.
+ *
+ * Older projects can keep a model id that is no longer visible in the live
+ * catalog. Every asset-generation entry point must use the same resolver so
+ * those projects do not submit a retired provider SKU just because the
+ * project JSON predates the current catalog.
+ */
+export function resolveAssetGenerationModel(
+    requestedId: string | null | undefined,
+): string {
+    return resolveModelId('t2i', requestedId, 'project_settings');
 }
 
 export function resolveModelSettings(

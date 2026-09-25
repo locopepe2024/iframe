@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import time
 import uuid
@@ -8,7 +9,19 @@ import re
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 
-from .models import Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus
+from .models import (
+    Script,
+    Character,
+    Scene,
+    Prop,
+    StoryboardFrame,
+    GenerationStatus,
+    DIRECTOR_CANON_STATE_MAX_CHARS,
+    DIRECTOR_CANON_STATE_MAX_ITEMS,
+    DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
+    build_director_refinement_context,
+    director_execution_payload,
+)
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -18,6 +31,172 @@ def _strip_markdown_json(content: str) -> str:
     elif "```" in content:
         content = content.split("```")[1].split("```")[0]
     return content.strip()
+
+
+def _prompt_json(value: Any) -> str:
+    """Serialize structured context without indentation overhead.
+
+    Director prompts can contain the full script, all shared entities, and a
+    previous profile. Pretty-printed JSON adds thousands of whitespace tokens
+    without adding facts and can push an OpenAI-compatible gateway over its
+    input/output context budget.
+    """
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
+DIRECTOR_PROFILE_MAX_RETRIES = 0
+DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
+DIRECTOR_PROFILE_OUTPUT_BUDGET = (
+    "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"
+    "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
+    "每个值尽量控制在 120 字以内；六个方向文本字段各不超过 240 字；"
+    "continuity_constraints、prohibitions、unresolved_questions 各最多 8 项、"
+    "每项不超过 120 字；scene_summaries 最多 16 项，每项只能有 scene_ref、"
+    "summary、state_in、state_out 四个键；scene_ref 不超过 40 字，summary 不超过 64 字，"
+    "state_in/state_out 各不超过 48 字，总计不超过 3200 字。"
+    f"canon_state 最多 {DIRECTOR_CANON_STATE_MAX_ITEMS} 条事实、最多 {DIRECTOR_CANON_STATE_MAX_CHARS} 个字符；"
+    "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
+    "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
+    "不要把没有原文依据的推断写成 active 事实。"
+)
+
+# A Director prompt is allowed to carry a complete source only while it is
+# still small enough to be a predictable request.  Larger sources are mapped
+# into source-linked notes before the Director call.  These are character
+# budgets (not token budgets) so the boundary remains deterministic for
+# Chinese and mixed-language scripts.
+DIRECTOR_SOURCE_DIRECT_MAX_CHARS = 16000
+DIRECTOR_SOURCE_CHUNK_TARGET_CHARS = 16000
+DIRECTOR_SOURCE_CHUNK_MAX_CHARS = 18000
+DIRECTOR_SOURCE_CHUNK_MIN_CHARS = 8000
+DIRECTOR_SOURCE_ANCHOR_MAX_CHARS = 5000
+DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS = 360
+DIRECTOR_SOURCE_FACT_MAX_CHARS = 72
+DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS = 64
+DIRECTOR_SOURCE_NOTE_MAX_ITEMS = 2
+DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 64000
+DIRECTOR_SOURCE_CACHE_MAX_ENTRIES = 4
+
+
+def _director_source_boundary_positions(text: str) -> List[int]:
+    """Return character offsets that are safe-ish narrative break points.
+
+    Paragraph/newline boundaries are preferred because they usually align with
+    chapter or scene prose. Sentence punctuation is a fallback for sources
+    that arrive as one wrapped paragraph. The offsets are end-exclusive.
+    """
+    positions = {0, len(text)}
+    for match in re.finditer(r"\r\n|\n|\r", text):
+        positions.add(match.end())
+    # Include closing quote/bracket characters in the preceding sentence so a
+    # split never leaves a dangling Chinese quote at the start of a chunk.
+    for match in re.finditer(
+        r"[。！？!?；;](?:[\"”’'』」）】》]*)", text
+    ):
+        positions.add(match.end())
+    return sorted(positions)
+
+
+def split_director_source(
+    text: str,
+    *,
+    direct_max_chars: int = DIRECTOR_SOURCE_DIRECT_MAX_CHARS,
+    target_chars: int = DIRECTOR_SOURCE_CHUNK_TARGET_CHARS,
+    max_chars: int = DIRECTOR_SOURCE_CHUNK_MAX_CHARS,
+) -> List[Dict[str, Any]]:
+    """Split a Director source into natural-boundary, source-linked chunks.
+
+    The returned ranges use ``[char_start, char_end)`` semantics and concatenate
+    exactly to the input. A hard split is used only when no known boundary fits
+    inside the chunk limit; callers can therefore distinguish a provenance
+    range from a claimed semantic scene boundary.
+    """
+    if not isinstance(text, str):
+        raise TypeError("Director source must be a string")
+    if not text:
+        return []
+    if direct_max_chars < 1 or target_chars < 1 or max_chars < 1:
+        raise ValueError("Director source chunk limits must be positive")
+    if target_chars > max_chars:
+        target_chars = max_chars
+
+    boundaries = _director_source_boundary_positions(text)
+    if len(text) <= direct_max_chars:
+        return [{
+            "source_ref": f"source:chars-0-{len(text)}",
+            "char_start": 0,
+            "char_end": len(text),
+            "text": text,
+        }]
+
+    chunks: List[Dict[str, Any]] = []
+    start = 0
+    while start < len(text):
+        hard_end = min(len(text), start + max_chars)
+        minimum_end = min(
+            hard_end,
+            start + max(1, min(DIRECTOR_SOURCE_CHUNK_MIN_CHARS, target_chars)),
+        )
+
+        # Pick the latest natural boundary within the hard limit. This keeps
+        # the number of map calls low while never exceeding the input budget.
+        eligible = [
+            position for position in boundaries if start < position <= hard_end
+        ]
+        natural = [position for position in eligible if position >= minimum_end]
+        selected_end = max(natural) if natural else None
+        if selected_end is None:
+            # If the source contains an unusually large paragraph, use the
+            # last boundary before the limit when it still makes a useful
+            # chunk; otherwise the hard limit is the only safe option.
+            selected_end = max(eligible) if eligible else hard_end
+        if selected_end <= start:
+            selected_end = hard_end
+
+        chunk_text = text[start:selected_end]
+        chunks.append({
+            "source_ref": f"source:chars-{start}-{selected_end}",
+            "char_start": start,
+            "char_end": selected_end,
+            "text": chunk_text,
+        })
+        start = selected_end
+    return chunks
+
+
+def _bounded_source_text(value: Any, limit: int) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    return value[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _bounded_source_list(value: Any, *, max_items: int, item_limit: int) -> List[str]:
+    if value in (None, "", [], {}):
+        return []
+    values = value if isinstance(value, list) else [value]
+    return [
+        _bounded_source_text(item, item_limit)
+        for item in values[:max_items]
+        if _bounded_source_text(item, item_limit)
+    ]
+
+# This is deliberately prompt guidance rather than a schema branch.  The
+# Director profile stores the user's requested editorial structure in
+# ``execution_summary``; downstream stages decide from that bounded text
+# whether the structure applies to a sample or a particular segment.
+BOOKEND_NARRATIVE_EXECUTION_GUIDANCE = (
+    "“首尾框架式回忆/书挡式叙事（Bookend Narrative Technique）”是可选的、"
+    "由用户明确触发的叙事结构标签：现实/当下开头锚点 → 主体回忆或插叙 → "
+    "回到现实/当下尾部锚点。它不是默认的‘回忆录风格’，也不是整部作品的视觉风格；"
+    "只在用户指定的样片或段落范围内生效。回忆内容必须来自原文，不能新增对白、事件或人物动机；"
+    "用户没有明确标注该结构时，不得自行套用。"
+)
 
 
 class PolishError(Exception):
@@ -372,6 +551,10 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
     "character_ref_names": ["角色名"],
     "prop_ref_names": ["道具名"],
     "action_summary": "一句话概括这帧发生什么（含角色动作 + 物理事件 + 神态表情）",
+    "visual_atmosphere": "环境与氛围：地点可见细节、天气/时间、色调和空间空气感（不少于 20 字）",
+    "character_acting": "角色表演：每个可见角色的表情、视线、姿态和身体动作（不少于 20 字）",
+    "key_action_physics": "关键动作物理：接触、力度、速度、材质变化或运动轨迹（无物理变化时说明状态）",
+    "lighting": {"direction": "主光方向", "quality": "soft/hard", "color_temp": "warm/neutral/cool", "description": "光影落点、明暗关系和质感"},
     "shot_size": "中景",
     "camera_angle": "平视",
     "camera_movement": "静止",
@@ -415,11 +598,25 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 """
 
 
+STORYBOARD_CONTINUITY_CONTEXT = """
+
+# 全片分镜连续性约束
+1. 原始剧本是事件、时间地点、动作因果和对白的事实来源。按原顺序拆分动作；每帧只突出一个主要动作，并让动作状态自然推进，不重复、回滚或跳过必要的因果结果。
+2. 只引用实体表中的角色、场景和道具；角色使用完整身份/时期变体名。人物外观、服装、道具形态和场景布局跨帧保持一致，除非剧本明确发生变化。
+3. 同一连续场景维持时间、天气、空间方位、人物朝向、视线/动作方向和道具持有状态；保持镜头轴线与屏幕方向连贯。景别、角度和运镜可以变化，但变化应服务叙事且不得意外翻转空间关系。
+4. 保留剧本对白原文、说话人和先后顺序；多人轮流说话时按原顺序拆成不同帧。没有依据的动作、对白、人物事实和场景细节不得补写。
+5. 全片使用同一项目视觉风格。只允许剧情明确要求的时空/氛围变化带来局部光线差异，不得因此改变角色设计、场景身份或整体材质、色彩与渲染语言。
+"""
+
+
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
         self._api_key = api_key
         from .llm_adapter import LLMAdapter
         self.llm = LLMAdapter()
+        # Long Director sources are expensive to map. Keep only compact source
+        # digests in-process; the raw script remains owned by Script storage.
+        self._director_source_cache: Dict[str, str] = {}
 
     @property
     def is_configured(self):
@@ -654,6 +851,172 @@ class ScriptProcessor:
             created_at=time.time(),
             updated_at=time.time()
         )
+
+    def _director_source_cache_key(self, text: str) -> str:
+        """Key a digest by source content and the active model identity."""
+        provider = str(getattr(self.llm, "provider", ""))
+        model = ""
+        model_getter = getattr(self.llm, "_get_default_model", None)
+        if callable(model_getter):
+            try:
+                model = str(model_getter())
+            except Exception:
+                model = ""
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"{provider}:{model}:{digest}"
+
+    def _normalize_director_source_note(
+        self, payload: Any, chunk: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Project one map response into a bounded, source-linked note."""
+        if not isinstance(payload, dict):
+            raise RuntimeError("长文本 Director 分块摘要必须是 JSON 对象")
+
+        summary = _bounded_source_text(
+            payload.get("summary")
+            or payload.get("local_summary")
+            or payload.get("continuity_summary"),
+            DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS,
+        )
+        if not summary:
+            raise RuntimeError(
+                f"长文本 Director 分块 {chunk['source_ref']} 缺少 summary"
+            )
+
+        def first_value(*keys: str) -> Any:
+            for key in keys:
+                if payload.get(key) not in (None, "", [], {}):
+                    return payload.get(key)
+            return None
+
+        return {
+            # The model cannot change provenance. The server owns the range and
+            # keeps it stable even if the model omits or hallucinates a ref.
+            "source_ref": chunk["source_ref"],
+            "char_start": chunk["char_start"],
+            "char_end": chunk["char_end"],
+            "summary": summary,
+            "continuity_in": _bounded_source_text(
+                first_value("continuity_in", "entry_state", "before"),
+                DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS,
+            ),
+            "continuity_out": _bounded_source_text(
+                first_value("continuity_out", "exit_state", "after"),
+                DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS,
+            ),
+            "facts": _bounded_source_list(
+                first_value("facts", "events", "key_events"),
+                max_items=DIRECTOR_SOURCE_NOTE_MAX_ITEMS,
+                item_limit=DIRECTOR_SOURCE_FACT_MAX_CHARS,
+            ),
+            "open_threads": _bounded_source_list(
+                first_value("open_threads", "unresolved_questions", "questions"),
+                max_items=DIRECTOR_SOURCE_NOTE_MAX_ITEMS,
+                item_limit=DIRECTOR_SOURCE_FACT_MAX_CHARS,
+            ),
+        }
+
+    def _director_source_digest(self, text: str) -> str:
+        """Map a long source once and render a bounded Director input digest."""
+        cache = getattr(self, "_director_source_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._director_source_cache = cache
+        cache_key = self._director_source_cache_key(text)
+        cached = cache.get(cache_key)
+        if isinstance(cached, str) and cached:
+            return cached
+
+        chunks = split_director_source(text)
+        if len(chunks) <= 1:
+            # This branch is mostly defensive because callers gate on the
+            # direct threshold, but it keeps the helper safe when used alone.
+            return text
+
+        notes: List[Dict[str, Any]] = []
+        for index, chunk in enumerate(chunks, start=1):
+            note_prompt = f"""你是长篇剧本的连续性编辑。只分析下面一个来源片段，不能调用片段之外的信息，也不能补写剧情。
+输出纯 JSON 对象，不要 Markdown：
+{{
+  "summary": "不超过 {DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS} 字符，概括本片段的角色、地点、时间推进和叙事功能",
+  "continuity_in": "不超过 {DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS} 字符，片段开始时的重要状态；没有依据就留空",
+  "continuity_out": "不超过 {DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS} 字符，片段结束时的重要状态；没有依据就留空",
+  "facts": ["最多 {DIRECTOR_SOURCE_NOTE_MAX_ITEMS} 条、每条不超过 {DIRECTOR_SOURCE_FACT_MAX_CHARS} 字符的关键事实"],
+  "open_threads": ["最多 {DIRECTOR_SOURCE_NOTE_MAX_ITEMS} 条、每条不超过 {DIRECTOR_SOURCE_FACT_MAX_CHARS} 字符的悬念或未解决问题"]
+}}
+不要把来源区间或片段编号当作剧情事实。所有结论必须能回指本片段。
+
+<source_chunk source_ref="{chunk['source_ref']}" chunk_number="{index}/{len(chunks)}" char_start="{chunk['char_start']}" char_end="{chunk['char_end']}">
+{chunk['text']}
+</source_chunk>"""
+            content = self.llm.chat(
+                messages=[{"role": "user", "content": note_prompt}],
+                response_format={"type": "json_object"},
+                timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+            ).strip()
+            try:
+                payload = json.loads(_strip_markdown_json(content))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"长文本 Director 分块 {chunk['source_ref']} 摘要格式错误: {exc}"
+                ) from exc
+            notes.append(self._normalize_director_source_note(payload, chunk))
+
+        anchor_limit = DIRECTOR_SOURCE_ANCHOR_MAX_CHARS
+        head_end = min(len(text), anchor_limit)
+        tail_start = max(0, len(text) - anchor_limit)
+        digest_payload: Dict[str, Any] = {
+            "mode": "map_reduce",
+            "source_char_count": len(text),
+            "range_semantics": "char_start inclusive, char_end exclusive",
+            "head_anchor": {
+                "source_ref": f"source:chars-0-{head_end}",
+                "char_start": 0,
+                "char_end": head_end,
+                "text": text[:head_end],
+            },
+            "chunk_summaries": notes,
+            "tail_anchor": {
+                "source_ref": f"source:chars-{tail_start}-{len(text)}",
+                "char_start": tail_start,
+                "char_end": len(text),
+                "text": text[tail_start:],
+            },
+        }
+        rendered = json.dumps(digest_payload, ensure_ascii=False, separators=(",", ":"))
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            # Keep provenance and anchors intact while shrinking the least
+            # important map fields. In normal operation the per-note budgets
+            # already keep this branch below the envelope limit.
+            for note in notes:
+                note.pop("facts", None)
+                note.pop("open_threads", None)
+            rendered = json.dumps(
+                digest_payload, ensure_ascii=False, separators=(",", ":")
+            )
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            for note in notes:
+                note["summary"] = _bounded_source_text(
+                    note.get("summary"), DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS // 2
+                )
+            rendered = json.dumps(
+                digest_payload, ensure_ascii=False, separators=(",", ":")
+            )
+        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+            raise RuntimeError("长文本 Director 来源摘要超过输入预算")
+
+        result = f"<source_digest>{rendered}</source_digest>"
+        while len(cache) >= DIRECTOR_SOURCE_CACHE_MAX_ENTRIES:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = result
+        return result
+
+    def _director_source_context(self, text: str) -> tuple[str, bool]:
+        """Return the source prompt and whether it is a map/reduce digest."""
+        if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
+            return text, False
+        return self._director_source_digest(text), True
 
     def split_into_episodes(self, text: str, suggested_episodes: int = 3) -> List[Dict[str, Any]]:
         """
@@ -1008,16 +1371,26 @@ class ScriptProcessor:
         """Create a reviewable director draft without mutating project data."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        source_context, is_source_digest = self._director_source_context(text)
+        source_label = (
+            "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
+            if is_source_digest
+            else "原始剧本"
+        )
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
 
-原始剧本：
-<script>{text}</script>
+{source_label}：
+<script>{source_context}</script>
+
+当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
+tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
+不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
+<entities>{_prompt_json(entities_json)}</entities>
 
 用户选择的视觉风格：
-<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
+<visual_style>{_prompt_json(style_config)}</visual_style>
 
 视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
 剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
@@ -1026,12 +1399,28 @@ class ScriptProcessor:
 
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
-sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan。
-setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。"""
+sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
+execution_summary, scene_summaries, canon_state。
+setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+{DIRECTOR_PROFILE_OUTPUT_BUDGET}
+execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
+地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
+也要保留用户已经确认的导演/样片形式约束，但明确标记为“用户要求”，不要把它们改写成剧本事实；
+使用短句或项目符号，最多 20 条、最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符，
+不要重复完整 timeline 或 sample_plan。
+{BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
+scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
+scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
+只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。
+canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
+人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
+删除或把未知内容标成 active。"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
             response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
         ).strip()
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
@@ -1041,33 +1430,90 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
     def refine_director_profile(self, text: str, entities_json: Dict[str, Any],
                                 style_config: Dict[str, Any], draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
-        """Revise a director draft while preserving source-grounded facts."""
+        """Return a source-grounded partial revision patch for a Director draft."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-        numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
+        source_context, is_source_digest = self._director_source_context(text)
+        source_label = (
+            "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
+            if is_source_digest
+            else "原始剧本"
+        )
+        # The visible draft already contains the effects of earlier revisions.
+        # Keep the newest instructions within a small budget for callers that
+        # still submit accumulated history (the UI now submits only one).
+        bounded_instructions = []
+        instruction_chars = 0
+        for item in reversed(instructions):
+            text_item = str(item).strip()
+            if not text_item:
+                continue
+            text_item = text_item[:DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS]
+            projected = instruction_chars + len(text_item) + (1 if bounded_instructions else 0)
+            if bounded_instructions and projected > DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS:
+                break
+            bounded_instructions.insert(0, text_item)
+            instruction_chars = projected
+        numbered = "\n".join(
+            f"{index}. {item}" for index, item in enumerate(bounded_instructions, 1)
+        )
         prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
 视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
 
-<script>{text}</script>
-<entities>{json.dumps(entities_json, ensure_ascii=False, indent=2)}</entities>
-<visual_style>{json.dumps(style_config, ensure_ascii=False, indent=2)}</visual_style>
-<current_director_profile>{json.dumps(draft, ensure_ascii=False, indent=2)}</current_director_profile>
+{source_label}：
+<script>{source_context}</script>
+当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
+tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
+不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
+<entities>{_prompt_json(entities_json)}</entities>
+<visual_style>{_prompt_json(style_config)}</visual_style>
+<current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
 <revision_instructions>{numbered}</revision_instructions>
 
 后面的用户要求在冲突时优先，但不得把用户的修改指令误写成剧本事实。
-保留未要求改变的正确内容。只返回与 current_director_profile 同结构的完整 JSON，不要解释。"""
+用户明确提出的导演风格、剪辑结构、样片时长和取材范围属于执行约束：必须保留在
+execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
+{BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
+保留未要求改变的正确内容，并同步刷新受影响的 execution_summary 或 scene_summaries。
+这是“变更补丁”协议：只返回因本次 revision_instructions 发生变化的顶层字段；没有变化时返回 {{}}。
+不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
+confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
+execution_summary 必须最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；
+scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，并且只保留后续分镜和
+资产设计需要的事实与约束。canon_state 只返回本次受影响的事实分类；优先复用已有
+fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
+不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
+{DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = self.llm.chat(
             messages=[{"role": "system", "content": prompt},
-                      {"role": "user", "content": "返回修订后的完整导演设定。"}],
+                      {"role": "user", "content": "只返回本次导演修订的 JSON 变更补丁。"}],
             response_format={"type": "json_object"},
+            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
         ).strip()
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
         return result
 
+    @staticmethod
+    def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:
+        if not visual_style:
+            return ""
+        return """
+
+# 全片统一视觉风格
+下面的项目级视觉风格适用于所有分镜帧。跨帧保持稳定的色彩、材质、摄影和渲染语言；
+只在剧本或镜头需要时改变动作、构图、景别与局部光线。视觉风格不得改变剧本中的地点、年代、文化背景或角色身份。
+<project_visual_style>
+%s
+</project_visual_style>
+""" % json.dumps(visual_style, ensure_ascii=False, indent=2)
+
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
-                              director_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                              director_profile: Optional[Dict[str, Any]] = None,
+                              visual_style: Optional[Dict[str, Any]] = None,
+                              previous_frames: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -1099,15 +1545,38 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += self._storyboard_visual_style_context(visual_style)
+        system_prompt += STORYBOARD_CONTINUITY_CONTEXT
+        if previous_frames:
+            # A compact handoff helps adjacent batches without resending the
+            # entire growing draft into every model request.
+            context = [
+                {key: frame.get(key) for key in (
+                    "scene_ref_name", "character_ref_names", "prop_ref_names",
+                    "action_summary", "dialogue", "speaker",
+                ) if frame.get(key) is not None}
+                for frame in previous_frames[-3:]
+            ]
+            system_prompt += (
+                "\n# 上一段最后的镜头（仅用于衔接，不得重复生成）\n"
+                + _prompt_json(context)
+            )
         if director_profile:
+            execution_context = director_execution_payload(director_profile)
             system_prompt += """
 
-以下是用户在第二步明确确认的导演设定。它约束镜头选择、表演、节奏、声音和连续性；
+以下是用户在第二步明确确认的导演执行摘要。它约束镜头选择、表演、节奏、声音和连续性；
 不得把 unresolved_questions 补写成事实，也不得违反 prohibitions：
-<confirmed_director_profile>
+<confirmed_director_execution_summary>
 %s
-</confirmed_director_profile>
-""" % json.dumps(director_profile, ensure_ascii=False, indent=2)
+</confirmed_director_execution_summary>
+scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文或实体中的 scene_ref；
+如果相邻场景都有记录，使用前一项 state_out 衔接后一项 state_in。没有匹配项时只能
+使用 execution_summary 的全局约束，不得凭空补写本地状态。execution_summary 中标记为
+“用户要求”的导演风格、取材范围、剪辑结构和时长约束同样有效。
+任何回忆/闪回子类型或剪辑结构都必须以 execution_summary 中明确标记的“用户要求”为准；
+未标注时不得自行套用，且回忆内容必须能在原文中找到。
+""" % json.dumps(execution_context, ensure_ascii=False, indent=2)
 
         try:
             content = self.llm.chat(
@@ -1152,9 +1621,19 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
 
         try:
             result = json.loads(content.strip())
-            frames = result.get("frames", [])
-            if not frames:
+            frames = result.get("frames", []) if isinstance(result, dict) else None
+            if not isinstance(frames, list) or not frames or not all(isinstance(frame, dict) for frame in frames):
                 logger.warning("Parsed JSON successfully but 'frames' array is empty")
+                return None
+            missing = []
+            for index, frame in enumerate(frames, 1):
+                required = ("scene_ref_name", "action_summary", "visual_atmosphere",
+                            "character_acting", "key_action_physics", "lighting")
+                absent = [field for field in required if not frame.get(field)]
+                if absent:
+                    missing.append(f"frame {index}: {', '.join(absent)}")
+            if missing:
+                logger.warning("Storyboard frames missing visual atoms: %s", "; ".join(missing[:5]))
                 return None
             logger.info(f"Storyboard Analysis generated {len(frames)} frames")
             return frames
@@ -1170,6 +1649,7 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
         instructions: List[str],
         custom_extraction_prompt: str = "",
         director_profile: Optional[Dict[str, Any]] = None,
+        visual_style: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -1181,10 +1661,18 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        baseline += self._storyboard_visual_style_context(visual_style)
+        baseline += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
-            baseline += "\n\n<confirmed_director_profile>\n" + json.dumps(
-                director_profile, ensure_ascii=False, indent=2
-            ) + "\n</confirmed_director_profile>"
+            baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
+                director_execution_payload(director_profile), ensure_ascii=False, indent=2
+            ) + "\n</confirmed_director_execution_summary>"
+            baseline += (
+                "\n场景级 scene_summaries 是局部连续性记忆。修订镜头时优先按 scene_ref "
+                "匹配对应 summary，并保持 state_out → state_in 的因果衔接；缺少匹配项时只能 "
+                "沿用全局 execution_summary，不要猜测未记录的场景状态。全局摘要中标记为“用户要求” "
+                "的导演风格、取材范围、剪辑结构和时长约束同样有效。"
+            )
         numbered = "\n".join(f"{index}. {item}" for index, item in enumerate(instructions, 1))
         prompt = f"""{baseline}
 
@@ -1237,6 +1725,8 @@ setting 是对象；timeline/relationships/key_events/sample_plan 是对象数�
         scene_assets: List[Dict[str, Any]],
         prev_frame_context: Optional[str] = None,
         next_frame_context: Optional[str] = None,
+        visual_style: Optional[Dict[str, Any]] = None,
+        director_context: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Phase 2: Refine a coarse frame into a rich frame with full structured fields."""
         if not self.is_configured:
@@ -1301,12 +1791,18 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.
-5. Maintain continuity with adjacent frames.
+5. Maintain continuity with adjacent frames: preserve character appearance/clothing, scene layout, time/weather, screen direction, eyelines, action direction, and prop state unless an explicit script event changes them. Camera framing may vary without accidentally reversing the axis.
 6. camera_movement has at most primary + secondary.
+
+# Project Visual Style
+{json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}
+
+# Confirmed Director Continuity Constraints
+{director_context or "No confirmed director profile"}
 
 # Coarse Frame
 {json.dumps(coarse_frame, ensure_ascii=False, indent=2)}

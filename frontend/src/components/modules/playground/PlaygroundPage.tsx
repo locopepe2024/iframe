@@ -22,6 +22,7 @@ import {
 import { playgroundApi } from '@/lib/api';
 import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } from './playgroundModels';
 import { referenceKey, referenceName } from './referenceMedia';
+import { normalizePlaygroundSubmission } from './playgroundSubmission';
 
 const POLL_INTERVAL = 2000;
 
@@ -209,13 +210,14 @@ function PlaygroundContent() {
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim() || !activeSessionId) return;
+    const submission = normalizePlaygroundSubmission(mode, inputMedia);
     enqueueRequest({
-      mode: mode === 't2i' && inputMedia.length > 0 ? 'i2i' : mode,
+      mode: submission.mode,
       modelId,
       prompt: prompt.trim(),
       negativePrompt: negativePrompt || undefined,
-      inputMedia,
-      mediaNames: Object.fromEntries(inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
+      inputMedia: submission.inputMedia,
+      mediaNames: Object.fromEntries(submission.inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
       parameters,
       batchSize,
       sessionId: activeSessionId,

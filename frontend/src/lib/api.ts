@@ -1,17 +1,49 @@
 import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
-import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import {
+    analyzeAndApplyStoryboard,
+    analyzeStoryboardPreview,
+    applyStoryboardDraft as applyStoryboardDraftRequest,
+    refineStoryboardPreview,
+    type StoryboardDraftFrame,
+} from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
-import { analyzeDirectorProfile, refineDirectorProfile, type DirectorProfileDraft } from "./directorProfile";
+import {
+    analyzeDirectorProfile,
+    refineDirectorProfile,
+    type DirectorProfileDraft,
+    type DirectorProfileJobStatusListener,
+} from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
 // Dynamic API URL detection (no port enumeration):
 // 1. Explicit override: NEXT_PUBLIC_API_URL (any env / proxy setup).
-// 2. Dev mode (`next dev`, NODE_ENV==='development'): backend runs on a separate
-//    port, so target the same host on the backend port — works for ANY dev port.
+// 2. Browser dev mode (`next dev`, NODE_ENV==='development'): use Next's
+//    same-origin proxy so anonymous identity cookies persist across requests.
 // 3. Production / packaged (Electron): frontend is served by the backend, so use
 //    the same origin.
 const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || "17177";
+
+type BrowserApiLocation = Pick<Location, "protocol" | "hostname" | "port">;
+
+export const resolveBrowserApiUrl = (
+    location: BrowserApiLocation,
+    environment: string | undefined,
+    backendPort: string,
+): string => {
+    const { protocol, hostname, port } = location;
+
+    // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
+    if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
+        return `http://127.0.0.1:${backendPort}`;
+    }
+
+    if (environment === 'development') {
+        return "/api-proxy";
+    }
+
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+};
 
 const getApiUrl = (): string => {
     // Explicit override always wins (strip any trailing slash).
@@ -21,21 +53,7 @@ const getApiUrl = (): string => {
     }
 
     if (typeof window !== 'undefined') {
-        const { protocol, hostname, port } = window.location;
-
-        // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
-        if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
-            return `http://127.0.0.1:${BACKEND_PORT}`;
-        }
-
-        // Dev server: backend lives on a different port regardless of which
-        // dev port Next.js picked (3008/3009/3018/...).
-        if (process.env.NODE_ENV === 'development') {
-            return `${protocol}//${hostname}:${BACKEND_PORT}`;
-        }
-
-        // Production / packaged: frontend is served by the backend → same origin.
-        return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+        return resolveBrowserApiUrl(window.location, process.env.NODE_ENV, BACKEND_PORT);
     }
 
     // SSR fallback
@@ -59,6 +77,53 @@ export const authenticatedFetch = (
 };
 
 export type ProviderMode = "dashscope" | "vendor";
+
+export interface AssetLibraryReference {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    variant_id: string;
+}
+
+export interface AssetReferenceIndexVariant {
+    id: string;
+    url: string;
+    created_at?: number;
+    prompt_used?: string | null;
+    is_favorited?: boolean;
+    reference_view_role?: string;
+    reference_distance?: string;
+}
+
+export interface AssetReferenceIndexEntry {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    name: string;
+    description?: string;
+    starred?: boolean;
+    source_scope: "episode" | "project" | "series" | "global";
+    source_container_id?: string | null;
+    source_name?: string | null;
+    selected_variant_id?: string | null;
+    cover_variant_id?: string | null;
+    variants: AssetReferenceIndexVariant[];
+}
+
+export interface AssetCoverSelectionResult {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    cover_variant_id: string;
+    variant: {
+        id: string;
+        url: string;
+        created_at: number;
+    };
+}
+
+export interface AssetReferenceIndex {
+    schema_version: 1;
+    project_id: string;
+    assets: AssetReferenceIndexEntry[];
+}
 
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
@@ -128,6 +193,7 @@ export interface UserConfigPayload {
     UNIART_API_KEY?: string;
     UNIART_BASE_URL?: string;
     preferences?: Record<string, unknown>;
+    runtime_uniart_available?: boolean;
     secrets_configured?: Record<string, boolean>;
     secret_prefixes?: Record<string, string>;
 }
@@ -146,6 +212,58 @@ export interface BgmPreset {
     label: string;
     mood: string;
     url: string;
+}
+
+// Assembly v1 — stable, URL-free editorial plan.  The backend owns the
+// reference/overlap checks; the client only edits bounded millisecond ranges.
+export type AssemblyScope = "project" | "series";
+export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "markers";
+export type AssemblyMarkerType = "episode" | "memory" | "story_node" | "note";
+
+export interface AssemblyClip {
+    id: string;
+    timeline_start_ms: number;
+    timeline_end_ms: number;
+    source_start_ms?: number;
+    source_end_ms?: number | null;
+    source_project_id?: string | null;
+    source_episode_id?: string | null;
+    source_frame_id?: string | null;
+    source_task_id?: string | null;
+    source_refs: string[];
+    label?: string | null;
+    enabled: boolean;
+    gain?: number | null;
+}
+
+export interface AssemblyLane {
+    id: string;
+    kind: AssemblyLaneKind;
+    clips: AssemblyClip[];
+    allow_overlap: boolean;
+    label?: string | null;
+}
+
+export interface AssemblyMarker {
+    id: string;
+    time_ms: number;
+    label: string;
+    marker_type: AssemblyMarkerType;
+    source_refs: string[];
+    source_episode_id?: string | null;
+}
+
+export interface AssemblyEditPlan {
+    id: string;
+    scope: AssemblyScope;
+    target_duration_ms: number;
+    revision: number;
+    source_revision?: number | null;
+    director_revision?: number | null;
+    content_ir_revision?: number | null;
+    provenance: Record<string, unknown>;
+    lanes: AssemblyLane[];
+    markers: AssemblyMarker[];
 }
 
 export interface ReconcileAction {
@@ -265,6 +383,51 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
+    getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getAssetLibraryIndex: async (): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/asset-index`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getAssemblyPlan: async (scope: AssemblyScope, resourceId: string): Promise<AssemblyEditPlan | null> => {
+        const base = scope === "series" ? "series" : "projects";
+        const res = await axios.get<AssemblyEditPlan | null>(`${API_URL}/${base}/${resourceId}/assembly-plan`);
+        return res.data;
+    },
+
+    saveAssemblyPlan: async (
+        scope: AssemblyScope,
+        resourceId: string,
+        plan: AssemblyEditPlan,
+        expectedRevision?: number,
+    ): Promise<AssemblyEditPlan> => {
+        const base = scope === "series" ? "series" : "projects";
+        const body = expectedRevision == null
+            ? plan
+            : { plan, expected_revision: expectedRevision };
+        const res = await axios.put<AssemblyEditPlan>(`${API_URL}/${base}/${resourceId}/assembly-plan`, body);
+        return res.data;
+    },
+
+    renderAssemblyPlan: async (
+        scope: AssemblyScope,
+        resourceId: string,
+    ): Promise<{ url: string }> => {
+        const base = scope === "series" ? "series" : "projects";
+        const res = await axios.post<{ url: string }>(
+            `${API_URL}/${base}/${resourceId}/assembly-plan/render`,
+        );
+        return res.data;
+    },
+
     deleteProject: async (scriptId: string) => {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;
@@ -348,7 +511,9 @@ export const api = {
         // Watermark toggle — supported across wan / kling / vidu / pixverse /
         // happyhorse video. undefined = leave to provider default (typically
         // off); explicit boolean is user's Advanced-section choice.
-        watermark?: boolean
+        watermark?: boolean,
+        poseReferenceVariantIds?: Record<string, string[]>,
+        directorSnapshotMediaId?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -378,6 +543,8 @@ export const api = {
             ratio,
             watermark,
             workbench_tab: workbenchTab,
+            pose_reference_variant_ids: poseReferenceVariantIds,
+            director_snapshot_media_id: directorSnapshotMediaId,
         });
         return res.data;
     },
@@ -422,6 +589,8 @@ export const api = {
             video_model?: string;
             workbench_generate_audio?: boolean;
             workbench_reference_variant_ids?: Record<string, string[]>;
+            workbench_pose_reference_variant_ids?: Record<string, string[]>;
+            workbench_director_snapshot_media_id?: string | null;
         },
     ) => {
         const res = await axios.patch(
@@ -553,7 +722,10 @@ export const api = {
         return response.json();
     },
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string) => {
+    assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
+        `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
+
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text") => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -566,12 +738,20 @@ export const api = {
             batch_size: batchSize,
             model_name: modelName,
             aspect_ratio: aspectRatio,
+            ...(reference ? { reference } : {}),
+            ...(references?.length ? { references } : {}),
+            image_generation_mode: imageGenerationMode,
         });
         return res.data;
     },
 
     getTaskStatus: async (taskId: string) => {
         const res = await axios.get(`${API_URL}/tasks/${taskId}`);
+        return res.data;
+    },
+
+    clearAssetGenerationState: async (scriptId: string, assetType: string, assetId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/generation/clear`);
         return res.data;
     },
 
@@ -639,6 +819,20 @@ export const api = {
             asset_type: assetType,
             image_url: imageUrl
         });
+        return res.data;
+    },
+
+    setAssetCoverVariant: async (
+        scriptId: string,
+        assetId: string,
+        assetType: "character" | "scene" | "prop",
+        variantId: string,
+    ): Promise<AssetCoverSelectionResult> => {
+        const res = await axios.post<AssetCoverSelectionResult>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/cover`,
+            { variant_id: variantId },
+            { timeout: 15_000 },
+        );
         return res.data;
     },
 
@@ -784,13 +978,15 @@ export const api = {
         return res.data;
     },
 
-    analyzeDirectorProfile: (scriptId: string) => analyzeDirectorProfile(API_URL, scriptId),
+    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener) =>
+        analyzeDirectorProfile(API_URL, scriptId, onStatus),
 
     refineDirectorProfile: (
         scriptId: string,
         draft: DirectorProfileDraft,
         instructions: string[],
-    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions),
+        onStatus?: DirectorProfileJobStatusListener,
+    ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
@@ -953,14 +1149,12 @@ export const api = {
      * Replaces existing frames with newly generated ones.
      */
     analyzeToStoryboard: async (scriptId: string, text: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
-            text: text
-        });
-        return res.data;
+        return analyzeAndApplyStoryboard(API_URL, scriptId, text);
     },
 
-    analyzeStoryboardPreview: async (scriptId: string, text: string) =>
-        analyzeStoryboardPreview(API_URL, scriptId, text),
+    analyzeStoryboardPreview: async (scriptId: string, text: string,
+                                     onProgress?: (completed: number, total: number) => void) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress),
 
     refineStoryboardPreview: async (
         scriptId: string,
@@ -970,8 +1164,7 @@ export const api = {
     ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
 
     applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
-        return res.data;
+        return applyStoryboardDraftRequest(API_URL, scriptId, text, draft);
     },
 
     /**
