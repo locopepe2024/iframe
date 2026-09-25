@@ -264,6 +264,8 @@ class ExtractionJobs:
             message = (
                 '分镜分析失败；已完成的分段已保存，重试会从未完成段继续。'
                 if row and row['fingerprint'].startswith('storyboard:')
+                else '导演拍摄计划分析失败；已完成的分段已保存，重试会从未完成段继续。'
+                if row and row['fingerprint'].startswith('director_shooting_plan:')
                 else '剧本分析失败，请检查模型配置后重试。'
             )
             self._finish(job_id, error=message)

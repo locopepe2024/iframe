@@ -61,6 +61,8 @@ from .models import (
     ArtifactLineage,
     DirectorProfile,
     DirectorProfileRevision,
+    DirectorShootingPlan,
+    DirectorShootingPlanRevision,
     ScriptSourceRevision,
     ScriptFactLedgerEntry,
     ScriptFactLedgerRevisionSummary,
@@ -334,6 +336,10 @@ def _script_response_dump(script: Script) -> Dict[str, Any]:
         "director_profile_draft_revision",
         "director_profile_draft_source_revision",
         "director_profile_draft_updated_at",
+        "director_shooting_plan_revisions",
+        "director_shooting_plan_draft",
+        "director_shooting_plan_draft_revision",
+        "director_shooting_plan_draft_updated_at",
         "fact_ledger",
         "fact_ledger_revisions",
         "fact_ledger_draft",
@@ -4572,6 +4578,22 @@ class DirectorProfileDraftSaveRequest(BaseModel):
     draft: Dict[str, Any]
 
 
+class DirectorShootingPlanDraftSaveRequest(BaseModel):
+    source_revision: int = Field(..., ge=1)
+    expected_draft_revision: int = Field(..., ge=0)
+    plan: DirectorShootingPlan
+
+
+class DirectorShootingPlanConfirmRequest(BaseModel):
+    expected_current_revision: int = Field(..., ge=0)
+    expected_draft_revision: int = Field(..., ge=0)
+    plan: DirectorShootingPlan
+
+
+class DirectorShootingPlanRestoreRequest(BaseModel):
+    expected_draft_revision: int = Field(..., ge=0)
+
+
 class ScriptFactLedgerDraftRequest(BaseModel):
     source_revision: int = Field(..., ge=1)
     expected_draft_revision: int = Field(..., ge=0)
@@ -4852,6 +4874,263 @@ def save_director_profile_draft(
         if message == "Script not found":
             status = 404
         raise HTTPException(status, message) from exc
+
+
+def _director_shooting_plan_counts(plan: Optional[DirectorShootingPlan]) -> Dict[str, int]:
+    if plan is None:
+        return {"scene_count": 0, "beat_count": 0, "shot_count": 0, "duration_seconds": 0}
+    beats = [beat for scene in plan.scenes for beat in scene.beats]
+    shots = [shot for beat in beats for shot in beat.shots]
+    return {
+        "scene_count": len(plan.scenes),
+        "beat_count": len(beats),
+        "shot_count": len(shots),
+        "duration_seconds": sum(shot.duration_seconds or 0 for shot in shots),
+    }
+
+
+def _director_shooting_plan_revision_summary(revision: DirectorShootingPlanRevision) -> Dict[str, Any]:
+    return {
+        "revision": revision.revision,
+        "content_hash": revision.content_hash,
+        "confirmed_at": revision.confirmed_at,
+        "source_revision": revision.plan.source_revision,
+        "source_revision_id": revision.plan.source_revision_id,
+        "director_profile_revision": revision.plan.director_profile_revision,
+        "director_profile_hash": revision.plan.director_profile_hash,
+        "effective_style_hash": revision.plan.effective_style_hash,
+        **_director_shooting_plan_counts(revision.plan),
+    }
+
+
+@app.get("/projects/{script_id}/director-shooting-plan")
+def get_director_shooting_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    try:
+        lineage = pipeline.director_shooting_plan_lineage(script_id)
+        lineage_error = None
+    except ValueError as exc:
+        lineage = None
+        lineage_error = str(exc)
+    from .llm import split_director_source
+    source_chunks = split_director_source(
+        script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
+    )
+    revisions = script.director_shooting_plan_revisions
+    confirmed = revisions[-1] if revisions else None
+    return {
+        "project_id": script.id,
+        "draft_revision": script.director_shooting_plan_draft_revision,
+        "draft_updated_at": script.director_shooting_plan_draft_updated_at,
+        "draft": script.director_shooting_plan_draft.model_dump() if script.director_shooting_plan_draft else None,
+        "current_revision": confirmed.revision if confirmed else 0,
+        "current": _director_shooting_plan_revision_summary(confirmed) if confirmed else None,
+        "current_lineage": lineage,
+        "readiness_error": lineage_error,
+        "draft_stale": bool(script.director_shooting_plan_draft and (
+            lineage is None or any(
+                getattr(script.director_shooting_plan_draft, key) != value for key, value in lineage.items()
+            )
+        )),
+        "current_stale": bool(confirmed and (
+            lineage is None or any(getattr(confirmed.plan, key) != value for key, value in lineage.items())
+        )),
+        "source_chunks": [{
+            "source_ref": item["source_ref"],
+            "char_start": item["char_start"],
+            "char_end": item["char_end"],
+        } for item in source_chunks],
+    }
+
+
+@app.get("/projects/{script_id}/director-shooting-plan/revisions")
+def list_director_shooting_plan_revisions(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return [_director_shooting_plan_revision_summary(item) for item in reversed(script.director_shooting_plan_revisions)]
+
+
+@app.get("/projects/{script_id}/director-shooting-plan/revisions/{revision}")
+def get_director_shooting_plan_revision(
+    script_id: str,
+    revision: int,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    snapshot = next((item for item in script.director_shooting_plan_revisions if item.revision == revision), None)
+    if snapshot is None:
+        raise HTTPException(404, "Shooting-plan revision not found")
+    return {**_director_shooting_plan_revision_summary(snapshot), "plan": snapshot.plan.model_dump()}
+
+
+@app.put("/projects/{script_id}/director-shooting-plan/draft")
+def save_director_shooting_plan_draft(
+    script_id: str,
+    request: DirectorShootingPlanDraftSaveRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        updated = pipeline.save_director_shooting_plan_draft(
+            script_id,
+            request.source_revision,
+            request.expected_draft_revision,
+            request.plan,
+        )
+        return {
+            "project_id": updated.id,
+            "draft_revision": updated.director_shooting_plan_draft_revision,
+            "draft_updated_at": updated.director_shooting_plan_draft_updated_at,
+            "draft": updated.director_shooting_plan_draft.model_dump() if updated.director_shooting_plan_draft else None,
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if message == "Script not found" else (
+            409 if "revision changed" in message.lower() or "stale" in message.lower() else 422
+        )
+        raise HTTPException(status, message) from exc
+
+
+@app.post("/projects/{script_id}/director-shooting-plan/confirm")
+def confirm_director_shooting_plan(
+    script_id: str,
+    request: DirectorShootingPlanConfirmRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        updated = pipeline.apply_director_shooting_plan(
+            script_id,
+            request.plan,
+            request.expected_current_revision,
+            request.expected_draft_revision,
+        )
+        current = updated.director_shooting_plan_revisions[-1]
+        return {
+            "project_id": updated.id,
+            "current_revision": current.revision,
+            "current": _director_shooting_plan_revision_summary(current),
+            "draft_revision": updated.director_shooting_plan_draft_revision,
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if message == "Script not found" else (
+            409 if "revision changed" in message.lower() or "unsaved" in message.lower() or "stale" in message.lower() else 422
+        )
+        raise HTTPException(status, message) from exc
+
+
+@app.post("/projects/{script_id}/director-shooting-plan/revisions/{revision}/restore")
+def restore_director_shooting_plan_revision(
+    script_id: str,
+    revision: int,
+    request: DirectorShootingPlanRestoreRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        updated = pipeline.restore_director_shooting_plan_revision(
+            script_id,
+            revision,
+            request.expected_draft_revision,
+        )
+        return {
+            "project_id": updated.id,
+            "draft_revision": updated.director_shooting_plan_draft_revision,
+            "draft_updated_at": updated.director_shooting_plan_draft_updated_at,
+            "draft": updated.director_shooting_plan_draft.model_dump() if updated.director_shooting_plan_draft else None,
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if message in {"Script not found", "Shooting-plan revision not found"} else (
+            409 if "revision changed" in message.lower() or "stale" in message.lower() else 422
+        )
+        raise HTTPException(status, message) from exc
+
+
+def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any]) -> str:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    entities = pipeline.resolve_episode_assets(script)
+    llm = pipeline.script_processor.llm
+    def selected_fields(items, names):
+        return [{name: getattr(item, name, None) for name in names} for item in items]
+
+    payload = [
+        lineage,
+        selected_fields(entities["characters"], ("id", "name", "persona", "base_character_id", "description")),
+        selected_fields(entities["scenes"], ("id", "name", "description")),
+        selected_fields(entities["props"], ("id", "name", "description")),
+        llm.provider,
+        llm._get_default_model(),
+    ]
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@app.post("/projects/{script_id}/director-shooting-plan-jobs", status_code=202)
+def start_director_shooting_plan(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    if not script.original_text.strip():
+        raise HTTPException(422, "Script text is required before generating a shooting plan")
+    try:
+        lineage = pipeline.director_shooting_plan_lineage(script_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    from .llm import split_director_source
+    chunks = split_director_source(
+        script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
+    )
+    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage)
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        script_id,
+        fingerprint,
+        lambda job_id: {
+            "plan": pipeline.preview_director_shooting_plan(
+                script_id,
+                load_batches=lambda: extraction_jobs.load_batches(
+                    user.owner_profile_id, script_id, fingerprint,
+                ),
+                save_batch=lambda index, source_ref, result: extraction_jobs.save_batch(
+                    user.owner_profile_id, script_id, fingerprint, job_id,
+                    index, source_ref, result,
+                ),
+                expected_lineage=lineage,
+            ).model_dump(),
+        },
+        pass_job_id=True,
+        total_batches=len(chunks),
+        queue_group="director_shooting_plan",
+    )
+
+
+@app.get("/projects/{script_id}/director-shooting-plan-jobs/{job_id}")
+def director_shooting_plan_status(
+    script_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, script_id, job_id)
 
 
 @app.get("/projects/{script_id}/director-evidence")

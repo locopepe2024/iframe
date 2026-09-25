@@ -966,6 +966,134 @@ class DirectorProfileRevision(BaseModel):
     source: Literal["user_apply", "migration"] = "user_apply"
 
 
+class _DirectorShootingPlanModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class DirectorPlanDialogueLine(_DirectorShootingPlanModel):
+    speaker: str = Field("", max_length=120)
+    line: str = Field("", max_length=1200)
+
+
+class DirectorPlanLighting(_DirectorShootingPlanModel):
+    key_source: str = Field("", max_length=240)
+    color_tone: str = Field("", max_length=160)
+    contrast: str = Field("", max_length=240)
+    practical_sources: List[str] = Field(default_factory=list, max_length=12)
+
+
+class DirectorPlanShot(_DirectorShootingPlanModel):
+    shot_id: str = Field(..., min_length=1, max_length=120)
+    order: int = Field(..., ge=0)
+    title: str = Field("", max_length=180)
+    visual_intent: str = Field("", max_length=2400)
+    performance_action: str = Field("", max_length=2400)
+    action_physics: str = Field("", max_length=1800)
+    shot_size: str = Field("", max_length=64)
+    camera_angle: str = Field("", max_length=120)
+    composition: str = Field("", max_length=1200)
+    camera_movement: str = Field("", max_length=500)
+    lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
+    duration_seconds: Optional[int] = Field(None, ge=1, le=30)
+    dialogue: List[DirectorPlanDialogueLine] = Field(default_factory=list, max_length=20)
+    ambient_sound: str = Field("", max_length=1000)
+    character_ids: List[str] = Field(default_factory=list, max_length=20)
+    prop_ids: List[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_character_ids(self):
+        if len(self.character_ids) != len(set(self.character_ids)):
+            raise ValueError("shooting-plan shot character IDs must be unique")
+        if len(self.prop_ids) != len(set(self.prop_ids)):
+            raise ValueError("shooting-plan shot prop IDs must be unique")
+        return self
+
+
+class DirectorPlanBeat(_DirectorShootingPlanModel):
+    beat_id: str = Field(..., min_length=1, max_length=120)
+    order: int = Field(..., ge=0)
+    title: str = Field("", max_length=180)
+    dramatic_purpose: str = Field("", max_length=1200)
+    emotional_change: str = Field("", max_length=1000)
+    story_event_ids: List[str] = Field(default_factory=list, max_length=40)
+    shots: List[DirectorPlanShot] = Field(default_factory=list, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_ids_and_orders(self):
+        if len(self.story_event_ids) != len(set(self.story_event_ids)):
+            raise ValueError("shooting-plan beat story event IDs must be unique")
+        shot_ids = [shot.shot_id for shot in self.shots]
+        shot_orders = [shot.order for shot in self.shots]
+        if len(shot_ids) != len(set(shot_ids)) or len(shot_orders) != len(set(shot_orders)):
+            raise ValueError("shooting-plan shot IDs and order values must be unique within a beat")
+        if shot_orders != list(range(len(self.shots))):
+            raise ValueError("shooting-plan shots must use contiguous zero-based order values")
+        return self
+
+
+class DirectorPlanScene(_DirectorShootingPlanModel):
+    scene_id: str = Field(..., min_length=1, max_length=120)
+    order: int = Field(..., ge=0)
+    scene_ref: str = Field("", max_length=240)
+    heading: str = Field("", max_length=240)
+    location: str = Field("", max_length=240)
+    time_anchor: str = Field("", max_length=160)
+    environment_atmosphere: str = Field("", max_length=1600)
+    unresolved_questions: List[str] = Field(default_factory=list, max_length=20)
+    source_chunk_refs: List[str] = Field(default_factory=list, max_length=160)
+    prop_ids: List[str] = Field(default_factory=list, max_length=40)
+    beats: List[DirectorPlanBeat] = Field(default_factory=list, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_ids_and_orders(self):
+        if len(self.source_chunk_refs) != len(set(self.source_chunk_refs)):
+            raise ValueError("shooting-plan scene source chunk refs must be unique")
+        beat_ids = [beat.beat_id for beat in self.beats]
+        beat_orders = [beat.order for beat in self.beats]
+        if len(beat_ids) != len(set(beat_ids)) or len(beat_orders) != len(set(beat_orders)):
+            raise ValueError("shooting-plan beat IDs and order values must be unique within a scene")
+        if beat_orders != list(range(len(self.beats))):
+            raise ValueError("shooting-plan beats must use contiguous zero-based order values")
+        if len(self.prop_ids) != len(set(self.prop_ids)):
+            raise ValueError("shooting-plan scene prop IDs must be unique")
+        return self
+
+
+class DirectorShootingPlan(_DirectorShootingPlanModel):
+    schema_version: Literal[1] = 1
+    source_revision: int = Field(..., ge=1)
+    source_revision_id: str = Field("", max_length=240)
+    director_profile_revision: int = Field(..., ge=1)
+    director_profile_hash: str = Field(..., min_length=1, max_length=128)
+    effective_style_hash: str = Field(..., min_length=1, max_length=128)
+    scenes: List[DirectorPlanScene] = Field(default_factory=list, max_length=160)
+    unresolved_questions: List[str] = Field(default_factory=list, max_length=80)
+    generated_at: Optional[float] = Field(None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_ids_and_orders(self):
+        scene_ids = [scene.scene_id for scene in self.scenes]
+        scene_orders = [scene.order for scene in self.scenes]
+        beat_ids = [beat.beat_id for scene in self.scenes for beat in scene.beats]
+        shot_ids = [shot.shot_id for scene in self.scenes for beat in scene.beats for shot in beat.shots]
+        if len(scene_ids) != len(set(scene_ids)) or len(scene_orders) != len(set(scene_orders)):
+            raise ValueError("shooting-plan scene IDs and order values must be unique")
+        if scene_orders != list(range(len(self.scenes))):
+            raise ValueError("shooting-plan scenes must use contiguous zero-based order values")
+        if len(beat_ids) != len(set(beat_ids)):
+            raise ValueError("shooting-plan beat IDs must be unique")
+        if len(shot_ids) != len(set(shot_ids)):
+            raise ValueError("shooting-plan shot IDs must be unique")
+        return self
+
+
+class DirectorShootingPlanRevision(BaseModel):
+    revision: int = Field(..., ge=1)
+    content_hash: str = Field(..., min_length=1)
+    plan: DirectorShootingPlan
+    confirmed_at: float = Field(..., ge=0)
+
+
 class ScriptSourceRevision(BaseModel):
     revision: int = Field(..., ge=1)
     content_hash: str = Field(..., min_length=1)
@@ -2078,6 +2206,10 @@ class Script(BaseModel):
     director_profile_draft_revision: int = Field(0, ge=0)
     director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
     director_profile_draft_updated_at: Optional[float] = None
+    director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
+    director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
+    director_shooting_plan_draft_revision: int = Field(0, ge=0)
+    director_shooting_plan_draft_updated_at: Optional[float] = None
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage

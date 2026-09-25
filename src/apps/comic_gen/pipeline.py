@@ -22,6 +22,8 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
+    DirectorShootingPlan,
+    DirectorShootingPlanRevision,
     ArtifactLineage,
     SourceRange,
     ScriptSourceRevision,
@@ -814,6 +816,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.director_profile_draft_revision = existing_script.director_profile_draft_revision
         new_script.director_profile_draft_source_revision = existing_script.director_profile_draft_source_revision
         new_script.director_profile_draft_updated_at = existing_script.director_profile_draft_updated_at
+        new_script.director_shooting_plan_revisions = [
+            item.model_copy(deep=True) for item in existing_script.director_shooting_plan_revisions
+        ]
+        new_script.director_shooting_plan_draft = (
+            existing_script.director_shooting_plan_draft.model_copy(deep=True)
+            if existing_script.director_shooting_plan_draft else None
+        )
+        new_script.director_shooting_plan_draft_revision = existing_script.director_shooting_plan_draft_revision
+        new_script.director_shooting_plan_draft_updated_at = existing_script.director_shooting_plan_draft_updated_at
         new_script.director_review_required = existing_script.director_review_required
         
         # Preserve project-level settings
@@ -2608,6 +2619,412 @@ class ComicGenPipeline(StudioOwnerMixin):
         for thread in story_map.get("story_threads", []):
             if not str(thread.get("label", "")).strip():
                 raise ValueError("Name every story thread before confirming the story map")
+
+    @staticmethod
+    def _shooting_plan_content(plan: Any) -> Dict[str, Any]:
+        if plan is None:
+            return {}
+        return plan.model_dump(exclude={"generated_at"}) if hasattr(plan, "model_dump") else {
+            key: value for key, value in plan.items() if key != "generated_at"
+        }
+
+    def director_shooting_plan_lineage(self, script_id: str) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        profile = self.effective_director_profile(script)
+        if profile is None:
+            raise ValueError("Confirm a Director interpretation before generating a shooting plan")
+        if profile.story_map is None:
+            raise ValueError("Create and confirm the visual story map before generating a shooting plan")
+        if profile.story_map.source_revision != script.source_revision:
+            raise ValueError("The confirmed story map is stale; re-confirm Director interpretation first")
+        if profile.story_map.source_revision_id != self.source_revision_id(script, script.source_revision):
+            raise ValueError("The confirmed story map source content is stale; re-confirm Director interpretation first")
+        style = self.storyboard_visual_style(script)
+        style_hash = hashlib.sha256(json.dumps(
+            style, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        return {
+            "source_revision": script.source_revision,
+            "source_revision_id": self.source_revision_id(script, script.source_revision),
+            "director_profile_revision": profile.revision,
+            "director_profile_hash": profile.content_hash,
+            "effective_style_hash": style_hash,
+        }
+
+    def _validate_director_shooting_plan(self, script: Script, value: Any) -> DirectorShootingPlan:
+        plan = value if isinstance(value, DirectorShootingPlan) else DirectorShootingPlan(**value)
+        profile = self.effective_director_profile(script)
+        if profile is None or profile.story_map is None:
+            raise ValueError("A confirmed Director story map is required for the shooting plan")
+        expected = self.director_shooting_plan_lineage(script.id)
+        for key, current_value in expected.items():
+            if getattr(plan, key) != current_value:
+                raise ValueError(f"Shooting plan lineage is stale: {key} changed")
+        valid_event_ids = {
+            event.event_id for phase in profile.story_map.phases for event in phase.events
+        }
+        requested_event_ids = {
+            event_id for scene in plan.scenes for beat in scene.beats for event_id in beat.story_event_ids
+        }
+        missing_events = requested_event_ids - valid_event_ids
+        if missing_events:
+            raise ValueError("Shooting plan references unknown Director story events: " + ", ".join(sorted(missing_events)))
+
+        available_entities = self.resolve_episode_assets(script)
+        available_characters = {character.id for character in available_entities["characters"]}
+        requested_characters = {
+            character_id
+            for scene in plan.scenes
+            for beat in scene.beats
+            for shot in beat.shots
+            for character_id in shot.character_ids
+        }
+        missing_characters = requested_characters - available_characters
+        if missing_characters:
+            raise ValueError("Shooting plan references unavailable character variants: " + ", ".join(sorted(missing_characters)))
+
+        available_props = {prop.id for prop in available_entities["props"]}
+        requested_props = {
+            prop_id
+            for scene in plan.scenes
+            for prop_id in scene.prop_ids
+        } | {
+            prop_id
+            for scene in plan.scenes
+            for beat in scene.beats
+            for shot in beat.shots
+            for prop_id in shot.prop_ids
+        }
+        missing_props = requested_props - available_props
+        if missing_props:
+            raise ValueError("Shooting plan references unavailable props: " + ", ".join(sorted(missing_props)))
+
+        from .llm import split_director_source
+        allowed_source_refs = {
+            item["source_ref"] for item in split_director_source(
+                script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
+            )
+        }
+        requested_source_refs = {
+            source_ref for scene in plan.scenes for source_ref in scene.source_chunk_refs
+        }
+        unknown_source_refs = requested_source_refs - allowed_source_refs
+        if unknown_source_refs:
+            raise ValueError("Shooting plan references unknown script source chunks: " + ", ".join(sorted(unknown_source_refs)))
+        return plan
+
+    def preview_director_shooting_plan(
+        self,
+        script_id: str,
+        *,
+        load_batches=None,
+        save_batch=None,
+        expected_lineage: Optional[Dict[str, Any]] = None,
+    ) -> DirectorShootingPlan:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        lineage = self.director_shooting_plan_lineage(script_id)
+        if expected_lineage and expected_lineage != lineage:
+            raise ValueError("Shooting plan inputs changed before generation started")
+        profile = self.effective_director_profile(script)
+        assert profile is not None and profile.story_map is not None
+        resolved = self.resolve_episode_assets(script)
+        entities = {
+            "characters": [{
+                "id": item.id,
+                "name": item.name,
+                "persona": item.persona,
+                "base_character_id": item.base_character_id,
+                "description": item.description,
+            } for item in resolved["characters"]],
+            "scenes": [{"id": item.id, "name": item.name, "description": item.description} for item in resolved["scenes"]],
+            "props": [{"id": item.id, "name": item.name, "description": item.description} for item in resolved["props"]],
+        }
+        from .llm import split_director_source
+        chunks = split_director_source(
+            script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
+        )
+        cached = load_batches() if load_batches else {}
+        scenes: List[Dict[str, Any]] = []
+        unresolved_questions: List[str] = []
+        for index, chunk in enumerate(chunks):
+            if self.director_shooting_plan_lineage(script_id) != lineage:
+                raise ValueError("Shooting plan inputs changed during generation")
+            prior = cached.get(index)
+            cached_payload = prior.get("frames") if isinstance(prior, dict) else None
+            if isinstance(cached_payload, dict) and isinstance(cached_payload.get("result"), dict):
+                cached_result = cached_payload["result"]
+            elif isinstance(prior, dict) and isinstance(prior.get("result"), dict):
+                # Accept the early in-process cache shape while no durable rows
+                # from this implementation have shipped.
+                cached_result = prior["result"]
+            else:
+                cached_result = None
+            if prior and prior.get("source_ref") == chunk["source_ref"] and cached_result is not None:
+                chunk_result = cached_result
+            else:
+                previous_scene = None
+                if scenes:
+                    last = scenes[-1]
+                    previous_scene = {
+                        "scene_ref": last["scene_ref"],
+                        "heading": last["heading"],
+                        "location": last["location"],
+                        "time_anchor": last["time_anchor"],
+                        "environment_atmosphere": last["environment_atmosphere"],
+                        "last_beat": last["beats"][-1]["title"] if last["beats"] else "",
+                    }
+                chunk_result = self.script_processor.plan_director_shooting_chunk(
+                    chunk["text"],
+                    entities,
+                    director_execution_payload(profile),
+                    self.storyboard_visual_style(script),
+                    previous_scene,
+                    source_ref=chunk["source_ref"],
+                )
+                chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
+                if chunk_error:
+                    raise RuntimeError(
+                        f"拍摄计划分析第 {index + 1}/{len(chunks)} 段未通过镜头契约校验：{chunk_error}"
+                    )
+                if save_batch and not save_batch(index, chunk["source_ref"], {"result": chunk_result}):
+                    raise RuntimeError("拍摄计划任务已过期，请重试。")
+            if ScriptProcessor._validate_director_shooting_chunk(chunk_result):
+                raise RuntimeError(f"拍摄计划缓存段 {index + 1}/{len(chunks)} 已不符合当前镜头契约，请重新生成。")
+
+            chunk_questions = chunk_result.get("unresolved_questions", [])
+            if isinstance(chunk_questions, list):
+                unresolved_questions.extend(str(item)[:500] for item in chunk_questions[:20] if str(item).strip())
+            raw_scenes = chunk_result.get("scenes", [])
+            if not raw_scenes:
+                raise RuntimeError(f"拍摄计划分析第 {index + 1}/{len(chunks)} 段没有返回场景。")
+            for scene_index, raw_scene in enumerate(raw_scenes):
+                if not isinstance(raw_scene, dict):
+                    raise RuntimeError("拍摄计划场景必须是对象。")
+                continuation = raw_scene.get("continues_previous_scene") is True and scene_index == 0 and bool(scenes)
+                if continuation:
+                    target = scenes[-1]
+                    target["source_chunk_refs"].append(chunk["source_ref"])
+                    target["source_chunk_refs"] = list(dict.fromkeys(target["source_chunk_refs"]))
+                    if not target["heading"]:
+                        target["heading"] = str(raw_scene.get("heading", ""))[:240]
+                    if not target["location"]:
+                        target["location"] = str(raw_scene.get("location", ""))[:240]
+                    if not target["time_anchor"]:
+                        target["time_anchor"] = str(raw_scene.get("time_anchor", ""))[:160]
+                    if not target["environment_atmosphere"]:
+                        target["environment_atmosphere"] = str(raw_scene.get("environment_atmosphere", ""))[:1600]
+                    beat_offset = len(target["beats"])
+                else:
+                    target = {
+                        "scene_id": f"plan-scene-{uuid.uuid4().hex}",
+                        "order": len(scenes),
+                        "scene_ref": str(raw_scene.get("scene_ref", ""))[:240],
+                        "heading": str(raw_scene.get("heading", ""))[:240],
+                        "location": str(raw_scene.get("location", ""))[:240],
+                        "time_anchor": str(raw_scene.get("time_anchor", ""))[:160],
+                        "environment_atmosphere": str(raw_scene.get("environment_atmosphere", ""))[:1600],
+                        "unresolved_questions": [],
+                        "source_chunk_refs": [chunk["source_ref"]],
+                        "prop_ids": [],
+                        "beats": [],
+                    }
+                    scenes.append(target)
+                    beat_offset = 0
+                questions = raw_scene.get("unresolved_questions", [])
+                if isinstance(questions, list):
+                    target["unresolved_questions"].extend(str(item)[:500] for item in questions[:20] if str(item).strip())
+                scene_prop_ids = raw_scene.get("prop_ids", [])
+                if isinstance(scene_prop_ids, list):
+                    target["prop_ids"] = list(dict.fromkeys(target["prop_ids"] + scene_prop_ids))
+                raw_beats = raw_scene.get("beats", [])
+                if not isinstance(raw_beats, list):
+                    raise RuntimeError("拍摄计划的 beats 必须是数组。")
+                for beat_index, raw_beat in enumerate(raw_beats):
+                    if not isinstance(raw_beat, dict):
+                        raise RuntimeError("拍摄计划 beat 必须是对象。")
+                    raw_shots = raw_beat.get("shots", [])
+                    if not isinstance(raw_shots, list):
+                        raise RuntimeError("拍摄计划的 shots 必须是数组。")
+                    beat = {
+                        "beat_id": f"plan-beat-{uuid.uuid4().hex}",
+                        "order": beat_offset + beat_index,
+                        "title": str(raw_beat.get("title", ""))[:180],
+                        "dramatic_purpose": str(raw_beat.get("dramatic_purpose", ""))[:1200],
+                        "emotional_change": str(raw_beat.get("emotional_change", ""))[:1000],
+                        "story_event_ids": raw_beat.get("story_event_ids", []),
+                        "shots": [],
+                    }
+                    for shot_index, raw_shot in enumerate(raw_shots):
+                        if not isinstance(raw_shot, dict):
+                            raise RuntimeError("拍摄计划 shot 必须是对象。")
+                        dialogue = raw_shot.get("dialogue", [])
+                        if not isinstance(dialogue, list):
+                            raise RuntimeError("shot dialogue 必须是数组。")
+                        beat["shots"].append({
+                            "shot_id": f"plan-shot-{uuid.uuid4().hex}",
+                            "order": shot_index,
+                            "title": str(raw_shot.get("title", ""))[:180],
+                            "visual_intent": str(raw_shot.get("visual_intent", ""))[:2400],
+                            "performance_action": str(raw_shot.get("performance_action", ""))[:2400],
+                            "action_physics": str(raw_shot.get("action_physics", ""))[:1800],
+                            "shot_size": str(raw_shot.get("shot_size", ""))[:64],
+                            "camera_angle": str(raw_shot.get("camera_angle", ""))[:120],
+                            "composition": str(raw_shot.get("composition", ""))[:1200],
+                            "camera_movement": str(raw_shot.get("camera_movement", ""))[:500],
+                            "lighting": raw_shot.get("lighting", {}),
+                            "duration_seconds": raw_shot.get("duration_seconds"),
+                            "dialogue": dialogue,
+                            "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
+                            "character_ids": raw_shot.get("character_ids", []),
+                            "prop_ids": raw_shot.get("prop_ids", []),
+                        })
+                    target["beats"].append(beat)
+        if not scenes:
+            raise RuntimeError("Director shooting-plan analysis returned no scenes")
+        plan = DirectorShootingPlan(
+            **lineage,
+            scenes=scenes,
+            unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
+            generated_at=time.time(),
+        )
+        return self._validate_director_shooting_plan(script, plan)
+
+    @staticmethod
+    def _validate_director_shooting_plan_for_confirmation(value: DirectorShootingPlan) -> None:
+        if not value.scenes:
+            raise ValueError("Add at least one scene before confirming the shooting plan")
+        for scene in value.scenes:
+            if not scene.scene_ref.strip():
+                raise ValueError("Name every scene before confirming the shooting plan")
+            if not scene.environment_atmosphere.strip():
+                raise ValueError("Describe the scene environment and atmosphere before confirming")
+            if not scene.source_chunk_refs:
+                raise ValueError("Link every scene to at least one source chunk before confirming")
+            if not scene.beats:
+                raise ValueError("Add at least one dramatic beat to every scene before confirming")
+            for beat in scene.beats:
+                if not beat.title.strip() or not beat.dramatic_purpose.strip():
+                    raise ValueError("Describe each dramatic beat before confirming the shooting plan")
+                if not beat.shots:
+                    raise ValueError("Add at least one shot to every beat before confirming")
+                for shot in beat.shots:
+                    missing = [
+                        name for name, text in (
+                            ("visual intent", shot.visual_intent),
+                            ("character performance", shot.performance_action),
+                            ("physical action", shot.action_physics),
+                            ("shot size", shot.shot_size),
+                            ("camera angle", shot.camera_angle),
+                            ("composition", shot.composition),
+                            ("camera movement", shot.camera_movement),
+                            ("ambient sound", shot.ambient_sound),
+                        ) if not text.strip()
+                    ]
+                    if missing:
+                        raise ValueError("Complete shot " + ", ".join(missing) + " before confirming")
+                    if any(not item.strip() for item in (
+                        shot.lighting.key_source,
+                        shot.lighting.color_tone,
+                        shot.lighting.contrast,
+                    )):
+                        raise ValueError("Complete shot lighting source, color tone, and contrast before confirming")
+                    if shot.duration_seconds is None:
+                        raise ValueError("Set a duration for every shot before confirming the shooting plan")
+
+    def save_director_shooting_plan_draft(
+        self,
+        script_id: str,
+        expected_source_revision: int,
+        expected_draft_revision: int,
+        plan: Any,
+    ) -> Script:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if expected_source_revision != script.source_revision:
+                raise ValueError("Script source revision changed; reload the shooting plan")
+            if expected_draft_revision != script.director_shooting_plan_draft_revision:
+                raise ValueError("Shooting-plan draft revision changed; reload before saving")
+            validated = self._validate_director_shooting_plan(script, plan)
+            script.director_shooting_plan_draft = validated.model_copy(deep=True)
+            script.director_shooting_plan_draft_revision += 1
+            script.director_shooting_plan_draft_updated_at = time.time()
+            script.updated_at = script.director_shooting_plan_draft_updated_at
+            self._save_data()
+            return script
+
+    def apply_director_shooting_plan(
+        self,
+        script_id: str,
+        plan: Any,
+        expected_current_revision: int,
+        expected_draft_revision: int,
+    ) -> Script:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            current_revision = script.director_shooting_plan_revisions[-1].revision if script.director_shooting_plan_revisions else 0
+            if expected_current_revision != current_revision:
+                raise ValueError("Confirmed shooting-plan revision changed; reload before confirming")
+            if expected_draft_revision != script.director_shooting_plan_draft_revision:
+                raise ValueError("Shooting-plan draft revision changed; save or reload before confirming")
+            if not script.director_shooting_plan_draft:
+                raise ValueError("Save the shooting-plan draft before confirming")
+            validated = self._validate_director_shooting_plan(script, plan)
+            self._validate_director_shooting_plan_for_confirmation(validated)
+            if self._shooting_plan_content(script.director_shooting_plan_draft) != self._shooting_plan_content(validated):
+                raise ValueError("Shooting plan has unsaved edits; save it before confirming")
+            content = self._shooting_plan_content(validated)
+            content_hash = hashlib.sha256(json.dumps(
+                content, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()).hexdigest()
+            if script.director_shooting_plan_revisions and script.director_shooting_plan_revisions[-1].content_hash == content_hash:
+                return script
+            revision = current_revision + 1
+            confirmed = DirectorShootingPlanRevision(
+                revision=revision,
+                content_hash=content_hash,
+                plan=validated.model_copy(deep=True),
+                confirmed_at=time.time(),
+            )
+            script.director_shooting_plan_revisions.append(confirmed)
+            script.director_shooting_plan_draft = validated.model_copy(deep=True)
+            script.director_shooting_plan_draft_updated_at = confirmed.confirmed_at
+            script.updated_at = confirmed.confirmed_at
+            self._save_data()
+            return script
+
+    def restore_director_shooting_plan_revision(
+        self,
+        script_id: str,
+        revision: int,
+        expected_draft_revision: int,
+    ) -> Script:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if expected_draft_revision != script.director_shooting_plan_draft_revision:
+                raise ValueError("Shooting-plan draft revision changed; reload before restoring")
+            snapshot = next(
+                (item for item in script.director_shooting_plan_revisions if item.revision == revision),
+                None,
+            )
+            if snapshot is None:
+                raise ValueError("Shooting-plan revision not found")
+            restored = self._validate_director_shooting_plan(script, snapshot.plan)
+            script.director_shooting_plan_draft = restored.model_copy(deep=True)
+            script.director_shooting_plan_draft_revision += 1
+            script.director_shooting_plan_draft_updated_at = time.time()
+            script.updated_at = script.director_shooting_plan_draft_updated_at
+            self._save_data()
+            return script
 
     def save_director_profile_draft(
         self,
