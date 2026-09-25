@@ -793,6 +793,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.director_profile_revisions = [
             item.model_copy(deep=True) for item in existing_script.director_profile_revisions
         ]
+        new_script.director_profile_draft = (
+            existing_script.director_profile_draft.model_copy(deep=True)
+            if existing_script.director_profile_draft else None
+        )
+        new_script.director_profile_draft_revision = existing_script.director_profile_draft_revision
+        new_script.director_profile_draft_source_revision = existing_script.director_profile_draft_source_revision
+        new_script.director_profile_draft_updated_at = existing_script.director_profile_draft_updated_at
         new_script.director_review_required = existing_script.director_review_required
         
         # Preserve project-level settings
@@ -2425,14 +2432,80 @@ class ComicGenPipeline(StudioOwnerMixin):
         DirectorProfile(**normalized_result)
         return normalized_result
 
-    def apply_director_profile(self, script_id: str, draft: Dict[str, Any]) -> Script:
+    def save_director_profile_draft(
+        self,
+        script_id: str,
+        source_revision: int,
+        expected_draft_revision: int,
+        draft: Dict[str, Any],
+    ) -> Script:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if source_revision != script.source_revision:
+                raise ValueError("Source revision changed; reload the Director draft")
+            if expected_draft_revision != script.director_profile_draft_revision:
+                raise ValueError("Director draft revision changed; reload before saving")
+
+            normalized = normalize_director_profile_draft(draft)
+            clean = DirectorProfile(**normalized).model_dump(
+                exclude={"revision", "content_hash", "confirmed_at"}
+            )
+            script.director_profile_draft = DirectorProfile(**clean)
+            script.director_profile_draft_revision += 1
+            script.director_profile_draft_source_revision = source_revision
+            script.director_profile_draft_updated_at = time.time()
+            script.updated_at = script.director_profile_draft_updated_at
+            self._save_data()
+            return script
+
+    def apply_director_profile(
+        self,
+        script_id: str,
+        draft: Dict[str, Any],
+        expected_current_revision: Optional[int] = None,
+        expected_draft_revision: Optional[int] = None,
+    ) -> Script:
+        with self._save_lock:
+            return self._apply_director_profile_locked(
+                script_id,
+                draft,
+                expected_current_revision,
+                expected_draft_revision,
+            )
+
+    def _apply_director_profile_locked(
+        self,
+        script_id: str,
+        draft: Dict[str, Any],
+        expected_current_revision: Optional[int],
+        expected_draft_revision: Optional[int],
+    ) -> Script:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        current = self.effective_director_profile(script)
+        current_revision = current.revision if current else 0
+        if expected_current_revision is not None and expected_current_revision != current_revision:
+            raise ValueError("Director profile revision changed; reload before confirming")
+        if expected_draft_revision is not None:
+            if expected_draft_revision != script.director_profile_draft_revision:
+                raise ValueError("Director draft revision changed; save or reload before confirming")
+            if script.director_profile_draft_source_revision != script.source_revision:
+                raise ValueError("Source revision changed; reload the Director draft before confirming")
+
         normalized = normalize_director_profile_draft(draft)
         clean = DirectorProfile(**normalized).model_dump(
             exclude={"revision", "content_hash", "confirmed_at"}
         )
+        if expected_draft_revision is not None:
+            saved_draft = script.director_profile_draft
+            saved_content = saved_draft.model_dump(
+                exclude={"revision", "content_hash", "confirmed_at"}
+            ) if saved_draft else None
+            if saved_content != clean:
+                raise ValueError("Director draft has unsaved edits; save it before confirming")
         # Summaries are bounded downstream projections, not a second source of
         # narrative truth. Keep historical content hash/revision semantics
         # based on the full Director fields only.
@@ -2444,7 +2517,6 @@ class ComicGenPipeline(StudioOwnerMixin):
         content_hash = hashlib.sha256(json.dumps(
             hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
-        current = self.effective_director_profile(script)
         revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
         confirmed = DirectorProfile(
             **clean, revision=revision, content_hash=content_hash, confirmed_at=time.time()
@@ -2473,6 +2545,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             script.director_review_required = True
             for item in [*script.characters, *script.scenes, *script.props, *script.frames]:
                 item.director_review_required = True
+        script.director_profile_draft = confirmed.model_copy(deep=True)
+        script.director_profile_draft_source_revision = script.source_revision
         script.updated_at = time.time()
         self._save_data()
         return script

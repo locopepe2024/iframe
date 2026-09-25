@@ -1764,6 +1764,10 @@ class Script(BaseModel):
         default_factory=list,
         description="Append-only confirmed Director profile snapshots for review and restore.",
     )
+    director_profile_draft: Optional[DirectorProfile] = None
+    director_profile_draft_revision: int = Field(0, ge=0)
+    director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
+    director_profile_draft_updated_at: Optional[float] = None
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage

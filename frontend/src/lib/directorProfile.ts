@@ -2,6 +2,14 @@ import axios from "axios";
 
 export type DirectorProfileDraft = Record<string, unknown>;
 
+export interface DirectorProfileDraftState {
+    project_id: string;
+    draft_revision: number;
+    source_revision: number | null;
+    draft: DirectorProfileDraft | null;
+    updated_at: number | null;
+}
+
 interface DirectorProfileJob {
     id: string;
     /** The API currently uses running/completed/failed. Keep the client

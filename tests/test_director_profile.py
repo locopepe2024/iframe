@@ -618,6 +618,89 @@ def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_re
     pipeline._save_data.assert_called_once()
 
 
+def test_director_profile_draft_persists_separately_and_requires_current_revisions():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+
+    saved = pipeline.save_director_profile_draft("film", script.source_revision, 0, draft)
+
+    assert saved.director_profile_draft_revision == 1
+    assert saved.director_profile_draft_source_revision == script.source_revision
+    assert saved.director_profile_draft.setting == draft["setting"]
+    assert saved.art_direction.director_profile is None
+
+    with pytest.raises(ValueError, match="draft revision changed"):
+        pipeline.save_director_profile_draft("film", script.source_revision, 0, draft)
+
+    active = pipeline.apply_director_profile(
+        "film", draft, expected_current_revision=0, expected_draft_revision=1,
+    )
+    assert active.art_direction.director_profile.revision == 1
+    assert active.director_profile_revisions[-1].profile.pacing == draft["pacing"]
+
+
+def test_director_profile_cannot_confirm_unsaved_or_stale_drafts():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+    pipeline.save_director_profile_draft("film", script.source_revision, 0, draft)
+
+    changed = {**draft, "pacing": "user changed after draft save"}
+    with pytest.raises(ValueError, match="unsaved edits"):
+        pipeline.apply_director_profile(
+            "film", changed, expected_current_revision=0, expected_draft_revision=1,
+        )
+
+    pipeline.update_script_text("film", "new source")
+    with pytest.raises(ValueError, match="Source revision changed"):
+        pipeline.apply_director_profile(
+            "film", draft, expected_current_revision=0, expected_draft_revision=1,
+        )
+
+
+def test_director_profile_draft_api_exposes_save_and_confirm_as_separate_actions(monkeypatch):
+    from fastapi import HTTPException
+    from src.apps.comic_gen import api
+
+    pipeline, script = make_pipeline()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    owner = UserContext("user", "owner", "", "")
+
+    draft = api.save_director_profile_draft(
+        "film",
+        api.DirectorProfileDraftSaveRequest(
+            source_revision=script.source_revision,
+            expected_draft_revision=0,
+            draft=profile_payload(),
+        ),
+        owner,
+    )
+    assert draft["draft_revision"] == 1
+    assert draft["source_revision"] == script.source_revision
+    assert script.art_direction.director_profile is None
+
+    with pytest.raises(HTTPException) as conflict:
+        api.save_director_profile_draft(
+            "film",
+            api.DirectorProfileDraftSaveRequest(
+                source_revision=script.source_revision,
+                expected_draft_revision=0,
+                draft=profile_payload(),
+            ),
+            owner,
+        )
+    assert conflict.value.status_code == 409
+
+    response = api.apply_director_profile(
+        "film",
+        api.DirectorProfileApplyRequest(
+            draft=profile_payload(), expected_current_revision=0, expected_draft_revision=1,
+        ),
+        owner,
+    )
+    assert response.status_code == 200
+    assert script.art_direction.director_profile.revision == 1
+
+
 def test_apply_director_profile_archives_only_changed_confirmations():
     pipeline, script = make_pipeline()
     draft = profile_payload()

@@ -13,6 +13,7 @@ import {
     analyzeDirectorProfile,
     refineDirectorProfile,
     type DirectorProfileDraft,
+    type DirectorProfileDraftState,
     type DirectorProfileJobStatusListener,
 } from "./directorProfile";
 import type {
@@ -994,8 +995,36 @@ export const api = {
         onStatus?: DirectorProfileJobStatusListener,
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
-    applyDirectorProfile: async (scriptId: string, draft: DirectorProfileDraft) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, { draft });
+    getDirectorProfileDraft: async (scriptId: string): Promise<DirectorProfileDraftState> => {
+        const res = await axios.get<DirectorProfileDraftState>(`${API_URL}/projects/${scriptId}/director-profile/draft`);
+        return res.data;
+    },
+
+    saveDirectorProfileDraft: async (
+        scriptId: string,
+        sourceRevision: number,
+        expectedDraftRevision: number,
+        draft: DirectorProfileDraft,
+    ): Promise<DirectorProfileDraftState> => {
+        const res = await axios.put<DirectorProfileDraftState>(`${API_URL}/projects/${scriptId}/director-profile/draft`, {
+            source_revision: sourceRevision,
+            expected_draft_revision: expectedDraftRevision,
+            draft,
+        });
+        return res.data;
+    },
+
+    applyDirectorProfile: async (
+        scriptId: string,
+        draft: DirectorProfileDraft,
+        expectedCurrentRevision?: number,
+        expectedDraftRevision?: number,
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/director-profile/apply`, {
+            draft,
+            expected_current_revision: expectedCurrentRevision,
+            expected_draft_revision: expectedDraftRevision,
+        });
         return res.data;
     },
 

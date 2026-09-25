@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Send } from "lucide-react";
+import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { useProjectStore, type DirectorProfile, type DirectorProfileRevision } from "@/store/projectStore";
@@ -17,7 +17,7 @@ const editableProfile = (profile?: DirectorProfile) => {
     return JSON.stringify(draft, null, 2);
 };
 
-type DirectorAction = "analyze" | "refine" | "apply";
+type DirectorAction = "analyze" | "refine" | "save" | "apply";
 type DirectorStatus = {
     kind: "idle" | "running" | "success" | "error";
     action?: DirectorAction;
@@ -41,16 +41,58 @@ export default function DirectorProfilePanel() {
     const [draftText, setDraftText] = useState(() => editableProfile(confirmed));
     const [instruction, setInstruction] = useState("");
     const [history, setHistory] = useState<string[]>([]);
-    const [busy, setBusy] = useState<"analyze" | "refine" | "apply" | null>(null);
+    const [busy, setBusy] = useState<"analyze" | "refine" | "save" | "apply" | null>(null);
     const [status, setStatus] = useState<DirectorStatus>({ kind: "idle" });
     const [revisions, setRevisions] = useState<DirectorProfileRevision[]>([]);
+    const [draftRevision, setDraftRevision] = useState(0);
+    const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
+    const [draftContextSourceRevision, setDraftContextSourceRevision] = useState<number | null>(null);
+    const [savedDraftText, setSavedDraftText] = useState(() => editableProfile(confirmed));
+    const sourceRevision = currentProject?.source_revision ?? 1;
+    const isDirty = draftText !== savedDraftText;
+    const hasStaleDraft = draftContextSourceRevision !== null && draftContextSourceRevision !== sourceRevision;
+    const needsDraftSave = isDirty || draftContextSourceRevision !== draftSourceRevision;
 
     useEffect(() => {
-        setDraftText(editableProfile(confirmed));
+        const fallback = editableProfile(confirmed);
+        setDraftText(fallback);
+        setSavedDraftText(fallback);
+        setDraftRevision(0);
+        setDraftSourceRevision(null);
+        setDraftContextSourceRevision(null);
         setInstruction("");
         setHistory([]);
         setStatus({ kind: "idle" });
-    }, [currentProject?.id, confirmed?.content_hash]);
+        if (!currentProject) return;
+        let active = true;
+        api.getDirectorProfileDraft(currentProject.id)
+            .then(saved => {
+                if (!active) return;
+                const loaded = saved.draft ? JSON.stringify(saved.draft, null, 2) : fallback;
+                setDraftText(loaded);
+                setSavedDraftText(loaded);
+                setDraftRevision(saved.draft_revision);
+                setDraftSourceRevision(saved.source_revision);
+                setDraftContextSourceRevision(saved.source_revision);
+            })
+            .catch(() => {
+                if (!active) return;
+                setDraftText(fallback);
+                setSavedDraftText(fallback);
+                setDraftContextSourceRevision(null);
+            });
+        return () => { active = false; };
+    }, [currentProject?.id, confirmed?.content_hash, sourceRevision]);
+
+    useEffect(() => {
+        if (!isDirty || typeof window === "undefined") return;
+        const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warnBeforeLeave);
+        return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+    }, [isDirty]);
 
     useEffect(() => {
         if (!currentProject) return;
@@ -76,6 +118,7 @@ export default function DirectorProfilePanel() {
                 setStatus({ kind: "running", action: "analyze", jobStatus });
             });
             setDraftText(JSON.stringify(profile, null, 2));
+            setDraftContextSourceRevision(sourceRevision);
             setHistory([]);
             setStatus({ kind: "success", action: "analyze", jobStatus: "completed" });
         } catch (error) {
@@ -104,6 +147,7 @@ export default function DirectorProfilePanel() {
                 jobStatus => setStatus({ kind: "running", action: "refine", jobStatus }),
             );
             setDraftText(JSON.stringify(profile, null, 2));
+            setDraftContextSourceRevision(sourceRevision);
             setHistory(nextHistory);
             setInstruction("");
             setStatus({ kind: "success", action: "refine", jobStatus: "completed" });
@@ -121,7 +165,34 @@ export default function DirectorProfilePanel() {
         setBusy("apply");
         setStatus({ kind: "running", action: "apply" });
         try {
-            const updated = await api.applyDirectorProfile(currentProject.id, parseDraft());
+            if (hasStaleDraft) {
+                throw new Error(t("directorDraftStaleActionRequired"));
+            }
+            const draft = parseDraft();
+            let expectedDraftRevision = draftRevision;
+            let confirmedDraft = draft;
+            if (isDirty || draftSourceRevision !== sourceRevision) {
+                const saved = await api.saveDirectorProfileDraft(
+                    currentProject.id,
+                    sourceRevision,
+                    draftRevision,
+                    draft,
+                );
+                expectedDraftRevision = saved.draft_revision;
+                setDraftRevision(saved.draft_revision);
+                setDraftSourceRevision(saved.source_revision);
+                setDraftContextSourceRevision(saved.source_revision);
+                const savedText = JSON.stringify(saved.draft ?? draft, null, 2);
+                setDraftText(savedText);
+                setSavedDraftText(savedText);
+                confirmedDraft = saved.draft ?? draft;
+            }
+            const updated = await api.applyDirectorProfile(
+                currentProject.id,
+                confirmedDraft,
+                confirmed?.revision,
+                expectedDraftRevision,
+            );
             updateProject(currentProject.id, updated);
             setStatus({ kind: "success", action: "apply", jobStatus: "completed" });
             toast.success(t("directorApplied"), { projectId: currentProject.id, projectTitle: currentProject.title });
@@ -134,18 +205,54 @@ export default function DirectorProfilePanel() {
         }
     };
 
+    const saveDraft = async () => {
+        if (!currentProject || !draftText) return;
+        setBusy("save");
+        setStatus({ kind: "running", action: "save" });
+        try {
+            if (hasStaleDraft) {
+                throw new Error(t("directorDraftStaleActionRequired"));
+            }
+            const draft = parseDraft();
+            const saved = await api.saveDirectorProfileDraft(
+                currentProject.id,
+                sourceRevision,
+                draftRevision,
+                draft,
+            );
+            setDraftRevision(saved.draft_revision);
+            setDraftSourceRevision(saved.source_revision);
+            setDraftContextSourceRevision(saved.source_revision);
+            const savedText = JSON.stringify(saved.draft ?? draft, null, 2);
+            setDraftText(savedText);
+            setSavedDraftText(savedText);
+            setStatus({ kind: "success", action: "save" });
+            toast.success(t("directorDraftSaved"), { projectId: currentProject.id, projectTitle: currentProject.title });
+        } catch (error) {
+            const message = extractErrorDetail(error, t("directorDraftSaveFailed"));
+            setStatus({ kind: "error", action: "save", message });
+            toast.error(message);
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const statusText = status.kind === "running"
-        ? status.action === "analyze"
-            ? t("directorStatus.analyzing")
-            : status.action === "refine"
-                ? t("directorStatus.refining")
-                : t("directorStatus.applying")
+            ? status.action === "analyze"
+                ? t("directorStatus.analyzing")
+                : status.action === "refine"
+                    ? t("directorStatus.refining")
+                    : status.action === "save"
+                        ? t("directorStatus.savingDraft")
+                        : t("directorStatus.applying")
         : status.kind === "success"
             ? status.action === "analyze"
                 ? t("directorStatus.analyzed")
                 : status.action === "refine"
                     ? t("directorStatus.refined")
-                    : t("directorStatus.applied")
+                    : status.action === "save"
+                        ? t("directorStatus.draftSaved")
+                        : t("directorStatus.applied")
             : status.kind === "error"
                 ? t("directorStatus.failed", { message: status.message || t("directorAnalyzeFailed") })
                 : "";
@@ -170,6 +277,13 @@ export default function DirectorProfilePanel() {
                 <div className="flex items-center gap-2">
                     {confirmed && (
                         <span className="text-xs text-text-secondary">{t("directorRevision", { revision: confirmed.revision })}</span>
+                    )}
+                    {draftRevision > 0 && (
+                        <span className={`text-xs ${draftSourceRevision !== sourceRevision ? "text-amber-300" : "text-text-muted"}`}>
+                            {draftSourceRevision !== sourceRevision
+                                ? t("directorDraftStale", { revision: draftRevision, sourceRevision: draftSourceRevision ?? 0, currentSourceRevision: sourceRevision })
+                                : t("directorDraftRevision", { revision: draftRevision })}
+                        </span>
                     )}
                     <WorkflowActionButton
                         variant="secondary"
@@ -253,6 +367,11 @@ export default function DirectorProfilePanel() {
                             spellCheck={false}
                         />
                     </details>
+                    {hasStaleDraft && (
+                        <p role="alert" className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                            {t("directorDraftStaleActionRequired")}
+                        </p>
+                    )}
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <textarea
                             value={instruction}
@@ -271,17 +390,32 @@ export default function DirectorProfilePanel() {
                             >
                                 {t("directorRefine")}
                             </WorkflowActionButton>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-text-muted">
+                            {needsDraftSave ? t("directorUnsavedHint") : t("directorApplyHint")}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <WorkflowActionButton
+                                variant="secondary"
+                                leftIcon={<Save />}
+                                loading={busy === "save"}
+                                disabled={busy !== null || !needsDraftSave || hasStaleDraft}
+                                onClick={saveDraft}
+                            >
+                                {t("directorSaveDraft")}
+                            </WorkflowActionButton>
                             <WorkflowActionButton
                                 leftIcon={<Check />}
                                 loading={busy === "apply"}
-                                disabled={busy !== null}
+                                disabled={busy !== null || hasStaleDraft || (!needsDraftSave && draftRevision === 0)}
                                 onClick={apply}
                             >
                                 {t("directorApply")}
                             </WorkflowActionButton>
                         </div>
                     </div>
-                    <p className="text-xs text-text-muted">{t("directorApplyHint")}</p>
                 </div>
             ) : (
                 <div className="flex min-h-32 items-center justify-center border border-dashed border-border text-sm text-text-muted">

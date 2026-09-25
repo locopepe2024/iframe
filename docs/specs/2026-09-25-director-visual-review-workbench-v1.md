@@ -162,3 +162,13 @@
 - `src/apps/comic_gen/api.py`
 - `src/apps/comic_gen/pipeline.py`
 - Director、ledger、ArtDirection 与 Assets/Storyboard context 的相关测试
+
+## 实施记录（2026-09-26）
+
+- 已提交 `fb11cc60`：Director 工作台三页签、故事理解结构化字段编辑、阶段列表式时间轴、人物关系图与可折叠高级 JSON。关系图只依据旧 Profile 的人物关系对绘制；旧 `initial/change/final` 仍不标成精确时间状态。
+- 已完成并待单独提交：Director Profile 草稿现在嵌入 Script JSON 持久化，支持按 expected draft revision 保存；草稿绑定 source revision。确认前若 source 或 draft revision 已变化，API 返回冲突；确认动作先保存可见修改，再确认其确切草稿版本。项目常规读接口不携带草稿正文，由独立 draft API 读取。
+- UI 的故事理解可视编辑仍写入现有 `DirectorProfile` 数据形状，尚未迁移到独立的 `DirectorInterpretation` schema；阶段和关系仍没有稳定 `phase_id/event_id` 与原文范围字段。
+- “拍摄计划”页签目前是明确的空态和旧 `sample_plan` 参考展示，不生成、不编辑、不确认正式 scene/beat/shot 计划。它不会把旧场次示例计作镜头或视频任务。
+- 风格选择复用原有项目/系列风格保存功能。Director 页签支持方向键切换；UI 测试覆盖编辑、人物关系图、草稿保存与确认分离。前端 typecheck/build 与 `tests/test_director_profile.py` 已通过。
+
+下一个功能切片必须新增独立 shooting-plan schema 与草稿/确认版本接口，再实现 scene → beat → shot 可视化编辑与生成；只有在对应的 Assets/Storyboard 消费和 lineage 已明确后，才把确认计划接入下游生成。

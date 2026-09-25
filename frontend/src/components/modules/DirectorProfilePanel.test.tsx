@@ -21,6 +21,18 @@ const profile = {
 };
 
 beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 0, source_revision: null, draft: null, updated_at: null,
+    });
+    vi.spyOn(api, "listDirectorProfileRevisions").mockResolvedValue([]);
+    vi.spyOn(api, "saveDirectorProfileDraft").mockImplementation(async (_projectId, sourceRevision, expectedDraftRevision, draft) => ({
+        project_id: "film",
+        draft_revision: expectedDraftRevision + 1,
+        source_revision: sourceRevision,
+        draft,
+        updated_at: 10,
+    }));
     useProjectStore.setState({
         currentProject: {
             id: "film", title: "Across the Shore", originalText: "script",
@@ -28,7 +40,6 @@ beforeEach(() => {
             createdAt: "", updatedAt: "",
         },
     });
-    vi.restoreAllMocks();
 });
 
 it("keeps director analysis as a draft until explicit confirmation", async () => {
@@ -45,12 +56,84 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
     await waitFor(() => expect(
-        (screen.getByLabelText("Director profile draft") as HTMLTextAreaElement).value,
+        (screen.getByLabelText("geography") as HTMLTextAreaElement).value,
     ).toContain("Chinese university and Beijing"));
     expect(apply).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm direction" }));
-    await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile));
+    await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile, undefined, 1));
+    expect(api.saveDirectorProfileDraft).toHaveBeenCalledWith("film", 1, 0, profile);
+});
+
+it("saves an editable Director draft without making it active", async () => {
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue(profile);
+    const apply = vi.spyOn(api, "applyDirectorProfile");
+    const save = vi.spyOn(api, "saveDirectorProfileDraft");
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    await waitFor(() => expect(screen.getByLabelText("Format and genre")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Format and genre"), { target: { value: "Romantic drama" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith(
+        "film",
+        1,
+        0,
+        expect.objectContaining({ setting: expect.objectContaining({ format_genre: "Romantic drama" }) }),
+    ));
+    expect(await screen.findByText("Saved draft v1")).toBeInTheDocument();
+    expect(apply).not.toHaveBeenCalled();
+});
+
+it("restores a saved Director draft independently from the confirmed profile", async () => {
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film",
+        draft_revision: 3,
+        source_revision: 1,
+        draft: { ...profile, setting: { ...profile.setting, geography: "User-edited geography" } },
+        updated_at: 10,
+    });
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByText("Saved draft v3")).toBeInTheDocument();
+    expect(screen.getByLabelText("geography")).toHaveValue("User-edited geography");
+});
+
+it("requires a fresh analysis after the source changes, then allows saving it against the new revision", async () => {
+    useProjectStore.setState(state => ({
+        currentProject: { ...state.currentProject!, source_revision: 2 },
+    }));
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 3, source_revision: 1, draft: profile, updated_at: 10,
+    });
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue(profile);
+    const save = vi.spyOn(api, "saveDirectorProfileDraft");
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByText(/script changed after this draft was saved/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate Interpretation" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Director analysis complete"));
+
+    expect(screen.queryByText(/script changed after this draft was saved/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(
+        "film", 2, 3, profile,
+    ));
 });
 
 it("surfaces the server detail when director revision fails", async () => {
@@ -66,7 +149,7 @@ it("surfaces the server detail when director revision fails", async () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    await waitFor(() => expect(screen.getByLabelText("Director profile draft")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     ), { target: { value: "Keep the story grounded" } });
@@ -93,7 +176,7 @@ it("shows a visible status while director revision is running and after it compl
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    await waitFor(() => expect(screen.getByLabelText("Director profile draft")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     ), { target: { value: "Condense this into a roughly one-minute sample" } });
@@ -119,7 +202,7 @@ it("sends only the current revision instruction after prior changes are merged",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    await waitFor(() => expect(screen.getByLabelText("Director profile draft")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     const input = screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     );

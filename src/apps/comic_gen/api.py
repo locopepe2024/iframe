@@ -330,6 +330,10 @@ def _script_response_dump(script: Script) -> Dict[str, Any]:
     return script.model_dump(exclude={
         "source_revisions",
         "director_profile_revisions",
+        "director_profile_draft",
+        "director_profile_draft_revision",
+        "director_profile_draft_source_revision",
+        "director_profile_draft_updated_at",
         "fact_ledger",
         "fact_ledger_revisions",
         "fact_ledger_draft",
@@ -4558,6 +4562,14 @@ class DirectorProfileRefineRequest(BaseModel):
 
 class DirectorProfileApplyRequest(BaseModel):
     draft: Dict[str, Any]
+    expected_current_revision: Optional[int] = Field(None, ge=0)
+    expected_draft_revision: Optional[int] = Field(None, ge=0)
+
+
+class DirectorProfileDraftSaveRequest(BaseModel):
+    source_revision: int = Field(..., ge=1)
+    expected_draft_revision: int = Field(..., ge=0)
+    draft: Dict[str, Any]
 
 
 class ScriptFactLedgerDraftRequest(BaseModel):
@@ -4790,6 +4802,58 @@ def list_director_profile_revisions(
     return script.director_profile_revisions
 
 
+@app.get("/projects/{script_id}/director-profile/draft")
+def get_director_profile_draft(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    return {
+        "project_id": script.id,
+        "draft_revision": script.director_profile_draft_revision,
+        "source_revision": script.director_profile_draft_source_revision,
+        "draft": script.director_profile_draft.model_dump(exclude={
+            "revision", "content_hash", "confirmed_at",
+        }) if script.director_profile_draft else None,
+        "updated_at": script.director_profile_draft_updated_at,
+    }
+
+
+@app.put("/projects/{script_id}/director-profile/draft")
+def save_director_profile_draft(
+    script_id: str,
+    request: DirectorProfileDraftSaveRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        draft = _validated_director_profile_draft(request.draft)
+        updated = pipeline.save_director_profile_draft(
+            script_id,
+            request.source_revision,
+            request.expected_draft_revision,
+            draft,
+        )
+        return {
+            "project_id": updated.id,
+            "draft_revision": updated.director_profile_draft_revision,
+            "source_revision": updated.director_profile_draft_source_revision,
+            "draft": updated.director_profile_draft.model_dump(exclude={
+                "revision", "content_hash", "confirmed_at",
+            }) if updated.director_profile_draft else None,
+            "updated_at": updated.director_profile_draft_updated_at,
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 409 if "revision changed" in message.lower() else 422
+        if message == "Script not found":
+            status = 404
+        raise HTTPException(status, message) from exc
+
+
 @app.get("/projects/{script_id}/director-evidence")
 def get_director_evidence(
     script_id: str,
@@ -4821,9 +4885,18 @@ def apply_director_profile(
     del user
     draft = _validated_director_profile_draft(request.draft)
     try:
-        return signed_response(pipeline.apply_director_profile(script_id, draft))
+        return signed_response(pipeline.apply_director_profile(
+            script_id,
+            draft,
+            request.expected_current_revision,
+            request.expected_draft_revision,
+        ))
     except ValueError as exc:
-        raise HTTPException(404, str(exc))
+        message = str(exc)
+        status = 409 if "revision changed" in message.lower() or "unsaved edits" in message.lower() else 422
+        if message == "Script not found":
+            status = 404
+        raise HTTPException(status, message) from exc
 
 
 @app.post("/projects/{script_id}/art_direction/analyze")
