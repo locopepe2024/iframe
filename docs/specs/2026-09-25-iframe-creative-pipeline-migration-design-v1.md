@@ -115,6 +115,30 @@ ArtifactJob
 
 复用现有 `ExtractionJobs` 作为迁移初期的异步执行基础，但后续需记录准确输入 revision，并把结果交给 artifact store 管理。线上分批恢复能力可通过 batch checkpoint adapter 迁移，不让 UI 直接依赖 SQLite batch 表结构。
 
+### 分层证据检索
+
+检索不是另一个事实源，而是从已确认内容版本派生的上下文服务：
+
+```text
+L0 Canonical artifacts
+  ScriptSource / ScriptFactLedger / DirectorInterpretation / DirectorShootingPlan
+    ↓
+L1 Structured evidence projections
+  scene / character timeline / relationship / prop state / beat indexes
+    ↓
+L2 Retrieval adapters
+  metadata + full-text first; vector retrieval only when measured gaps justify it
+    ↓
+L3 Stage context builders
+  Assets / Storyboard / continuity QA / targeted repair
+```
+
+第一阶段先实现 L1 的结构化索引和稳定查询：按 `scene_id`、`character_id`、时期/阶段、关系状态、`prop_id`、`beat_id`、`source_range` 和 `shot_plan_id` 获取证据。角色资产生成使用角色时间线、时期变体和导演约束；Storyboard 使用 shot/beat、对白、空间连续性、光影和动作相关证据；局部返修只提交受影响对象的上下文，不重新发送整部剧本。
+
+L2 先使用确定性的 metadata/full-text 过滤。只有在长文本的自然语言问题、上下文成本或结构化过滤召回不足有可测证据时，才增加 embedding/vector adapter。任何检索命中必须带确切 `source_revision_id`、`source_range`、相关 fact/scene/character/beat IDs 和 index revision；检索结果只能作为证据上下文，不能绕过 artifact 审批成为事实。
+
+索引从 L0/L1 重建，不能成为唯一写入源。上游 revision 改变时，旧索引标记 `stale`，新索引异步重建；生成 job 同时 pin 使用的 artifact revision 和 index revision。
+
 ## 阶段数据契约
 
 ### 当前第一集输出的归属建议
@@ -339,6 +363,7 @@ checkpoint key 必须包含 flow、stage、input artifact revision、source rang
 
 - 保留 Director Profile 作为兼容输入；新增 ScriptFactLedger、DirectorInterpretation、ScenePlan/BeatPlan/ShotPlan 的 draft schema 和异步 job；
 - map/reduce 输出有来源的事实与场景候选，不把局部 batch 当作导演最终判断；
+- 先使 ScriptSource revision、事实 ID/source range 和 L1 结构化查询可用，再把它们接入 Director 审阅及下游 context builder；
 - DirectorInterpretation 全局生成并设置独立 review/approve 门；
 - DirectorShootingPlan 引用已批准阐释，独立 review/approve 后再供 Storyboard 使用；
 - 所有用户修订保存为 artifact revision，追踪下游失效关系。

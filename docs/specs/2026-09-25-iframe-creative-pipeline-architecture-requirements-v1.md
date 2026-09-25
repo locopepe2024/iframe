@@ -137,6 +137,21 @@ Director 基于批准的 ScriptFactLedger 工作，产出两个先后衔接、�
 
 Assets 不决定镜头数量或运镜；它提供可被 shot 引用的视觉事实和约束。
 
+### 4.1 分层证据检索
+
+角色设计和分镜返修需要“只取相关剧本证据”，但检索结果不能替代权威结构化产物。采用分层方式：
+
+```text
+L0 权威 artifact：ScriptSource / ScriptFactLedger / Director artifacts
+  → L1 结构化证据投影：场景、角色时间线、关系状态、道具状态、beat 索引
+  → L2 检索适配器：metadata/full-text 优先，必要时再接 vector
+  → L3 阶段上下文：Assets / Storyboard / 连续性 QA / 局部返修
+```
+
+第一阶段不要求 embedding。先提供按 `scene_id`、`character_id`、时期/阶段、关系状态、`prop_id`、`beat_id`、`shot_plan_id` 和 `source_range` 的稳定查询。角色设计查询角色的时期变体、关系状态、表演边界和来源；分镜查询对应 shot/beat 的对白、动作、空间连续性、光影和环境证据。
+
+后续如果结构化过滤和全文检索对自然语言问题出现可测召回缺口，再增加可重建的 embedding/vector adapter。每次命中都必须返回 `source_revision_id`、`source_range`、相关 fact/scene/character/beat IDs 和 `index_revision`；检索结果只是证据上下文，不能直接成为新事实或批准内容。
+
 ### 5. Storyboard Stage
 
 输入只能是已确认的 `ShotPlan`、Assets 和原文对白/声音事实。
@@ -283,7 +298,8 @@ FAILED
 2. `DirectorInterpretation`：可编辑、保存、返修、比较版本、批准生效的导演阐释；
 3. `DirectorShootingPlan`：只在导演阐释被批准后生成，包含 `scene_plan + beat_plan + shot_plan`，可独立审阅和批准；
 4. `CreativeAssetProfile`：角色/场景/道具的导演化定义，并引用两个批准的 Director revisions；
-5. `StoryboardFrame` 必须绑定 `shot_plan_id` 和明确的上游 revisions。
+5. 结构化证据投影与查询：支持 Assets、Storyboard 和局部返修按对象/阶段取证据；
+6. `StoryboardFrame` 必须绑定 `shot_plan_id` 和明确的上游 revisions。
 
 早期 UI 可以沿用 DirectorProfilePanel 的分析/反馈/应用交互作迁移入口，但必须把其单一 JSON 草稿拆成可读、可局部编辑的事实账本和导演阐释视图；拍摄计划使用按场景和镜头组织的表格/列表，不要求用户直接编辑原始 JSON。草稿保存、批准生效应为不同操作。
 

@@ -43,7 +43,7 @@
 2. 不能把 `revision` 字段的存在等同于内容历史。Director Profile 有当前版本号和内容 hash，但上游剧本、分镜 frame 和其他产物没有与之对等的统一 revision/archive 机制。
 3. 当前 Director revision/hash 主要用于标记下游“用过哪个 profile”及要求复核；它尚未表达“此 Director artifact 基于哪个 Script revision、经谁批准、被哪些具体下游产物引用”。
 4. 长文本分块摘要有助于限制单次输入规模，但它与来源可追溯性、跨段事实核验和 Director 全局阐释版本是不同问题。
-5. 对 Director 设计的首要架构工作应是明确结构化事实、阐释和拍摄计划的产物边界与版本/审批 lineage；当前证据不支持先加 RAG 才能完成此目标。
+5. 对 Director 设计的首要架构工作应是明确结构化事实、阐释和拍摄计划的产物边界与版本/审批 lineage；RAG 不应先于这层权威结构，但 Assets/Storyboard 的局部证据需求说明检索能力应纳入分层架构，而不是被排除在外。
 
 ## Not yet proven
 
@@ -54,21 +54,56 @@
 
 ## Architecture recommendation for Director optimization
 
-先延用结构化存储作为权威数据边界，不把 RAG 索引设为事实源：
+采用分层内容与检索架构。先优化结构化权威层，再按实际召回缺口增加派生索引：
 
 ```text
-ScriptSource revision
-  → ScriptFactLedger artifact revision
-  → DirectorInterpretation artifact revision
-  → DirectorShootingPlan artifact revision
-  → Assets / Storyboard artifacts referencing exact parent revisions
+L0  Canonical artifacts
+    ScriptSource / ScriptFactLedger / DirectorInterpretation / DirectorShootingPlan
+      ↓ exact revision + source refs
+L1  Structured evidence projections
+    scene index / character timeline / relationship state / prop state / beat index
+      ↓ filtered by scene, character, phase, source range, artifact revision
+L2  Retrieval adapters (可选、可重建)
+    lexical/full-text search → semantic/vector search when measured necessary
+      ↓ evidence snippets with source refs
+L3  Stage context builders
+    Assets / Storyboard / continuity QA / user question answers
 ```
 
 - Script 正文修改创建新的 source revision；实体/事实解析结果绑定该 revision。
 - 用户编辑先保存为可恢复 draft；批准时创建不可变 artifact revision。保存与批准/生效是不同动作。
 - DirectorInterpretation 引用事实账本 revision；DirectorShootingPlan 引用批准的 DirectorInterpretation revision；Assets 与 Storyboard 固定引用确切上游版本。
 - 用 artifact parent refs 或显式依赖边计算受影响的下游对象；只标记依赖发生变化的产物 stale，不将全项目布尔值作为唯一失效机制。
-- 先实现全文/分块事实 Map-Reduce 与有来源的结构化账本；只有在长剧本检索质量、上下文成本或针对性返修有可测瓶颈后，再评估是否增加派生的检索索引。若增加索引，必须可从权威 ScriptSource/FactLedger 重建，并保留命中 source refs。
+- L1 是第一阶段重点：把当前 `canon_state`、timeline、relationships、scene summaries、角色/场景/道具和 frame 引用规范化为可查询投影。它服务于局部上下文，不改变 L0 权威内容。
+- Assets 生成至少可按角色、时期变体、关系状态、场景和导演约束查询证据；Storyboard 生成至少可按 shot/beat、scene、character、时间阶段、对白和连续性状态查询证据。
+- L2 先实现确定性的 source range/metadata 过滤和全文检索；只有长剧本中出现结构化过滤无法覆盖的自然语言问题、上下文成本或召回缺口时，才增加 embedding/vector adapter。
+- 任何 L2 命中必须返回 `source_revision_id`、`source_range`、`fact_ids`、相关 scene/character/beat 和索引版本；检索结果是证据上下文，不是新的事实或批准内容。
+- 索引只能从 L0/L1 重建，不能成为唯一写入源。上游 revision 改变时，旧索引标记 stale，新索引异步重建；生成任务 pin 使用的 source/artifact revision 与 index revision。
+
+### 第一阶段结构化检索契约
+
+先提供稳定的领域查询，而不是让每个 prompt 自己拼全文：
+
+```text
+get_scene_evidence(flow_id, scene_id, source_revision_id)
+get_character_timeline(flow_id, character_id, source_revision_id, phase=None)
+get_relationship_state(flow_id, character_ids, source_revision_id, at_phase=None)
+get_prop_state(flow_id, prop_id, source_revision_id, scene_id=None)
+get_shot_context(flow_id, shot_plan_id, source_revision_ids)
+find_source_ranges(flow_id, source_revision_id, query, filters={scene, character, phase, beat})
+```
+
+每个查询返回带来源和状态的结构化记录，供 Director 局部返修、Assets 角色/场景定义、Storyboard 完整镜头描述和连续性 QA 共用。这样先解决“相关内容在哪里、属于哪个版本、能否追溯”，再决定是否需要语义向量召回。
+
+### 首个可实施切片
+
+1. 选择包含线上 storyboard 修复的目标分支并确认权威持久化后，给 ScriptSource 增加不可变 revision 与稳定 source ranges；现有文本更新接口在兼容期维护旧读模型。
+2. 建立 `ScriptFactLedger` 的最小结构化事实：`fact_id`、`kind`、`subject_ids`、`phase`、`source_revision_id`、`source_ranges`、`value`、`evidence_status`、`conflict_group_id`。先覆盖角色身份/时期、关系状态、场景、事件和道具状态。
+3. 从确认的事实账本构建 L1 投影；查询必须显式传入 source revision，返回事实、剧本片段、来源与冲突状态。若索引版本与输入版本不匹配，返回明确过期错误，不静默查询当前版本。
+4. 在 Director 审阅中先展示每条解释所用的事实与原文；在 Assets/Storyboard 生成路径引入同一个 context builder，分别按角色/场景和 shot/beat 取证据。
+5. 用第一集选定的角色跨时期、关系变化和重复动作样本验证覆盖率与引用正确性；全局导演阐释仍由完整事实账本归纳，不能只由局部召回拼接。
+
+验收以行为为准：同一查询在固定 revision 下结果稳定；剧本修改后旧查询可复现旧证据，新查询只读新证据；角色设计与分镜草稿能显示准确来源；冲突/未知项不被默认当作事实；局部返修不需要发送整集原文。
 
 ## What would verify it
 
