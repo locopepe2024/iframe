@@ -9,6 +9,7 @@ import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
 import ScriptFactLedgerPanel from "./ScriptFactLedgerPanel";
+import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
 
 const editableProfile = (profile?: DirectorProfile) => {
     if (!profile) return "";
@@ -224,12 +225,34 @@ export default function DirectorProfilePanel() {
                             ))}
                         </div>
                     )}
-                    <textarea
-                        aria-label={t("directorDraft")}
-                        value={draftText}
-                        onChange={event => setDraftText(event.target.value)}
-                        className="min-h-[22rem] w-full resize-y rounded-md border border-border bg-background p-4 font-mono text-xs leading-5 text-foreground outline-none focus:border-primary"
-                    />
+                    {(() => {
+                        try {
+                            return (
+                                <DirectorInterpretationVisualEditor
+                                    profile={parseDraft()}
+                                    onChange={value => setDraftText(JSON.stringify(value, null, 2))}
+                                />
+                            );
+                        } catch {
+                            return (
+                                <div role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                                    {t("directorDraftInvalidVisual")}
+                                </div>
+                            );
+                        }
+                    })()}
+                    <details className="rounded-md border border-border bg-background/40 p-3">
+                        <summary className="cursor-pointer text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
+                            {t("directorAdvancedJson")}
+                        </summary>
+                        <textarea
+                            aria-label={t("directorDraft")}
+                            value={draftText}
+                            onChange={event => setDraftText(event.target.value)}
+                            className="mt-3 min-h-[22rem] w-full resize-y rounded-md border border-border bg-background p-4 font-mono text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            spellCheck={false}
+                        />
+                    </details>
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <textarea
                             value={instruction}

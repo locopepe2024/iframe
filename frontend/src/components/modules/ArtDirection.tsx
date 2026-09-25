@@ -3,13 +3,22 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Palette, Wand2, Plus, Check, ChevronRight, Lock, RotateCcw, ArrowUp, AlertTriangle, X, Image as ImageIcon, Pencil } from "lucide-react";
+import { Sparkles, Palette, Wand2, Plus, Check, ChevronRight, Lock, RotateCcw, ArrowUp, AlertTriangle, X, Image as ImageIcon, Pencil, BookOpen, Clapperboard } from "lucide-react";
 import { useProjectStore, type StyleConfig, type StylePreset, type StylePresetCategory } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
 import DirectorProfilePanel from "./DirectorProfilePanel";
+import DirectorShootingPlanPanel from "./DirectorShootingPlanPanel";
+
+type DirectorTab = "understanding" | "shooting_plan" | "style";
+
+const directorTabs: { id: DirectorTab; labelKey: string; icon: typeof BookOpen }[] = [
+    { id: "understanding", labelKey: "understanding", icon: BookOpen },
+    { id: "shooting_plan", labelKey: "shootingPlan", icon: Clapperboard },
+    { id: "style", labelKey: "style", icon: Palette },
+];
 
 export default function ArtDirection() {
     const ta = useTranslations("artDirection");
@@ -60,6 +69,7 @@ export default function ArtDirection() {
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
     const [overrideAccepted, setOverrideAccepted] = useState(false);
+    const [activeDirectorTab, setActiveDirectorTab] = useState<DirectorTab>("understanding");
 
     useEffect(() => {
         setOverrideAccepted(false);
@@ -397,8 +407,80 @@ export default function ArtDirection() {
             />
 
             {/* Scrollable content — full width */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-8 bg-surface">
-                <DirectorProfilePanel />
+            <div className="flex-1 min-h-0 overflow-y-auto bg-surface">
+                <div className="sticky top-0 z-20 border-b border-border bg-surface/95 px-4 py-2 backdrop-blur-md sm:px-8">
+                    <div
+                        className="flex gap-1 overflow-x-auto"
+                        role="tablist"
+                        aria-label={ta("directorTabs.label")}
+                        onKeyDown={event => {
+                            const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+                            if (!keys.includes(event.key)) return;
+                            event.preventDefault();
+                            const currentIndex = directorTabs.findIndex(tab => tab.id === activeDirectorTab);
+                            const nextIndex = event.key === "Home"
+                                ? 0
+                                : event.key === "End"
+                                    ? directorTabs.length - 1
+                                    : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + directorTabs.length) % directorTabs.length;
+                            const nextTab = directorTabs[nextIndex];
+                            setActiveDirectorTab(nextTab.id);
+                            document.getElementById(`director-tab-${nextTab.id}`)?.focus();
+                        }}
+                    >
+                        {directorTabs.map(tab => {
+                            const Icon = tab.icon;
+                            const selected = activeDirectorTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    id={`director-tab-${tab.id}`}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={selected}
+                                    aria-controls={`director-panel-${tab.id}`}
+                                    tabIndex={selected ? 0 : -1}
+                                    onClick={() => setActiveDirectorTab(tab.id)}
+                                    className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${selected ? "border-primary text-foreground" : "border-transparent text-text-secondary hover:text-foreground"}`}
+                                >
+                                    <Icon size={16} aria-hidden="true" />
+                                    {ta(`directorTabs.${tab.labelKey}`)}
+                                    {tab.id === "understanding" && currentProject?.art_direction?.director_profile && (
+                                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[0.625rem] text-text-muted" aria-label={ta("directorTabs.confirmedVersion", { revision: currentProject.art_direction.director_profile.revision })}>
+                                            v{currentProject.art_direction.director_profile.revision}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="p-4 sm:p-8">
+                    <section
+                        id="director-panel-understanding"
+                        role="tabpanel"
+                        aria-labelledby="director-tab-understanding"
+                        hidden={activeDirectorTab !== "understanding"}
+                        className="space-y-8"
+                    >
+                        <DirectorProfilePanel />
+                    </section>
+                    <section
+                        id="director-panel-shooting_plan"
+                        role="tabpanel"
+                        aria-labelledby="director-tab-shooting_plan"
+                        hidden={activeDirectorTab !== "shooting_plan"}
+                    >
+                        <DirectorShootingPlanPanel />
+                    </section>
+                    <section
+                        id="director-panel-style"
+                        role="tabpanel"
+                        aria-labelledby="director-tab-style"
+                        hidden={activeDirectorTab !== "style"}
+                        className="space-y-8"
+                    >
                 {/* Series inherit/override banners */}
                 {inSeries && !seriesBaselineLoading && (
                     <>
@@ -575,10 +657,12 @@ export default function ArtDirection() {
                         </div>
                     </div>
                 )}
+                    </section>
+                </div>
             </div>
 
             {/* Bottom sticky bar */}
-            <div className="shrink-0 border-t border-glass-border bg-surface/95 backdrop-blur-md px-8 py-3 flex items-center justify-end gap-3">
+            {activeDirectorTab === "style" && <div className="shrink-0 border-t border-glass-border bg-surface/95 backdrop-blur-md px-8 py-3 flex items-center justify-end gap-3">
                 {selectedStyle ? (
                     <div className="flex items-center gap-2">
                         <span className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -611,7 +695,7 @@ export default function ArtDirection() {
                 >
                     {isSaving ? ta("saving") : ta("applyAndContinue")}
                 </WorkflowActionButton>
-            </div>
+            </div>}
 
             {/* AI Recommendation Detail Modal */}
             <AnimatePresence>
