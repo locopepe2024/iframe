@@ -74,3 +74,31 @@ def test_migrate_owner_profile_does_not_merge_unrelated_owner():
 
     assert pipeline.migrate_legacy_browser_owners("apikey-user", "apikey-profile") is False
     assert pipeline.saved == []
+
+
+def test_migrate_legacy_browser_owners_claims_unowned_records():
+    script = SimpleNamespace(
+        id="project-legacy",
+        owner_user_id=None,
+        owner_profile_id=None,
+        characters=[],
+        scenes=[],
+        props=[],
+        frames=[],
+        video_tasks=[],
+    )
+    series = SimpleNamespace(
+        id="series-legacy",
+        owner_user_id=None,
+        owner_profile_id=None,
+        characters=[],
+        scenes=[],
+        props=[],
+        frames=[],
+        video_tasks=[],
+    )
+    pipeline = _Pipeline(script, series)
+
+    assert pipeline.migrate_legacy_browser_owners("apikey-user", "apikey-profile") is True
+    assert script.owner_profile_id == "apikey-profile"
+    assert series.owner_profile_id == "apikey-profile"

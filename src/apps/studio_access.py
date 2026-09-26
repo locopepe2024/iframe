@@ -475,18 +475,20 @@ class StudioOwnerMixin:
 
         for resource in self.scripts.values():
             legacy_owner_profile_id = getattr(resource, "owner_profile_id", None)
-            if not legacy_owner_profile_id or not legacy_owner_profile_id.startswith("browser-"):
+            if legacy_owner_profile_id and not legacy_owner_profile_id.startswith("browser-"):
                 continue
-            legacy_owner_ids.add(legacy_owner_profile_id)
+            if legacy_owner_profile_id:
+                legacy_owner_ids.add(legacy_owner_profile_id)
             resource.owner_user_id = owner_user_id
             resource.owner_profile_id = owner_profile_id
             reassign_children(resource)
             changed = True
         for resource in self.series_store.values():
-            if not getattr(resource, "owner_profile_id", "").startswith("browser-"):
+            legacy_owner_profile_id = getattr(resource, "owner_profile_id", None)
+            if legacy_owner_profile_id and not legacy_owner_profile_id.startswith("browser-"):
                 continue
-            legacy_owner_profile_id = resource.owner_profile_id
-            legacy_owner_ids.add(legacy_owner_profile_id)
+            if legacy_owner_profile_id:
+                legacy_owner_ids.add(legacy_owner_profile_id)
             resource.owner_user_id = owner_user_id
             resource.owner_profile_id = owner_profile_id
             reassign_children(resource)
