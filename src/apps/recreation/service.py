@@ -106,7 +106,7 @@ class RecreationService:
             raise HTTPException(422, f"Selected {label} model is unavailable for {capability} in the current UniArt catalog")
         return model_id
 
-    def _video_resolution_for_model(self, model):
+    def _video_params_for_model(self, model, source_width=None, source_height=None):
         """Return the catalog-owned default resolution for a video model.
 
         A recreation task must carry the resolved provider parameter from the
@@ -126,7 +126,19 @@ class RecreationService:
             raise HTTPException(422, "Selected video model has no resolution capability in the current UniArt catalog")
         if str(default) not in options:
             default = options[0]
-        return str(default)
+        ratios = params.get("ratio") if isinstance(params, dict) else None
+        ratio_options = [str(value) for value in (ratios.get("options") if isinstance(ratios, dict) else []) if value]
+        ratio_default = ratios.get("default") if isinstance(ratios, dict) else None
+        if ratio_options:
+            if source_width and source_height:
+                source_ratio = float(source_width) / float(source_height)
+                def distance(value):
+                    width, height = (float(part) for part in value.split(":", 1))
+                    return abs(source_ratio - width / height)
+                ratio_default = min(ratio_options, key=distance)
+            if str(ratio_default) not in ratio_options:
+                ratio_default = ratio_options[0]
+        return str(default), (str(ratio_default) if ratio_default else None)
 
     def _recreation_video_model(self, model):
         model_id = str(model or "").strip()
@@ -681,7 +693,6 @@ class RecreationService:
 
     def generation_plan(self, project_id, revision, model=DEFAULT_RECREATION_VIDEO_MODEL, audio_policy="silent", soundscape="", generation_durations=None):
         model = self._recreation_video_model(model)
-        resolution = self._video_resolution_for_model(model)
         if audio_policy not in ("silent", "generated", "preserve_source"):
             raise HTTPException(422, "Unsupported audio policy")
         if audio_policy == "generated" and not soundscape.strip():
@@ -693,6 +704,11 @@ class RecreationService:
             if record["revision"] != revision or record["status"] != "confirmed" or not record.get("timeline"):
                 raise HTTPException(409, "Confirm the current timeline before preparing a plan")
             source_media, _source_path = self._verified_source_media(db, record)
+            resolution, ratio = self._video_params_for_model(
+                model,
+                source_media.get("metadata", {}).get("width"),
+                source_media.get("metadata", {}).get("height"),
+            )
             shots, blockers = [], []
             for index, shot in enumerate(record["timeline"]["shots"], 1):
                 description = shot.get("description", "").strip()
@@ -744,7 +760,7 @@ class RecreationService:
                               "generate_audio": audio_policy == "generated", "images": images, "prompt": prompt})
             return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
                     "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_video_labels", "guidance": guidance,
-                    "resolution": resolution,
+                    "resolution": resolution, "ratio": ratio,
                     "source_video": {"media_id": source_media["media_id"], "sha256": source_media["sha256"], "label": "<Video 1>"},
                     "time_base": record["analysis"]["time_base"], "audio_policy": audio_policy, "ready": not blockers,
                     "submission_enabled": True,
@@ -805,7 +821,7 @@ class RecreationService:
                     "shot_id": shot["shot_id"], "shot_number": shot["shot_number"],
                     "revision": revision, "analysis_id": plan["analysis_id"], "status": "pending",
                     "model": model, "prompt": shot["prompt"], "duration": shot["generation_duration"],
-                    "resolution": plan["resolution"],
+                    "resolution": plan["resolution"], "ratio": plan["ratio"],
                     "audio_policy": audio_policy, "generate_audio": shot["generate_audio"],
                     "soundscape": soundscape, "seed": seed, "inputs": inputs,
                     "source_media_id": source_media["media_id"],
@@ -938,7 +954,8 @@ class RecreationService:
 
             kwargs = {
                 "model": task["model"], "mode": "reference2video", "duration": task["duration"],
-                "resolution": task["resolution"], "generate_audio": task["generate_audio"],
+                "resolution": task["resolution"], "ratio": task.get("ratio"),
+                "generate_audio": task["generate_audio"],
                 "on_task_submitted": save_provider_task,
             }
             if task.get("seed") is not None:
