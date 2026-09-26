@@ -13,10 +13,10 @@ from typing import Any, Dict
 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from .identity import UserContext, require_user_context
+from .identity import UserContext, _api_key_context, _set_browser_profile_cookie, require_user_context
 
 
 SECRET_FIELDS = {"UNIART_API_KEY"}
@@ -241,7 +241,19 @@ def get_user_config(identity: UserContext = Depends(require_user_context)):
 
 @router.put("/config")
 def update_user_config(
+    request: Request,
+    response: Response,
     update: UserConfigUpdate,
     identity: UserContext = Depends(require_user_context),
 ):
+    # Compatibility for older static iframe bundles that submit the key before
+    # they know how to send its fingerprint header. The key itself remains
+    # encrypted and is immediately replaced by the API-key owner scope.
+    if update.UNIART_API_KEY and identity.owner_profile_id.startswith("browser-"):
+        fingerprint = hashlib.sha256(update.UNIART_API_KEY.strip().encode()).hexdigest()
+        key_identity = _api_key_context(fingerprint)
+        if key_identity is not None:
+            identity = key_identity
+            request.state.lumenx_identity = identity
+            _set_browser_profile_cookie(response, request, identity)
     return get_user_config_store().update(identity, update)
