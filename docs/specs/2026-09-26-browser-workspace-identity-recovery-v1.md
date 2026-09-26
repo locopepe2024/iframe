@@ -19,6 +19,9 @@
    is available; once a key is configured, the key-derived owner wins.
 5. The API key fingerprint is a workspace namespace, not a provider
    authorization substitute; provider calls still use the encrypted key.
+6. When an API-key request still carries a legacy browser owner hint, Studio
+   may migrate only that explicitly identified legacy owner to the API-key
+   owner. The old media directory is retained as a rollback copy.
 
 ## Success criteria
 
@@ -28,3 +31,6 @@
 - Bearer requests remain authoritative for integrations that use them.
 - No plaintext API key is stored in the identity header, owner ID, or project
   data.
+- Projects and series created under the identified legacy browser owner are
+  visible after the first API-key request without merging unrelated browser
+  workspaces.

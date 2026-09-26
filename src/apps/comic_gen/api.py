@@ -101,7 +101,10 @@ if os.path.exists(env_path):
 from ..identity import (
     API_KEY_IDENTITY_HEADER,
     BROWSER_PROFILE_COOKIE,
+    LEGACY_BROWSER_INSTALLATION_HEADER,
     UserContext,
+    _api_key_context,
+    _legacy_browser_owner,
     _resolve_request_context,
     _set_browser_profile_cookie,
     router as identity_router,
@@ -228,6 +231,18 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         request.state.lumenx_identity = user
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    if _api_key_context(request.headers.get(API_KEY_IDENTITY_HEADER)) is not None:
+        legacy_owner = _legacy_browser_owner(
+            request.cookies.get(BROWSER_PROFILE_COOKIE),
+            request.headers.get(LEGACY_BROWSER_INSTALLATION_HEADER),
+        )
+        if legacy_owner:
+            pipeline.migrate_owner_profile(
+                legacy_owner,
+                user.user_id,
+                user.owner_profile_id,
+            )
 
     try:
         verify_studio_resource_path(

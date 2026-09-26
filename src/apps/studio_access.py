@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 import hashlib
 import hmac
+import logging
 import os
 import shutil
 import time
@@ -28,6 +29,7 @@ _studio_uniart: ContextVar[Optional[Dict[str, str]]] = ContextVar(
     "iframe_studio_uniart", default=None
 )
 STUDIO_MEDIA_PREVIEW_SIZES = frozenset({160, 320, 512, 960})
+logger = logging.getLogger(__name__)
 
 
 def set_studio_user(user: UserContext) -> Token:
@@ -450,6 +452,63 @@ class StudioOwnerMixin:
                     item.owner_profile_id = owner_profile_id
                     changed = True
         return changed
+
+    def migrate_owner_profile(
+        self,
+        legacy_owner_profile_id: str,
+        owner_user_id: str,
+        owner_profile_id: str,
+    ) -> bool:
+        """Move one explicitly identified legacy browser workspace to a key owner."""
+        if (
+            not legacy_owner_profile_id
+            or not owner_user_id
+            or not owner_profile_id
+            or legacy_owner_profile_id == owner_profile_id
+        ):
+            return False
+
+        changed = False
+
+        def reassign_children(container: Any) -> None:
+            for collection_name in ("characters", "scenes", "props", "frames", "video_tasks"):
+                for item in getattr(container, collection_name, []) or []:
+                    if hasattr(item, "owner_user_id"):
+                        item.owner_user_id = owner_user_id
+                    if hasattr(item, "owner_profile_id"):
+                        item.owner_profile_id = owner_profile_id
+
+        for resource in self.scripts.values():
+            if getattr(resource, "owner_profile_id", None) != legacy_owner_profile_id:
+                continue
+            resource.owner_user_id = owner_user_id
+            resource.owner_profile_id = owner_profile_id
+            reassign_children(resource)
+            changed = True
+        for resource in self.series_store.values():
+            if getattr(resource, "owner_profile_id", None) != legacy_owner_profile_id:
+                continue
+            resource.owner_user_id = owner_user_id
+            resource.owner_profile_id = owner_profile_id
+            reassign_children(resource)
+            changed = True
+
+        if not changed:
+            return False
+
+        self._save_data()
+        self._save_series_data()
+
+        # Keep the old tree intact so a failed rollout can be rolled back.
+        old_dir = os.path.realpath(studio_owner_dir(legacy_owner_profile_id))
+        new_dir = os.path.realpath(studio_owner_dir(owner_profile_id))
+        if os.path.isdir(old_dir) and old_dir != new_dir:
+            try:
+                os.makedirs(new_dir, exist_ok=True)
+                shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
+            except OSError:
+                logger.exception("Failed to copy legacy Studio media during owner migration")
+        return True
 
     def get_script(self, script_id: str, owner_profile_id: Optional[str] = None) -> Any:
         script = self.scripts.get(script_id)
