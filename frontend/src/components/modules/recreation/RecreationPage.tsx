@@ -13,6 +13,34 @@ type WorkflowStep = typeof workflowSteps[number];
 type WorkflowStatus = "pending" | "active" | "complete" | "failed";
 type RunProgress = { generation: WorkflowStatus; assembly: WorkflowStatus };
 const emptyRunProgress: RunProgress = { generation: "pending", assembly: "pending" };
+const workspaceStorageKey = "iframe.recreation.workspace.v1";
+
+type SavedWorkspace = { projectId: string; step: WorkflowStep };
+
+function readSavedWorkspace(): SavedWorkspace | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(workspaceStorageKey);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<SavedWorkspace>;
+    return typeof value.projectId === "string" && value.projectId.length > 0
+      && typeof value.step === "string" && workflowSteps.includes(value.step as WorkflowStep)
+      ? { projectId: value.projectId, step: value.step as WorkflowStep }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveWorkspace(value: SavedWorkspace) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(workspaceStorageKey, JSON.stringify(value)); } catch { /* storage is optional */ }
+}
+
+function clearSavedWorkspace() {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(workspaceStorageKey); } catch { /* storage is optional */ }
+}
 
 const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
@@ -55,12 +83,29 @@ export default function RecreationPage() {
 
   useEffect(() => {
     let alive = true;
-    recreationApi.list().then(records => { if (alive) setProjects(records); })
-      .catch(err => { if (alive) report(err); }).finally(() => { if (alive) setLoading(false); });
+    const saved = readSavedWorkspace();
+    recreationApi.list().then(async records => {
+      if (!alive) return;
+      setProjects(records);
+      if (!saved) return;
+      try {
+        const restored = await recreationApi.get(saved.projectId);
+        if (!alive) return;
+        open(restored, true);
+        setStep(saved.step);
+      } catch {
+        // A deleted or inaccessible project must not make the rest of the workspace unusable.
+        clearSavedWorkspace();
+      }
+    }).catch(err => { if (alive) report(err); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; activeId.current = null; };
     // Only initial loading; subsequent refreshes preserve the active draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (project) saveWorkspace({ projectId: project.id, step });
+  }, [project?.id, step]);
 
   useEffect(() => {
     if (!project || !processing) return;
