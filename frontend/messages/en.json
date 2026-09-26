@@ -1365,6 +1365,7 @@
         "graphKeyboardHint": "Relationship edges are keyboard selectable. Relationship cards below provide the same editing controls.",
         "viewMode": "View mode",
         "graphView": "Graph view",
+        "mindMapView": "Mind map",
         "editorView": "Editor view",
         "graphDescription": "Director story map graph",
         "mindMapCore": "Story core",

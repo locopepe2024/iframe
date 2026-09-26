@@ -1366,6 +1366,7 @@
         "graphKeyboardHint": "关系连线可用键盘选择；下方关系卡片提供相同的编辑操作。",
         "viewMode": "视图模式",
         "graphView": "图谱视图",
+        "mindMapView": "思维导图",
         "editorView": "编辑视图",
         "graphDescription": "导演故事图谱",
         "mindMapCore": "故事核心",

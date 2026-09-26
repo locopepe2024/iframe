@@ -748,9 +748,15 @@ function StoryMapSection({
                             {staleSource && <span role="alert" className="rounded bg-amber-400/10 px-2 py-1 text-amber-200">{t("staleSource", { mapRevision: map.source_revision, currentRevision: sourceRevision })}</span>}
                         </div>
                     </div>
-                    <button type="button" onClick={onReloadFacts} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
-                        <RefreshCw size={14} aria-hidden="true" />{t("reloadEvidence")}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("viewMode")}>
+                            <button type="button" onClick={() => setViewMode("graph")} aria-pressed={viewMode === "graph"} className={`min-h-10 rounded px-3 text-xs font-medium ${viewMode === "graph" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("mindMapView")}</button>
+                            <button type="button" onClick={() => setViewMode("editor")} aria-pressed={viewMode === "editor"} className={`min-h-10 rounded px-3 text-xs font-medium ${viewMode === "editor" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("editorView")}</button>
+                        </div>
+                        <button type="button" onClick={onReloadFacts} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
+                            <RefreshCw size={14} aria-hidden="true" />{t("reloadEvidence")}
+                        </button>
+                    </div>
                 </div>
                 {factsError && <p role="alert" className="mt-3 text-xs text-amber-200">{factsError}</p>}
 
@@ -760,13 +766,6 @@ function StoryMapSection({
                         <p className="mt-1 text-xs text-text-secondary">{t("timelineHint")}</p>
                     </div>
                     <button type="button" onClick={addPhase} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addPhase")}</button>
-                </div>
-
-                <div className="mt-3 flex justify-end">
-                    <div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("viewMode")}>
-                        <button type="button" onClick={() => setViewMode("graph")} aria-pressed={viewMode === "graph"} className={`min-h-9 rounded px-3 text-xs ${viewMode === "graph" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("graphView")}</button>
-                        <button type="button" onClick={() => setViewMode("editor")} aria-pressed={viewMode === "editor"} className={`min-h-9 rounded px-3 text-xs ${viewMode === "editor" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("editorView")}</button>
-                    </div>
                 </div>
 
                 {viewMode === "graph" && <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-4" role="group" aria-label={t("graphDescription")}>
