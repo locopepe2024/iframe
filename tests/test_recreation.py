@@ -667,6 +667,7 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
         assert kwargs['model'] == 'uniart/minimax-h3-vip'
         assert kwargs['mode'] == 'reference2video'
         assert kwargs['duration'] == 5
+        assert kwargs['resolution'] == '720p'
         assert kwargs['generate_audio'] is False
         assert len(kwargs['ref_image_urls']) == 2
         assert kwargs['ref_video_urls'] == [str((Path('output') / p['source_url']).resolve())]
