@@ -1530,6 +1530,14 @@
         "focus": "Directing focus",
         "asset_need": "Asset needs"
       },
+      "flow": {
+        "scene": "Scene",
+        "beat": "Beat",
+        "shots": "shots",
+        "openShot": "Open shot",
+        "untitledBeat": "Untitled beat",
+        "noEffect": "No director effect yet"
+      },
       "practicalSourceHint": "Examples: cinema sign, ticket-window light, or street lamp. Leave blank when no practical source is visible.",
       "noProject": "Open a project first."
     },

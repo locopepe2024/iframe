@@ -92,3 +92,10 @@ can be edited in the shooting-plan draft, survives draft save/restore, and is co
 the confirmed shooting-plan revision. Confirming a shooting plan still activates only that
 plan revision; the annotation is not implicitly applied to Storyboard or Motion. A future
 Storyboard handoff must carry it through an explicit adapter and its own apply/confirm action.
+
+## Continuation slice: shot flow map (2026-09-26)
+
+The shooting-plan review surface includes a readable scene → beat → shot flow map with
+visible connector lines. Shot cards expose the title, duration, and director effect at a
+glance; selecting a card opens the corresponding editable shot details. The map is a view
+of the same nested plan data and does not create a second ordering or confirmation state.

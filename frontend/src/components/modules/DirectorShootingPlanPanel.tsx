@@ -165,6 +165,68 @@ function moveItem<T>(items: T[], index: number, delta: number): T[] {
     return next;
 }
 
+function ShotFlowMap({
+    scenes,
+    onSelectShot,
+    labels,
+}: {
+    scenes: DirectorPlanScene[];
+    onSelectShot: (shotId: string) => void;
+    labels: { scene: string; beat: string; shots: string; openShot: string; untitledScene: string; untitledBeat: string; untitledShot: string; noEffect: string };
+}) {
+    return (
+        <div className="space-y-5" aria-label="Director shot flow map">
+            {scenes.map((scene, sceneIndex) => (
+                <div key={scene.scene_id} className="relative rounded-lg border border-border bg-background/45 p-3 sm:p-4">
+                    <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 text-xs font-semibold text-primary">
+                            S{sceneIndex + 1}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-primary">{labels.scene}</p>
+                            <p className="truncate text-sm font-semibold text-foreground">{scene.scene_ref || labels.untitledScene}</p>
+                        </div>
+                    </div>
+                    <div className="ml-4 space-y-3 border-l-2 border-primary/30 pl-4 sm:ml-5 sm:pl-6">
+                        {scene.beats.map((beat, beatIndex) => (
+                            <div key={beat.beat_id} className="relative">
+                                <span className="absolute -left-[1.55rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-primary bg-background sm:-left-[1.85rem]" aria-hidden="true" />
+                                <div className="rounded-md border border-border bg-surface/70 p-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{labels.beat} {beatIndex + 1}</span>
+                                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                                        <span className="text-xs text-text-muted">{labels.shots}: {beat.shots.length}</span>
+                                    </div>
+                                    <p className="mt-1 text-sm font-medium text-foreground">{beat.title || labels.untitledBeat}</p>
+                                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                        {beat.shots.map((shot, shotIndex) => (
+                                            <button
+                                                key={shot.shot_id}
+                                                type="button"
+                                                onClick={() => onSelectShot(shot.shot_id)}
+                                                className="group relative min-h-24 rounded-md border border-border bg-background/80 p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                                aria-label={`${labels.openShot} ${shotIndex + 1}: ${shot.title || labels.untitledShot}`}
+                                            >
+                                                {shotIndex > 0 && <span className="absolute -left-2 top-1/2 hidden h-px w-2 bg-primary/50 md:block" aria-hidden="true" />}
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{labels.shots.replace(/s$/, "")} {shotIndex + 1}</span>
+                                                    <span className="text-xs text-text-muted">{shot.duration_seconds ?? 0}s</span>
+                                                </div>
+                                                <p className="mt-1 line-clamp-2 text-sm font-medium text-foreground">{shot.title || labels.untitledShot}</p>
+                                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary">{shot.director_effect || shot.visual_intent || labels.noEffect}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export default function DirectorShootingPlanPanel() {
     const t = useTranslations("artDirection.directorPlan");
     const { currentProject } = useProjectStore();
@@ -488,6 +550,24 @@ export default function DirectorShootingPlanPanel() {
                         </ol>
                     </section>
 
+                    <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-plan-flow-title">
+                        <div className="mb-3">
+                            <h3 id="director-plan-flow-title" className="text-sm font-semibold text-foreground">Shot flow</h3>
+                            <p className="mt-1 text-xs text-text-muted">Scenes, beats and shots are connected in reading order. Select a shot to open its editable details.</p>
+                        </div>
+                        <ShotFlowMap
+                            scenes={scenes}
+                            labels={{
+                                scene: t("flow.scene"), beat: t("flow.beat"), shots: t("flow.shots"), openShot: t("flow.openShot"),
+                                untitledScene: t("unnamedScene"), untitledBeat: t("flow.untitledBeat"), untitledShot: t("untitledShot"), noEffect: t("flow.noEffect"),
+                            }}
+                            onSelectShot={shotId => {
+                                setExpandedShots(previous => new Set(previous).add(shotId));
+                                requestAnimationFrame(() => document.getElementById(`director-plan-shot-${shotId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+                            }}
+                        />
+                    </section>
+
                     <div className="space-y-4">
                         {scenes.map((scene, sceneIndex) => (
                             <section key={scene.scene_id} className="overflow-hidden rounded-lg border border-border bg-background/30" aria-labelledby={`director-plan-scene-${scene.scene_id}`}>
@@ -591,6 +671,8 @@ export default function DirectorShootingPlanPanel() {
                                                     {beat.shots.map((shot, shotIndex) => (
                                                         <details
                                                             key={shot.shot_id}
+                                                            id={`director-plan-shot-${shot.shot_id}`}
+                                                            open={expandedShots.has(shot.shot_id)}
                                                             className="group rounded-md border border-border bg-surface"
                                                             onToggle={event => {
                                                                 const isOpen = event.currentTarget.open;

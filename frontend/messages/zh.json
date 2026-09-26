@@ -1531,6 +1531,14 @@
         "focus": "导演重点",
         "asset_need": "所需资产"
       },
+      "flow": {
+        "scene": "场景",
+        "beat": "节拍",
+        "shots": "个镜头",
+        "openShot": "打开镜头",
+        "untitledBeat": "未命名节拍",
+        "noEffect": "尚未填写导演效果"
+      },
       "practicalSourceHint": "例如电影院门头灯、售票窗口灯或街道灯；没有画内实际光源时留空。",
       "noProject": "请先打开一个项目。"
     },

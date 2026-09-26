@@ -148,6 +148,7 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open shot 1: Follow the couple/i })).toBeInTheDocument();
     expect(screen.getAllByText("4 sec")).toHaveLength(3);
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
