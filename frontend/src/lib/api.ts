@@ -2296,12 +2296,28 @@ export const playgroundApi = {
     axios.delete(API_URL + "/playground/templates/" + id).then(r => r.data),
 
   // Upload media file for playground input (returns file path)
-  uploadMedia: (file: File) => {
+  uploadMedia: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return axios.post<{ path: string }>(API_URL + "/playground/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }).then(r => r.data);
+    // Let the browser set the multipart boundary. Manually setting
+    // Content-Type can omit the boundary and make FastAPI reject a batch
+    // upload even when other files in the same batch succeed.
+    const response = await authenticatedFetch(`${API_URL}/playground/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      let detail = "Failed to upload media";
+      try {
+        const payload = await response.json() as { detail?: string };
+        if (payload.detail) detail = payload.detail;
+      } catch {
+        // Preserve the useful HTTP status when the proxy returns non-JSON.
+        detail = `Failed to upload media (HTTP ${response.status})`;
+      }
+      throw new Error(detail);
+    }
+    return response.json() as Promise<{ path: string }>;
   },
 };
 
