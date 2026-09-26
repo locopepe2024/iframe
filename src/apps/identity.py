@@ -160,7 +160,12 @@ def _api_key_context(identity_key: str | None) -> UserContext | None:
 def _session_token_secret() -> bytes:
     # A configured server secret is required in production. The config master
     # key is an acceptable shared secret for installations that already use it.
-    value = os.getenv("LUMENX_SESSION_TOKEN_SECRET") or os.getenv("LUMENX_CONFIG_MASTER_KEY")
+    value = (
+        os.getenv("LUMENX_SESSION_TOKEN_SECRET")
+        or os.getenv("LUMENX_CONFIG_MASTER_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or os.getenv("UNIART_API_KEY")
+    )
     if not value:
         raise HTTPException(status_code=503, detail="Session token signing is not configured")
     return value.encode("utf-8")

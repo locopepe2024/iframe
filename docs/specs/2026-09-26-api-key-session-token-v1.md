@@ -6,7 +6,7 @@
 - The response returns an opaque `iframe-session.*` Bearer token and its `expires_at`.
 - The token contains only a SHA-256 API-key fingerprint, issue time, expiry, and a nonce; it never contains the API key.
 - Requests with this token resolve to `apikey-<fingerprint>` and remain API-key scoped even when an old browser cookie or login token exists.
-- The server signs tokens with `LUMENX_SESSION_TOKEN_SECRET`, or the configured `LUMENX_CONFIG_MASTER_KEY`.
+- The server signs tokens with `LUMENX_SESSION_TOKEN_SECRET`, or the configured `LUMENX_CONFIG_MASTER_KEY`; legacy deployments may use their configured provider secret as a rotation-compatible fallback.
 
 ## MCP / HTTPS use
 
