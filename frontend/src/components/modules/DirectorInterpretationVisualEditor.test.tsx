@@ -158,6 +158,8 @@ it("edits scene analysis summaries without changing the story map or unknown fie
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap, scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet", state_in: "Separate", state_out: "Curious" }] }, onChange);
 
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+
     fireEvent.change(screen.getByLabelText("Scene summary"), { target: { value: "They meet beside the window" } });
     fireEvent.change(screen.getByLabelText("State out"), { target: { value: "Exchange books" } });
 

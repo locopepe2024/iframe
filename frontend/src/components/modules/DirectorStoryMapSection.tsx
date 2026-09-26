@@ -816,6 +816,7 @@ function StoryMapSection({
                 </div>}
             </section>
 
+            {viewMode === "editor" && <>
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-relationship-graph-title">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -938,22 +939,6 @@ function StoryMapSection({
                     </div>
                     <button type="button" onClick={addThread} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addStoryline")}</button>
                 </div>
-                {viewMode === "graph" && <div className="overflow-x-auto rounded-lg border border-border bg-surface p-3">
-                    <div className="min-w-[760px] space-y-3">
-                        {map.story_threads.map((thread, threadIndex) => (
-                            <div key={thread.thread_id} className="relative rounded-md border border-primary/30 bg-primary/5 p-3">
-                                <div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{threadIndex + 1}</span><div><p className="text-[10px] uppercase tracking-wide text-primary">{t("storylineNumber", { number: threadIndex + 1 })}</p><p className="text-sm font-semibold text-foreground">{thread.label || t("unnamedStoryline")}</p></div></div>
-                                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(phases.length, 1)}, minmax(180px, 1fr))` }}>
-                                    {phases.map((phase, phaseIndex) => {
-                                        const milestones = thread.milestones.filter(milestone => phase.events.some(event => event.event_id === milestone.event_id));
-                                        return <div key={phase.phase_id} className="relative min-h-20 rounded border border-border bg-background/80 p-2">{phaseIndex > 0 && <span className="absolute -left-2 top-1/2 h-px w-2 bg-primary/50" aria-hidden="true" />}<p className="text-[10px] font-medium text-text-muted">{phase.label || t("unnamedPhase")}</p><div className="mt-2 space-y-1.5">{milestones.map(milestone => { const event = allEvents.find(item => item.event_id === milestone.event_id); return event ? <button key={milestone.event_id} type="button" onClick={() => { setViewMode("editor"); setExpandedEventId(event.event_id); }} className="w-full rounded border border-primary/20 bg-primary/10 p-1.5 text-left text-[11px] text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{event.title || event.description || t("unnamedEvent")}<span className="mt-0.5 block text-[10px] text-text-secondary">{t(`milestone.${milestone.role}`)}</span></button> : null; })}</div></div>;
-                                    })}
-                                </div>
-                            </div>
-                        ))}
-                        {map.story_threads.length === 0 && <p className="text-xs text-text-muted">{t("noStorylines")}</p>}
-                    </div>
-                </div>}
                 {viewMode === "editor" && <div className="space-y-4">
                     {map.story_threads.map((thread, index) => (
                         <article id={`storyline-${thread.thread_id}`} key={thread.thread_id} className="scroll-mt-4 rounded-lg border border-border bg-surface p-3 sm:p-4">
@@ -1049,6 +1034,7 @@ function StoryMapSection({
                     {sceneSummaries.length === 0 && <p className="rounded border border-dashed border-border p-3 text-xs text-text-muted">{t("noSceneSummaries")}</p>}
                 </div>
             </section>
+            </>}
 
             {(oldTimeline.length > 0 || oldRelationships.length > 0 || oldKeyEvents.length > 0) && (
                 <details className="rounded-lg border border-border bg-background/30 p-4">
