@@ -132,6 +132,7 @@ it('passes explicit sound and generation duration and invalidates changed plans'
   vi.mocked(recreationApi.generationPlan).mockResolvedValue({ revision: 4, ready: true, blockers: [], shots: [] });
   render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
   fireEvent.change(screen.getByRole('combobox', { name: 'audioPolicy' }), { target: { value: 'generated' } });
+  expect(screen.getByRole('note')).toHaveTextContent('generatedAudioDescription');
   fireEvent.change(screen.getByRole('textbox', { name: 'soundRequirements' }), { target: { value: 'Footsteps only' } });
   fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '5' } });
   fireEvent.click(screen.getByRole('button', { name: 'checkPlan' }));
