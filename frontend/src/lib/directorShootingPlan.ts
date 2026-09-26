@@ -37,6 +37,9 @@ export interface DirectorPlanBeat {
     title: string;
     dramatic_purpose: string;
     emotional_change: string;
+    duration_seconds: number | null;
+    keep_with_next: boolean;
+    source_chunk_refs: string[];
     story_event_ids: string[];
     shots: DirectorPlanShot[];
 }
@@ -48,6 +51,10 @@ export interface DirectorPlanScene {
     heading: string;
     location: string;
     time_anchor: string;
+    continues_previous_scene: boolean;
+    continuity_in: string;
+    continuity_out: string;
+    duration_seconds: number | null;
     environment_atmosphere: string;
     unresolved_questions: string[];
     source_chunk_refs: string[];

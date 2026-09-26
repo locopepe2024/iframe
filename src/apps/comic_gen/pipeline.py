@@ -2817,6 +2817,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                         target["time_anchor"] = str(raw_scene.get("time_anchor", ""))[:160]
                     if not target["environment_atmosphere"]:
                         target["environment_atmosphere"] = str(raw_scene.get("environment_atmosphere", ""))[:1600]
+                    if not target["continuity_in"]:
+                        target["continuity_in"] = str(raw_scene.get("continuity_in", ""))[:1200]
+                    if raw_scene.get("continuity_out"):
+                        target["continuity_out"] = str(raw_scene.get("continuity_out", ""))[:1200]
+                    if target["duration_seconds"] is None and isinstance(raw_scene.get("duration_seconds"), int):
+                        target["duration_seconds"] = raw_scene["duration_seconds"]
                     beat_offset = len(target["beats"])
                 else:
                     target = {
@@ -2827,6 +2833,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "location": str(raw_scene.get("location", ""))[:240],
                         "time_anchor": str(raw_scene.get("time_anchor", ""))[:160],
                         "environment_atmosphere": str(raw_scene.get("environment_atmosphere", ""))[:1600],
+                        "continues_previous_scene": continuation,
+                        "continuity_in": str(raw_scene.get("continuity_in", ""))[:1200],
+                        "continuity_out": str(raw_scene.get("continuity_out", ""))[:1200],
+                        "duration_seconds": raw_scene.get("duration_seconds") if isinstance(raw_scene.get("duration_seconds"), int) else None,
                         "unresolved_questions": [],
                         "source_chunk_refs": [chunk["source_ref"]],
                         "prop_ids": [],
@@ -2855,6 +2865,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "title": str(raw_beat.get("title", ""))[:180],
                         "dramatic_purpose": str(raw_beat.get("dramatic_purpose", ""))[:1200],
                         "emotional_change": str(raw_beat.get("emotional_change", ""))[:1000],
+                        "duration_seconds": raw_beat.get("duration_seconds") if isinstance(raw_beat.get("duration_seconds"), int) else None,
+                        "keep_with_next": raw_beat.get("keep_with_next") is True,
+                        "source_chunk_refs": [chunk["source_ref"]],
                         "story_event_ids": raw_beat.get("story_event_ids", []),
                         "shots": [],
                     }

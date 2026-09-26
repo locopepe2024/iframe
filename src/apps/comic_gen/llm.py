@@ -1528,9 +1528,10 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         scene_keys = {
             "scene_ref", "heading", "location", "time_anchor",
             "environment_atmosphere", "prop_ids", "unresolved_questions",
-            "continues_previous_scene", "beats",
+            "continues_previous_scene", "continuity_in", "continuity_out",
+            "duration_seconds", "beats",
         }
-        beat_keys = {"title", "dramatic_purpose", "emotional_change", "story_event_ids", "shots"}
+        beat_keys = {"title", "dramatic_purpose", "emotional_change", "duration_seconds", "keep_with_next", "source_chunk_refs", "story_event_ids", "shots"}
         shot_keys = {
             "title", "visual_intent", "performance_action", "action_physics",
             "shot_size", "camera_angle", "composition", "camera_movement",
@@ -1553,6 +1554,11 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 return f"scene {scene_index + 1} 缺少环境氛围"
             if "continues_previous_scene" in scene and not isinstance(scene["continues_previous_scene"], bool):
                 return f"scene {scene_index + 1} continues_previous_scene 必须是布尔值"
+            for key in ("continuity_in", "continuity_out"):
+                if key in scene and not isinstance(scene[key], str):
+                    return f"scene {scene_index + 1} 的 {key} 必须是字符串"
+            if "duration_seconds" in scene and (not isinstance(scene["duration_seconds"], int) or isinstance(scene["duration_seconds"], bool) or not 1 <= scene["duration_seconds"] <= 1800):
+                return f"scene {scene_index + 1} duration_seconds 必须是 1–1800 的整数"
             for key in ("prop_ids", "unresolved_questions"):
                 values = scene.get(key, [])
                 if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
@@ -1569,6 +1575,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                     return f"scene {scene_index + 1} beat {beat_index + 1} 的情绪变化必须是字符串"
                 if not nonempty(beat.get("title")) or not nonempty(beat.get("dramatic_purpose")):
                     return f"scene {scene_index + 1} beat {beat_index + 1} 缺少标题或戏剧目的"
+                if "duration_seconds" in beat and (not isinstance(beat["duration_seconds"], int) or isinstance(beat["duration_seconds"], bool) or not 1 <= beat["duration_seconds"] <= 300):
+                    return f"scene {scene_index + 1} beat {beat_index + 1} duration_seconds 必须是 1–300 的整数"
+                if "keep_with_next" in beat and not isinstance(beat["keep_with_next"], bool):
+                    return f"scene {scene_index + 1} beat {beat_index + 1} keep_with_next 必须是布尔值"
+                if "source_chunk_refs" in beat and (not isinstance(beat["source_chunk_refs"], list) or any(not isinstance(item, str) for item in beat["source_chunk_refs"])):
+                    return f"scene {scene_index + 1} beat {beat_index + 1} source_chunk_refs 必须是字符串数组"
                 event_ids = beat.get("story_event_ids", [])
                 if not isinstance(event_ids, list) or any(not isinstance(item, str) for item in event_ids):
                     return f"scene {scene_index + 1} beat {beat_index + 1} story_event_ids 必须是字符串数组"
@@ -1641,14 +1653,14 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
 规划要求：
 1. 先判断场景，再组织每场戏的戏剧 beat，最后根据叙事目的决定 shots。不要把每个动作或每句对白机械拆成一个 shot；连续动作可以放在同一镜头，只有视线/情绪/空间/信息变化值得剪切时才增加镜头。
-2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、environment_atmosphere、prop_ids、unresolved_questions 和 beats。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。
-3. 每个 beat 填 title、dramatic_purpose、emotional_change、story_event_ids 和 shots。story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
+2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。
+3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
 5. lighting 必须严格包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。镜头内环境光应符合场景与风格。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 写此镜头能听见的环境底噪/具体声响。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
-必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。scene 还可包含 continues_previous_scene 布尔值；只有片段开头有明确连续动作/连续场次证据时才设为 true，不要仅因地点相同而续接。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成。
+必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
 
 <source_chunk ref="{source_ref}">
 {script_chunk}

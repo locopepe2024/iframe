@@ -1015,6 +1015,9 @@ class DirectorPlanBeat(_DirectorShootingPlanModel):
     title: str = Field("", max_length=180)
     dramatic_purpose: str = Field("", max_length=1200)
     emotional_change: str = Field("", max_length=1000)
+    duration_seconds: Optional[int] = Field(None, ge=1, le=300)
+    keep_with_next: bool = False
+    source_chunk_refs: List[str] = Field(default_factory=list, max_length=160)
     story_event_ids: List[str] = Field(default_factory=list, max_length=40)
     shots: List[DirectorPlanShot] = Field(default_factory=list, max_length=40)
 
@@ -1022,6 +1025,8 @@ class DirectorPlanBeat(_DirectorShootingPlanModel):
     def validate_ids_and_orders(self):
         if len(self.story_event_ids) != len(set(self.story_event_ids)):
             raise ValueError("shooting-plan beat story event IDs must be unique")
+        if len(self.source_chunk_refs) != len(set(self.source_chunk_refs)):
+            raise ValueError("shooting-plan beat source chunk refs must be unique")
         shot_ids = [shot.shot_id for shot in self.shots]
         shot_orders = [shot.order for shot in self.shots]
         if len(shot_ids) != len(set(shot_ids)) or len(shot_orders) != len(set(shot_orders)):
@@ -1038,6 +1043,10 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
     heading: str = Field("", max_length=240)
     location: str = Field("", max_length=240)
     time_anchor: str = Field("", max_length=160)
+    continues_previous_scene: bool = False
+    continuity_in: str = Field("", max_length=1200)
+    continuity_out: str = Field("", max_length=1200)
+    duration_seconds: Optional[int] = Field(None, ge=1, le=1800)
     environment_atmosphere: str = Field("", max_length=1600)
     unresolved_questions: List[str] = Field(default_factory=list, max_length=20)
     source_chunk_refs: List[str] = Field(default_factory=list, max_length=160)

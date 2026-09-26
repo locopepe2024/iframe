@@ -48,6 +48,7 @@ function emptyShot(order: number): DirectorPlanShot {
 function emptyBeat(order: number): DirectorPlanBeat {
     return {
         beat_id: newId("plan-beat"), order, title: "", dramatic_purpose: "", emotional_change: "",
+        duration_seconds: null, keep_with_next: false, source_chunk_refs: [],
         story_event_ids: [], shots: [emptyShot(0)],
     };
 }
@@ -55,6 +56,7 @@ function emptyBeat(order: number): DirectorPlanBeat {
 function emptyScene(order: number): DirectorPlanScene {
     return {
         scene_id: newId("plan-scene"), order, scene_ref: "", heading: "", location: "", time_anchor: "",
+        continues_previous_scene: false, continuity_in: "", continuity_out: "", duration_seconds: null,
         environment_atmosphere: "", unresolved_questions: [], source_chunk_refs: [], prop_ids: [],
         beats: [emptyBeat(0)],
     };
@@ -506,7 +508,16 @@ export default function DirectorShootingPlanPanel() {
                                         <Field label={t("fields.heading")} value={scene.heading} onChange={value => updateScene(sceneIndex, { heading: value })} />
                                         <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
+                                        <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
                                     </div>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <Field label={t("fields.continuityIn")} value={scene.continuity_in} multiline onChange={value => updateScene(sceneIndex, { continuity_in: value })} />
+                                        <Field label={t("fields.continuityOut")} value={scene.continuity_out} multiline onChange={value => updateScene(sceneIndex, { continuity_out: value })} />
+                                    </div>
+                                    <label className="inline-flex items-center gap-2 text-xs text-text-secondary">
+                                        <input type="checkbox" checked={scene.continues_previous_scene} onChange={event => updateScene(sceneIndex, { continues_previous_scene: event.target.checked })} className="accent-primary" />
+                                        {t("fields.continuesPreviousScene")}
+                                    </label>
                                     <Field label={t("fields.environmentAtmosphere")} value={scene.environment_atmosphere} multiline onChange={value => updateScene(sceneIndex, { environment_atmosphere: value })} />
                                     <div className="grid gap-4 lg:grid-cols-2">
                                         <MultiSelect label={t("fields.sceneProps")} values={scene.prop_ids} options={propOptions} onChange={values => updateScene(sceneIndex, { prop_ids: values })} />
@@ -571,6 +582,8 @@ export default function DirectorShootingPlanPanel() {
                                                 <div className="grid gap-3 sm:grid-cols-2">
                                                     <Field label={t("fields.beatTitle")} value={beat.title} onChange={value => updateBeat(sceneIndex, beatIndex, { title: value })} />
                                                     <Field label={t("fields.emotionalChange")} value={beat.emotional_change} onChange={value => updateBeat(sceneIndex, beatIndex, { emotional_change: value })} />
+                                                    <Field label={t("fields.beatDuration")} type="number" min={1} max={300} value={beat.duration_seconds} onChange={value => updateBeat(sceneIndex, beatIndex, { duration_seconds: value ? Number(value) : null })} />
+                                                    <label className="inline-flex items-center gap-2 self-end pb-2 text-xs text-text-secondary"><input type="checkbox" checked={beat.keep_with_next} onChange={event => updateBeat(sceneIndex, beatIndex, { keep_with_next: event.target.checked })} className="accent-primary" />{t("fields.keepWithNext")}</label>
                                                     <div className="sm:col-span-2"><Field label={t("fields.dramaticPurpose")} value={beat.dramatic_purpose} multiline onChange={value => updateBeat(sceneIndex, beatIndex, { dramatic_purpose: value })} /></div>
                                                     <div className="sm:col-span-2"><MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} /></div>
                                                 </div>

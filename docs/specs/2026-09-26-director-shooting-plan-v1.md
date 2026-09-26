@@ -73,3 +73,14 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 ## Implementation boundary
 
 Ship this as local commits only. Do not push or deploy. Keep story understanding, shooting plan, style selection, Assets, Storyboard and Motion as separate user decisions and revision/lineage boundaries.
+
+## Continuation slice: scene continuity and beat timing (2026-09-26)
+
+The shooting-plan editor now carries explicit continuity metadata without changing
+confirmation semantics:
+
+- Scene fields: `continues_previous_scene`, `continuity_in`, `continuity_out`, and optional `duration_seconds`.
+- Beat fields: optional `duration_seconds`, `keep_with_next`, and generated `source_chunk_refs`.
+- LLM output may propose continuity and durations; the server validates and binds source chunk refs.
+- Chunk stitching preserves continuity metadata when the first scene of a later chunk continues the previous scene.
+- These fields describe planning continuity only. They do not create Storyboard frames or Motion tasks.
