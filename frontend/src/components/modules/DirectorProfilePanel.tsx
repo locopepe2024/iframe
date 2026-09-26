@@ -70,6 +70,15 @@ export default function DirectorProfilePanel() {
             return null;
         }
     }, [draftText]);
+    const storyMapHasFactReferences = useMemo(() => {
+        try {
+            const parsed = JSON.parse(draftText) as { story_map?: { phases?: Array<{ events?: Array<{ source_fact_ids?: unknown }> }>; relationship_arcs?: Array<{ states?: Array<{ source_fact_ids?: unknown }> }> } };
+            return (parsed.story_map?.phases ?? []).some(phase => (phase.events ?? []).some(event => Array.isArray(event.source_fact_ids) && event.source_fact_ids.length > 0))
+                || (parsed.story_map?.relationship_arcs ?? []).some(arc => (arc.states ?? []).some(state => Array.isArray(state.source_fact_ids) && state.source_fact_ids.length > 0));
+        } catch {
+            return false;
+        }
+    }, [draftText]);
 
     useEffect(() => {
         if (!currentProject) {
@@ -104,13 +113,13 @@ export default function DirectorProfilePanel() {
         })().catch(() => {
             if (active) {
                 setFactEvidence(null);
-                setFactsError(t("directorEditor.storyMap.factLoadFailed"));
+                setFactsError(storyMapHasFactReferences ? t("directorEditor.storyMap.factLoadFailed") : "");
             }
         }).finally(() => {
             if (active) setFactsLoading(false);
         });
         return () => { active = false; };
-    }, [currentProject?.id, sourceRevision, requestedFactLedgerRevision, factRefreshToken, t]);
+    }, [currentProject?.id, sourceRevision, requestedFactLedgerRevision, factRefreshToken, storyMapHasFactReferences, t]);
 
     useEffect(() => {
         const fallback = editableProfile(confirmed);
