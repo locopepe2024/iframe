@@ -136,19 +136,18 @@ git diff --check
 
 ## 当前通过基线（2026-09-26）
 
-- 后端 Director/身份相关：19 项通过
+- Director 后端/profile/shooting/storyboard 相关：72 项通过
 - Director UI：12 项通过
 - 前端 typecheck：通过
 - `git diff --check`：通过
-- 生产 build：尚未在本轮验收中执行
+- 前端 production build：通过
 
 ## 未覆盖风险
 
-1. 生产 build 仍需单独执行；通过 typecheck 不等于 build 一定通过。
-2. 真实浏览器中的窄屏、键盘完整流程需要 UI 运行验收。
-3. LLM 生成质量不能由 schema 测试证明，只能证明输出契约和边界校验。
-4. Storyboard handoff 尚未属于当前验收范围。
-5. 远端部署后的 Director UI bundle 需要重新构建后才能验证线上前端行为。
+1. 真实浏览器中的窄屏、键盘完整流程需要 UI 运行验收。
+2. LLM 生成质量不能由 schema 测试证明，只能证明输出契约和边界校验。
+3. Storyboard handoff 尚未属于当前验收范围。
+4. 远端部署后的 Director UI bundle 需要 HTTPS 冒烟验证线上前端行为。
 
 ## 部署测试门
 
