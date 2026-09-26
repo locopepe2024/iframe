@@ -102,9 +102,16 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
   let config = MODE_CONFIG[mode === 't2v' ? 'i2v' : mode];
 
-  const imageLimit = getModelsForMode(mode).find((model) => model.id === modelId)?.maxReferenceImages;
-  if (config && (mode === 't2i' || mode === 'i2i') && imageLimit && imageLimit > 0) {
-    config = { ...config, multiple: imageLimit > 1, maxFiles: imageLimit };
+  const selectedModeModel = getModelsForMode(mode).find((model) => model.id === modelId);
+  const isRuntimeUniArt = modelId.startsWith('uniart/') && !!selectedModeModel;
+  const publishedMaterialLimit = selectedModeModel
+    ? selectedModeModel.maxReferenceImages + selectedModeModel.maxReferenceVideos + selectedModeModel.maxReferenceAudios
+    : 0;
+  // UniArt publishes per-SKU modality capacities at runtime. Use those
+  // capacities for every UniArt input mode, including i2v; legacy models keep
+  // their existing UI defaults when no runtime capability is available.
+  if (config && isRuntimeUniArt && publishedMaterialLimit > 0) {
+    config = { ...config, multiple: publishedMaterialLimit > 1, maxFiles: publishedMaterialLimit };
   }
 
   // Override r2v config when Seedance is selected
@@ -119,14 +126,18 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   if (config && mode === 'r2v' && modelId.startsWith('uniart/') && selectedModel) {
     config = { ...config,
       accept: ['image/*', ...(selectedModel.maxReferenceVideos ? ['video/*'] : []), ...(selectedModel.maxReferenceAudios ? ['audio/*'] : [])].join(','),
-      maxFiles: selectedModel.maxReferenceImages + selectedModel.maxReferenceVideos + selectedModel.maxReferenceAudios || config.maxFiles,
     };
   }
 
   if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: Number.POSITIVE_INFINITY };
   // Uploading a reference is separate from the provider's per-model capacity checks.
   if (agentMode || mode === 'r2v') config = {
-    ...config!, multiple: true, maxFiles: Math.max(config?.maxFiles || 0, 16),
+    ...config!, multiple: true,
+    maxFiles: agentMode
+      ? Number.POSITIVE_INFINITY
+      : isRuntimeUniArt && publishedMaterialLimit > 0
+        ? publishedMaterialLimit
+        : Math.max(config?.maxFiles || 0, 16),
     accept: 'image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.aiff,.aif,.wma,.txt,.md,.csv,.json,.srt,.vtt',
   };
 

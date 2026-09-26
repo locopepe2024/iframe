@@ -42,6 +42,15 @@ it('uses UniArt reference modality capacities rather than a legacy model prefix'
   expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toContain('image/*,video/*,audio/*');
   expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toContain('.txt');
 });
+it('uses UniArt published capacity for i2v instead of the legacy one-file default', async () => {
+  installUniArtCatalog([{ id: 'uniart/seedance-2.5-vip', api_model_id: 'seedance-2.5-vip', display_name: 'Seedance', description: '', family: 'seedance', provider: 'uniart', capabilities: ['i2v'], inputs: { reference_images: { max: 4 } } }]);
+  usePlaygroundStore.setState({ mode: 'i2v', modelId: 'uniart/seedance-2.5-vip', inputMedia: [] });
+  const { container } = render(<MediaInput />);
+  expect(screen.getByText('media.localUpload')).not.toBeDisabled();
+  upload.mockResolvedValueOnce({ path: '/one.png' }).mockResolvedValueOnce({ path: '/two.png' });
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['1'], 'one.png'), new File(['2'], 'two.png')] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/one.png', '/two.png']));
+});
 it.each([true, false])('offers audio/video/text uploads with agentMode=%s even without catalog limits', (agentMode) => {
   usePlaygroundStore.setState({ mode: 'r2v', modelId: 'uniart/minimax-h3-vip', inputMedia: [] });
   const { container } = render(<MediaInput agentMode={agentMode} />);
