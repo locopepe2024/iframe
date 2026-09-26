@@ -21,6 +21,7 @@ const project: RecreationProject = {
 };
 
 beforeEach(() => {
+  window.localStorage.clear();
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
   vi.mocked(recreationApi.media).mockResolvedValue({ media_id: "image", project_id: "source", kind: "evidence_frame", display_name: "Evidence", storage_path: "/image.png", sha256: "hash", created_at: 1, metadata: {} });
@@ -31,7 +32,7 @@ beforeEach(() => {
   vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
     timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); window.localStorage.clear(); vi.useRealTimers(); vi.clearAllMocks(); });
 
 async function open() {
   render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
@@ -40,6 +41,23 @@ async function open() {
 }
 
 describe("recreation confirmation", () => {
+  it("restores the last project and workflow stage after reload", async () => {
+    window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "source", step: "analyze" }));
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    expect(await screen.findByRole("heading", { name: "Original.mp4" })).toBeInTheDocument();
+    expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
+    expect(recreationApi.get).toHaveBeenCalledWith("source");
+  });
+
+  it("clears an inaccessible saved project without blocking the project list", async () => {
+    window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "missing", step: "replace" }));
+    vi.mocked(recreationApi.get).mockRejectedValueOnce(new Error("not found"));
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    expect(await screen.findByRole("button", { name: /Original.mp4/ })).toBeInTheDocument();
+    expect(window.localStorage.getItem("iframe.recreation.workspace.v1")).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("navigates the six workflow stages and keeps asset management available", async () => {
     await open();
     expect(screen.getByRole("img", { name: "Previous frame" })).toHaveAttribute("src", expect.stringContaining("/before-preview.webp"));
