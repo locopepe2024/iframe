@@ -210,6 +210,7 @@ export default function ShotReferences({ project, disabled, stage, onProgress, o
     <label className="block text-sm">{t("audioPolicy")}<select className="glass-input block" value={audioPolicy} onChange={e => setAudioPolicy(e.target.value)}>
       <option value="silent">{t("silent")}</option><option value="generated">{t("generatedAudio")}</option><option value="preserve_source">{t("preserveAudio")}</option>
     </select></label>
+    {audioPolicy === "generated" && <p className="text-xs text-text-muted" role="note">{t("generatedAudioDescription")}</p>}
     {audioPolicy === "generated" && <label className="block text-sm">{t("soundRequirements")}<textarea className="glass-input block w-full" maxLength={2000} value={soundscape} onChange={e => setSoundscape(e.target.value)} /></label>}
     <div className="flex flex-wrap gap-3">{project.timeline?.shots.map((s, i) => <label key={s.id} className="text-sm">{t("shot")} {i + 1} · {t("generationSeconds")}
       <input type="number" min={4} max={15} step={1} className="glass-input block w-24" value={durations[s.id!] ?? ""} onChange={e => setDurations(all => ({ ...all, [s.id!]: Number(e.target.value) }))} />
