@@ -124,7 +124,11 @@ class RecreationService:
         options = [str(value) for value in options or [] if value is not None]
         if not options:
             raise HTTPException(422, "Selected video model has no resolution capability in the current UniArt catalog")
-        if str(default) not in options:
+        # Recreation favors the lower supported tier to control cost and
+        # latency. The preference is only used when UniArt advertises it.
+        if "720p" in options:
+            default = "720p"
+        elif str(default) not in options:
             default = options[0]
         ratios = params.get("ratio") if isinstance(params, dict) else None
         ratio_options = [str(value) for value in (ratios.get("options") if isinstance(ratios, dict) else []) if value]
