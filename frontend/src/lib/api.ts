@@ -81,32 +81,39 @@ const getApiUrl = (): string => {
 
 export const API_URL = getApiUrl();
 
-const BROWSER_INSTALLATION_KEY = "lumenx-browser-installation";
-const BROWSER_INSTALLATION_HEADER = "X-iFrame-Browser-Installation";
+const API_KEY_IDENTITY_KEY = "lumenx-api-key-identity";
+const API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity";
 
 /**
- * Anonymous browser mode normally uses the HttpOnly profile cookie. This
- * local identifier is only a continuity hint for cookie-restricted browsers
- * and embedded runtimes; it is never an authentication credential.
+ * The open-source iframe build uses a provider API-key fingerprint as the
+ * workspace identity. Only the fingerprint is retained locally; the provider
+ * key itself remains in the encrypted user-config store.
  */
-export const getBrowserInstallationId = (): string | null => {
+export const getApiKeyIdentity = (): string | null => {
     if (typeof window === "undefined") return null;
     try {
-        const existing = window.localStorage.getItem(BROWSER_INSTALLATION_KEY);
+        const existing = window.localStorage.getItem(API_KEY_IDENTITY_KEY);
         if (existing && /^[A-Za-z0-9_-]{1,128}$/.test(existing)) return existing;
-        const generated = window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-        window.localStorage.setItem(BROWSER_INSTALLATION_KEY, generated);
-        return generated;
     } catch {
-        return null;
+        /* local storage unavailable */
     }
+    return null;
 };
 
-axios.interceptors.request.use((config) => {
-    const installationId = getBrowserInstallationId();
-    if (installationId && !config.headers?.[BROWSER_INSTALLATION_HEADER]) {
+export const setApiKeyIdentity = async (apiKey: string): Promise<string | null> => {
+    if (typeof window === "undefined" || !apiKey.trim()) return null;
+    const bytes = new TextEncoder().encode(apiKey.trim());
+    const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+    const identity = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    window.localStorage.setItem(API_KEY_IDENTITY_KEY, identity);
+    return identity;
+};
+
+axios.interceptors.request.use(async (config) => {
+    const apiKeyIdentity = getApiKeyIdentity();
+    if (apiKeyIdentity && !config.headers?.[API_KEY_IDENTITY_HEADER]) {
         config.headers = config.headers ?? {};
-        config.headers[BROWSER_INSTALLATION_HEADER] = installationId;
+        config.headers[API_KEY_IDENTITY_HEADER] = apiKeyIdentity;
     }
     return config;
 });
@@ -121,9 +128,9 @@ export const authenticatedFetch = (
         if (token && !headers.has("Authorization")) {
             headers.set("Authorization", `Bearer ${token}`);
         }
-        const installationId = getBrowserInstallationId();
-        if (installationId && !headers.has(BROWSER_INSTALLATION_HEADER)) {
-            headers.set(BROWSER_INSTALLATION_HEADER, installationId);
+        const apiKeyIdentity = getApiKeyIdentity();
+        if (apiKeyIdentity && !headers.has(API_KEY_IDENTITY_HEADER)) {
+            headers.set(API_KEY_IDENTITY_HEADER, apiKeyIdentity);
         }
     }
     return fetch(input, { ...init, headers });

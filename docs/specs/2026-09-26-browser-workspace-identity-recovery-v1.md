@@ -1,34 +1,30 @@
-# Browser workspace identity recovery v1
+# API-key workspace identity recovery v1
 
 ## Observed
 
 - Workspaces, projects, and user configuration are scoped by the server-side
   `owner_profile_id`.
-- Anonymous browser mode normally derives that owner from the HttpOnly
-  `lumenx-browser-profile` cookie.
-- The provider API key is encrypted configuration; it is not a workspace
-  identity and must not be used as one.
-- A browser restart or embedded runtime can lose or omit the cookie while
-  retaining local storage. The server then creates a new anonymous owner and
-  historical projects appear missing.
+- The open-source iframe build uses the configured provider API key as the
+  stable workspace identity.
+- The API key itself must not be persisted in project records or owner IDs;
+  only a one-way fingerprint is used for identity lookup.
 
 ## Contract
 
 1. Bearer identity remains authoritative when present.
-2. The HttpOnly browser-profile cookie remains authoritative when present.
-3. When neither is present, the frontend sends a random, browser-local
-   installation identifier from local storage. The backend may use it only to
-   recreate the same anonymous browser owner and must set the normal HttpOnly
-   cookie again.
-4. The installation identifier is a continuity hint, not authentication. It
-   must never override a bearer token or an existing browser-profile cookie.
-5. API keys remain provider credentials and are never converted into owner IDs.
+2. The frontend stores only a SHA-256 fingerprint of the configured API key
+   and sends it as the workspace identity hint.
+3. The backend maps that fingerprint to a stable `apikey-*` owner scope.
+4. A legacy browser-profile cookie is accepted only when no API-key identity
+   is available; once a key is configured, the key-derived owner wins.
+5. The API key fingerprint is a workspace namespace, not a provider
+   authorization substitute; provider calls still use the encrypted key.
 
 ## Success criteria
 
-- A cookie-preserving browser keeps the existing owner behavior.
-- If the cookie is missing after restart but local storage remains, the same
-  owner profile and historical projects are recovered.
-- Two fresh browser installations receive different owner profiles.
-- Bearer requests ignore the continuity hint.
-- No secret or provider API key is stored in the continuity identifier.
+- Restarting the browser with the same configured API key recovers the same
+  owner profile and historical projects.
+- Different API keys receive different owner profiles.
+- Bearer requests remain authoritative for integrations that use them.
+- No plaintext API key is stored in the identity header, owner ID, or project
+  data.

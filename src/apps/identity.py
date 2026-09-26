@@ -28,8 +28,8 @@ class LoginRequest(BaseModel):
 
 BROWSER_PROFILE_COOKIE = "lumenx-browser-profile"
 BROWSER_PROFILE_MAX_AGE = 60 * 60 * 24 * 365
-BROWSER_INSTALLATION_HEADER = "X-iFrame-Browser-Installation"
-BROWSER_INSTALLATION_MAX_LENGTH = 128
+API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity"
+API_KEY_IDENTITY_MAX_LENGTH = 64
 
 
 class UniArtIdentityClient:
@@ -128,36 +128,39 @@ def _new_browser_context() -> UserContext:
     return _browser_context(secrets.token_urlsafe(32))
 
 
-def _browser_context_from_installation(installation_id: str | None) -> UserContext | None:
-    """Recover an anonymous browser owner when the HttpOnly cookie is absent.
-
-    This is a continuity hint for embedded runtimes and cookie-restricted
-    browsers, not an authentication mechanism. Keep the accepted alphabet
-    narrow so a caller cannot smuggle arbitrary owner-shaped values into the
-    persisted path namespace.
-    """
-    normalized = (installation_id or "").strip()
-    if not normalized or len(normalized) > BROWSER_INSTALLATION_MAX_LENGTH:
+def _api_key_context(identity_key: str | None) -> UserContext | None:
+    """Resolve the stable owner derived from a provider-key fingerprint."""
+    normalized = (identity_key or "").strip().lower()
+    if not normalized or len(normalized) > API_KEY_IDENTITY_MAX_LENGTH:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", normalized):
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized):
         return None
-    return _browser_context(f"installation-{normalized}")
+    return UserContext(
+        user_id=f"apikey-{normalized}",
+        owner_profile_id=f"apikey-{normalized}",
+        display_name="API key workspace",
+        access_token="",
+    )
 
 
 def _resolve_request_context(
     authorization: str | None,
     browser_profile: str | None,
-    browser_installation: str | None = None,
+    api_key_identity: str | None = None,
 ) -> tuple[UserContext, bool]:
     if authorization:
         token = _extract_bearer(authorization)
         payload = UniArtIdentityClient().me(token)
         return _context_from_payload(payload, token), False
+    key_context = _api_key_context(api_key_identity)
+    if key_context is not None:
+        return key_context, True
     if browser_profile:
+        if browser_profile.startswith("apikey-"):
+            key_context = _api_key_context(browser_profile.removeprefix("apikey-"))
+            if key_context is not None:
+                return key_context, False
         return _browser_context(browser_profile), False
-    recovered = _browser_context_from_installation(browser_installation)
-    if recovered is not None:
-        return recovered, True
     return _new_browser_context(), True
 
 
@@ -181,13 +184,13 @@ def require_user_context(
     response: Response,
     authorization: str | None = Header(default=None),
     browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
-    browser_installation: str | None = Header(default=None, alias=BROWSER_INSTALLATION_HEADER),
+    api_key_identity: str | None = Header(default=None, alias=API_KEY_IDENTITY_HEADER),
 ) -> UserContext:
     existing = getattr(request.state, "lumenx_identity", None)
     if existing is not None:
         return existing
     identity, should_set_cookie = _resolve_request_context(
-        authorization, browser_profile, browser_installation
+        authorization, browser_profile, api_key_identity
     )
     request.state.lumenx_identity = identity
     if should_set_cookie:
@@ -209,10 +212,10 @@ def me(
     response: Response,
     authorization: str | None = Header(default=None),
     browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
-    browser_installation: str | None = Header(default=None, alias=BROWSER_INSTALLATION_HEADER),
+    api_key_identity: str | None = Header(default=None, alias=API_KEY_IDENTITY_HEADER),
 ):
     identity, should_set_cookie = _resolve_request_context(
-        authorization, browser_profile, browser_installation
+        authorization, browser_profile, api_key_identity
     )
     if should_set_cookie:
         _set_browser_profile_cookie(response, request, identity)

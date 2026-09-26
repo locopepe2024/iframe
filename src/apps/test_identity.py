@@ -39,34 +39,44 @@ def test_missing_browser_profile_creates_a_new_scope():
     assert second_should_set_cookie is True
 
 
-def test_installation_hint_recovers_the_same_anonymous_scope_when_cookie_is_missing():
+def test_api_key_identity_recovers_the_same_workspace_when_cookie_is_missing():
     first, first_should_set_cookie = _resolve_request_context(
-        None, None, "stable-installation-id"
+        None, None, "a" * 64
     )
     second, second_should_set_cookie = _resolve_request_context(
-        None, None, "stable-installation-id"
+        None, None, "a" * 64
     )
 
     assert first == second
-    assert first.owner_profile_id == "browser-installation-stable-installation-id"
+    assert first.owner_profile_id == "apikey-" + "a" * 64
     assert first_should_set_cookie is True
     assert second_should_set_cookie is True
 
 
-def test_existing_cookie_wins_over_installation_hint():
+def test_api_key_identity_takes_precedence_over_old_cookie():
     identity, should_set_cookie = _resolve_request_context(
-        None, "cookie-profile", "different-installation"
+        None, "cookie-profile", "b" * 64
     )
 
-    assert identity.owner_profile_id == "browser-cookie-profile"
-    assert should_set_cookie is False
+    assert identity.owner_profile_id == "apikey-" + "b" * 64
+    assert should_set_cookie is True
 
 
-def test_invalid_installation_hint_creates_a_fresh_scope():
+def test_api_key_cookie_can_restore_the_same_workspace_without_header():
+    identity, _ = _resolve_request_context(None, None, "c" * 64)
+    restored, restored_should_set_cookie = _resolve_request_context(
+        None, identity.owner_profile_id, None
+    )
+
+    assert restored == identity
+    assert restored_should_set_cookie is False
+
+
+def test_invalid_api_key_identity_creates_a_fresh_scope():
     identity, should_set_cookie = _resolve_request_context(None, None, "bad id")
 
     assert identity.owner_profile_id.startswith("browser-")
-    assert "installation-bad" not in identity.owner_profile_id
+    assert "apikey-bad" not in identity.owner_profile_id
     assert should_set_cookie is True
 
 

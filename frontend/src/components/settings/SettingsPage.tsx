@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check, RefreshCw, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { api, playgroundApi, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
+import { api, playgroundApi, setApiKeyIdentity, type EnvConfigPayload, type UserConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
 import { ASPECT_RATIOS } from "@/store/projectStore";
 import {
   DEFAULT_MODEL_SETTINGS,
@@ -350,6 +350,9 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
+      if (config.UNIART_API_KEY?.trim()) {
+        await setApiKeyIdentity(config.UNIART_API_KEY.trim());
+      }
       const saved = await api.saveUserConfig({
         ...(config.UNIART_API_KEY?.trim() ? { UNIART_API_KEY: config.UNIART_API_KEY.trim() } : {}),
         UNIART_BASE_URL: config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1",

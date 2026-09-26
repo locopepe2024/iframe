@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { KeyRound, Loader2, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { api } from "@/lib/api";
+import { api, setApiKeyIdentity } from "@/lib/api";
 
 interface EnvConfigDialogProps {
   isOpen: boolean;
@@ -44,6 +44,9 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
     setSaving(true);
     setError(null);
     try {
+      if (apiKey.trim()) {
+        await setApiKeyIdentity(apiKey.trim());
+      }
       const next = await api.saveUserConfig({
         ...(apiKey.trim() ? { UNIART_API_KEY: apiKey.trim() } : {}),
         UNIART_BASE_URL: baseUrl.trim(),
