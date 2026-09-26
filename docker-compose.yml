@@ -11,10 +11,13 @@ services:
     environment:
       - NO_PROXY=*.aliyuncs.com,localhost,127.0.0.1
     volumes:
-      - ./output:/app/output
+      - /srv/lumenx/output:/app/output
     ports:
       - "17177:17177"
     restart: unless-stopped
+    networks:
+      - default
+      - lumenx-net
 
   frontend:
     build:
@@ -26,3 +29,7 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+networks:
+  lumenx-net:
+    external: true
