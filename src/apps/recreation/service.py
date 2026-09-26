@@ -106,6 +106,28 @@ class RecreationService:
             raise HTTPException(422, f"Selected {label} model is unavailable for {capability} in the current UniArt catalog")
         return model_id
 
+    def _video_resolution_for_model(self, model):
+        """Return the catalog-owned default resolution for a video model.
+
+        A recreation task must carry the resolved provider parameter from the
+        UniArt capability catalog.  The worker must not invent a resolution
+        from a provider-specific constant because the live catalog is the
+        authority for supported values and defaults.
+        """
+        live_models = self._live_uniart_models()
+        candidates = live_models if live_models is not None else _static_uniart_models()
+        selected = next((item for item in candidates if item.get("id") == model), None)
+        params = selected.get("params") if isinstance(selected, dict) else None
+        resolution = params.get("resolution") if isinstance(params, dict) else None
+        options = resolution.get("options") if isinstance(resolution, dict) else None
+        default = resolution.get("default") if isinstance(resolution, dict) else None
+        options = [str(value) for value in options or [] if value is not None]
+        if not options:
+            raise HTTPException(422, "Selected video model has no resolution capability in the current UniArt catalog")
+        if str(default) not in options:
+            default = options[0]
+        return str(default)
+
     def _recreation_video_model(self, model):
         model_id = str(model or "").strip()
         # The prompt compiler currently proves only the MiniMax H3 native
@@ -659,6 +681,7 @@ class RecreationService:
 
     def generation_plan(self, project_id, revision, model=DEFAULT_RECREATION_VIDEO_MODEL, audio_policy="silent", soundscape="", generation_durations=None):
         model = self._recreation_video_model(model)
+        resolution = self._video_resolution_for_model(model)
         if audio_policy not in ("silent", "generated", "preserve_source"):
             raise HTTPException(422, "Unsupported audio policy")
         if audio_policy == "generated" and not soundscape.strip():
@@ -721,6 +744,7 @@ class RecreationService:
                               "generate_audio": audio_policy == "generated", "images": images, "prompt": prompt})
             return {"project_id": project_id, "revision": revision, "analysis_id": record["analysis_id"],
                     "model": model, "model_family": "minimax_h3", "mapping_strategy": "h3_picture_video_labels", "guidance": guidance,
+                    "resolution": resolution,
                     "source_video": {"media_id": source_media["media_id"], "sha256": source_media["sha256"], "label": "<Video 1>"},
                     "time_base": record["analysis"]["time_base"], "audio_policy": audio_policy, "ready": not blockers,
                     "submission_enabled": True,
@@ -781,6 +805,7 @@ class RecreationService:
                     "shot_id": shot["shot_id"], "shot_number": shot["shot_number"],
                     "revision": revision, "analysis_id": plan["analysis_id"], "status": "pending",
                     "model": model, "prompt": shot["prompt"], "duration": shot["generation_duration"],
+                    "resolution": plan["resolution"],
                     "audio_policy": audio_policy, "generate_audio": shot["generate_audio"],
                     "soundscape": soundscape, "seed": seed, "inputs": inputs,
                     "source_media_id": source_media["media_id"],
@@ -913,10 +938,7 @@ class RecreationService:
 
             kwargs = {
                 "model": task["model"], "mode": "reference2video", "duration": task["duration"],
-                # UniArt's video contract accepts 480p/720p for this route.
-                # 768p is not a valid Seedance/H3 resolution and is rejected
-                # by the provider as a metadata conflict.
-                "resolution": "720p", "generate_audio": task["generate_audio"],
+                "resolution": task["resolution"], "generate_audio": task["generate_audio"],
                 "on_task_submitted": save_provider_task,
             }
             if task.get("seed") is not None:
