@@ -617,6 +617,39 @@ def test_storyboard_analysis_context_passes_project_style_to_all_frames():
     )
 
 
+def test_storyboard_analysis_consumes_confirmed_director_revision_and_hash():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    profile = DirectorProfile(
+        revision=7,
+        content_hash="director-hash-7",
+        confirmed_at=1,
+        execution_summary="用户要求：保持冷静长镜头",
+    )
+    script = Script(
+        id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+        art_direction=ArtDirection(selected_style_id="film-noir", style_config={}, director_profile=profile),
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [], "props": []}, "prompt"
+    )
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.return_value = [{"action_summary": "角色停留"}]
+
+    result = pipeline.preview_storyboard_analysis("project", "source")
+
+    assert result[0]["action_summary"] == "角色停留"
+    kwargs = pipeline.script_processor.analyze_to_storyboard.call_args.kwargs
+    assert kwargs["director_profile"]["revision"] == 7
+    assert kwargs["director_profile"]["content_hash"] == "director-hash-7"
+    lineage = pipeline.storyboard_analysis_lineage("project", "source")
+    assert lineage.director_profile_revision == 7
+    assert lineage.director_profile_hash == "director-hash-7"
+
+
 def test_storyboard_visual_style_inherits_series_art_direction():
     from src.apps.comic_gen.pipeline import ComicGenPipeline
 
