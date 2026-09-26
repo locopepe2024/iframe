@@ -6,6 +6,8 @@ from src.apps.identity import (
     _browser_context,
     _resolve_request_context,
     _set_browser_profile_cookie,
+    _context_from_session_token,
+    create_session_token,
 )
 
 
@@ -91,3 +93,35 @@ def test_browser_profile_cookie_is_httponly_and_secure_over_https():
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
     assert "Secure" in cookie
+
+
+def test_api_key_session_token_restores_api_key_owner(monkeypatch):
+    monkeypatch.setenv("LUMENX_SESSION_TOKEN_SECRET", "test-secret")
+    token, identity, expires_at = create_session_token("sk-test-owner", 300)
+
+    restored, should_set_cookie = _resolve_request_context(f"Bearer {token}", "old-cookie")
+
+    assert expires_at > 0
+    assert identity.owner_profile_id == restored.owner_profile_id
+    assert restored.owner_profile_id.startswith("apikey-")
+    assert should_set_cookie is False
+
+
+def test_api_key_session_token_rejects_tampering(monkeypatch):
+    monkeypatch.setenv("LUMENX_SESSION_TOKEN_SECRET", "test-secret")
+    token, _, _ = create_session_token("sk-test-owner", 300)
+    tampered = token[:-1] + ("0" if token[-1] != "0" else "1")
+
+    from fastapi import HTTPException
+    import pytest
+
+    with pytest.raises(HTTPException) as exc:
+        _context_from_session_token(tampered)
+    assert exc.value.status_code == 401
+
+
+def test_api_key_session_token_is_api_key_scoped_even_with_cookie(monkeypatch):
+    monkeypatch.setenv("LUMENX_SESSION_TOKEN_SECRET", "test-secret")
+    token, identity, _ = create_session_token("sk-test-owner", 300)
+    restored, _ = _resolve_request_context(f"Bearer {token}", identity.owner_profile_id)
+    assert restored.owner_profile_id == identity.owner_profile_id

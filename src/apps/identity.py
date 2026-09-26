@@ -5,6 +5,12 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import base64
+import binascii
+import hashlib
+import hmac
+import json
+import time
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -26,10 +32,18 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SessionTokenRequest(BaseModel):
+    api_key: str
+    ttl_seconds: int = 3600
+
+
 BROWSER_PROFILE_COOKIE = "lumenx-browser-profile"
 BROWSER_PROFILE_MAX_AGE = 60 * 60 * 24 * 365
 API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity"
 API_KEY_IDENTITY_MAX_LENGTH = 64
+SESSION_TOKEN_PREFIX = "iframe-session."
+SESSION_TOKEN_MAX_TTL = 3600
+SESSION_TOKEN_MIN_TTL = 60
 
 
 class UniArtIdentityClient:
@@ -143,6 +157,65 @@ def _api_key_context(identity_key: str | None) -> UserContext | None:
     )
 
 
+def _session_token_secret() -> bytes:
+    # A configured server secret is required in production. The config master
+    # key is an acceptable shared secret for installations that already use it.
+    value = os.getenv("LUMENX_SESSION_TOKEN_SECRET") or os.getenv("LUMENX_CONFIG_MASTER_KEY")
+    if not value:
+        raise HTTPException(status_code=503, detail="Session token signing is not configured")
+    return value.encode("utf-8")
+
+
+def _b64_json(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _decode_b64_json(value: str) -> dict[str, Any]:
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, TypeError, json.JSONDecodeError, binascii.Error):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    return payload
+
+
+def create_session_token(api_key: str, ttl_seconds: int = 3600) -> tuple[str, UserContext, int]:
+    normalized_key = api_key.strip()
+    if not normalized_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+    ttl = max(SESSION_TOKEN_MIN_TTL, min(int(ttl_seconds), SESSION_TOKEN_MAX_TTL))
+    fingerprint = hashlib.sha256(normalized_key.encode("utf-8")).hexdigest()
+    issued_at = int(time.time())
+    payload = {"v": 1, "owner": fingerprint, "iat": issued_at, "exp": issued_at + ttl, "jti": secrets.token_urlsafe(12)}
+    body = _b64_json(payload)
+    signature = hmac.new(_session_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    identity = _api_key_context(fingerprint)
+    assert identity is not None
+    return f"{SESSION_TOKEN_PREFIX}{body}.{signature}", identity, payload["exp"]
+
+
+def _context_from_session_token(token: str) -> UserContext:
+    encoded = token.removeprefix(SESSION_TOKEN_PREFIX)
+    if "." not in encoded:
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    body, signature = encoded.rsplit(".", 1)
+    expected = hmac.new(_session_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    payload = _decode_b64_json(body)
+    owner = payload.get("owner")
+    expires = payload.get("exp")
+    if payload.get("v") != 1 or not isinstance(owner, str) or not isinstance(expires, int) or expires <= int(time.time()):
+        raise HTTPException(status_code=401, detail="Session token expired")
+    identity = _api_key_context(owner)
+    if identity is None:
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    return identity
+
+
 def _resolve_request_context(
     authorization: str | None,
     browser_profile: str | None,
@@ -150,6 +223,8 @@ def _resolve_request_context(
 ) -> tuple[UserContext, bool]:
     if authorization:
         token = _extract_bearer(authorization)
+        if token.startswith(SESSION_TOKEN_PREFIX):
+            return _context_from_session_token(token), False
         payload = UniArtIdentityClient().me(token)
         return _context_from_payload(payload, token), False
     key_context = _api_key_context(api_key_identity)
@@ -213,6 +288,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login")
 def login(request: LoginRequest):
     return UniArtIdentityClient().login(request.model_dump())
+
+
+@router.post("/session-token")
+def session_token(request: SessionTokenRequest):
+    token, identity, expires_at = create_session_token(request.api_key, request.ttl_seconds)
+    return {
+        "access_token": token,
+        "token_type": "Bearer",
+        "expires_at": expires_at,
+        "owner_profile_id": identity.owner_profile_id,
+        "auth_mode": "api_key_session",
+    }
 
 
 @router.get("/me")

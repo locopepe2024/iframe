@@ -160,11 +160,40 @@ export const setApiKeyIdentity = async (apiKey: string): Promise<string | null> 
     return identity;
 };
 
+/** Mint a short-lived API-key scoped token for HTTPS/MCP test access. */
+export const createApiKeySessionToken = async (apiKey: string, ttlSeconds = 3600): Promise<{
+    access_token: string;
+    token_type: "Bearer";
+    expires_at: number;
+    owner_profile_id: string;
+    auth_mode: "api_key_session";
+}> => {
+    const response = await fetch(`${API_URL}/auth/session-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, ttl_seconds: ttlSeconds }),
+    });
+    if (!response.ok) {
+        let detail = `Failed to create session token (HTTP ${response.status})`;
+        try {
+            const payload = await response.json() as { detail?: string };
+            if (payload.detail) detail = payload.detail;
+        } catch { /* keep status detail */ }
+        throw new Error(detail);
+    }
+    return response.json();
+};
+
 axios.interceptors.request.use(async (config) => {
     const apiKeyIdentity = getApiKeyIdentity();
-    if (apiKeyIdentity && !config.headers?.[API_KEY_IDENTITY_HEADER]) {
+    if (apiKeyIdentity) {
         config.headers = config.headers ?? {};
-        config.headers[API_KEY_IDENTITY_HEADER] = apiKeyIdentity;
+        if (!config.headers[API_KEY_IDENTITY_HEADER]) {
+            config.headers[API_KEY_IDENTITY_HEADER] = apiKeyIdentity;
+        }
+        // The open-source iframe workspace is API-key scoped. Do not let a
+        // stale browser login Bearer override that owner on business calls.
+        delete config.headers.Authorization;
     }
     return config;
 });
@@ -175,13 +204,15 @@ export const authenticatedFetch = (
 ): Promise<Response> => {
     const headers = new Headers(init.headers);
     if (typeof window !== "undefined") {
-        const token = window.localStorage.getItem("lumenx-access-token");
-        if (token && !headers.has("Authorization")) {
-            headers.set("Authorization", `Bearer ${token}`);
-        }
         const apiKeyIdentity = getApiKeyIdentity();
-        if (apiKeyIdentity && !headers.has(API_KEY_IDENTITY_HEADER)) {
+        if (apiKeyIdentity) {
             headers.set(API_KEY_IDENTITY_HEADER, apiKeyIdentity);
+            headers.delete("Authorization");
+        } else {
+            const token = window.localStorage.getItem("lumenx-access-token");
+            if (token && !headers.has("Authorization")) {
+                headers.set("Authorization", `Bearer ${token}`);
+            }
         }
     }
     return fetch(input, { ...init, headers });
