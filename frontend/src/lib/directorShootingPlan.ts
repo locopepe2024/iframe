@@ -17,6 +17,7 @@ export interface DirectorPlanShot {
     order: number;
     title: string;
     visual_intent: string;
+    director_effect: string;
     performance_action: string;
     action_physics: string;
     shot_size: string;

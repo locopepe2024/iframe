@@ -38,7 +38,7 @@ const planFingerprint = (plan: DirectorShootingPlan | null) => plan ? JSON.strin
 
 function emptyShot(order: number): DirectorPlanShot {
     return {
-        shot_id: newId("plan-shot"), order, title: "", visual_intent: "", performance_action: "",
+        shot_id: newId("plan-shot"), order, title: "", visual_intent: "", director_effect: "", performance_action: "",
         action_physics: "", shot_size: "", camera_angle: "", composition: "", camera_movement: "",
         lighting: emptyLighting(), duration_seconds: 3, dialogue: [], ambient_sound: "",
         character_ids: [], prop_ids: [],
@@ -618,6 +618,7 @@ export default function DirectorShootingPlanPanel() {
                                                                     <Field label={t("fields.shotTitle")} value={shot.title} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { title: value })} />
                                                                     <Field label={t("fields.duration")} type="number" min={1} max={30} value={shot.duration_seconds} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { duration_seconds: value ? Number(value) : null })} />
                                                                     <div className="sm:col-span-2"><Field label={t("fields.visualIntent")} value={shot.visual_intent} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { visual_intent: value })} /></div>
+                                                                    <div className="sm:col-span-2"><Field label={t("fields.directorEffect")} value={shot.director_effect} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { director_effect: value })} /></div>
                                                                     <Field label={t("fields.performanceAction")} value={shot.performance_action} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { performance_action: value })} />
                                                                     <Field label={t("fields.actionPhysics")} value={shot.action_physics} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { action_physics: value })} />
                                                                     <Field label={t("fields.shotSize")} value={shot.shot_size} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { shot_size: value })} />

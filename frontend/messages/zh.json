@@ -1509,6 +1509,7 @@
         "shotTitle": "镜头标题",
         "duration": "时长（秒）",
         "visualIntent": "画面意图",
+        "directorEffect": "导演效果（观众感受/剪辑意图）",
         "performanceAction": "角色表演（视线、表情、姿态、节奏）",
         "actionPhysics": "动作物理（位移、接触、支撑、速度、结果）",
         "shotSize": "景别",

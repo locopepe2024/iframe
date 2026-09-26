@@ -1508,6 +1508,7 @@
         "shotTitle": "Shot title",
         "duration": "Duration (seconds)",
         "visualIntent": "Visual intent",
+        "directorEffect": "Director effect (audience / editorial effect)",
         "performanceAction": "Character performance (gaze, expression, posture, pace)",
         "actionPhysics": "Action physics (movement, contact, support, speed, result)",
         "shotSize": "Shot size",

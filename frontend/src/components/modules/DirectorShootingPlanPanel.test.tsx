@@ -51,6 +51,7 @@ const plan: DirectorShootingPlan = {
                 order: 0,
                 title: "Follow the couple",
                 visual_intent: "Keep the cinema sign visible behind them.",
+                director_effect: "Let the relaxed walk feel briefly fragile beneath the bright sign.",
                 performance_action: "They exchange a relaxed glance and smile.",
                 action_physics: "He holds her hand as they walk at the same pace.",
                 shot_size: "Medium shot",
@@ -157,6 +158,8 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
     const performance = await screen.findByLabelText("Character performance (gaze, expression, posture, pace)");
     fireEvent.change(performance, { target: { value: "They trade a brief smile while keeping the same pace." } });
+    const effect = screen.getByLabelText("Director effect (audience / editorial effect)");
+    fireEvent.change(effect, { target: { value: "Make the bright entrance feel emotionally unstable." } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(save).toHaveBeenCalledWith(
@@ -164,7 +167,10 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
         expect.objectContaining({
             scenes: [expect.objectContaining({
                 beats: [expect.objectContaining({
-                    shots: [expect.objectContaining({ performance_action: "They trade a brief smile while keeping the same pace." })],
+                    shots: [expect.objectContaining({
+                        performance_action: "They trade a brief smile while keeping the same pace.",
+                        director_effect: "Make the bright entrance feel emotionally unstable.",
+                    })],
                 })],
             })],
         }),
