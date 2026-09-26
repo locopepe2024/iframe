@@ -327,7 +327,13 @@ def me(
             "owner_user_id": identity.user_id,
             "display_name": identity.display_name,
         },
-        "auth_mode": "bearer" if identity.access_token else "browser",
+        "auth_mode": (
+            "bearer"
+            if identity.access_token
+            else "api_key_session"
+            if identity.owner_profile_id.startswith("apikey-")
+            else "browser"
+        ),
     }
 
 
