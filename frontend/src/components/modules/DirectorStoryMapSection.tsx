@@ -769,19 +769,19 @@ function StoryMapSection({
                     </div>
                 </div>
 
-                {viewMode === "graph" && <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-3" role="group" aria-label={t("graphDescription")}>
-                    <div className="grid min-w-[720px] gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(phases.length, 1)}, minmax(180px, 1fr))` }}>
-                        {phases.map((phase, phaseIndex) => (
-                            <div key={phase.phase_id} className="relative rounded-md border border-primary/30 bg-primary/5 p-3">
-                                {phaseIndex > 0 && <span className="absolute -left-3 top-1/2 h-px w-3 bg-primary/60" aria-hidden="true" />}
-                                <div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{phaseIndex + 1}</span><div><p className="text-[10px] uppercase tracking-wide text-primary">{t("phaseIndex", { number: phaseIndex + 1 })}</p><p className="text-sm font-semibold text-foreground">{phase.label || t("unnamedPhase")}</p></div></div>
-                                <div className="space-y-2 border-l-2 border-primary/30 pl-3">
-                                    {phase.events.slice().sort((a, b) => a.order - b.order).map((event, eventIndex) => <button key={event.event_id} type="button" onClick={() => { setViewMode("editor"); setExpandedEventId(event.event_id); }} className="relative w-full rounded-md border border-border bg-background/80 p-2 text-left hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="absolute -left-[1.05rem] top-4 h-2 w-2 rounded-full border border-primary bg-background" aria-hidden="true" /><span className="text-[10px] font-semibold text-primary">{t("eventNumber", { number: eventIndex + 1 })}</span><span className="mt-1 block line-clamp-2 text-xs font-medium text-foreground">{event.title || t("unnamedEvent")}</span><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-secondary">{event.description || t("eventNeedsDescription")}</span></button>)}
-                                    {phase.events.length === 0 && <p className="text-xs text-text-muted">{t("noEvents")}</p>}
-                                    <button type="button" onClick={() => { addEvent(phase.phase_id); setViewMode("editor"); }} className="inline-flex min-h-8 items-center gap-1 rounded border border-dashed border-border px-2 text-[11px] text-text-secondary hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={12} aria-hidden="true" />{t("addEvent")}</button>
-                                </div>
-                            </div>
-                        ))}
+                {viewMode === "graph" && <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-4" role="group" aria-label={t("graphDescription")}>
+                    <div className="flex min-w-[860px] items-stretch gap-5">
+                        <div className="flex w-56 shrink-0 items-center justify-center rounded-xl border-2 border-primary/60 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
+                            <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
+                        </div>
+                        <div className="relative flex-1 space-y-3 border-l-2 border-primary/40 pl-6">
+                            {[
+                                { key: "timeline", title: t("mindMapTimeline"), summary: phases.map(phase => `${phase.label || t("unnamedPhase")} · ${phase.events.length}`).join(" → ") || t("noPhases"), nodes: phases.flatMap((phase, phaseIndex) => phase.events.slice().sort((a, b) => a.order - b.order).slice(0, 4).map((event, eventIndex) => ({ id: event.event_id, label: event.title || t("unnamedEvent"), meta: `${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}`, onClick: () => { setViewMode("editor"); setExpandedEventId(event.event_id); } }))) },
+                                { key: "people", title: t("mindMapPeople"), summary: people.map(person => person.display_name).join(" · ") || t("needPeople"), nodes: people.slice(0, 6).map(person => ({ id: person.person_id, label: person.display_name, meta: t("mindMapPerson"), onClick: () => { setViewMode("editor"); const arc = map.relationship_arcs.find(candidate => candidate.person_ids.includes(person.person_id)); if (arc) { setSelectedRelationshipId(arc.relationship_id); requestAnimationFrame(() => document.getElementById(`relationship-${arc.relationship_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })); } } })) },
+                                { key: "threads", title: t("mindMapThreads"), summary: map.story_threads.map(thread => thread.label || t("unnamedStoryline")).join(" · ") || t("noStorylines"), nodes: map.story_threads.slice(0, 6).map(thread => ({ id: thread.thread_id, label: thread.label || t("unnamedStoryline"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`, onClick: () => { setViewMode("editor"); requestAnimationFrame(() => document.getElementById(`storyline-${thread.thread_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })); } })) },
+                                { key: "scenes", title: t("mindMapScenes"), summary: sceneSummaries.map(scene => asText(scene.scene_ref) || t("unnamedScene")).join(" · ") || t("noSceneSummaries"), nodes: sceneSummaries.slice(0, 6).map((scene, sceneIndex) => ({ id: `${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), meta: asText(scene.summary) || t("sceneSummary"), onClick: () => { setViewMode("editor"); requestAnimationFrame(() => document.getElementById("director-scene-summaries-title")?.scrollIntoView({ block: "start", behavior: "smooth" })); } })) },
+                            ].map(branch => <section key={branch.key} className="relative rounded-lg border border-border bg-background/70 p-3"><span className="absolute -left-7 top-1/2 h-px w-7 bg-primary/50" aria-hidden="true" /><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">{branch.title}</span><p className="text-xs text-text-secondary">{branch.summary}</p></div><div className="mt-3 flex flex-wrap gap-2">{branch.nodes.map(node => <button key={node.id} type="button" onClick={node.onClick} className="rounded-md border border-border bg-surface px-3 py-2 text-left hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="block text-xs font-medium text-foreground">{node.label}</span><span className="mt-1 block text-[10px] text-text-muted">{node.meta}</span></button>)}</div></section>)}
+                        </div>
                     </div>
                 </div>}
 
@@ -956,7 +956,7 @@ function StoryMapSection({
                 </div>}
                 {viewMode === "editor" && <div className="space-y-4">
                     {map.story_threads.map((thread, index) => (
-                        <article key={thread.thread_id} className="rounded-lg border border-border bg-surface p-3 sm:p-4">
+                        <article id={`storyline-${thread.thread_id}`} key={thread.thread_id} className="scroll-mt-4 rounded-lg border border-border bg-surface p-3 sm:p-4">
                             <div className="flex items-start gap-3">
                                 <div className="min-w-0 flex-1 space-y-3">
                                     <Field label={t("storylineLabel")} value={thread.label} placeholder={t("storylineLabelPlaceholder")} onChange={value => updateThread(thread, { label: value })} />

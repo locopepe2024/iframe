@@ -169,3 +169,13 @@ git diff --check
 - 不把 beat 数量直接当作镜头数量；
 - 不在 Director confirm 中隐式执行 Storyboard handoff；
 - 不把来源分块边界声称为精确语义场景边界。
+
+## Continuation slice: Director mind map overview (2026-09-26)
+
+The Director overview uses a mind-map presentation as its default reading surface:
+
+- A central story/directing node anchors the view.
+- Timeline, character relationships, storylines, and scene/event analysis are first-level branches.
+- Phase, person, event, relationship, milestone, and scene nodes show concise summaries directly on the canvas.
+- Selecting a node opens the existing editor for that canonical object; the mind map does not create a second state model.
+- The shooting plan remains a separate ordered Scene → Beat → Shot graph because its primary meaning is temporal and editorial order.

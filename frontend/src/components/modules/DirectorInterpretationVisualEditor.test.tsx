@@ -186,6 +186,8 @@ it("edits events, reorders phases, and adds a user described event in the same s
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap }, onChange);
 
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
     fireEvent.change(screen.getByLabelText("What happens"), { target: { value: "They meet and exchange books" } });
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -214,6 +216,8 @@ it("selects a relationship edge and edits its state for a specific phase", () =>
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap }, onChange);
 
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+
     fireEvent.click(screen.getByRole("button", { name: "Select relationship: Shen Xia ↔ Zhou Han" }));
     fireEvent.change(screen.getByLabelText("Relationship state"), { target: { value: "They are growing apart" } });
 
@@ -232,6 +236,8 @@ it("selects a relationship edge and edits its state for a specific phase", () =>
 it("links an event to exact confirmed ledger text and adds an event to a story thread lane", () => {
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap }, onChange, [fact]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
     fireEvent.click(screen.getByText(/Script evidence/));
@@ -262,6 +268,8 @@ it("appends phase and event order values after existing gaps", () => {
         }],
     };
     renderEditor({ ...profile, story_map: gappedMap }, onChange);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add event" }));
     let changed = onChange.mock.lastCall?.[0] as Record<string, unknown>;
@@ -294,6 +302,8 @@ it("cleans deleted event references and clears the ledger pin when no citations 
     };
     renderEditor({ ...profile, story_map: referencedMap }, onChange);
 
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
     fireEvent.click(screen.getByRole("button", { name: "Delete event 1" }));
 
@@ -312,6 +322,8 @@ it("does not offer citations from a different pinned ledger revision", () => {
         story_map: { ...storyMap, fact_ledger_revision: 2 },
     };
     renderEditor(mismatchedProfile, vi.fn(), [fact], 1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
     fireEvent.click(screen.getByText(/Script evidence/));
