@@ -30,8 +30,6 @@ BROWSER_PROFILE_COOKIE = "lumenx-browser-profile"
 BROWSER_PROFILE_MAX_AGE = 60 * 60 * 24 * 365
 API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity"
 API_KEY_IDENTITY_MAX_LENGTH = 64
-LEGACY_BROWSER_INSTALLATION_HEADER = "X-iFrame-Legacy-Browser-Installation"
-LEGACY_BROWSER_INSTALLATION_MAX_LENGTH = 128
 
 
 class UniArtIdentityClient:
@@ -143,21 +141,6 @@ def _api_key_context(identity_key: str | None) -> UserContext | None:
         display_name="API key workspace",
         access_token="",
     )
-
-
-def _legacy_browser_owner(
-    browser_profile: str | None,
-    browser_installation: str | None = None,
-) -> str | None:
-    """Return an explicitly identified pre-API-key browser owner."""
-    profile = (browser_profile or "").strip()
-    if profile and not profile.startswith("apikey-"):
-        return f"browser-{profile}"
-    installation = (browser_installation or "").strip()
-    if installation and len(installation) <= LEGACY_BROWSER_INSTALLATION_MAX_LENGTH:
-        if re.fullmatch(r"[A-Za-z0-9_-]+", installation):
-            return f"browser-installation-{installation}"
-    return None
 
 
 def _resolve_request_context(

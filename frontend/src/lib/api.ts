@@ -83,8 +83,6 @@ export const API_URL = getApiUrl();
 
 const API_KEY_IDENTITY_KEY = "lumenx-api-key-identity";
 const API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity";
-const LEGACY_BROWSER_INSTALLATION_KEY = "lumenx-browser-installation";
-const LEGACY_BROWSER_INSTALLATION_HEADER = "X-iFrame-Legacy-Browser-Installation";
 
 /**
  * The open-source iframe build uses a provider API-key fingerprint as the
@@ -102,16 +100,6 @@ export const getApiKeyIdentity = (): string | null => {
     return null;
 };
 
-const getLegacyBrowserInstallation = (): string | null => {
-    if (typeof window === "undefined") return null;
-    try {
-        const value = window.localStorage.getItem(LEGACY_BROWSER_INSTALLATION_KEY);
-        return value && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : null;
-    } catch {
-        return null;
-    }
-};
-
 export const setApiKeyIdentity = async (apiKey: string): Promise<string | null> => {
     if (typeof window === "undefined" || !apiKey.trim()) return null;
     const bytes = new TextEncoder().encode(apiKey.trim());
@@ -126,11 +114,6 @@ axios.interceptors.request.use(async (config) => {
     if (apiKeyIdentity && !config.headers?.[API_KEY_IDENTITY_HEADER]) {
         config.headers = config.headers ?? {};
         config.headers[API_KEY_IDENTITY_HEADER] = apiKeyIdentity;
-    }
-    const legacyInstallation = getLegacyBrowserInstallation();
-    if (legacyInstallation && !config.headers?.[LEGACY_BROWSER_INSTALLATION_HEADER]) {
-        config.headers = config.headers ?? {};
-        config.headers[LEGACY_BROWSER_INSTALLATION_HEADER] = legacyInstallation;
     }
     return config;
 });
@@ -148,10 +131,6 @@ export const authenticatedFetch = (
         const apiKeyIdentity = getApiKeyIdentity();
         if (apiKeyIdentity && !headers.has(API_KEY_IDENTITY_HEADER)) {
             headers.set(API_KEY_IDENTITY_HEADER, apiKeyIdentity);
-        }
-        const legacyInstallation = getLegacyBrowserInstallation();
-        if (legacyInstallation && !headers.has(LEGACY_BROWSER_INSTALLATION_HEADER)) {
-            headers.set(LEGACY_BROWSER_INSTALLATION_HEADER, legacyInstallation);
         }
     }
     return fetch(input, { ...init, headers });

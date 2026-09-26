@@ -40,9 +40,7 @@ def test_migrate_owner_profile_updates_projects_series_and_children():
     )
     pipeline = _Pipeline(script, series)
 
-    assert pipeline.migrate_owner_profile(
-        "browser-old", "apikey-user", "apikey-profile"
-    ) is True
+    assert pipeline.migrate_legacy_browser_owners("apikey-user", "apikey-profile") is True
     assert script.owner_user_id == "apikey-user"
     assert script.owner_profile_id == "apikey-profile"
     assert child.owner_user_id == "apikey-user"
@@ -55,7 +53,7 @@ def test_migrate_owner_profile_does_not_merge_unrelated_owner():
     script = SimpleNamespace(
         id="project-1",
         owner_user_id="other-user",
-        owner_profile_id="browser-other",
+        owner_profile_id="other-profile",
         characters=[],
         scenes=[],
         props=[],
@@ -65,7 +63,7 @@ def test_migrate_owner_profile_does_not_merge_unrelated_owner():
     series = SimpleNamespace(
         id="series-1",
         owner_user_id="other-user",
-        owner_profile_id="browser-other",
+        owner_profile_id="other-profile",
         characters=[],
         scenes=[],
         props=[],
@@ -74,7 +72,5 @@ def test_migrate_owner_profile_does_not_merge_unrelated_owner():
     )
     pipeline = _Pipeline(script, series)
 
-    assert pipeline.migrate_owner_profile(
-        "browser-old", "apikey-user", "apikey-profile"
-    ) is False
+    assert pipeline.migrate_legacy_browser_owners("apikey-user", "apikey-profile") is False
     assert pipeline.saved == []

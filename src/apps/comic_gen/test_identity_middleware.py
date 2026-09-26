@@ -24,6 +24,11 @@ def test_studio_owner_middleware_forwards_api_key_identity(monkeypatch):
         series_store = {}
 
         @staticmethod
+        def migrate_legacy_browser_owners(owner_user_id, owner_profile_id):
+            assert owner_user_id == user.user_id
+            assert owner_profile_id == user.owner_profile_id
+
+        @staticmethod
         def list_scripts(owner_profile_id):
             assert owner_profile_id == user.owner_profile_id
             return []

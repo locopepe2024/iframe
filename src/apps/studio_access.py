@@ -453,22 +453,17 @@ class StudioOwnerMixin:
                     changed = True
         return changed
 
-    def migrate_owner_profile(
+    def migrate_legacy_browser_owners(
         self,
-        legacy_owner_profile_id: str,
         owner_user_id: str,
         owner_profile_id: str,
     ) -> bool:
-        """Move one explicitly identified legacy browser workspace to a key owner."""
-        if (
-            not legacy_owner_profile_id
-            or not owner_user_id
-            or not owner_profile_id
-            or legacy_owner_profile_id == owner_profile_id
-        ):
+        """Move legacy browser workspaces to the API-key owner."""
+        if not owner_user_id or not owner_profile_id:
             return False
 
         changed = False
+        legacy_owner_ids: set[str] = set()
 
         def reassign_children(container: Any) -> None:
             for collection_name in ("characters", "scenes", "props", "frames", "video_tasks"):
@@ -479,15 +474,19 @@ class StudioOwnerMixin:
                         item.owner_profile_id = owner_profile_id
 
         for resource in self.scripts.values():
-            if getattr(resource, "owner_profile_id", None) != legacy_owner_profile_id:
+            legacy_owner_profile_id = getattr(resource, "owner_profile_id", None)
+            if not legacy_owner_profile_id or not legacy_owner_profile_id.startswith("browser-"):
                 continue
+            legacy_owner_ids.add(legacy_owner_profile_id)
             resource.owner_user_id = owner_user_id
             resource.owner_profile_id = owner_profile_id
             reassign_children(resource)
             changed = True
         for resource in self.series_store.values():
-            if getattr(resource, "owner_profile_id", None) != legacy_owner_profile_id:
+            if not getattr(resource, "owner_profile_id", "").startswith("browser-"):
                 continue
+            legacy_owner_profile_id = resource.owner_profile_id
+            legacy_owner_ids.add(legacy_owner_profile_id)
             resource.owner_user_id = owner_user_id
             resource.owner_profile_id = owner_profile_id
             reassign_children(resource)
@@ -500,14 +499,15 @@ class StudioOwnerMixin:
         self._save_series_data()
 
         # Keep the old tree intact so a failed rollout can be rolled back.
-        old_dir = os.path.realpath(studio_owner_dir(legacy_owner_profile_id))
-        new_dir = os.path.realpath(studio_owner_dir(owner_profile_id))
-        if os.path.isdir(old_dir) and old_dir != new_dir:
-            try:
-                os.makedirs(new_dir, exist_ok=True)
-                shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
-            except OSError:
-                logger.exception("Failed to copy legacy Studio media during owner migration")
+        for legacy_owner_profile_id in legacy_owner_ids:
+            old_dir = os.path.realpath(studio_owner_dir(legacy_owner_profile_id))
+            new_dir = os.path.realpath(studio_owner_dir(owner_profile_id))
+            if os.path.isdir(old_dir) and old_dir != new_dir:
+                try:
+                    os.makedirs(new_dir, exist_ok=True)
+                    shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
+                except OSError:
+                    logger.exception("Failed to copy legacy Studio media during owner migration")
         return True
 
     def get_script(self, script_id: str, owner_profile_id: Optional[str] = None) -> Any:
