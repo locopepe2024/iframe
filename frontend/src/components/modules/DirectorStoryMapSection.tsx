@@ -760,16 +760,17 @@ function StoryMapSection({
                 </div>
                 {factsError && <p role="alert" className="mt-3 text-xs text-amber-200">{factsError}</p>}
 
-                <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
+                {viewMode === "editor" && <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
                     <div>
                         <h4 className="text-sm font-semibold text-foreground">{t("timelineTitle")}</h4>
                         <p className="mt-1 text-xs text-text-secondary">{t("timelineHint")}</p>
                     </div>
                     <button type="button" onClick={addPhase} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addPhase")}</button>
-                </div>
+                </div>}
 
-                {viewMode === "graph" && <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-4" role="group" aria-label={t("graphDescription")}>
-                    <div className="flex min-w-[860px] items-stretch gap-5">
+                {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div>
+                    <div className="flex min-h-[340px] min-w-[860px] items-stretch gap-5">
                         <div className="flex w-56 shrink-0 items-center justify-center rounded-xl border-2 border-primary/60 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
                             <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
                         </div>

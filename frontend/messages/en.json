@@ -1370,6 +1370,7 @@
         "graphDescription": "Director story map graph",
         "mindMapCore": "Story core",
         "mindMapCoreHint": "Confirmed story understanding and directing intent",
+        "mindMapCanvasHint": "Read the whole Director structure here. Select a node to edit its canonical source object.",
         "mindMapTimeline": "Timeline and events",
         "mindMapPeople": "Characters and relationships",
         "mindMapThreads": "Storylines",
