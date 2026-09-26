@@ -2505,8 +2505,11 @@
       "title": "选择素材",
       "loading": "加载中...",
       "retry": "重试",
+      "loadFailed": "素材加载失败，请重试",
       "empty": "暂无可用素材",
-      "emptyHint": "在 Playground 中生成内容后，输出将出现在这里",
+      "emptyFilter": "当前筛选下暂无素材",
+      "emptyHint": "这里会显示工作区资产、当前会话素材和 Playground 生成结果",
+      "source": { "workspace": "工作区", "playground": "生成结果", "session": "当前会话" },
       "cancel": "取消",
       "select": "选择"
     },

@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Image, Film, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { playgroundApi } from '@/lib/api';
+import { api, playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
-import { referenceName } from './referenceMedia';
+import { referenceKey, referenceName } from './referenceMedia';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ interface AssetItem {
   type: 'image' | 'video' | 'audio' | 'text';
   thumbnail?: string;
   label: string;
+  source: 'workspace' | 'playground' | 'session';
 }
 
 type FilterTab = 'all' | 'image' | 'video';
@@ -79,45 +80,80 @@ export default function AssetPickerModal({
   );
 
   // -------------------------------------------------------------------------
-  // Fetch assets from playground history
+  // Merge owner-scoped workspace assets, Playground history, and current inputs.
   // -------------------------------------------------------------------------
 
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const history = await playgroundApi.getHistory(100, 0);
+      const [historyResult, libraryResult] = await Promise.allSettled([
+        playgroundApi.getHistory(100, 0),
+        api.getAssetLibraryIndex(),
+      ]);
+      if (historyResult.status === 'rejected' && libraryResult.status === 'rejected') {
+        throw historyResult.reason;
+      }
+      const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
       const items: AssetItem[] = [];
       const seen = new Set<string>();
+
+      const add = (item: AssetItem) => {
+        const key = referenceKey(item.path);
+        if (!item.path || seen.has(key)) return;
+        seen.add(key);
+        items.push(item);
+      };
+
+      if (libraryResult.status === 'fulfilled') {
+        for (const entry of libraryResult.value.assets) {
+          for (const variant of entry.variants || []) {
+            add({
+              id: `${entry.source_scope}-${entry.source_container_id || 'global'}-${entry.asset_type}-${entry.asset_id}-${variant.id}`,
+              path: variant.url,
+              type: 'image',
+              label: entry.name,
+              source: 'workspace',
+            });
+          }
+        }
+      }
+
+      const current = usePlaygroundStore.getState();
+      for (const path of current.inputMedia) {
+        add({
+          id: `current-${referenceKey(path)}`,
+          path,
+          type: isVideoPath(path) ? 'video' : /\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? 'audio' : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? 'text' : 'image',
+          label: referenceName(path, current.mediaNames, history),
+          source: 'session',
+        });
+      }
 
       for (const gen of history) {
         if (gen.status !== 'completed') continue;
         for (const output of gen.outputs) {
-          if (!output.media_path || seen.has(output.media_path)) continue;
-          seen.add(output.media_path);
-
           const isVideo = output.media_type === 'video';
-          items.push({
+          add({
             id: output.id,
             path: output.media_path,
             type: isVideo ? 'video' : 'image',
             thumbnail: output.thumbnail_path || undefined,
             label: referenceName(output.media_path, {}, history),
+            source: 'playground',
           });
         }
 
         // Also include input media from history entries
         if (gen.input_media) {
           for (const inputPath of gen.input_media) {
-            if (!inputPath || seen.has(inputPath)) continue;
-            seen.add(inputPath);
-
             const isVideo = isVideoPath(inputPath);
-            items.push({
+            add({
               id: 'input-' + inputPath,
               path: inputPath,
               type: isVideo ? 'video' : /\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(inputPath) ? 'audio' : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(inputPath) ? 'text' : 'image',
               label: referenceName(inputPath, gen.media_names || {}, history),
+              source: 'playground',
             });
           }
         }
@@ -126,11 +162,11 @@ export default function AssetPickerModal({
       setAssets(items);
     } catch (err) {
       console.error('[AssetPickerModal] fetch failed:', err);
-      setError('Failed to load assets');
+      setError(t('assetPicker.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (isOpen) {
@@ -315,11 +351,11 @@ export default function AssetPickerModal({
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                   <Image className="w-8 h-8 text-text-muted" />
                   <span className="text-xs text-text-muted">
-                    {t('assetPicker.empty')}
+                    {t(assets.length ? 'assetPicker.emptyFilter' : 'assetPicker.empty')}
                   </span>
-                  <span className="text-[0.6875rem] text-text-muted">
+                  {assets.length === 0 && <span className="text-[0.6875rem] text-text-muted">
                     {t('assetPicker.emptyHint')}
-                  </span>
+                  </span>}
                 </div>
               )}
 
@@ -367,8 +403,11 @@ export default function AssetPickerModal({
                         )}
 
                         {/* Type badge */}
+                        <div className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[0.625rem] text-foreground/80">
+                          {t(`assetPicker.source.${asset.source}`)}
+                        </div>
                         {asset.type === 'video' && (
-                          <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm">
+                          <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm">
                             <Film className="w-3 h-3 text-foreground/80" />
                           </div>
                         )}
