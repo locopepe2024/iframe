@@ -80,6 +80,7 @@ if os.path.exists(env_path):
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
 from ..identity import (
+    API_KEY_IDENTITY_HEADER,
     BROWSER_PROFILE_COOKIE,
     UserContext,
     _resolve_request_context,
@@ -200,6 +201,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
             _resolve_request_context,
             request.headers.get("Authorization"),
             request.cookies.get(BROWSER_PROFILE_COOKIE),
+            request.headers.get(API_KEY_IDENTITY_HEADER),
         )
         request.state.lumenx_identity = user
     except HTTPException as exc:
@@ -2440,6 +2442,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
+    visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         text,
@@ -2448,6 +2451,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         instructions,
         prompt,
         director_profile.model_dump() if director_profile else None,
+        visual_style,
         llm.provider,
         llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
