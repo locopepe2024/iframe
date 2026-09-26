@@ -249,6 +249,7 @@ export default function DirectorShootingPlanPanel() {
     const [jobStatus, setJobStatus] = useState("");
     const [expandedShots, setExpandedShots] = useState<Set<string>>(() => new Set());
     const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
 
     const sourceRevision = currentProject?.source_revision ?? 1;
@@ -597,7 +598,14 @@ export default function DirectorShootingPlanPanel() {
                         </div>
                     </section>
 
-                    <div className="space-y-4">
+                    <div className="flex items-center justify-end gap-2">
+                        <div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("flow.viewMode")}>
+                            <button type="button" onClick={() => setViewMode("graph")} className={`min-h-9 rounded px-3 text-xs ${viewMode === "graph" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`} aria-pressed={viewMode === "graph"}>{t("flow.graphView")}</button>
+                            <button type="button" onClick={() => setViewMode("editor")} className={`min-h-9 rounded px-3 text-xs ${viewMode === "editor" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`} aria-pressed={viewMode === "editor"}>{t("flow.editorView")}</button>
+                        </div>
+                    </div>
+
+                    {viewMode === "editor" && <div className="space-y-4">
                         {scenes.map((scene, sceneIndex) => (
                             <section key={scene.scene_id} className="overflow-hidden rounded-lg border border-border bg-background/30" aria-labelledby={`director-plan-scene-${scene.scene_id}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/60 px-4 py-3">
@@ -775,7 +783,7 @@ export default function DirectorShootingPlanPanel() {
                             </section>
                         ))}
                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: [...current.scenes, emptyScene(current.scenes.length)] }))} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-dashed border-border px-4 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={16} aria-hidden="true" />{t("addScene")}</button>
-                    </div>
+                    </div>}
 
                     <div className="sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur">
                         <div className="flex items-center gap-2 text-sm text-text-secondary">

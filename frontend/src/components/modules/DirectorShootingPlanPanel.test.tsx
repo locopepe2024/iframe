@@ -152,6 +152,7 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     expect(shotNode).toBeInTheDocument();
     fireEvent.click(shotNode);
     expect(screen.getByText("Shot inspector")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     expect(screen.getAllByText("4 sec")).toHaveLength(3);
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
