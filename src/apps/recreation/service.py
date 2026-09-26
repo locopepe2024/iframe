@@ -913,7 +913,10 @@ class RecreationService:
 
             kwargs = {
                 "model": task["model"], "mode": "reference2video", "duration": task["duration"],
-                "resolution": "768p", "generate_audio": task["generate_audio"],
+                # UniArt's video contract accepts 480p/720p for this route.
+                # 768p is not a valid Seedance/H3 resolution and is rejected
+                # by the provider as a metadata conflict.
+                "resolution": "720p", "generate_audio": task["generate_audio"],
                 "on_task_submitted": save_provider_task,
             }
             if task.get("seed") is not None:
