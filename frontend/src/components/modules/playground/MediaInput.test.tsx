@@ -26,6 +26,15 @@ it('uploads mixed Agent references without changing the media generation mode', 
   expect(usePlaygroundStore.getState().mode).toBe('t2v');
   expect(screen.getByText('media.agentHint')).toBeInTheDocument();
 });
+it('keeps Agent reference capacity independent from a UniArt one-image SKU limit', async () => {
+  installUniArtCatalog([{ id: 'uniart/seedance-2.5-vip', api_model_id: 'seedance-2.5-vip', display_name: 'Seedance', description: '', family: 'seedance', provider: 'uniart', capabilities: ['i2v'], inputs: { reference_images: { max: 1 } } }]);
+  usePlaygroundStore.setState({ mode: 'i2v', modelId: 'uniart/seedance-2.5-vip', inputMedia: [] });
+  const { container } = render(<MediaInput agentMode />);
+  upload.mockResolvedValueOnce({ path: '/agent-1.png' }).mockResolvedValueOnce({ path: '/agent-2.png' });
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['1'], 'agent-1.png'), new File(['2'], 'agent-2.png')] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/agent-1.png', '/agent-2.png']));
+  expect(screen.getByText('media.localUpload')).not.toBeDisabled();
+});
 
 it('keeps successful references and reports an upload failure', async () => {
   upload.mockResolvedValueOnce({ path: '/clip.mp4' }).mockRejectedValueOnce(new Error('Network error'));

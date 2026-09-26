@@ -83,6 +83,12 @@ const ACTION_BTN_CLASS =
   'text-foreground/80 hover:bg-hover-bg hover:text-foreground ' +
   'transition-colors disabled:opacity-40';
 
+// Agent references are bounded by the prompt/context budget, not by a
+// provider SKU's single-request media capacity. Keep this UI guard at the
+// documented million-reference ceiling so ordinary model limits cannot leak
+// into the Agent composer.
+const AGENT_MAX_REFERENCES = 1_000_000;
+
 export default function MediaInput({ agentMode = false }: { agentMode?: boolean } = {}) {
   const mode = usePlaygroundStore((s) => s.mode);
   const modelId = usePlaygroundStore((s) => s.modelId);
@@ -129,12 +135,12 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     };
   }
 
-  if (agentMode) config = { ...MODE_CONFIG.t2i!, maxFiles: Number.POSITIVE_INFINITY };
+  if (agentMode) config = { ...MODE_CONFIG.t2i!, multiple: true, maxFiles: AGENT_MAX_REFERENCES };
   // Uploading a reference is separate from the provider's per-model capacity checks.
   if (agentMode || mode === 'r2v') config = {
     ...config!, multiple: true,
     maxFiles: agentMode
-      ? Number.POSITIVE_INFINITY
+      ? AGENT_MAX_REFERENCES
       : isRuntimeUniArt && publishedMaterialLimit > 0
         ? publishedMaterialLimit
         : Math.max(config?.maxFiles || 0, 16),
