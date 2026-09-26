@@ -168,6 +168,14 @@ def _set_browser_profile_cookie(response: Response, request: Request, identity: 
     profile_id = identity.owner_profile_id.removeprefix("browser-")
     forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
     secure = (forwarded_proto or request.url.scheme).lower() == "https"
+    # HTTPS deployments may be reached through more than one UniArt host
+    # (for example garage.uniart.fun and arcreel.uniart.fun). Remove the
+    # legacy host-only cookie before writing one shared cookie so a stale
+    # browser identity cannot win when duplicate cookies are sent.
+    host = request.headers.get("host", "").split(":", 1)[0].lower()
+    shared_domain = ".uniart.fun" if host.endswith(".uniart.fun") else None
+    if shared_domain:
+        response.delete_cookie(BROWSER_PROFILE_COOKIE, path="/")
     response.set_cookie(
         BROWSER_PROFILE_COOKIE,
         profile_id,
@@ -176,6 +184,7 @@ def _set_browser_profile_cookie(response: Response, request: Request, identity: 
         samesite="lax",
         secure=secure,
         path="/",
+        domain=shared_domain,
     )
 
 
