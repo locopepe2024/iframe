@@ -124,7 +124,7 @@ it("requires an explicit user action to build a map from legacy phases and keeps
     renderEditor(profile, onChange);
 
     expect(screen.getByText("Initial: Close · Change: Long distance · Ending: Separated")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Create visual story map" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter mind map" }));
 
     const changed = onChange.mock.lastCall?.[0] as Record<string, unknown> | undefined;
     expect(changed).toEqual(expect.objectContaining({

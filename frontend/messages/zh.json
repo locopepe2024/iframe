@@ -1289,7 +1289,9 @@
       "storyMap": {
         "title": "剧情时间线、人物关系与剧情线",
         "legacyIntro": "这个项目使用较早的摘要格式。创建可视化故事地图后，可在同一份结构中编辑阶段、事件、关系状态和剧情线。旧关系摘要会保留；只有补充具体阶段状态后才会进入关系图。",
+        "mindMapEntryHint": "先进入导演思维导图查看整体结构。需要修改具体对象时，再切换到编辑视图。",
         "createFromLegacy": "创建可视化故事地图",
+        "enterMindMap": "进入思维导图",
         "legacyPhases": "旧时间线（{count}）",
         "noLegacyPhases": "没有旧时间线阶段。",
         "legacyRelationships": "旧人物关系摘要（{count}）",

@@ -616,10 +616,10 @@ function StoryMapSection({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3>
-                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("legacyIntro")}</p>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("mindMapEntryHint")}</p>
                     </div>
-                    <button type="button" onClick={newMap} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
-                        <Plus size={15} aria-hidden="true" />{t("createFromLegacy")}
+                    <button type="button" onClick={newMap} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
+                        <Plus size={15} aria-hidden="true" />{t("enterMindMap")}
                     </button>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">

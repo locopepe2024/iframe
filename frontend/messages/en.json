@@ -1288,7 +1288,9 @@
       "storyMap": {
         "title": "Story timeline, relationships and storylines",
         "legacyIntro": "This project has the earlier summary format. Create a story map to edit phases, events, relationship states and storylines together. Existing relationship summaries stay separate until you add stage specific states.",
+        "mindMapEntryHint": "Start with the Director mind map. It gives you a readable overview first; use Editor view only when you need to change the canonical story objects.",
         "createFromLegacy": "Create visual story map",
+        "enterMindMap": "Enter mind map",
         "legacyPhases": "Earlier timeline ({count})",
         "noLegacyPhases": "No earlier timeline stages.",
         "legacyRelationships": "Earlier relationship summaries ({count})",
