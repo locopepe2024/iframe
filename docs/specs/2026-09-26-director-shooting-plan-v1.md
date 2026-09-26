@@ -17,7 +17,7 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 1. Store the plan separately from `DirectorProfile`, with its own current draft, draft revision, confirmed revision, immutable confirmed snapshots and content hash. The plan may cite a Director profile, but changing the plan does not rewrite story understanding.
 2. Bind every generated/saved/confirmed plan to the current script source revision, confirmed Director profile revision/hash, and effective visual-style hash. Refuse confirmation if any bound input changed.
 3. Use one canonical hierarchy: ordered scenes contain ordered dramatic beats, and beats contain ordered shots. Timeline cards and future visual maps are views of this same structure.
-4. A scene records a screenplay-facing scene reference, location/time labels, its environment and atmosphere, prop references, and source chunk references. A beat records dramatic purpose, emotional change, optional stable story-map event IDs, and shots. A shot records visual intent, character performance, observable physical action, structured lighting (key source/direction, color tone, contrast, practical sources), composition, shot size, camera angle/movement, duration, dialogue, ambient sound, and optional character-variant/prop IDs. These are reviewable visual proposals, not claims about facts absent from the script.
+4. A scene records a screenplay-facing scene reference, location/time labels, its environment and atmosphere, prop references, and source chunk references. A beat records dramatic purpose, emotional change, optional stable story-map event IDs, and shots. A shot records visual intent, an optional user-editable `director_effect` annotation, character performance, observable physical action, structured lighting (key source/direction, color tone, contrast, practical sources), composition, shot size, camera angle/movement, duration, dialogue, ambient sound, and optional character-variant/prop IDs. `director_effect` states the intended audience or editorial effect for this shot; it is a direction note, not a new screenplay fact. These are reviewable visual proposals, not claims about facts absent from the script.
 5. Shot count is derived from `scenes[].beats[].shots[]`; it is never inferred from action/event count, and no separate count field is accepted. Total runtime is derived from shot durations. Do not copy old storyboard frames or convert `sample_plan` items into shots.
 6. Long scripts use the existing bounded natural-boundary source chunker and resumable extraction-job batch storage. Every returned scene records the source chunk(s) that informed it; chunk bounds must not be presented as exact semantic scene boundaries.
 7. The generation prompt may propose cuts and durations, but user edits and confirmation are the production decision. A beat may contain multiple shots, and a shot may cover several continuous actions when screen direction and dramatic intent allow it.
@@ -28,8 +28,8 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 - `DirectorShootingPlan`: schema version, source revision and stable source ID, confirmed Director revision/hash, effective-style hash, ordered scenes, and generated-at metadata.
 - Scene: stable ID/order, scene reference, optional heading/location/time, environment/atmosphere, prop IDs, source chunk refs, and beats.
 - Beat: stable ID/order, title, dramatic purpose, emotional change, optional story-map event references, and shots.
-- Shot: stable ID/order, visual intent, character performance, physical action, structured lighting, shot size, camera angle, composition, camera movement, duration in seconds, dialogue lines, ambient sound, character variant IDs, and prop IDs.
-- Strict Pydantic models reject unknown keys, duplicate IDs/order values, unresolved story-map event IDs, or unavailable character/prop references. Drafts may be incomplete; confirmation requires at least one named scene with environment/atmosphere, one described beat, and one shot with visual intent, performance, physical action, lighting source/color/contrast, shot size, camera angle, composition, camera movement, ambient sound, and duration in each beat. Durations are bounded and totals are derived.
+- Shot: stable ID/order, visual intent, optional `director_effect` (maximum 2400 characters), character performance, physical action, structured lighting, shot size, camera angle, composition, camera movement, duration in seconds, dialogue lines, ambient sound, character variant IDs, and prop IDs.
+- Strict Pydantic models reject unknown keys, duplicate IDs/order values, unresolved story-map event IDs, or unavailable character/prop references. Drafts may be incomplete; confirmation requires at least one named scene with environment/atmosphere, one described beat, and one shot with visual intent, performance, physical action, lighting source/color/contrast, shot size, camera angle, composition, camera movement, ambient sound, and duration in each beat. `director_effect` is optional so existing plans remain confirmable; when present it is persisted with the shot and included in the confirmed plan revision. Durations are bounded and totals are derived.
 - Source chunk references identify model input provenance only. They are not exact source ranges or proof that the model's interpretation is correct.
 - Normal Script responses omit plan drafts and histories. Dedicated endpoints own plan reads, draft save, confirmation, history, and generation jobs.
 
@@ -37,7 +37,7 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 
 1. Confirm a Director profile that has an explicitly reviewed story map.
 2. Generate a shooting-plan draft from the bound script, story map, available character variants, and style.
-3. Review and edit scene grouping, beat purposes, shot count, durations, image composition, actions, dialogue and sound.
+3. Review and edit scene grouping, beat purposes, shot count, durations, image composition, actions, the intended `director_effect` for individual shots, dialogue and sound.
 4. Save the draft; confirm only after required fields are complete and lineage still matches.
 5. Assets/Storyboard integration is deferred to a follow-up slice.
 
@@ -84,3 +84,11 @@ confirmation semantics:
 - LLM output may propose continuity and durations; the server validates and binds source chunk refs.
 - Chunk stitching preserves continuity metadata when the first scene of a later chunk continues the previous scene.
 - These fields describe planning continuity only. They do not create Storyboard frames or Motion tasks.
+
+## Continuation slice: shot director-effect annotation (2026-09-26)
+
+`director_effect` is a shot-level review field. It is generated as an optional proposal,
+can be edited in the shooting-plan draft, survives draft save/restore, and is copied into
+the confirmed shooting-plan revision. Confirming a shooting plan still activates only that
+plan revision; the annotation is not implicitly applied to Storyboard or Motion. A future
+Storyboard handoff must carry it through an explicit adapter and its own apply/confirm action.

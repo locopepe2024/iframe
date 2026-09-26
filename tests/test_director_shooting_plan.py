@@ -94,6 +94,7 @@ def raw_shot(**overrides):
     return {
         "title": "双人跟拍",
         "visual_intent": "两人从电影院门口进入画面，入口灯箱形成视觉落点。",
+        "director_effect": "先建立轻松亲密，再让明亮入口带出短暂的不安。",
         "performance_action": "两人轻松交谈，沈夏短暂看向周涵并微笑。",
         "action_physics": "周涵牵住沈夏的右手，两人同速向前走，衣袖随步伐摆动。",
         "shot_size": "中景",
@@ -238,6 +239,7 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
     restored = pipeline.restore_director_shooting_plan_revision("film", 1, 2)
     assert restored.director_shooting_plan_draft_revision == 3
     assert restored.director_shooting_plan_draft.scenes[0].beats[0].shots[0].visual_intent == plan.scenes[0].beats[0].shots[0].visual_intent
+    assert restored.director_shooting_plan_draft.scenes[0].beats[0].shots[0].director_effect == plan.scenes[0].beats[0].shots[0].director_effect
     assert restored.frames[0].model_dump() == original_frames[0]
 
 

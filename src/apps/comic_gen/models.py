@@ -987,6 +987,7 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     order: int = Field(..., ge=0)
     title: str = Field("", max_length=180)
     visual_intent: str = Field("", max_length=2400)
+    director_effect: str = Field("", max_length=2400)
     performance_action: str = Field("", max_length=2400)
     action_physics: str = Field("", max_length=1800)
     shot_size: str = Field("", max_length=64)

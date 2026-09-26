@@ -2882,6 +2882,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "order": shot_index,
                             "title": str(raw_shot.get("title", ""))[:180],
                             "visual_intent": str(raw_shot.get("visual_intent", ""))[:2400],
+                            "director_effect": str(raw_shot.get("director_effect", ""))[:2400],
                             "performance_action": str(raw_shot.get("performance_action", ""))[:2400],
                             "action_physics": str(raw_shot.get("action_physics", ""))[:1800],
                             "shot_size": str(raw_shot.get("shot_size", ""))[:64],
