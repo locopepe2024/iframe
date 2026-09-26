@@ -587,6 +587,15 @@ function StoryMapSection({
     const oldRelationships = rows(profile.relationships).map(asEntry);
     const oldTimeline = rows(profile.timeline).map(asEntry);
     const oldKeyEvents = rows(profile.key_events).map(asEntry);
+    const sceneSummaries = rows(profile.scene_summaries).map(asEntry);
+    const updateSceneSummary = (index: number, patch: Draft) => onChange({
+        ...profile,
+        scene_summaries: sceneSummaries.map((scene, sceneIndex) => sceneIndex === index ? { ...scene, ...patch } : scene),
+    });
+    const addSceneSummary = () => onChange({
+        ...profile,
+        scene_summaries: [...sceneSummaries, { scene_ref: "", summary: "", state_in: "", state_out: "" }],
+    });
     const newMap = () => onChange({
         ...profile,
         story_map: createDirectorStoryMapFromLegacy(profile, sourceRevision, characters),
@@ -968,6 +977,35 @@ function StoryMapSection({
                         </article>
                     ))}
                     {map.story_threads.length === 0 && <p className="text-xs text-text-muted">{t("noStorylines")}</p>}
+                </div>
+            </section>
+
+            <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-scene-summaries-title">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h3 id="director-scene-summaries-title" className="text-sm font-semibold text-foreground">{t("sceneSummariesTitle")}</h3>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("sceneSummariesHint")}</p>
+                    </div>
+                    <button type="button" onClick={addSceneSummary} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addSceneSummary")}</button>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {sceneSummaries.map((scene, index) => (
+                        <article key={`${asText(scene.scene_ref)}-${index}`} className="rounded-md border border-border bg-surface p-3">
+                            <div className="flex items-start justify-between gap-2">
+                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("sceneSummaryIndex", { number: index + 1 })}</span>
+                                <button type="button" onClick={() => onChange({ ...profile, scene_summaries: sceneSummaries.filter((_, sceneIndex) => sceneIndex !== index) })} className="rounded p-2 text-text-secondary hover:bg-red-500/10 hover:text-red-300" aria-label={t("removeSceneSummary", { number: index + 1 })}><Trash2 size={14} aria-hidden="true" /></button>
+                            </div>
+                            <div className="mt-3 grid gap-3">
+                                <Field label={t("sceneRef")} value={asText(scene.scene_ref)} onChange={value => updateSceneSummary(index, { scene_ref: value })} placeholder={t("sceneRefPlaceholder")} />
+                                <Field label={t("sceneSummary")} value={asText(scene.summary)} onChange={value => updateSceneSummary(index, { summary: value })} multiline />
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <Field label={t("sceneStateIn")} value={asText(scene.state_in)} onChange={value => updateSceneSummary(index, { state_in: value })} multiline />
+                                    <Field label={t("sceneStateOut")} value={asText(scene.state_out)} onChange={value => updateSceneSummary(index, { state_out: value })} multiline />
+                                </div>
+                            </div>
+                        </article>
+                    ))}
+                    {sceneSummaries.length === 0 && <p className="rounded border border-dashed border-border p-3 text-xs text-text-muted">{t("noSceneSummaries")}</p>}
                 </div>
             </section>
 

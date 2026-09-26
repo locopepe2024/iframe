@@ -154,6 +154,20 @@ it("builds an explicit story map from a legacy timeline without inventing phase 
     expect(result.relationship_arcs).toEqual([]);
 });
 
+it("edits scene analysis summaries without changing the story map or unknown fields", () => {
+    const onChange = vi.fn();
+    renderEditor({ ...profile, story_map: storyMap, scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet", state_in: "Separate", state_out: "Curious" }] }, onChange);
+
+    fireEvent.change(screen.getByLabelText("Scene summary"), { target: { value: "They meet beside the window" } });
+    fireEvent.change(screen.getByLabelText("State out"), { target: { value: "Exchange books" } });
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        story_map: storyMap,
+        scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet beside the window", state_in: "Separate", state_out: "Exchange books" }],
+        future_field: profile.future_field,
+    }));
+});
+
 it("rejects a malformed story map instead of rendering incomplete arrays", () => {
     renderEditor({
         ...profile,
