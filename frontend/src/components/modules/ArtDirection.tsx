@@ -69,10 +69,7 @@ export default function ArtDirection() {
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
     const [overrideAccepted, setOverrideAccepted] = useState(false);
-    // The Director shooting graph is the primary review surface. Keep the
-    // interpretation editor available as a separate tab, but make refresh
-    // land on the readable Scene → Beat → Shot graph.
-    const [activeDirectorTab, setActiveDirectorTab] = useState<DirectorTab>("shooting_plan");
+    const [activeDirectorTab, setActiveDirectorTab] = useState<DirectorTab>("understanding");
 
     useEffect(() => {
         setOverrideAccepted(false);

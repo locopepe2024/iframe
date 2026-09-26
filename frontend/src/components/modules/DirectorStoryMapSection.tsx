@@ -412,6 +412,7 @@ function StoryMapSection({
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
+    const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const people = map?.people ?? [];
     const phases = (map?.phases ?? []).slice().sort((a, b) => a.order - b.order);
     const allEvents = phases.flatMap(phase => phase.events);
@@ -761,7 +762,30 @@ function StoryMapSection({
                     <button type="button" onClick={addPhase} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addPhase")}</button>
                 </div>
 
-                <div className="mt-3 overflow-x-auto pb-2">
+                <div className="mt-3 flex justify-end">
+                    <div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("viewMode")}>
+                        <button type="button" onClick={() => setViewMode("graph")} aria-pressed={viewMode === "graph"} className={`min-h-9 rounded px-3 text-xs ${viewMode === "graph" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("graphView")}</button>
+                        <button type="button" onClick={() => setViewMode("editor")} aria-pressed={viewMode === "editor"} className={`min-h-9 rounded px-3 text-xs ${viewMode === "editor" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`}>{t("editorView")}</button>
+                    </div>
+                </div>
+
+                {viewMode === "graph" && <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-3" role="group" aria-label={t("graphDescription")}>
+                    <div className="grid min-w-[720px] gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(phases.length, 1)}, minmax(180px, 1fr))` }}>
+                        {phases.map((phase, phaseIndex) => (
+                            <div key={phase.phase_id} className="relative rounded-md border border-primary/30 bg-primary/5 p-3">
+                                {phaseIndex > 0 && <span className="absolute -left-3 top-1/2 h-px w-3 bg-primary/60" aria-hidden="true" />}
+                                <div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{phaseIndex + 1}</span><div><p className="text-[10px] uppercase tracking-wide text-primary">{t("phaseIndex", { number: phaseIndex + 1 })}</p><p className="text-sm font-semibold text-foreground">{phase.label || t("unnamedPhase")}</p></div></div>
+                                <div className="space-y-2 border-l-2 border-primary/30 pl-3">
+                                    {phase.events.slice().sort((a, b) => a.order - b.order).map((event, eventIndex) => <button key={event.event_id} type="button" onClick={() => { setViewMode("editor"); setExpandedEventId(event.event_id); }} className="relative w-full rounded-md border border-border bg-background/80 p-2 text-left hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="absolute -left-[1.05rem] top-4 h-2 w-2 rounded-full border border-primary bg-background" aria-hidden="true" /><span className="text-[10px] font-semibold text-primary">{t("eventNumber", { number: eventIndex + 1 })}</span><span className="mt-1 block line-clamp-2 text-xs font-medium text-foreground">{event.title || t("unnamedEvent")}</span><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-secondary">{event.description || t("eventNeedsDescription")}</span></button>)}
+                                    {phase.events.length === 0 && <p className="text-xs text-text-muted">{t("noEvents")}</p>}
+                                    <button type="button" onClick={() => { addEvent(phase.phase_id); setViewMode("editor"); }} className="inline-flex min-h-8 items-center gap-1 rounded border border-dashed border-border px-2 text-[11px] text-text-secondary hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={12} aria-hidden="true" />{t("addEvent")}</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>}
+
+                {viewMode === "editor" && <div className="mt-3 overflow-x-auto pb-2">
                     <div className="flex min-w-max items-stretch gap-3">
                         {phases.map((phase, phaseIndex) => (
                             <article key={phase.phase_id} className="w-[min(84vw,360px)] rounded-lg border border-border bg-surface p-3 sm:w-[340px]">
@@ -789,7 +813,7 @@ function StoryMapSection({
                         ))}
                         {phases.length === 0 && <p className="rounded-md border border-dashed border-border p-4 text-sm text-text-muted">{t("noPhases")}</p>}
                     </div>
-                </div>
+                </div>}
             </section>
 
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-relationship-graph-title">
@@ -824,6 +848,7 @@ function StoryMapSection({
                         selectedId={selectedRelationshipId || map.relationship_arcs[0]?.relationship_id || ""}
                         onSelect={relationshipId => {
                             setSelectedRelationshipId(relationshipId);
+                            setViewMode("editor");
                             const card = document.getElementById(`relationship-${relationshipId}`);
                             if (card && typeof card.scrollIntoView === "function") card.scrollIntoView({ block: "nearest", behavior: "smooth" });
                         }}
@@ -832,7 +857,7 @@ function StoryMapSection({
                 )}
                 {people.length < 2 && <p className="rounded-md border border-dashed border-border p-4 text-xs text-text-muted">{t("needPeople")}</p>}
 
-                <div className="mt-4 space-y-3">
+                {viewMode === "editor" && <div className="mt-4 space-y-3">
                     {map.relationship_arcs.map((arc, index) => (
                         <article id={`relationship-${arc.relationship_id}`} key={arc.relationship_id} className="scroll-mt-4 rounded-lg border border-border bg-surface p-3 sm:p-4">
                             <div className="mb-3 flex items-start gap-3">
@@ -902,7 +927,7 @@ function StoryMapSection({
                         </article>
                     ))}
                     {map.relationship_arcs.length === 0 && <p className="text-xs text-text-muted">{t("noRelationships")}</p>}
-                </div>
+                </div>}
             </section>
 
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-storyline-title">
@@ -913,7 +938,23 @@ function StoryMapSection({
                     </div>
                     <button type="button" onClick={addThread} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addStoryline")}</button>
                 </div>
-                <div className="space-y-4">
+                {viewMode === "graph" && <div className="overflow-x-auto rounded-lg border border-border bg-surface p-3">
+                    <div className="min-w-[760px] space-y-3">
+                        {map.story_threads.map((thread, threadIndex) => (
+                            <div key={thread.thread_id} className="relative rounded-md border border-primary/30 bg-primary/5 p-3">
+                                <div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{threadIndex + 1}</span><div><p className="text-[10px] uppercase tracking-wide text-primary">{t("storylineNumber", { number: threadIndex + 1 })}</p><p className="text-sm font-semibold text-foreground">{thread.label || t("unnamedStoryline")}</p></div></div>
+                                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(phases.length, 1)}, minmax(180px, 1fr))` }}>
+                                    {phases.map((phase, phaseIndex) => {
+                                        const milestones = thread.milestones.filter(milestone => phase.events.some(event => event.event_id === milestone.event_id));
+                                        return <div key={phase.phase_id} className="relative min-h-20 rounded border border-border bg-background/80 p-2">{phaseIndex > 0 && <span className="absolute -left-2 top-1/2 h-px w-2 bg-primary/50" aria-hidden="true" />}<p className="text-[10px] font-medium text-text-muted">{phase.label || t("unnamedPhase")}</p><div className="mt-2 space-y-1.5">{milestones.map(milestone => { const event = allEvents.find(item => item.event_id === milestone.event_id); return event ? <button key={milestone.event_id} type="button" onClick={() => { setViewMode("editor"); setExpandedEventId(event.event_id); }} className="w-full rounded border border-primary/20 bg-primary/10 p-1.5 text-left text-[11px] text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{event.title || event.description || t("unnamedEvent")}<span className="mt-0.5 block text-[10px] text-text-secondary">{t(`milestone.${milestone.role}`)}</span></button> : null; })}</div></div>;
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                        {map.story_threads.length === 0 && <p className="text-xs text-text-muted">{t("noStorylines")}</p>}
+                    </div>
+                </div>}
+                {viewMode === "editor" && <div className="space-y-4">
                     {map.story_threads.map((thread, index) => (
                         <article key={thread.thread_id} className="rounded-lg border border-border bg-surface p-3 sm:p-4">
                             <div className="flex items-start gap-3">
@@ -977,7 +1018,7 @@ function StoryMapSection({
                         </article>
                     ))}
                     {map.story_threads.length === 0 && <p className="text-xs text-text-muted">{t("noStorylines")}</p>}
-                </div>
+                </div>}
             </section>
 
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-scene-summaries-title">
