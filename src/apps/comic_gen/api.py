@@ -99,6 +99,7 @@ if os.path.exists(env_path):
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
 from ..identity import (
+    API_KEY_IDENTITY_HEADER,
     BROWSER_PROFILE_COOKIE,
     UserContext,
     _resolve_request_context,
@@ -222,6 +223,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
             _resolve_request_context,
             request.headers.get("Authorization"),
             request.cookies.get(BROWSER_PROFILE_COOKIE),
+            request.headers.get(API_KEY_IDENTITY_HEADER),
         )
         request.state.lumenx_identity = user
     except HTTPException as exc:
