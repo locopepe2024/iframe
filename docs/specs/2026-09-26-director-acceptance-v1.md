@@ -13,6 +13,18 @@
 
 本说明不把 Storyboard handoff 当作当前 Director confirm 的一部分。
 
+## 本轮能力验收基线（用户确认）
+
+Director 只有同时满足以下五项，才算达到可测试能力：
+
+1. **导演风格**：可以新增/编辑导演风格，并明确项目或系列作用域、保存状态和当前生效版本。
+2. **可视化导演分析**：人物关系、时间线、事件和场景都能以结构化数据驱动的视图展示；图、时间线和表单读写同一份草稿。
+3. **导演重分析**：可以基于当前剧本/事实版本重新分析；重分析进入新草稿，不覆盖已确认版本；旧结果可追溯并标记 stale。
+4. **分析标注修改**：用户可以对事件、场景、beat、shot 添加或修改导演意图，例如某一镜头的表演效果、画面效果、声音、剪辑或连续性要求；修改可保存、恢复并参与确认校验。
+5. **确认后的全局生效**：确认的 Director revision 必须成为分镜分析及其后续生成链的明确输入，并在请求 lineage 中携带 revision/hash；未确认草稿不得影响全局。
+
+“界面上存在按钮”不等于通过验收；每项都必须有状态、持久化、revision/stale 和下游消费证据。
+
 ## 规范基线
 
 - `docs/specs/2026-09-25-director-visual-review-workbench-v1.md`
@@ -73,6 +85,26 @@
 | 类型检查 | `npm run typecheck` |
 | 生产构建 | `npm run build` |
 | i18n 文案 | `npm run check:colors` 之外，检查 en/zh key 对齐 |
+
+### E. 本轮五项能力验收矩阵
+
+| 能力 | 必须验证的行为 | 当前证据/缺口 |
+| --- | --- | --- |
+| 导演风格 | 新增/编辑风格；项目/系列作用域；保存后重新打开仍能恢复；显示当前生效版本 | Code fact：已有 `art_direction` 保存与继承；需补“新增导演风格”独立验收，避免与视觉风格预设混称 |
+| 可视化分析 | 人物关系、时间线、事件、场景均可查看和编辑；视图间修改同步；场景不能只存在于 shooting plan 的 JSON | Code fact：story map 已覆盖 people/phases/events/relationship arcs；需补 scene 视图和端到端交互测试 |
+| 重分析 | source/fact revision 变化可触发重分析；结果进 draft；确认 revision 不被静默改写；失败和取消可重试 | Code fact：profile analysis/refine job 和 draft revision 存在；需补“确认版本保留 + 重分析 stale”测试 |
+| 标注修改 | 至少覆盖 shot 的 `visual_intent`、表演/动作效果、lighting、sound、transition/continuity；保存后再读一致；缺字段阻止确认 | Code fact：shooting plan 有部分视觉字段；缺口是独立的用户标注语义、编辑入口和 round-trip 测试 |
+| 全局生效 | Director confirm 后 storyboard analysis 请求包含确认 profile revision/hash 和执行摘要；草稿不能被消费；旧 storyboard/frame 标记 review/stale | Code fact：Storyboard analysis 已消费 effective director profile；需补 revision/hash 断言、旧 frame review 门和“确认前不生效”测试 |
+
+### F. 必须补齐的遗漏边界
+
+1. **导演风格 ≠ 视觉风格预设**：验收要区分导演的叙事/摄影/表演约束与 `art_direction.style_config` 的视觉参数，并定义两者合并优先级。
+2. **场景视图缺失**：当前 story map 主要是 phase/event；拍摄计划有 scene，但尚未证明“场景分析”是可视化、可编辑且与事件/shot 有稳定引用。
+3. **标注的对象和作用域**：必须规定标注属于 event、scene、beat 还是 shot；同一标注如何进入 storyboard prompt，不能只保存为任意 JSON。
+4. **重分析的输入快照**：必须固定 source revision、Fact Ledger revision、导演风格 revision 和分析指令，否则无法判断重分析是否可复现。
+5. **全局生效的下游范围**：至少验收 storyboard analysis、frame generation、资产/视频 prompt；只证明一次 storyboard 分析读取 profile，不足以声称全局生效。
+6. **确认边界**：Director interpretation confirm、shooting plan confirm、Storyboard apply/confirm 仍是三个动作；验收必须防止任一按钮隐式替代另一个动作。
+7. **失败/回滚**：重分析失败、保存冲突、确认冲突和下游 lineage stale 都要保留旧确认版本，并给出恢复路径。
 
 ## 标准验收命令
 
