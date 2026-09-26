@@ -700,8 +700,11 @@ export default function Home() {
     return <SeriesDetailPage seriesId={seriesId} />;
   }
 
-  // Filter standalone projects (not belonging to any series)
-  const standaloneProjects = projects.filter((p) => !p.series_id);
+  // A series list request can fail independently from the project list (for
+  // example during API-key session renewal). Keep episode projects visible
+  // instead of silently dropping every project that has a series_id.
+  const loadedEpisodeIds = new Set(Object.values(seriesEpisodes).flat().map((p) => p.id));
+  const standaloneProjects = projects.filter((p) => !p.series_id || !loadedEpisodeIds.has(p.id));
 
   const totalCount = seriesList.length + standaloneProjects.length;
 
