@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from typing import Any, Dict
@@ -27,6 +28,8 @@ class LoginRequest(BaseModel):
 
 BROWSER_PROFILE_COOKIE = "lumenx-browser-profile"
 BROWSER_PROFILE_MAX_AGE = 60 * 60 * 24 * 365
+BROWSER_INSTALLATION_HEADER = "X-iFrame-Browser-Installation"
+BROWSER_INSTALLATION_MAX_LENGTH = 128
 
 
 class UniArtIdentityClient:
@@ -125,9 +128,26 @@ def _new_browser_context() -> UserContext:
     return _browser_context(secrets.token_urlsafe(32))
 
 
+def _browser_context_from_installation(installation_id: str | None) -> UserContext | None:
+    """Recover an anonymous browser owner when the HttpOnly cookie is absent.
+
+    This is a continuity hint for embedded runtimes and cookie-restricted
+    browsers, not an authentication mechanism. Keep the accepted alphabet
+    narrow so a caller cannot smuggle arbitrary owner-shaped values into the
+    persisted path namespace.
+    """
+    normalized = (installation_id or "").strip()
+    if not normalized or len(normalized) > BROWSER_INSTALLATION_MAX_LENGTH:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", normalized):
+        return None
+    return _browser_context(f"installation-{normalized}")
+
+
 def _resolve_request_context(
     authorization: str | None,
     browser_profile: str | None,
+    browser_installation: str | None = None,
 ) -> tuple[UserContext, bool]:
     if authorization:
         token = _extract_bearer(authorization)
@@ -135,6 +155,9 @@ def _resolve_request_context(
         return _context_from_payload(payload, token), False
     if browser_profile:
         return _browser_context(browser_profile), False
+    recovered = _browser_context_from_installation(browser_installation)
+    if recovered is not None:
+        return recovered, True
     return _new_browser_context(), True
 
 
@@ -158,11 +181,14 @@ def require_user_context(
     response: Response,
     authorization: str | None = Header(default=None),
     browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
+    browser_installation: str | None = Header(default=None, alias=BROWSER_INSTALLATION_HEADER),
 ) -> UserContext:
     existing = getattr(request.state, "lumenx_identity", None)
     if existing is not None:
         return existing
-    identity, should_set_cookie = _resolve_request_context(authorization, browser_profile)
+    identity, should_set_cookie = _resolve_request_context(
+        authorization, browser_profile, browser_installation
+    )
     request.state.lumenx_identity = identity
     if should_set_cookie:
         _set_browser_profile_cookie(response, request, identity)
@@ -183,8 +209,11 @@ def me(
     response: Response,
     authorization: str | None = Header(default=None),
     browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
+    browser_installation: str | None = Header(default=None, alias=BROWSER_INSTALLATION_HEADER),
 ):
-    identity, should_set_cookie = _resolve_request_context(authorization, browser_profile)
+    identity, should_set_cookie = _resolve_request_context(
+        authorization, browser_profile, browser_installation
+    )
     if should_set_cookie:
         _set_browser_profile_cookie(response, request, identity)
     return {

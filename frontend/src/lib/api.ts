@@ -81,6 +81,36 @@ const getApiUrl = (): string => {
 
 export const API_URL = getApiUrl();
 
+const BROWSER_INSTALLATION_KEY = "lumenx-browser-installation";
+const BROWSER_INSTALLATION_HEADER = "X-iFrame-Browser-Installation";
+
+/**
+ * Anonymous browser mode normally uses the HttpOnly profile cookie. This
+ * local identifier is only a continuity hint for cookie-restricted browsers
+ * and embedded runtimes; it is never an authentication credential.
+ */
+export const getBrowserInstallationId = (): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+        const existing = window.localStorage.getItem(BROWSER_INSTALLATION_KEY);
+        if (existing && /^[A-Za-z0-9_-]{1,128}$/.test(existing)) return existing;
+        const generated = window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        window.localStorage.setItem(BROWSER_INSTALLATION_KEY, generated);
+        return generated;
+    } catch {
+        return null;
+    }
+};
+
+axios.interceptors.request.use((config) => {
+    const installationId = getBrowserInstallationId();
+    if (installationId && !config.headers?.[BROWSER_INSTALLATION_HEADER]) {
+        config.headers = config.headers ?? {};
+        config.headers[BROWSER_INSTALLATION_HEADER] = installationId;
+    }
+    return config;
+});
+
 export const authenticatedFetch = (
     input: RequestInfo | URL,
     init: RequestInit = {},
@@ -90,6 +120,10 @@ export const authenticatedFetch = (
         const token = window.localStorage.getItem("lumenx-access-token");
         if (token && !headers.has("Authorization")) {
             headers.set("Authorization", `Bearer ${token}`);
+        }
+        const installationId = getBrowserInstallationId();
+        if (installationId && !headers.has(BROWSER_INSTALLATION_HEADER)) {
+            headers.set(BROWSER_INSTALLATION_HEADER, installationId);
         }
     }
     return fetch(input, { ...init, headers });
