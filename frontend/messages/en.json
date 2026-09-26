@@ -1536,7 +1536,10 @@
         "shots": "shots",
         "openShot": "Open shot",
         "untitledBeat": "Untitled beat",
-        "noEffect": "No director effect yet"
+        "noEffect": "No director effect yet",
+        "inspector": "Shot inspector",
+        "selectShot": "Select a shot node to edit it while keeping the graph visible.",
+        "shotLabel": "Shot {number}"
       },
       "practicalSourceHint": "Examples: cinema sign, ticket-window light, or street lamp. Leave blank when no practical source is visible.",
       "noProject": "Open a project first."

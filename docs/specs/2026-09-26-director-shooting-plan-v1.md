@@ -99,3 +99,18 @@ The shooting-plan review surface includes a readable scene → beat → shot flo
 visible connector lines. Shot cards expose the title, duration, and director effect at a
 glance; selecting a card opens the corresponding editable shot details. The map is a view
 of the same nested plan data and does not create a second ordering or confirmation state.
+
+## Continuation slice: director graph editor (2026-09-26)
+
+The primary review surface is a three-lane graph rather than nested drawers:
+
+- Scene, Beat, and Shot are separate visual lanes.
+- Scene → Beat edges express ownership; Beat → Shot edges express membership; Shot → Shot edges express ordered cutting within a beat.
+- Selecting a Shot keeps the graph visible and opens a persistent inspector beside it. The inspector edits the selected shot in the same draft; it is not a second state or a modal drawer.
+- The graph may use a layout-only position in the frontend, but canonical order remains `scenes[].beats[].shots[]`. Moving or reordering a node must update that canonical order before save.
+- Nodes expose the information needed for scanning: title, duration, shot size, and director effect. Long text is edited in the inspector rather than truncated into the graph.
+- Scene continuity and unresolved questions remain attached to their source Scene/Beat nodes; they are not inferred from graph geometry.
+
+The first implementation may use a lightweight DOM graph with semantic connectors. A graph library
+such as XYFlow can be introduced only if pan/zoom, edge editing, or large-plan performance requires
+it; adopting a library is not itself a change to the Director data contract.

@@ -168,10 +168,12 @@ function moveItem<T>(items: T[], index: number, delta: number): T[] {
 function ShotFlowMap({
     scenes,
     onSelectShot,
+    selectedShotId,
     labels,
 }: {
     scenes: DirectorPlanScene[];
     onSelectShot: (shotId: string) => void;
+    selectedShotId: string | null;
     labels: { scene: string; beat: string; shots: string; openShot: string; untitledScene: string; untitledBeat: string; untitledShot: string; noEffect: string };
 }) {
     return (
@@ -204,7 +206,7 @@ function ShotFlowMap({
                                                 key={shot.shot_id}
                                                 type="button"
                                                 onClick={() => onSelectShot(shot.shot_id)}
-                                                className="group relative min-h-24 rounded-md border border-border bg-background/80 p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                                className={`group relative min-h-24 rounded-md border p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedShotId === shot.shot_id ? "border-primary bg-primary/10 ring-1 ring-primary/50" : "border-border bg-background/80"}`}
                                                 aria-label={`${labels.openShot} ${shotIndex + 1}: ${shot.title || labels.untitledShot}`}
                                             >
                                                 {shotIndex > 0 && <span className="absolute -left-2 top-1/2 hidden h-px w-2 bg-primary/50 md:block" aria-hidden="true" />}
@@ -246,6 +248,7 @@ export default function DirectorShootingPlanPanel() {
     const [jobProgress, setJobProgress] = useState<{ completed: number; total: number } | null>(null);
     const [jobStatus, setJobStatus] = useState("");
     const [expandedShots, setExpandedShots] = useState<Set<string>>(() => new Set());
+    const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
 
     const sourceRevision = currentProject?.source_revision ?? 1;
@@ -555,17 +558,43 @@ export default function DirectorShootingPlanPanel() {
                             <h3 id="director-plan-flow-title" className="text-sm font-semibold text-foreground">Shot flow</h3>
                             <p className="mt-1 text-xs text-text-muted">Scenes, beats and shots are connected in reading order. Select a shot to open its editable details.</p>
                         </div>
-                        <ShotFlowMap
-                            scenes={scenes}
-                            labels={{
-                                scene: t("flow.scene"), beat: t("flow.beat"), shots: t("flow.shots"), openShot: t("flow.openShot"),
-                                untitledScene: t("unnamedScene"), untitledBeat: t("flow.untitledBeat"), untitledShot: t("untitledShot"), noEffect: t("flow.noEffect"),
-                            }}
-                            onSelectShot={shotId => {
-                                setExpandedShots(previous => new Set(previous).add(shotId));
-                                requestAnimationFrame(() => document.getElementById(`director-plan-shot-${shotId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
-                            }}
-                        />
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                            <ShotFlowMap
+                                scenes={scenes}
+                                selectedShotId={selectedShotId}
+                                labels={{
+                                    scene: t("flow.scene"), beat: t("flow.beat"), shots: t("flow.shots"), openShot: t("flow.openShot"),
+                                    untitledScene: t("unnamedScene"), untitledBeat: t("flow.untitledBeat"), untitledShot: t("untitledShot"), noEffect: t("flow.noEffect"),
+                                }}
+                                onSelectShot={shotId => {
+                                    setSelectedShotId(shotId);
+                                    requestAnimationFrame(() => {
+                                        const target = document.getElementById(`director-plan-shot-${shotId}`);
+                                        target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                                    });
+                                }}
+                            />
+                            <aside className="h-fit rounded-lg border border-primary/30 bg-surface/70 p-4 lg:sticky lg:top-4" aria-label={t("flow.inspector") }>
+                                {(() => {
+                                    const selected = shots.find(shot => shot.shot_id === selectedShotId);
+                                    if (!selected) return <p className="text-sm leading-6 text-text-secondary">{t("flow.selectShot")}</p>;
+                                    const location = scenes.flatMap((scene, sceneIndex) => scene.beats.flatMap((beat, beatIndex) => beat.shots.map((shot, shotIndex) => ({ shot, sceneIndex, beatIndex, shotIndex })))).find(item => item.shot.shot_id === selectedShotId);
+                                    if (!location) return null;
+                                    return (
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t("flow.inspector")}</p>
+                                                <h4 className="mt-1 text-sm font-semibold text-foreground">{t("flow.shotLabel", { number: location.shotIndex + 1 })}</h4>
+                                            </div>
+                                            <Field label={t("fields.shotTitle")} value={selected.title} onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { title: value })} />
+                                            <Field label={t("fields.directorEffect")} value={selected.director_effect} multiline onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { director_effect: value })} />
+                                            <Field label={t("fields.duration")} type="number" min={1} max={30} value={selected.duration_seconds} onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { duration_seconds: value ? Number(value) : null })} />
+                                            <Field label={t("fields.visualIntent")} value={selected.visual_intent} multiline onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { visual_intent: value })} />
+                                        </div>
+                                    );
+                                })()}
+                            </aside>
+                        </div>
                     </section>
 
                     <div className="space-y-4">

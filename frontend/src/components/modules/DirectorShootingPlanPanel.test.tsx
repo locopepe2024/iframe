@@ -148,7 +148,10 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open shot 1: Follow the couple/i })).toBeInTheDocument();
+    const shotNode = screen.getByRole("button", { name: /Open shot 1: Follow the couple/i });
+    expect(shotNode).toBeInTheDocument();
+    fireEvent.click(shotNode);
+    expect(screen.getByText("Shot inspector")).toBeInTheDocument();
     expect(screen.getAllByText("4 sec")).toHaveLength(3);
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
@@ -159,7 +162,7 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
     const performance = await screen.findByLabelText("Character performance (gaze, expression, posture, pace)");
     fireEvent.change(performance, { target: { value: "They trade a brief smile while keeping the same pace." } });
-    const effect = screen.getByLabelText("Director effect (audience / editorial effect)");
+    const effect = screen.getAllByLabelText("Director effect (audience / editorial effect)").at(-1)!;
     fireEvent.change(effect, { target: { value: "Make the bright entrance feel emotionally unstable." } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
