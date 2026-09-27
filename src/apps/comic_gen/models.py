@@ -1463,8 +1463,26 @@ def build_director_execution_summary(profile: Dict[str, Any]) -> str:
     semantic replacement for a model-generated summary.
     """
     existing = profile.get("execution_summary")
+    current_edit_sections = (
+        ("SETTING", profile.get("setting"), 300),
+        ("TIMELINE", profile.get("timeline"), 400),
+        ("GUARDRAILS", {
+            field: profile.get(field)
+            for field in _DIRECTOR_STRING_LIST_FIELDS
+            if profile.get(field)
+        }, 700),
+    )
+    current_edits = []
+    for label, value, limit in current_edit_sections:
+        if value not in (None, "", [], {}):
+            current_edits.append(f"{label}: {_bounded_director_text(value, limit)}")
     if isinstance(existing, str) and existing.strip():
-        return _bounded_director_text(existing, DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS)
+        if not current_edits:
+            return _bounded_director_text(existing, DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS)
+        existing = existing.split("\nCURRENT_DIRECTOR_EDITS:", 1)[0].rstrip()
+        suffix = "\nCURRENT_DIRECTOR_EDITS: " + "\n".join(current_edits)
+        available = max(256, DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS - len(suffix))
+        return _bounded_director_text(existing, available) + suffix
 
     sections = (
         ("SETTING", profile.get("setting"), 300),
@@ -1915,7 +1933,10 @@ def merge_director_profile_patch(
         )
     merged = dict(base)
     merged.update(changed)
-    return normalize_director_profile_draft(merged)
+    normalized = normalize_director_profile_draft(merged)
+    if not ({"setting", "timeline", "continuity_constraints", "prohibitions", "unresolved_questions"} & set(changed)):
+        normalized["execution_summary"] = base.get("execution_summary", normalized["execution_summary"])
+    return normalized
 
 
 def _compact_director_context_value(value: Any, limit: int) -> Any:

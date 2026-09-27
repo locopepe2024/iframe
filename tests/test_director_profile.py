@@ -512,6 +512,24 @@ def test_legacy_profile_gets_bounded_execution_payload_without_full_profile_fiel
     assert execution["scene_summaries"][0]["scene_ref"] == "21"
 
 
+def test_current_director_edits_are_appended_when_old_execution_summary_exists():
+    payload = {
+        **profile_payload(),
+        "execution_summary": "模型生成的旧摘要",
+        "setting": {"time_period": "2014—2024", "social_context": "移动互联网普及"},
+        "timeline": [{"phase": "北京职场", "time_anchor": "2020 年"}],
+        "continuity_constraints": ["周涵在职场阶段留短发，婚礼阶段恢复长发"],
+        "unresolved_questions": ["各阶段是否分别对应 2014、2018、2020、2024？"],
+    }
+
+    execution = director_execution_payload(DirectorProfile(**payload))
+
+    assert "模型生成的旧摘要" in execution["execution_summary"]
+    assert "周涵在职场阶段留短发" in execution["execution_summary"]
+    assert "2014—2024" in execution["execution_summary"]
+    assert "各阶段是否分别对应" in execution["execution_summary"]
+
+
 def test_scene_memory_is_bounded_and_keeps_transition_fields():
     payload = {
         **profile_payload(),
