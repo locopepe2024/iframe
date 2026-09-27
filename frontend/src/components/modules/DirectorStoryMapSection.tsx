@@ -435,11 +435,17 @@ function StoryMapSection({
             });
             setGraphEdges(next);
         };
-        measure();
+        const frame = requestAnimationFrame(measure);
         const observer = new ResizeObserver(measure);
         observer.observe(canvas);
-        return () => observer.disconnect();
-    }, [viewMode]);
+        canvas.querySelectorAll<HTMLElement>('[data-graph-branch]').forEach(branch => observer.observe(branch));
+        window.addEventListener("resize", measure);
+        return () => {
+            cancelAnimationFrame(frame);
+            observer.disconnect();
+            window.removeEventListener("resize", measure);
+        };
+    }, [viewMode, map?.source_revision]);
     const people = map?.people ?? [];
     const phases = (map?.phases ?? []).slice().sort((a, b) => a.order - b.order);
     const allEvents = phases.flatMap(phase => phase.events);
