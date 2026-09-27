@@ -168,6 +168,27 @@ it("restores a saved Director draft independently from the confirmed profile", a
     expect(screen.getByLabelText("geography")).toHaveValue("User-edited geography");
 });
 
+it("restores a browser draft when the previous server save failed", async () => {
+    window.localStorage.setItem("iframe.director-profile-draft.v1:film:source-1", JSON.stringify({
+        schemaVersion: 1,
+        projectId: "film",
+        sourceRevision: 1,
+        confirmedHash: "",
+        draftRevision: 0,
+        draft: { ...profile, unresolved_questions: ["2014 or 2020?"], continuity_constraints: ["Keep the haircut by era"] },
+        savedAt: Date.now(),
+    }));
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorProfilePanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByDisplayValue("2014 or 2020?")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Keep the haircut by era")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
+});
+
 it("requires a fresh analysis after the source changes, then allows saving it against the new revision", async () => {
     useProjectStore.setState(state => ({
         currentProject: { ...state.currentProject!, source_revision: 2 },

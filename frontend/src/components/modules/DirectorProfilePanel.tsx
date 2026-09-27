@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
@@ -40,6 +40,19 @@ const jobStateKey = (status: string) => {
     return "running";
 };
 
+const directorLocalDraftKey = (projectId: string, sourceRevision: number) =>
+    `iframe.director-profile-draft.v1:${projectId}:source-${sourceRevision}`;
+
+type LocalDirectorDraft = {
+    schemaVersion: 1;
+    projectId: string;
+    sourceRevision: number;
+    confirmedHash: string;
+    draftRevision: number;
+    draft: Record<string, unknown>;
+    savedAt: number;
+};
+
 export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapOnly?: boolean }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
@@ -61,6 +74,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
     const [factsLoading, setFactsLoading] = useState(false);
     const [factsError, setFactsError] = useState("");
     const [factRefreshToken, setFactRefreshToken] = useState(0);
+    const draftHydratedRef = useRef(false);
     const sourceRevision = currentProject?.source_revision ?? 1;
     const isDirty = draftText !== savedDraftText;
     const hasStaleDraft = draftContextSourceRevision !== null && draftContextSourceRevision !== sourceRevision;
@@ -126,6 +140,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
 
     useEffect(() => {
         const fallback = editableProfile(confirmed);
+        draftHydratedRef.current = false;
         setDraftText(fallback);
         setSavedDraftText(fallback);
         setDraftRevision(0);
@@ -142,21 +157,57 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
         api.getDirectorProfileDraft(currentProject.id)
             .then(saved => {
                 if (!active) return;
-                const loaded = saved.draft ? JSON.stringify(saved.draft, null, 2) : fallback;
+                const serverLoaded = saved.draft ? JSON.stringify(saved.draft, null, 2) : fallback;
+                let loaded = serverLoaded;
+                let loadedRevision = saved.draft_revision;
+                try {
+                    const raw = window.localStorage.getItem(directorLocalDraftKey(currentProject.id, sourceRevision));
+                    const local = raw ? JSON.parse(raw) as Partial<LocalDirectorDraft> : null;
+                    if (local?.schemaVersion === 1 && local.projectId === currentProject.id
+                        && local.sourceRevision === sourceRevision && local.draft && typeof local.draft === "object") {
+                        const serverUpdatedAt = saved.updated_at ? saved.updated_at * 1000 : 0;
+                        if (!serverUpdatedAt || (local.savedAt ?? 0) >= serverUpdatedAt) {
+                            loaded = JSON.stringify(local.draft, null, 2);
+                            loadedRevision = saved.draft_revision;
+                        }
+                    }
+                } catch {
+                    // Local draft recovery is best effort; server state remains authoritative.
+                }
                 setDraftText(loaded);
-                setSavedDraftText(loaded);
-                setDraftRevision(saved.draft_revision);
+                setSavedDraftText(serverLoaded);
+                setDraftRevision(loadedRevision);
                 setDraftSourceRevision(saved.source_revision);
                 setDraftContextSourceRevision(saved.source_revision);
+                draftHydratedRef.current = true;
             })
             .catch(() => {
                 if (!active) return;
                 setDraftText(fallback);
                 setSavedDraftText(fallback);
                 setDraftContextSourceRevision(null);
+                draftHydratedRef.current = true;
             });
         return () => { active = false; };
     }, [currentProject?.id, confirmed?.content_hash, sourceRevision]);
+
+    useEffect(() => {
+        if (!draftHydratedRef.current || !currentProject || !isDirty || typeof window === "undefined") return;
+        try {
+            const draft = JSON.parse(draftText) as Record<string, unknown>;
+            window.localStorage.setItem(directorLocalDraftKey(currentProject.id, sourceRevision), JSON.stringify({
+                schemaVersion: 1,
+                projectId: currentProject.id,
+                sourceRevision,
+                confirmedHash: confirmed?.content_hash ?? "",
+                draftRevision,
+                draft,
+                savedAt: Date.now(),
+            } satisfies LocalDirectorDraft));
+        } catch {
+            // Invalid JSON is already shown by the editor; do not persist it as a recoverable draft.
+        }
+    }, [draftText, isDirty, currentProject?.id, sourceRevision, confirmed?.content_hash, draftRevision]);
 
     useEffect(() => {
         if (!isDirty || typeof window === "undefined") return;
@@ -181,6 +232,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
         const value = JSON.parse(draftText);
         if (!value || Array.isArray(value) || typeof value !== "object") throw new Error(t("directorInvalidJson"));
         return value;
+    };
+
+    const clearLocalDraft = () => {
+        if (typeof window === "undefined" || !currentProject) return;
+        try { window.localStorage.removeItem(directorLocalDraftKey(currentProject.id, sourceRevision)); } catch { /* storage unavailable */ }
     };
 
     const queueCandidate = (profile: Record<string, unknown>, action: "analyze" | "refine") => {
@@ -286,9 +342,10 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                 setDraftSourceRevision(saved.source_revision);
                 setDraftContextSourceRevision(saved.source_revision);
                 const savedText = JSON.stringify(saved.draft ?? draft, null, 2);
-                setDraftText(savedText);
-                setSavedDraftText(savedText);
-                confirmedDraft = saved.draft ?? draft;
+            setDraftText(savedText);
+            setSavedDraftText(savedText);
+            confirmedDraft = saved.draft ?? draft;
+            clearLocalDraft();
             }
             const updated = await api.applyDirectorProfile(
                 currentProject.id,
@@ -329,6 +386,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             const savedText = JSON.stringify(saved.draft ?? draft, null, 2);
             setDraftText(savedText);
             setSavedDraftText(savedText);
+            clearLocalDraft();
             setStatus({ kind: "success", action: "save" });
             toast.success(t("directorDraftSaved"), { projectId: currentProject.id, projectTitle: currentProject.title });
         } catch (error) {
