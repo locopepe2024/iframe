@@ -24,6 +24,8 @@
 - Whether the current media director can import an automatically extracted track without a new extractor and skeleton-mapping adapter.
 - Whether a full-duration render is operationally acceptable without a low-resolution/low-sample preview profile.
 - A 24-frame, 1-second, 640x360, single-sample MP4 smoke test completed and ffprobe reported 24 frames at 24 fps.
+- MediaPipe Pose Landmarker Lite ran on the supplied 1394x792 test clip in an isolated Python 3.12 venv. The first 120 sampled frames produced a JSON track and overlay video.
+- On those 120 samples, the extractor detected 1, 2, or 3 people depending on the frame. The center target was tracked on 79 samples and marked `occluded` on 41 samples instead of silently assigning a left/right person.
 
 ## Blender white-model boundary
 
@@ -36,6 +38,16 @@
 **What would verify it:** Import a fixture containing at least 24 frames of target joint rotations and root positions, render a short MP4, and compare the manifest plus sampled overlay frames against the source track.
 
 **Smoke-test result:** A fixture with five target samples (frames 1, 6, 12, 18, and 24) rendered successfully. The manifest retained all three actor IDs and the MP4 was decoded as 640x360, 24 frames, 1.0 seconds. This verifies the renderer path, but not pose accuracy against an extracted source video.
+
+## 2D extractor boundary
+
+**Observed:** MediaPipe Pose Landmarker Lite can emit up to three pose candidates per sampled frame and a target overlay. A naive detector-index or center-only selector changed identity when the three-person portion appeared. Visual inspection showed the yellow center person selected initially, then a left male selected after the center pose was absent from a frame.
+
+**Direct implication:** `motion-track.v1` must carry a target selection status and explicit occlusion gaps. A missing center detection cannot be filled by copying a neighboring person's pose.
+
+**Current fixture policy:** the smoke extractor uses a center prior plus continuity score; if no candidate lies within the center corridor, it emits `selection_status: "occluded"` and leaves target landmarks absent. This is a review signal, not an assertion that the person is physically absent.
+
+**Not yet proven:** The center corridor is a test-specific heuristic. It is not sufficient for arbitrary camera pans, lateral subject movement, or shots where the target is not centered.
 
 ## Control bundle contract
 
