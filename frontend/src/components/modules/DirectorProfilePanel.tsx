@@ -361,6 +361,26 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             confirmedDraft = saved.draft ?? draft;
             clearLocalDraft();
             }
+            // A previous request may have committed the draft while its
+            // response was lost. Refresh the server revision before confirm
+            // so the next action is not blocked by a stale optimistic value.
+            const latestDraft = await api.getDirectorProfileDraft(currentProject.id);
+            if (latestDraft.source_revision === sourceRevision && latestDraft.draft_revision !== expectedDraftRevision) {
+                const latestText = latestDraft.draft ? JSON.stringify(latestDraft.draft) : "";
+                if (latestText === JSON.stringify(confirmedDraft)) {
+                    expectedDraftRevision = latestDraft.draft_revision;
+                } else {
+                    const saved = await saveDraftWithRecovery(confirmedDraft, latestDraft.draft_revision);
+                    expectedDraftRevision = saved.draft_revision;
+                    confirmedDraft = saved.draft ?? confirmedDraft;
+                    setDraftRevision(saved.draft_revision);
+                    setDraftSourceRevision(saved.source_revision);
+                    setDraftContextSourceRevision(saved.source_revision);
+                    const savedText = JSON.stringify(confirmedDraft, null, 2);
+                    setDraftText(savedText);
+                    setSavedDraftText(savedText);
+                }
+            }
             const updated = await api.applyDirectorProfile(
                 currentProject.id,
                 confirmedDraft,
