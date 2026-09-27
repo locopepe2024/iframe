@@ -235,6 +235,41 @@ function SelectField<T extends string>({
     );
 }
 
+type MindMapTreeNode = {
+    id: string;
+    label: string;
+    meta?: string;
+    tone?: "core" | "branch" | "leaf" | "warning";
+    onClick?: () => void;
+    children?: MindMapTreeNode[];
+};
+
+function MindMapTreeNodeView({ node, parentId }: { node: MindMapTreeNode; parentId?: string }) {
+    const className = node.tone === "branch"
+        ? "border-primary/35 bg-primary/10"
+        : node.tone === "warning"
+            ? "border-amber-400/35 bg-amber-400/10"
+            : "border-border bg-background/85";
+    return (
+        <div className="min-w-0" data-graph-node={node.id} data-graph-parent={parentId}>
+            <button
+                type="button"
+                onClick={node.onClick}
+                disabled={!node.onClick}
+                className={`w-full rounded-lg border px-3 py-2.5 text-left shadow-sm transition-colors ${className} ${node.onClick ? "hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : "cursor-default"}`}
+            >
+                <span className="block text-xs font-semibold text-foreground">{node.label}</span>
+                {node.meta && <span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span>}
+            </button>
+            {node.children && node.children.length > 0 && (
+                <div className="ml-5 mt-2 space-y-2 border-l border-primary/25 pl-3">
+                    {node.children.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={node.id} />)}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function IconActions({
     label,
     onMoveUp,
@@ -421,24 +456,29 @@ function StoryMapSection({
         if (!canvas || viewMode !== "graph") return;
         const measure = () => {
             const base = canvas.getBoundingClientRect();
-            const core = canvas.querySelector<HTMLElement>('[data-graph-node="core"]');
-            if (!core) return;
-            const coreBox = core.getBoundingClientRect();
-            const next = Array.from(canvas.querySelectorAll<HTMLElement>('[data-graph-branch]')).map(branch => {
-                const box = branch.getBoundingClientRect();
-                return {
-                    x1: coreBox.left + coreBox.width / 2 - base.left,
-                    y1: coreBox.bottom - base.top,
-                    x2: box.left + box.width / 2 - base.left,
-                    y2: box.top - base.top,
-                };
+            const nodes = Array.from(canvas.querySelectorAll<HTMLElement>('[data-graph-node]'));
+            if (!nodes.some(node => node.dataset.graphNode === "core")) return;
+            const next = Array.from(canvas.querySelectorAll<HTMLElement>('[data-graph-parent]')).flatMap(child => {
+                const parentId = child.dataset.graphParent;
+                if (!parentId) return [];
+                const parent = nodes.find(node => node.dataset.graphNode === parentId);
+                if (!parent) return [];
+                const parentBox = parent.getBoundingClientRect();
+                const childBox = child.getBoundingClientRect();
+                const parentBelow = childBox.top >= parentBox.bottom - 2;
+                return [{
+                    x1: (parentBelow ? parentBox.left + parentBox.width / 2 : parentBox.right) - base.left,
+                    y1: (parentBelow ? parentBox.bottom : parentBox.top + parentBox.height / 2) - base.top,
+                    x2: (parentBelow ? childBox.left + childBox.width / 2 : childBox.left) - base.left,
+                    y2: (parentBelow ? childBox.top : childBox.top + childBox.height / 2) - base.top,
+                }];
             });
             setGraphEdges(next);
         };
         const frame = requestAnimationFrame(measure);
         const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
         observer?.observe(canvas);
-        canvas.querySelectorAll<HTMLElement>('[data-graph-branch]').forEach(branch => observer?.observe(branch));
+        canvas.querySelectorAll<HTMLElement>('[data-graph-node]').forEach(node => observer?.observe(node));
         window.addEventListener("resize", measure);
         return () => {
             cancelAnimationFrame(frame);
@@ -635,6 +675,61 @@ function StoryMapSection({
         story_map: createDirectorStoryMapFromLegacy(profile, sourceRevision, characters),
     });
 
+    const selectNode = (kind: string, title: string, body: string, meta: string) => () => {
+        setSelectedGraphNode({ kind, title, body, meta });
+    };
+    const mindMapBranches: MindMapTreeNode[] = [
+        {
+            id: "timeline", label: t("mindMapTimeline"), tone: "branch", meta: t("mindMapTimelineHint"),
+            children: phases.map((phase, phaseIndex) => ({
+                id: `timeline-${phase.phase_id}`, label: phase.label || t("unnamedPhase"), tone: "leaf" as const,
+                meta: `${t("phaseIndex", { number: phaseIndex + 1 })} · ${phase.time_anchor || t("noTimeAnchor")}`,
+                onClick: selectNode(t("mindMapTimeline"), phase.label || t("unnamedPhase"), phase.events.map(event => event.title || event.description).join("\n") || t("noEvents"), `${t("phaseIndex", { number: phaseIndex + 1 })} · ${phase.time_anchor || t("noTimeAnchor")}`),
+                children: phase.events.slice().sort((a, b) => a.order - b.order).map((event, eventIndex) => ({
+                    id: `event-${event.event_id}`, label: event.title || event.description || t("unnamedEvent"), tone: "leaf" as const,
+                    meta: `${t("eventNumber", { number: eventIndex + 1 })} · ${event.evidence_status}`,
+                    onClick: selectNode(t("mindMapEvent"), event.title || event.description || t("unnamedEvent"), event.description || event.dramatic_function || t("noEvents"), `${phase.label || t("unnamedPhase")} · ${event.evidence_status}`),
+                })),
+            })),
+        },
+        {
+            id: "people", label: t("mindMapPeople"), tone: "branch", meta: t("mindMapPeopleHint"),
+            children: people.map(person => ({
+                id: `person-${person.person_id}`, label: person.display_name, tone: "leaf" as const, meta: t("mindMapPerson"),
+                onClick: selectNode(t("mindMapPeople"), person.display_name, t("mindMapPerson"), t("mindMapPerson")),
+                children: (map?.relationship_arcs ?? []).filter(arc => arc.person_ids.includes(person.person_id)).map(arc => ({
+                    id: `relationship-${arc.relationship_id}`, label: arc.label || relationshipLabel(arc, people), tone: "leaf" as const,
+                    meta: `${arc.states.length} · ${t("mindMapRelationshipStates")}`,
+                    onClick: selectNode(t("mindMapRelationship"), arc.label || relationshipLabel(arc, people), arc.states.map(state => state.state).filter(Boolean).join("\n") || t("noRelationshipStates"), `${arc.states.length} · ${t("mindMapRelationshipStates")}`),
+                })),
+            })),
+        },
+        {
+            id: "threads", label: t("mindMapThreads"), tone: "branch", meta: t("mindMapThreadsHint"),
+            children: (map?.story_threads ?? []).map(thread => ({
+                id: `thread-${thread.thread_id}`, label: thread.label || t("unnamedStoryline"), tone: "leaf" as const,
+                meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`,
+                onClick: selectNode(t("mindMapThreads"), thread.label || t("unnamedStoryline"), thread.milestones.map(item => item.note).filter(Boolean).join("\n") || t("noStorylines"), `${thread.milestones.length} · ${t("mindMapMilestones")}`),
+                children: thread.milestones.map(milestone => {
+                    const event = allEvents.find(item => item.event_id === milestone.event_id);
+                    return { id: `milestone-${thread.thread_id}-${milestone.event_id}`, label: event?.title || event?.description || t("unnamedEvent"), tone: "leaf" as const, meta: t(`milestone.${milestone.role}`), onClick: selectNode(t("mindMapMilestone"), event?.title || event?.description || t("unnamedEvent"), milestone.note || event?.description || t("noEvents"), `${thread.label || t("unnamedStoryline")} · ${t(`milestone.${milestone.role}`)}`) };
+                }),
+            })),
+        },
+        {
+            id: "scenes", label: t("mindMapScenes"), tone: "branch", meta: t("mindMapScenesHint"),
+            children: sceneSummaries.map((scene, sceneIndex) => ({
+                id: `scene-${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), tone: "leaf" as const,
+                meta: asText(scene.summary) || t("sceneSummary"),
+                onClick: selectNode(t("mindMapScenes"), asText(scene.scene_ref) || t("unnamedScene"), asText(scene.summary) || t("sceneSummary"), `${t("sceneStateIn")}: ${asText(scene.state_in) || "—"} · ${t("sceneStateOut")}: ${asText(scene.state_out) || "—"}`),
+                children: [
+                    { id: `scene-in-${sceneIndex}`, label: t("sceneStateIn"), tone: "leaf" as const, meta: asText(scene.state_in) || t("notSpecified") },
+                    { id: `scene-out-${sceneIndex}`, label: t("sceneStateOut"), tone: "leaf" as const, meta: asText(scene.state_out) || t("notSpecified") },
+                ],
+            })),
+        },
+    ];
+
     if (invalidMap) {
         return (
             <section role="alert" className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-xs leading-5 text-amber-100">
@@ -803,20 +898,15 @@ function StoryMapSection({
 
                 {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
                     <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div>
-                    <div ref={graphCanvasRef} className="relative min-h-[520px] min-w-[900px] px-4 pb-2 pt-2">
+                    <div ref={graphCanvasRef} className="relative min-h-[680px] min-w-[1120px] px-4 pb-2 pt-2">
                         <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
                             {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${edge.y1 + 28}, ${edge.x2} ${edge.y2 - 28}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}
                         </svg>
                         <div data-graph-node="core" className="relative z-10 mx-auto flex w-72 items-center justify-center rounded-xl border-2 border-primary/70 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
                             <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
                         </div>
-                        <div className="relative mt-14 grid grid-cols-2 gap-5">
-                            {[
-                                { key: "timeline", title: t("mindMapTimeline"), summary: phases.map(phase => `${phase.label || t("unnamedPhase")} · ${phase.events.length}`).join(" → ") || t("noPhases"), nodes: phases.flatMap((phase, phaseIndex) => phase.events.slice().sort((a, b) => a.order - b.order).slice(0, 4).map((event, eventIndex) => ({ id: event.event_id, label: event.title || event.description || t("unnamedEvent"), meta: `${phase.label || t("unnamedPhase")} · ${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}`, onClick: () => setSelectedGraphNode({ kind: t("mindMapTimeline"), title: event.title || event.description || t("unnamedEvent"), body: event.description || event.dramatic_function || t("noEvents"), meta: `${phase.label || t("unnamedPhase")} · ${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}` }) }))) },
-                                { key: "people", title: t("mindMapPeople"), summary: people.map(person => person.display_name).join(" · ") || t("needPeople"), nodes: people.slice(0, 6).map(person => ({ id: person.person_id, label: person.display_name, meta: t("mindMapPerson"), onClick: () => setSelectedGraphNode({ kind: t("mindMapPeople"), title: person.display_name, body: t("mindMapPerson"), meta: t("mindMapPerson") }) })) },
-                                { key: "threads", title: t("mindMapThreads"), summary: map.story_threads.map(thread => thread.label || t("unnamedStoryline")).join(" · ") || t("noStorylines"), nodes: map.story_threads.slice(0, 6).map(thread => ({ id: thread.thread_id, label: thread.label || t("unnamedStoryline"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`, onClick: () => setSelectedGraphNode({ kind: t("mindMapThreads"), title: thread.label || t("unnamedStoryline"), body: thread.milestones.map(item => item.note).filter(Boolean).join("\n") || t("noStorylines"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}` }) })) },
-                                { key: "scenes", title: t("mindMapScenes"), summary: sceneSummaries.map(scene => asText(scene.scene_ref) || t("unnamedScene")).join(" · ") || t("noSceneSummaries"), nodes: sceneSummaries.slice(0, 6).map((scene, sceneIndex) => ({ id: `${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), meta: asText(scene.summary) || t("sceneSummary"), onClick: () => setSelectedGraphNode({ kind: t("mindMapScenes"), title: asText(scene.scene_ref) || t("unnamedScene"), body: asText(scene.summary) || t("sceneSummary"), meta: t("mindMapScenes") }) })) },
-                            ].map(branch => <section key={branch.key} data-graph-branch={branch.key} className="relative z-10 min-h-44 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">{branch.title}</span><p className="line-clamp-2 text-xs text-text-secondary">{branch.summary}</p></div><div className="mt-4 flex flex-wrap gap-2">{branch.nodes.length > 0 ? branch.nodes.map(node => <button key={node.id} type="button" onClick={node.onClick} className="min-w-28 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="block text-xs font-medium text-foreground">{node.label}</span><span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span></button>) : <p className="text-xs text-text-muted">{branch.summary}</p>}</div></section>)}
+                        <div className="relative z-10 mt-14 grid grid-cols-4 items-start gap-6">
+                            {mindMapBranches.map(branch => <section key={branch.id} data-graph-node={branch.id} data-graph-parent="core" className="min-h-56 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="mb-3 rounded-lg border border-primary/35 bg-primary/10 px-3 py-2"><p className="text-xs font-semibold text-foreground">{branch.label}</p><p className="mt-1 text-[10px] leading-4 text-text-secondary">{branch.meta}</p></div><div className="space-y-2">{branch.children?.length ? branch.children.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={branch.id} />) : <p className="text-xs text-text-muted">{t("mindMapEmptyBranch")}</p>}</div></section>)}
                         </div>
                     </div>
                     {selectedGraphNode && <aside className="mt-4 rounded-lg border border-primary/30 bg-background/80 p-4" aria-label="脑图节点详情">
