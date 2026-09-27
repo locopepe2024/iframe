@@ -7,6 +7,8 @@
 - H3, Seedance, and Wan 3 are currently consumed through ordinary image/video reference inputs; the iFrame adapter does not submit provider-native pose or depth-control fields.
 - The media host has Blender 4.5.9 LTS, a white-model rig, motion-clip retargeting, camera/reference-video export, and shot-control-bundle concepts.
 - The media host does not currently expose a verified automatic video-to-pose extractor in the director runtime.
+- A media-host headless Blender smoke test rendered a three-actor scene from a JSON state. The output manifest recorded `preserve-left`, `target-center`, and `preserve-right` as separate actors.
+- The same renderer can emit a still reference and an MP4 camera/motion reference. The still completed successfully at 640x360; the MP4 path is valid but CPU-bound on the current four-CPU host and must be tested with a short smoke profile before a full render.
 
 ## Direct implication
 
@@ -20,6 +22,17 @@
 - Whether ordinary multi-video references cause H3, Seedance, or Wan 3 to follow the target subject motion rather than regenerate a semantically similar scene.
 - Whether a white-model or silhouette video improves target-subject motion retention for any of the three providers.
 - Whether the current media director can import an automatically extracted track without a new extractor and skeleton-mapping adapter.
+- Whether a full-duration render is operationally acceptable without a low-resolution/low-sample preview profile.
+
+## Blender white-model boundary
+
+**Observed:** `blender/render_director_reference.py` creates multiple procedural actors, applies pose presets, keys root trajectories and camera motion, and writes a versioned `director_reference_manifest.v1`.
+
+**Direct implication:** Blender can be the downstream compiler for a reviewed `motion-track.v1`; it can produce a white-model animation asset for director review and as a candidate reference video. The target actor must remain a named actor in the state and manifest (`target-center` in the smoke test), while preservation actors remain separate.
+
+**Not yet proven:** The current renderer does not consume an automatically extracted per-frame pose track. Its existing actor input is state-level pose/trajectory data, so an adapter is still required between `motion-track.v1` and Blender actor keyframes.
+
+**What would verify it:** Import a fixture containing at least 24 frames of target joint rotations and root positions, render a short MP4, and compare the manifest plus sampled overlay frames against the source track.
 
 ## Control bundle contract
 
