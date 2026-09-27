@@ -4858,7 +4858,11 @@ def get_director_profile_draft(
         # existing workspace. This is a read-only compatibility projection.
         draft = pipeline.effective_director_profile(script)
         if draft is not None:
-            draft_revision = draft.revision
+            # The confirmed profile revision is not the optimistic-concurrency
+            # revision of the separate draft resource. A migrated profile is
+            # editable content backed by the real draft revision (normally 0),
+            # otherwise the first save after refresh always conflicts.
+            draft_revision = script.director_profile_draft_revision
             draft_source_revision = script.source_revision
             updated_at = draft.confirmed_at
     return {

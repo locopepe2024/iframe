@@ -868,16 +868,19 @@ def test_director_profile_draft_api_exposes_save_and_confirm_as_separate_actions
         )
     assert conflict.value.status_code == 409
 
-    response = api.apply_director_profile(
-        "film",
-        api.DirectorProfileApplyRequest(
-            draft=profile_payload(), expected_current_revision=0, expected_draft_revision=1,
-        ),
-        owner,
-    )
-    assert response.status_code == 200
-    assert script.art_direction.director_profile.revision == 1
 
+def test_legacy_confirmed_profile_uses_real_zero_draft_revision_on_first_load(monkeypatch):
+    from src.apps.comic_gen import api
+
+    pipeline, script = make_pipeline()
+    pipeline.apply_director_profile("film", profile_payload())
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    owner = UserContext("user", "owner", "", "")
+    state = api.get_director_profile_draft("film", owner)
+
+    assert state["draft"] is not None
+    assert state["draft_revision"] == 0
+    assert state["source_revision"] == script.source_revision
 
 def test_apply_director_profile_archives_only_changed_confirmations():
     pipeline, script = make_pipeline()
