@@ -27,6 +27,8 @@
 - MediaPipe Pose Landmarker Lite ran on the supplied 1394x792 test clip in an isolated Python 3.12 venv. The first 120 sampled frames produced a JSON track and overlay video.
 - On those 120 samples, the extractor detected 1, 2, or 3 people depending on the frame. The center target was tracked on 79 samples and marked `occluded` on 41 samples instead of silently assigning a left/right person.
 - A 2D landmark-to-Blender adapter converted the 79 tracked samples into per-frame root positions and rotations for the existing shoulder/elbow/hip/knee controls. A 24-frame, 1-second white-model MP4 smoke test completed successfully.
+- The track validator reports a source-frame sampling step of 2 and a tracked ratio of `0.6583`; it reports occlusion ranges in source-frame coordinates rather than expanding them into unsampled frames.
+- The adapter now preserves source timing: the 30.687 fps source is compiled to a declared 24 fps Blender timeline of about 7.79 seconds.
 
 ## Blender white-model boundary
 
@@ -59,6 +61,10 @@
 **Not yet proven:** This is not a physically valid 3D retarget. The root position is an image-plane proxy, depth is absent, left/right camera perspective is not solved, and the angle convention is a temporary adapter contract.
 
 **What would verify the next boundary:** Compare mapped white-model joint directions against manually reviewed keyframes at the start, center, and end of the source clip, then replace the planar adapter with a calibrated 3D lift or SMPL/SMPL-X mapping.
+
+## Track quality gate
+
+The validator must pass before a track can be promoted to a control bundle. It checks monotonic source frames, normalized bounding boxes, explicit `tracked`/`occluded` statuses, source-frame sampling step, and tracked ratio. A passing validation does not mean the pose is accurate; it only means the track is structurally reviewable.
 
 ## Control bundle contract
 
