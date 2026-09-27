@@ -1,0 +1,19 @@
+{
+  "schema_version": "director_full_rig_manifest.v1",
+  "state_id": "motion-track-blender-adapter-v1",
+  "rig_asset": "white-model-neutral-female-v1.blend",
+  "rig_bones": 73,
+  "frame_range": [
+    1,
+    187
+  ],
+  "fps": 24,
+  "width": 640,
+  "height": 360,
+  "actors": [
+    "preserve-left",
+    "target-center",
+    "preserve-right"
+  ],
+  "output": "full_rig_motion_reference.mp4"
+}
