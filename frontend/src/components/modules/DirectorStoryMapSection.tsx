@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type {
@@ -413,6 +413,33 @@ function StoryMapSection({
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
+    const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
+    const graphCanvasRef = useRef<HTMLDivElement>(null);
+    const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
+    useLayoutEffect(() => {
+        const canvas = graphCanvasRef.current;
+        if (!canvas || viewMode !== "graph") return;
+        const measure = () => {
+            const base = canvas.getBoundingClientRect();
+            const core = canvas.querySelector<HTMLElement>('[data-graph-node="core"]');
+            if (!core) return;
+            const coreBox = core.getBoundingClientRect();
+            const next = Array.from(canvas.querySelectorAll<HTMLElement>('[data-graph-branch]')).map(branch => {
+                const box = branch.getBoundingClientRect();
+                return {
+                    x1: coreBox.left + coreBox.width / 2 - base.left,
+                    y1: coreBox.bottom - base.top,
+                    x2: box.left + box.width / 2 - base.left,
+                    y2: box.top - base.top,
+                };
+            });
+            setGraphEdges(next);
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(canvas);
+        return () => observer.disconnect();
+    }, [viewMode]);
     const people = map?.people ?? [];
     const phases = (map?.phases ?? []).slice().sort((a, b) => a.order - b.order);
     const allEvents = phases.flatMap(phase => phase.events);
@@ -770,22 +797,27 @@ function StoryMapSection({
 
                 {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
                     <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div>
-                    <div className="relative min-h-[520px] min-w-[900px] px-4 pb-2 pt-2">
-                        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 900 520" preserveAspectRatio="none" aria-hidden="true">
-                            <path d="M450 112 V150 M450 150 H225 V176 M450 150 H675 V176 M225 150 V344 M675 150 V344" fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />
+                    <div ref={graphCanvasRef} className="relative min-h-[520px] min-w-[900px] px-4 pb-2 pt-2">
+                        <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+                            {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${edge.y1 + 28}, ${edge.x2} ${edge.y2 - 28}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}
                         </svg>
-                        <div className="relative mx-auto flex w-72 items-center justify-center rounded-xl border-2 border-primary/70 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
+                        <div data-graph-node="core" className="relative z-10 mx-auto flex w-72 items-center justify-center rounded-xl border-2 border-primary/70 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
                             <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
                         </div>
                         <div className="relative mt-14 grid grid-cols-2 gap-5">
                             {[
-                                { key: "timeline", title: t("mindMapTimeline"), summary: phases.map(phase => `${phase.label || t("unnamedPhase")} · ${phase.events.length}`).join(" → ") || t("noPhases"), nodes: phases.flatMap((phase, phaseIndex) => phase.events.slice().sort((a, b) => a.order - b.order).slice(0, 4).map((event, eventIndex) => ({ id: event.event_id, label: event.title || event.description || t("unnamedEvent"), meta: `${phase.label || t("unnamedPhase")} · ${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}`, onClick: () => { setViewMode("editor"); setExpandedEventId(event.event_id); } }))) },
-                                { key: "people", title: t("mindMapPeople"), summary: people.map(person => person.display_name).join(" · ") || t("needPeople"), nodes: people.slice(0, 6).map(person => ({ id: person.person_id, label: person.display_name, meta: t("mindMapPerson"), onClick: () => { setViewMode("editor"); const arc = map.relationship_arcs.find(candidate => candidate.person_ids.includes(person.person_id)); if (arc) { setSelectedRelationshipId(arc.relationship_id); requestAnimationFrame(() => document.getElementById(`relationship-${arc.relationship_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })); } } })) },
-                                { key: "threads", title: t("mindMapThreads"), summary: map.story_threads.map(thread => thread.label || t("unnamedStoryline")).join(" · ") || t("noStorylines"), nodes: map.story_threads.slice(0, 6).map(thread => ({ id: thread.thread_id, label: thread.label || t("unnamedStoryline"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`, onClick: () => { setViewMode("editor"); requestAnimationFrame(() => document.getElementById(`storyline-${thread.thread_id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })); } })) },
-                                { key: "scenes", title: t("mindMapScenes"), summary: sceneSummaries.map(scene => asText(scene.scene_ref) || t("unnamedScene")).join(" · ") || t("noSceneSummaries"), nodes: sceneSummaries.slice(0, 6).map((scene, sceneIndex) => ({ id: `${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), meta: asText(scene.summary) || t("sceneSummary"), onClick: () => { setViewMode("editor"); requestAnimationFrame(() => document.getElementById("director-scene-summaries-title")?.scrollIntoView({ block: "start", behavior: "smooth" })); } })) },
-                            ].map(branch => <section key={branch.key} className="relative min-h-44 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">{branch.title}</span><p className="line-clamp-2 text-xs text-text-secondary">{branch.summary}</p></div><div className="mt-4 flex flex-wrap gap-2">{branch.nodes.length > 0 ? branch.nodes.map(node => <button key={node.id} type="button" onClick={node.onClick} className="min-w-28 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="block text-xs font-medium text-foreground">{node.label}</span><span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span></button>) : <p className="text-xs text-text-muted">{branch.summary}</p>}</div></section>)}
+                                { key: "timeline", title: t("mindMapTimeline"), summary: phases.map(phase => `${phase.label || t("unnamedPhase")} · ${phase.events.length}`).join(" → ") || t("noPhases"), nodes: phases.flatMap((phase, phaseIndex) => phase.events.slice().sort((a, b) => a.order - b.order).slice(0, 4).map((event, eventIndex) => ({ id: event.event_id, label: event.title || event.description || t("unnamedEvent"), meta: `${phase.label || t("unnamedPhase")} · ${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}`, onClick: () => setSelectedGraphNode({ kind: t("mindMapTimeline"), title: event.title || event.description || t("unnamedEvent"), body: event.description || event.dramatic_function || t("noEvents"), meta: `${phase.label || t("unnamedPhase")} · ${t("phaseIndex", { number: phaseIndex + 1 })} · ${eventIndex + 1}` }) }))) },
+                                { key: "people", title: t("mindMapPeople"), summary: people.map(person => person.display_name).join(" · ") || t("needPeople"), nodes: people.slice(0, 6).map(person => ({ id: person.person_id, label: person.display_name, meta: t("mindMapPerson"), onClick: () => setSelectedGraphNode({ kind: t("mindMapPeople"), title: person.display_name, body: t("mindMapPerson"), meta: t("mindMapPerson") }) })) },
+                                { key: "threads", title: t("mindMapThreads"), summary: map.story_threads.map(thread => thread.label || t("unnamedStoryline")).join(" · ") || t("noStorylines"), nodes: map.story_threads.slice(0, 6).map(thread => ({ id: thread.thread_id, label: thread.label || t("unnamedStoryline"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`, onClick: () => setSelectedGraphNode({ kind: t("mindMapThreads"), title: thread.label || t("unnamedStoryline"), body: thread.milestones.map(item => item.note).filter(Boolean).join("\n") || t("noStorylines"), meta: `${thread.milestones.length} · ${t("mindMapMilestones")}` }) })) },
+                                { key: "scenes", title: t("mindMapScenes"), summary: sceneSummaries.map(scene => asText(scene.scene_ref) || t("unnamedScene")).join(" · ") || t("noSceneSummaries"), nodes: sceneSummaries.slice(0, 6).map((scene, sceneIndex) => ({ id: `${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), meta: asText(scene.summary) || t("sceneSummary"), onClick: () => setSelectedGraphNode({ kind: t("mindMapScenes"), title: asText(scene.scene_ref) || t("unnamedScene"), body: asText(scene.summary) || t("sceneSummary"), meta: t("mindMapScenes") }) })) },
+                            ].map(branch => <section key={branch.key} data-graph-branch={branch.key} className="relative z-10 min-h-44 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">{branch.title}</span><p className="line-clamp-2 text-xs text-text-secondary">{branch.summary}</p></div><div className="mt-4 flex flex-wrap gap-2">{branch.nodes.length > 0 ? branch.nodes.map(node => <button key={node.id} type="button" onClick={node.onClick} className="min-w-28 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="block text-xs font-medium text-foreground">{node.label}</span><span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span></button>) : <p className="text-xs text-text-muted">{branch.summary}</p>}</div></section>)}
                         </div>
                     </div>
+                    {selectedGraphNode && <aside className="mt-4 rounded-lg border border-primary/30 bg-background/80 p-4" aria-label="脑图节点详情">
+                        <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{selectedGraphNode.kind}</p><h4 className="mt-1 text-sm font-semibold text-foreground">{selectedGraphNode.title}</h4></div><button type="button" onClick={() => setSelectedGraphNode(null)} className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary hover:border-primary">关闭</button></div>
+                        <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-text-secondary">{selectedGraphNode.body}</p>
+                        <p className="mt-3 text-[10px] text-text-muted">{selectedGraphNode.meta}</p>
+                    </aside>}
                 </div>}
 
                 {viewMode === "editor" && <div className="mt-3 overflow-x-auto pb-2">
