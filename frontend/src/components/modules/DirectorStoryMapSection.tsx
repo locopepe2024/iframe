@@ -436,13 +436,13 @@ function StoryMapSection({
             setGraphEdges(next);
         };
         const frame = requestAnimationFrame(measure);
-        const observer = new ResizeObserver(measure);
-        observer.observe(canvas);
-        canvas.querySelectorAll<HTMLElement>('[data-graph-branch]').forEach(branch => observer.observe(branch));
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+        observer?.observe(canvas);
+        canvas.querySelectorAll<HTMLElement>('[data-graph-branch]').forEach(branch => observer?.observe(branch));
         window.addEventListener("resize", measure);
         return () => {
             cancelAnimationFrame(frame);
-            observer.disconnect();
+            observer?.disconnect();
             window.removeEventListener("resize", measure);
         };
     }, [viewMode, map?.source_revision]);

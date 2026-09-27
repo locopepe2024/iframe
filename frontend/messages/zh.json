@@ -1216,6 +1216,13 @@
     "directorRefineFailed": "导演设定修订失败",
     "directorApplyFailed": "导演设定保存失败",
     "directorApplied": "导演设定已确认",
+    "directorCandidateTitle": "导演分析候选结果",
+    "directorCandidateHint": "请先检查这份候选结果。它只修正导演分析，不修改剧本；接受后仍需保存草稿并确认 Director 版本，才会成为下游分镜的输入。",
+    "directorCandidateNoChange": "本次分析与当前 Director 草稿没有结构变化。",
+    "directorCandidateFromAnalysis": "重新分析",
+    "directorCandidateFromRefine": "修正请求",
+    "directorAcceptCandidate": "接受候选结果",
+    "directorDiscardCandidate": "放弃候选结果",
     "directorEditor": {
       "overviewTitle": "故事与导演总览",
       "overviewHint": "编辑导演对故事的理解。导演解释和假设与剧本事实、证据分开展示。",

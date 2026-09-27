@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send } from "lucide-react";
+import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import {
@@ -54,6 +54,9 @@ export default function DirectorProfilePanel() {
     const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
     const [draftContextSourceRevision, setDraftContextSourceRevision] = useState<number | null>(null);
     const [savedDraftText, setSavedDraftText] = useState(() => editableProfile(confirmed));
+    const [candidateText, setCandidateText] = useState<string | null>(null);
+    const [candidateAction, setCandidateAction] = useState<"analyze" | "refine" | null>(null);
+    const [candidateNoChange, setCandidateNoChange] = useState(false);
     const [factEvidence, setFactEvidence] = useState<ScriptFactLedgerQueryResult | null>(null);
     const [factsLoading, setFactsLoading] = useState(false);
     const [factsError, setFactsError] = useState("");
@@ -131,6 +134,9 @@ export default function DirectorProfilePanel() {
         setInstruction("");
         setHistory([]);
         setStatus({ kind: "idle" });
+        setCandidateText(null);
+        setCandidateAction(null);
+        setCandidateNoChange(false);
         if (!currentProject) return;
         let active = true;
         api.getDirectorProfileDraft(currentProject.id)
@@ -177,6 +183,36 @@ export default function DirectorProfilePanel() {
         return value;
     };
 
+    const queueCandidate = (profile: Record<string, unknown>, action: "analyze" | "refine") => {
+        const next = JSON.stringify(profile, null, 2);
+        let unchanged = false;
+        try {
+            unchanged = JSON.stringify(JSON.parse(next)) === JSON.stringify(JSON.parse(draftText));
+        } catch {
+            unchanged = false;
+        }
+        setCandidateText(next);
+        setCandidateAction(action);
+        setCandidateNoChange(unchanged);
+    };
+
+    const acceptCandidate = () => {
+        if (!candidateText || candidateNoChange) return;
+        setDraftText(candidateText);
+        setDraftContextSourceRevision(sourceRevision);
+        setCandidateText(null);
+        setCandidateAction(null);
+        setCandidateNoChange(false);
+        setStatus({ kind: "success", action: "refine", jobStatus: "candidate_accepted" });
+    };
+
+    const discardCandidate = () => {
+        setCandidateText(null);
+        setCandidateAction(null);
+        setCandidateNoChange(false);
+        setStatus({ kind: "success", action: "refine", jobStatus: "candidate_discarded" });
+    };
+
     const analyze = async () => {
         if (!currentProject) return;
         setBusy("analyze");
@@ -185,9 +221,7 @@ export default function DirectorProfilePanel() {
             const profile = await api.analyzeDirectorProfile(currentProject.id, jobStatus => {
                 setStatus({ kind: "running", action: "analyze", jobStatus });
             });
-            setDraftText(JSON.stringify(profile, null, 2));
-            setDraftContextSourceRevision(sourceRevision);
-            setHistory([]);
+            queueCandidate(profile, "analyze");
             setStatus({ kind: "success", action: "analyze", jobStatus: "completed" });
         } catch (error) {
             const message = extractErrorDetail(error, t("directorAnalyzeFailed"));
@@ -214,8 +248,7 @@ export default function DirectorProfilePanel() {
                 [currentInstruction],
                 jobStatus => setStatus({ kind: "running", action: "refine", jobStatus }),
             );
-            setDraftText(JSON.stringify(profile, null, 2));
-            setDraftContextSourceRevision(sourceRevision);
+            queueCandidate(profile, "refine");
             setHistory(nextHistory);
             setInstruction("");
             setStatus({ kind: "success", action: "refine", jobStatus: "completed" });
@@ -392,6 +425,27 @@ export default function DirectorProfilePanel() {
 
             {draftText ? (
                 <div className="space-y-3">
+                    {candidateText && (
+                        <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label={t("directorCandidateTitle")}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground">{t("directorCandidateTitle")}</h3>
+                                    <p className="mt-1 text-xs leading-5 text-text-secondary">
+                                        {candidateNoChange ? t("directorCandidateNoChange") : t("directorCandidateHint")}
+                                    </p>
+                                </div>
+                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
+                                    {candidateAction === "analyze" ? t("directorCandidateFromAnalysis") : t("directorCandidateFromRefine")}
+                                </span>
+                            </div>
+                            {!candidateNoChange && (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
+                                    <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
+                                </div>
+                            )}
+                        </section>
+                    )}
                     {revisions.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorHistory")}>
                             <span>{t("directorHistory")}</span>
@@ -493,8 +547,32 @@ export default function DirectorProfilePanel() {
                     </div>
                 </div>
             ) : (
-                <div className="flex min-h-32 items-center justify-center border border-dashed border-border text-sm text-text-muted">
-                    {t("directorEmpty")}
+                <div className="space-y-3">
+                    {candidateText ? (
+                        <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label={t("directorCandidateTitle")}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground">{t("directorCandidateTitle")}</h3>
+                                    <p className="mt-1 text-xs leading-5 text-text-secondary">
+                                        {candidateNoChange ? t("directorCandidateNoChange") : t("directorCandidateHint")}
+                                    </p>
+                                </div>
+                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
+                                    {candidateAction === "analyze" ? t("directorCandidateFromAnalysis") : t("directorCandidateFromRefine")}
+                                </span>
+                            </div>
+                            {!candidateNoChange && (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
+                                    <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
+                                </div>
+                            )}
+                        </section>
+                    ) : (
+                        <div className="flex min-h-32 items-center justify-center border border-dashed border-border text-sm text-text-muted">
+                            {t("directorEmpty")}
+                        </div>
+                    )}
                 </div>
             )}
         </section>
