@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2, Save, ShieldAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
@@ -28,12 +28,28 @@ type LedgerEvidence = {
 const emptyLedger = "[]";
 
 function importDirectorFacts(profile: DirectorProfile | undefined, sourceRevision: number): ScriptFactLedgerEntry[] {
-    const state = profile?.canon_state;
+    const canonState = profile?.canon_state;
+    const state = canonState && typeof canonState === "object" && Object.keys(canonState).length > 0
+        ? canonState
+        : profile
+            ? {
+                // Older Director profiles predate canon_state. Keep their
+                // reviewable material importable instead of showing an empty
+                // ledger after the user clicks Import.
+                setting: profile.setting && Object.keys(profile.setting).length > 0 ? [profile.setting] : [],
+                timeline: profile.timeline,
+                relationships: profile.relationships,
+                key_events: profile.key_events,
+                continuity_constraints: profile.continuity_constraints,
+                prohibitions: profile.prohibitions,
+                unresolved_questions: profile.unresolved_questions,
+            }
+            : null;
     if (!state || typeof state !== "object") return [];
     return Object.entries(state).flatMap(([category, rawItems]) => {
-        if (!Array.isArray(rawItems)) return [];
-        return rawItems.filter(item => item && typeof item === "object").map((item, index) => {
-            const fact = item as Record<string, unknown>;
+        const items = Array.isArray(rawItems) ? rawItems : [rawItems];
+        return items.filter(item => item !== null && item !== undefined && item !== "").map((item, index) => {
+            const fact: Record<string, unknown> = typeof item === "object" ? item as Record<string, unknown> : { value: item };
             const subject = typeof fact.subject === "string" ? fact.subject : "";
             const baseId = String(fact.fact_id || category + "-" + (index + 1));
             return {
@@ -45,7 +61,7 @@ function importDirectorFacts(profile: DirectorProfile | undefined, sourceRevisio
                 source_ranges: [],
                 value: {
                     subject,
-                    value: fact.value ?? fact,
+                    value: fact.value !== undefined ? { subject, value: fact.value, source_refs: fact.source_refs ?? [] } : { subject, value: fact, source_refs: fact.source_refs ?? [] },
                     source_refs: fact.source_refs ?? [],
                 },
                 // Director canon items can be useful candidates, but they do
@@ -124,6 +140,15 @@ export default function ScriptFactLedgerPanel({
     const staleDraft = draftSourceRevision !== null && draftSourceRevision !== sourceRevision;
     const canConfirm = !isDirty && draftRevision > 0 && draftSourceRevision === sourceRevision;
 
+    const parsedFacts = useMemo(() => {
+        try {
+            const value: unknown = JSON.parse(draftText);
+            return Array.isArray(value) ? value as ScriptFactLedgerEntry[] : [];
+        } catch {
+            return [];
+        }
+    }, [draftText]);
+
     const parseFacts = (): ScriptFactLedgerEntry[] => {
         const value: unknown = JSON.parse(draftText);
         if (!Array.isArray(value)) throw new Error(t("factLedgerInvalidJson"));
@@ -185,6 +210,12 @@ export default function ScriptFactLedgerPanel({
 
     const importCurrentDirectorFacts = () => {
         const facts = importDirectorFacts(directorProfile, sourceRevision);
+        if (facts.length === 0) {
+            const message = t("factLedgerNoDirectorCandidates");
+            setError(message);
+            toast.info(message);
+            return;
+        }
         setDraftText(JSON.stringify(facts, null, 2));
         setDraftSourceRevision(sourceRevision);
         setError("");
@@ -247,6 +278,37 @@ export default function ScriptFactLedgerPanel({
                 <span className="self-center text-xs text-text-muted">{t("factLedgerImportNote")}</span>
             </div>
 
+            <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label={t("factLedgerWorkflowTitle")}>
+                <h4 className="text-xs font-semibold text-foreground">{t("factLedgerWorkflowTitle")}</h4>
+                <ol className="mt-2 grid gap-1.5 text-xs leading-5 text-text-secondary sm:grid-cols-2">
+                    <li><span className="font-medium text-foreground">1.</span> {t("factLedgerWorkflowImport")}</li>
+                    <li><span className="font-medium text-foreground">2.</span> {t("factLedgerWorkflowReview")}</li>
+                    <li><span className="font-medium text-foreground">3.</span> {t("factLedgerWorkflowSave")}</li>
+                    <li><span className="font-medium text-foreground">4.</span> {t("factLedgerWorkflowConfirm")}</li>
+                </ol>
+                <p className="mt-2 text-xs text-text-muted">{t("factLedgerWorkflowImportant")}</p>
+            </div>
+
+            {parsedFacts.length > 0 && (
+                <details className="mt-3 rounded border border-border bg-background/30 p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-foreground">
+                        {t("factLedgerCandidateSummary", { count: parsedFacts.length })}
+                    </summary>
+                    <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {parsedFacts.map((fact, index) => (
+                            <li key={`${fact.fact_id}-${index}`} className="rounded border border-border px-3 py-2 text-xs">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="truncate font-medium text-foreground">{fact.fact_id || t("factLedgerUntitled")}</span>
+                                    <span className="shrink-0 text-text-muted">{t(`factLedgerStatus.${fact.evidence_status}`)}</span>
+                                </div>
+                                <p className="mt-1 text-text-secondary">{typeof fact.value?.subject === "string" ? fact.value.subject : fact.kind}</p>
+                                <p className="mt-1 text-text-muted">{t("factLedgerEvidenceCount", { count: fact.source_ranges?.length ?? 0 })}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+
             <details className="mt-3 text-xs text-text-secondary">
                 <summary className="cursor-pointer">{t("factLedgerSchema")}</summary>
                 <pre className="mt-2 overflow-x-auto rounded border border-border bg-background p-3 text-[11px] leading-5">
@@ -265,7 +327,12 @@ export default function ScriptFactLedgerPanel({
                 </pre>
             </details>
 
+            <label htmlFor="fact-ledger-draft" className="mt-3 block text-xs font-medium text-foreground">
+                {t("factLedgerDraftAdvanced")}
+            </label>
+            <p className="mt-1 text-xs text-text-muted">{t("factLedgerDraftAdvancedHint")}</p>
             <textarea
+                id="fact-ledger-draft"
                 aria-label={t("factLedgerDraft")}
                 value={draftText}
                 onChange={event => setDraftText(event.target.value)}
