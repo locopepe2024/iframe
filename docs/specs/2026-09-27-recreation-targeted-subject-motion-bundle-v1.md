@@ -26,6 +26,7 @@
 - A 24-frame, 1-second, 640x360, single-sample MP4 smoke test completed and ffprobe reported 24 frames at 24 fps.
 - MediaPipe Pose Landmarker Lite ran on the supplied 1394x792 test clip in an isolated Python 3.12 venv. The first 120 sampled frames produced a JSON track and overlay video.
 - On those 120 samples, the extractor detected 1, 2, or 3 people depending on the frame. The center target was tracked on 79 samples and marked `occluded` on 41 samples instead of silently assigning a left/right person.
+- A 2D landmark-to-Blender adapter converted the 79 tracked samples into per-frame root positions and rotations for the existing shoulder/elbow/hip/knee controls. A 24-frame, 1-second white-model MP4 smoke test completed successfully.
 
 ## Blender white-model boundary
 
@@ -48,6 +49,16 @@
 **Current fixture policy:** the smoke extractor uses a center prior plus continuity score; if no candidate lies within the center corridor, it emits `selection_status: "occluded"` and leaves target landmarks absent. This is a review signal, not an assertion that the person is physically absent.
 
 **Not yet proven:** The center corridor is a test-specific heuristic. It is not sufficient for arbitrary camera pans, lateral subject movement, or shots where the target is not centered.
+
+## 2D-to-Blender mapping boundary
+
+**Observed:** `tools/motion_track/pose_to_blender_state.py` maps MediaPipe landmark pairs to image-plane joint angles and emits a director state with the tracked samples attached to `target-center`. The media Blender renderer consumed that state and produced a 24-frame MP4 while preserving the three actor IDs.
+
+**Direct implication:** The system now has a testable vertical slice from sampled 2D landmarks to a white-model reference asset. The result is useful for reviewing timing, rough limb direction, subject identity, and occlusion gaps.
+
+**Not yet proven:** This is not a physically valid 3D retarget. The root position is an image-plane proxy, depth is absent, left/right camera perspective is not solved, and the angle convention is a temporary adapter contract.
+
+**What would verify the next boundary:** Compare mapped white-model joint directions against manually reviewed keyframes at the start, center, and end of the source clip, then replace the planar adapter with a calibrated 3D lift or SMPL/SMPL-X mapping.
 
 ## Control bundle contract
 
