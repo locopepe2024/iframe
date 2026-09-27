@@ -578,7 +578,7 @@ export default function Home() {
     const handleHashChange = () => {
       const hash = window.location.hash;
       // Match #/series/{id}/episode/{eid} first (more specific)
-      const seriesEpisodeMatch = hash.match(/^#\/series\/([^/]+)\/episode\/([^/]+)$/);
+      const seriesEpisodeMatch = hash.match(/^#\/series\/([^/]+)\/episode\/([^/?]+)(?:\?.*)?$/);
       if (seriesEpisodeMatch) {
         setSeriesId(seriesEpisodeMatch[1]);
         setEpisodeId(seriesEpisodeMatch[2]);
@@ -587,7 +587,7 @@ export default function Home() {
         return;
       }
       // Match #/series/{id}
-      const seriesMatch = hash.match(/^#\/series\/([^/]+)$/);
+      const seriesMatch = hash.match(/^#\/series\/([^/?]+)(?:\?.*)?$/);
       if (seriesMatch) {
         setSeriesId(seriesMatch[1]);
         setEpisodeId(null);

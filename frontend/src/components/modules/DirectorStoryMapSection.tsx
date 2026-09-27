@@ -256,11 +256,13 @@ function MindMapTreeNodeView({ node, parentId, filter }: { node: MindMapTreeNode
             ? "border-amber-400/35 bg-amber-400/10"
             : "border-border bg-background/85";
     return (
-        <div className="min-w-0" data-graph-node={node.id} data-graph-parent={parentId}>
+        <div className="min-w-0">
             <button
                 type="button"
                 onClick={node.onClick}
                 disabled={!node.onClick}
+                data-graph-node={node.id}
+                data-graph-parent={parentId}
                 className={`w-full rounded-lg border px-3 py-2.5 text-left shadow-sm transition-colors ${className} ${node.onClick ? "hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : "cursor-default"}`}
             >
                 <span className="block text-xs font-semibold text-foreground">{node.label}</span>
@@ -454,15 +456,16 @@ function StoryMapSection({
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
     const [viewMode, setViewMode] = useState<"graph" | "editor">(() => {
-        if (typeof window === "undefined") return "graph";
-        return new URLSearchParams(window.location.search).get("directorView") === "mindmap" ? "graph" : "graph";
+        return "graph";
     });
     const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
     const [mindMapFilter, setMindMapFilter] = useState<"all" | "review">("all");
     const openMindMapWindow = () => {
         if (typeof window === "undefined") return;
         const url = new URL(window.location.href);
-        url.searchParams.set("directorView", "mindmap");
+        const hash = url.hash || "#/director";
+        url.search = "";
+        url.hash = `${hash}${hash.includes("?") ? "&" : "?"}directorView=mindmap`;
         window.open(url.toString(), "iframe-director-mind-map", "popup,width=1440,height=1000,resizable=yes,scrollbars=yes");
     };
     const graphCanvasRef = useRef<HTMLDivElement>(null);
@@ -492,7 +495,7 @@ function StoryMapSection({
             setGraphEdges(next);
         };
         const frame = requestAnimationFrame(measure);
-        const focusMindMap = new URLSearchParams(window.location.search).get("directorView") === "mindmap";
+        const focusMindMap = window.location.hash.includes("directorView=mindmap");
         if (focusMindMap) window.setTimeout(() => canvas.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior }), 0);
         const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
         observer?.observe(canvas);
@@ -717,8 +720,8 @@ function StoryMapSection({
             children: people.map(person => ({
                 id: `person-${person.person_id}`, label: person.display_name, tone: "leaf" as const, meta: t("mindMapPerson"),
                 onClick: selectNode(t("mindMapPeople"), person.display_name, t("mindMapPerson"), t("mindMapPerson")),
-                children: (map?.relationship_arcs ?? []).filter(arc => arc.person_ids.includes(person.person_id)).map(arc => ({
-                    id: `relationship-${arc.relationship_id}`, label: arc.label || relationshipLabel(arc, people), tone: "leaf" as const,
+                children: (map?.relationship_arcs ?? []).filter(arc => arc.person_ids[0] === person.person_id).map(arc => ({
+                    id: `relationship-${person.person_id}-${arc.relationship_id}`, label: arc.label || relationshipLabel(arc, people), tone: "leaf" as const,
                     meta: `${arc.states.length} · ${t("mindMapRelationshipStates")}`,
                     issue: arc.states.length === 0 ? t("issueNoRelationshipStates") : undefined,
                     onClick: selectNode(t("mindMapRelationship"), arc.label || relationshipLabel(arc, people), arc.states.map(state => state.state).filter(Boolean).join("\n") || t("noRelationshipStates"), `${arc.states.length} · ${t("mindMapRelationshipStates")}`),
