@@ -242,10 +242,15 @@ type MindMapTreeNode = {
     tone?: "core" | "branch" | "leaf" | "warning";
     onClick?: () => void;
     children?: MindMapTreeNode[];
+    issue?: string;
 };
 
-function MindMapTreeNodeView({ node, parentId }: { node: MindMapTreeNode; parentId?: string }) {
-    const className = node.tone === "branch"
+function MindMapTreeNodeView({ node, parentId, filter }: { node: MindMapTreeNode; parentId?: string; filter: "all" | "review" }) {
+    const visibleChildren = (node.children ?? []).filter(child => filter === "all" || child.issue || child.children?.some(grandchild => grandchild.issue));
+    if (filter === "review" && !node.issue && visibleChildren.length === 0) return null;
+    const className = node.issue
+        ? "border-amber-400/45 bg-amber-400/10"
+        : node.tone === "branch"
         ? "border-primary/35 bg-primary/10"
         : node.tone === "warning"
             ? "border-amber-400/35 bg-amber-400/10"
@@ -260,10 +265,11 @@ function MindMapTreeNodeView({ node, parentId }: { node: MindMapTreeNode; parent
             >
                 <span className="block text-xs font-semibold text-foreground">{node.label}</span>
                 {node.meta && <span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span>}
+                {node.issue && <span className="mt-1 block text-[10px] font-medium text-amber-200">{node.issue}</span>}
             </button>
             {node.children && node.children.length > 0 && (
                 <div className="ml-5 mt-2 space-y-2 border-l border-primary/25 pl-3">
-                    {node.children.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={node.id} />)}
+                    {visibleChildren.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={node.id} filter={filter} />)}
                 </div>
             )}
         </div>
@@ -449,6 +455,7 @@ function StoryMapSection({
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
+    const [mindMapFilter, setMindMapFilter] = useState<"all" | "review">("all");
     const graphCanvasRef = useRef<HTMLDivElement>(null);
     const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
     useLayoutEffect(() => {
@@ -684,10 +691,12 @@ function StoryMapSection({
             children: phases.map((phase, phaseIndex) => ({
                 id: `timeline-${phase.phase_id}`, label: phase.label || t("unnamedPhase"), tone: "leaf" as const,
                 meta: `${t("phaseIndex", { number: phaseIndex + 1 })} · ${phase.time_anchor || t("noTimeAnchor")}`,
+                issue: phase.events.length === 0 ? t("issueNoEvents") : undefined,
                 onClick: selectNode(t("mindMapTimeline"), phase.label || t("unnamedPhase"), phase.events.map(event => event.title || event.description).join("\n") || t("noEvents"), `${t("phaseIndex", { number: phaseIndex + 1 })} · ${phase.time_anchor || t("noTimeAnchor")}`),
                 children: phase.events.slice().sort((a, b) => a.order - b.order).map((event, eventIndex) => ({
                     id: `event-${event.event_id}`, label: event.title || event.description || t("unnamedEvent"), tone: "leaf" as const,
                     meta: `${t("eventNumber", { number: eventIndex + 1 })} · ${event.evidence_status}`,
+                    issue: event.evidence_status === "conflicted" ? t("issueConflict") : event.evidence_status === "uncertain" ? t("issueUncertain") : !event.description.trim() ? t("issueMissingDescription") : undefined,
                     onClick: selectNode(t("mindMapEvent"), event.title || event.description || t("unnamedEvent"), event.description || event.dramatic_function || t("noEvents"), `${phase.label || t("unnamedPhase")} · ${event.evidence_status}`),
                 })),
             })),
@@ -700,6 +709,7 @@ function StoryMapSection({
                 children: (map?.relationship_arcs ?? []).filter(arc => arc.person_ids.includes(person.person_id)).map(arc => ({
                     id: `relationship-${arc.relationship_id}`, label: arc.label || relationshipLabel(arc, people), tone: "leaf" as const,
                     meta: `${arc.states.length} · ${t("mindMapRelationshipStates")}`,
+                    issue: arc.states.length === 0 ? t("issueNoRelationshipStates") : undefined,
                     onClick: selectNode(t("mindMapRelationship"), arc.label || relationshipLabel(arc, people), arc.states.map(state => state.state).filter(Boolean).join("\n") || t("noRelationshipStates"), `${arc.states.length} · ${t("mindMapRelationshipStates")}`),
                 })),
             })),
@@ -709,6 +719,7 @@ function StoryMapSection({
             children: (map?.story_threads ?? []).map(thread => ({
                 id: `thread-${thread.thread_id}`, label: thread.label || t("unnamedStoryline"), tone: "leaf" as const,
                 meta: `${thread.milestones.length} · ${t("mindMapMilestones")}`,
+                issue: thread.milestones.length === 0 ? t("issueNoMilestones") : undefined,
                 onClick: selectNode(t("mindMapThreads"), thread.label || t("unnamedStoryline"), thread.milestones.map(item => item.note).filter(Boolean).join("\n") || t("noStorylines"), `${thread.milestones.length} · ${t("mindMapMilestones")}`),
                 children: thread.milestones.map(milestone => {
                     const event = allEvents.find(item => item.event_id === milestone.event_id);
@@ -721,6 +732,7 @@ function StoryMapSection({
             children: sceneSummaries.map((scene, sceneIndex) => ({
                 id: `scene-${asText(scene.scene_ref)}-${sceneIndex}`, label: asText(scene.scene_ref) || t("unnamedScene"), tone: "leaf" as const,
                 meta: asText(scene.summary) || t("sceneSummary"),
+                issue: !asText(scene.summary).trim() ? t("issueMissingSceneSummary") : !asText(scene.state_in).trim() || !asText(scene.state_out).trim() ? t("issueMissingSceneState") : undefined,
                 onClick: selectNode(t("mindMapScenes"), asText(scene.scene_ref) || t("unnamedScene"), asText(scene.summary) || t("sceneSummary"), `${t("sceneStateIn")}: ${asText(scene.state_in) || "—"} · ${t("sceneStateOut")}: ${asText(scene.state_out) || "—"}`),
                 children: [
                     { id: `scene-in-${sceneIndex}`, label: t("sceneStateIn"), tone: "leaf" as const, meta: asText(scene.state_in) || t("notSpecified") },
@@ -897,7 +909,7 @@ function StoryMapSection({
                 </div>}
 
                 {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
-                    <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><div className="flex items-center gap-2"><div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("mindMapFilterLabel")}><button type="button" onClick={() => setMindMapFilter("all")} aria-pressed={mindMapFilter === "all"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "all" ? "bg-primary text-white" : "text-text-secondary"}`}>{t("mindMapFilterAll")}</button><button type="button" onClick={() => setMindMapFilter("review")} aria-pressed={mindMapFilter === "review"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "review" ? "bg-amber-500/80 text-white" : "text-text-secondary"}`}>{t("mindMapFilterReview")}</button></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div></div>
                     <div ref={graphCanvasRef} className="relative min-h-[680px] min-w-[1120px] px-4 pb-2 pt-2">
                         <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
                             {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${edge.y1 + 28}, ${edge.x2} ${edge.y2 - 28}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}
@@ -906,7 +918,7 @@ function StoryMapSection({
                             <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
                         </div>
                         <div className="relative z-10 mt-14 grid grid-cols-4 items-start gap-6">
-                            {mindMapBranches.map(branch => <section key={branch.id} data-graph-node={branch.id} data-graph-parent="core" className="min-h-56 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="mb-3 rounded-lg border border-primary/35 bg-primary/10 px-3 py-2"><p className="text-xs font-semibold text-foreground">{branch.label}</p><p className="mt-1 text-[10px] leading-4 text-text-secondary">{branch.meta}</p></div><div className="space-y-2">{branch.children?.length ? branch.children.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={branch.id} />) : <p className="text-xs text-text-muted">{t("mindMapEmptyBranch")}</p>}</div></section>)}
+                            {mindMapBranches.map(branch => <section key={branch.id} data-graph-node={branch.id} data-graph-parent="core" className="min-h-56 rounded-xl border border-primary/25 bg-background/75 p-4 shadow-sm"><div className="mb-3 rounded-lg border border-primary/35 bg-primary/10 px-3 py-2"><p className="text-xs font-semibold text-foreground">{branch.label}</p><p className="mt-1 text-[10px] leading-4 text-text-secondary">{branch.meta}</p></div><div className="space-y-2">{branch.children?.length ? branch.children.map(child => <MindMapTreeNodeView key={child.id} node={child} parentId={branch.id} filter={mindMapFilter} />) : <p className="text-xs text-text-muted">{t("mindMapEmptyBranch")}</p>}</div></section>)}
                         </div>
                     </div>
                     {selectedGraphNode && <aside className="mt-4 rounded-lg border border-primary/30 bg-background/80 p-4" aria-label="脑图节点详情">
