@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "motion-review-bundle.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "bundle_id", "source", "target", "artifacts", "blender", "review_status", "evidence_boundary"],
+  "properties": {
+    "schema": { "const": "motion-review-bundle.v1" },
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["schema", "media", "fps", "width", "height"],
+      "properties": {
+        "schema": { "const": "motion-track.v1" },
+        "media": { "$ref": "#/$defs/file" },
+        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "required": ["subject_id", "selection_policy", "tracked_frames", "occluded_frames", "tracked_ratio", "occluded_ranges_source_frames"],
+      "properties": {
+        "subject_id": { "type": "string", "minLength": 1 },
+        "selection_policy": { "type": "string", "minLength": 1 },
+        "tracked_frames": { "type": "integer", "minimum": 0 },
+        "occluded_frames": { "type": "integer", "minimum": 0 },
+        "tracked_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "occluded_ranges_source_frames": { "type": "array", "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 1 } } }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "minProperties": 5,
+      "additionalProperties": { "$ref": "#/$defs/file" }
+    },
+    "blender": { "type": "object" },
+    "review_status": { "enum": ["needs_director_review", "approved", "rejected"] },
+    "evidence_boundary": {
+      "type": "object",
+      "required": ["proven", "not_proven"],
+      "properties": { "proven": { "type": "string" }, "not_proven": { "type": "array", "items": { "type": "string" } } },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path", "filename", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
