@@ -28,23 +28,10 @@ type LedgerEvidence = {
 const emptyLedger = "[]";
 
 function importDirectorFacts(profile: DirectorProfile | undefined, sourceRevision: number): ScriptFactLedgerEntry[] {
-    const canonState = profile?.canon_state;
-    const state = canonState && typeof canonState === "object" && Object.keys(canonState).length > 0
-        ? canonState
-        : profile
-            ? {
-                // Older Director profiles predate canon_state. Keep their
-                // reviewable material importable instead of showing an empty
-                // ledger after the user clicks Import.
-                setting: profile.setting && Object.keys(profile.setting).length > 0 ? [profile.setting] : [],
-                timeline: profile.timeline,
-                relationships: profile.relationships,
-                key_events: profile.key_events,
-                continuity_constraints: profile.continuity_constraints,
-                prohibitions: profile.prohibitions,
-                unresolved_questions: profile.unresolved_questions,
-            }
-            : null;
+    // Only source-linked canon_state entries are valid fact candidates.
+    // The other Director profile fields are interpretation/diff material and
+    // must not be re-labelled as script facts.
+    const state = profile?.canon_state;
     if (!state || typeof state !== "object") return [];
     return Object.entries(state).flatMap(([category, rawItems]) => {
         const items = Array.isArray(rawItems) ? rawItems : [rawItems];
