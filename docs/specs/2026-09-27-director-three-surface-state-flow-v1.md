@@ -131,6 +131,32 @@ story_map
 
 ## 三、重新生成 / 重新分析逻辑
 
+### 先明确对象边界
+
+Director 重新分析的对象是 **导演分析结果**，不是剧本本身。
+
+```text
+剧本 source revision          只读事实来源
+Fact Ledger                  只读事实与证据来源
+Director profile / story_map 可修正的导演解释与结构
+Shooting plan                基于已确认导演分析继续设计
+```
+
+因此，Director 阶段不得：
+
+- 修改剧本文字、台词、段落或原始场景；
+- 让模型根据导演意见“重写剧本”后再把重写结果当成新事实；
+- 用一次分析结果自动触发下一次分析；
+- 把模型生成的导演解释提升为 `explicit` 剧本事实；
+- 把 shooting plan 的镜头修改反向写回剧本。
+
+Director 可以做的是：
+
+- 修正阶段、事件、人物关系和剧情线的解释；
+- 增加导演意图、表演效果、画面效果、声音和连续性标注；
+- 标记不确定、冲突或待确认的分析项；
+- 为下一步分镜设计提供稳定、可追溯的结构化导演输入。
+
 ### 触发条件
 
 用户在总览或编辑器中选择“重新分析”时，系统固定以下输入快照：
@@ -144,6 +170,8 @@ analysis_instructions
 visible_draft_snapshot
 ```
 
+其中 `source_revision` 和 `fact_ledger_revision` 是只读输入身份。它们在本次 job 中固定不变；模型不能通过输出内容改变这两个 revision。
+
 ### 运行期间
 
 - 不修改当前 confirmed Director revision；
@@ -151,6 +179,8 @@ visible_draft_snapshot
 - 页面显示 `分析中`，禁止对同一输入快照并发启动第二个 job；
 - 失败保留旧 draft、旧 confirmed revision 和失败原因；
 - 取消只终止 job，不产生新 revision。
+- job 完成后不会自动再次提交模型；下一次重新分析必须由用户明确发起。
+- 同一输入快照、同一 draft 指纹和同一指令指纹的 job 应被去重或提示已有结果，不能无限递归排队。
 
 ### 成功后
 
@@ -171,6 +201,31 @@ analysis result
 - 已确认 revision 永远不被覆盖；
 - 旧 draft 和新 candidate 都要可追溯，至少记录输入快照、job id、时间和来源。
 
+### 防止反复修改无法结束
+
+Director 分析不要求模型输出一个“最终完美答案”，而要求每次输出一个可审查的 bounded candidate。系统必须设置以下收敛边界：
+
+1. **一次用户动作只产生一个 candidate**：成功后停在待审查状态，不自动继续。
+2. **候选结果必须是分析 delta 或规范化 draft**：不得返回剧本改写文本作为隐式下一轮输入。
+3. **重复检测**：如果 candidate 与当前 draft 的规范化指纹相同，标记为 `no_change`，不创建新 revision。
+4. **冲突停机**：如果模型结果与用户未保存修改冲突，进入 `conflict`，等待用户选择，不自动覆盖或重跑。
+5. **证据不足停机**：无法从当前 source/fact revision 支持的内容标记为 `uncertain` 或 `needs_review`，不得通过多轮调用强行补全。
+6. **显式重试上限**：网络失败可以按 job 策略有限重试；语义分析不会因为“结果不理想”自动重试。
+7. **下一阶段门槛**：只有用户确认 Director revision 后，结果才可作为 shooting plan 的输入。
+
+可采用的状态集合：
+
+```text
+idle → running → candidate_ready
+                  ├── accepted_to_draft
+                  ├── discarded
+                  ├── conflict
+                  ├── no_change
+                  └── failed
+```
+
+这里的 `accepted_to_draft` 仍然不是 `confirmed`。它只表示用户接受候选作为新的 Director draft；确认 Director revision 仍是独立动作。
+
 ### 用户决策
 
 成功后展示三种结果：
@@ -190,6 +245,19 @@ analysis result
 | 思维导图节点跳转 | 对应编辑器焦点 | 数据本身 | 在编辑器修改并保存 |
 | Director interpretation confirm | confirmed Director revision、下游 lineage | 不自动创建 storyboard frame 或 motion task | 单独确认成功 |
 | shooting plan 生成 | 新的 plan draft | Story Map draft/confirmed profile | 使用明确的 confirmed Director revision |
+
+## 四点一、Director 与剧本、分镜的边界
+
+| 对象 | Director 是否可修改 | 作用 |
+|---|---:|---|
+| 原始剧本文字 | 否 | 事实来源，保持 source revision 不变 |
+| Fact Ledger | 否 | 证据来源，保持 ledger revision 不变 |
+| 导演解释与假设 | 是 | 形成可审查的 Director draft |
+| 人物关系、阶段、事件、剧情线 | 是 | 结构化导演分析 |
+| 场景/镜头导演标注 | 是 | 为 shooting plan 提供意图和约束 |
+| Shooting plan Scene → Beat → Shot | 在独立工作面修改 | 具体拍摄设计 |
+
+Director 的输出契约是“可确认的导演分析输入”，不是新的剧本版本。分镜设计读取 confirmed Director revision，并基于它生成自己的 plan draft；两者的 revision、保存和确认状态分别管理。
 
 ## 五、UI 必须显示的状态
 
@@ -226,4 +294,3 @@ analysis result
 - 修改只改变 draft；重新分析产生 candidate；确认才产生新 Director revision。
 - 重新分析失败或冲突时，旧 draft 和 confirmed revision 可继续恢复。
 - shooting plan 只能读取明确的 confirmed Director revision，不能读取未保存或未确认 draft。
-
