@@ -1395,6 +1395,7 @@
         "mindMapFilterLabel": "脑图聚焦",
         "mindMapFilterAll": "全部结构",
         "mindMapFilterReview": "只看待复核",
+        "openMindMapWindow": "在新窗口打开脑图",
         "issueNoEvents": "需要补充事件",
         "issueConflict": "证据存在冲突",
         "issueUncertain": "解释尚不确定",

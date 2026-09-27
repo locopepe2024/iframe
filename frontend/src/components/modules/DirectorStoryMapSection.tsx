@@ -453,9 +453,18 @@ function StoryMapSection({
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
-    const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
+    const [viewMode, setViewMode] = useState<"graph" | "editor">(() => {
+        if (typeof window === "undefined") return "graph";
+        return new URLSearchParams(window.location.search).get("directorView") === "mindmap" ? "graph" : "graph";
+    });
     const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
     const [mindMapFilter, setMindMapFilter] = useState<"all" | "review">("all");
+    const openMindMapWindow = () => {
+        if (typeof window === "undefined") return;
+        const url = new URL(window.location.href);
+        url.searchParams.set("directorView", "mindmap");
+        window.open(url.toString(), "iframe-director-mind-map", "popup,width=1440,height=1000,resizable=yes,scrollbars=yes");
+    };
     const graphCanvasRef = useRef<HTMLDivElement>(null);
     const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
     useLayoutEffect(() => {
@@ -483,6 +492,8 @@ function StoryMapSection({
             setGraphEdges(next);
         };
         const frame = requestAnimationFrame(measure);
+        const focusMindMap = new URLSearchParams(window.location.search).get("directorView") === "mindmap";
+        if (focusMindMap) window.setTimeout(() => canvas.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior }), 0);
         const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
         observer?.observe(canvas);
         canvas.querySelectorAll<HTMLElement>('[data-graph-node]').forEach(node => observer?.observe(node));
@@ -909,7 +920,7 @@ function StoryMapSection({
                 </div>}
 
                 {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><div className="flex items-center gap-2"><div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("mindMapFilterLabel")}><button type="button" onClick={() => setMindMapFilter("all")} aria-pressed={mindMapFilter === "all"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "all" ? "bg-primary text-white" : "text-text-secondary"}`}>{t("mindMapFilterAll")}</button><button type="button" onClick={() => setMindMapFilter("review")} aria-pressed={mindMapFilter === "review"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "review" ? "bg-amber-500/80 text-white" : "text-text-secondary"}`}>{t("mindMapFilterReview")}</button></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div></div>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={openMindMapWindow} className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">{t("openMindMapWindow")}</button><div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("mindMapFilterLabel")}><button type="button" onClick={() => setMindMapFilter("all")} aria-pressed={mindMapFilter === "all"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "all" ? "bg-primary text-white" : "text-text-secondary"}`}>{t("mindMapFilterAll")}</button><button type="button" onClick={() => setMindMapFilter("review")} aria-pressed={mindMapFilter === "review"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "review" ? "bg-amber-500/80 text-white" : "text-text-secondary"}`}>{t("mindMapFilterReview")}</button></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div></div>
                     <div ref={graphCanvasRef} className="relative min-h-[680px] min-w-[1120px] px-4 pb-2 pt-2">
                         <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
                             {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${edge.y1 + 28}, ${edge.x2} ${edge.y2 - 28}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}

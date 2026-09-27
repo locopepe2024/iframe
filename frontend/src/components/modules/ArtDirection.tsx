@@ -69,7 +69,11 @@ export default function ArtDirection() {
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
     const [overrideAccepted, setOverrideAccepted] = useState(false);
-    const [activeDirectorTab, setActiveDirectorTab] = useState<DirectorTab>("understanding");
+    const [activeDirectorTab, setActiveDirectorTab] = useState<DirectorTab>(() => (
+        typeof window !== "undefined" && new URLSearchParams(window.location.search).get("directorView") === "mindmap"
+            ? "understanding"
+            : "understanding"
+    ));
 
     useEffect(() => {
         setOverrideAccepted(false);

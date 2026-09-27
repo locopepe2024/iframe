@@ -1396,6 +1396,7 @@
         "mindMapFilterLabel": "Mind map focus",
         "mindMapFilterAll": "All structure",
         "mindMapFilterReview": "Needs review",
+        "openMindMapWindow": "Open mind map in new window",
         "issueNoEvents": "Needs events",
         "issueConflict": "Evidence conflict",
         "issueUncertain": "Uncertain interpretation",
