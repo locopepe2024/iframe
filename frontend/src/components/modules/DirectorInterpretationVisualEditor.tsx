@@ -54,6 +54,7 @@ export default function DirectorInterpretationVisualEditor({
     factsLoading = false,
     factsError = "",
     onReloadFacts = () => undefined,
+    mindMapOnly = false,
 }: {
     profile: Draft;
     onChange: (profile: Draft) => void;
@@ -64,6 +65,7 @@ export default function DirectorInterpretationVisualEditor({
     factsLoading?: boolean;
     factsError?: string;
     onReloadFacts?: () => void;
+    mindMapOnly?: boolean;
 }) {
     const t = useTranslations("artDirection.directorEditor");
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
@@ -85,7 +87,7 @@ export default function DirectorInterpretationVisualEditor({
 
     return (
         <div className="space-y-6">
-            <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
+            {!mindMapOnly && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
                 <div className="mb-4">
                     <h3 id="director-story-overview" className="text-sm font-semibold text-foreground">{t("overviewTitle")}</h3>
                     <p className="mt-1 text-xs leading-5 text-text-secondary">{t("overviewHint")}</p>
@@ -103,7 +105,7 @@ export default function DirectorInterpretationVisualEditor({
                         <TextField key={field} label={t(`field.${field}`)} value={asText(profile[field])} onChange={value => updateProfile(field, value)} />
                     ))}
                 </div>
-            </section>
+            </section>}
 
             <DirectorStoryMapSection
                 profile={profile}
@@ -115,9 +117,10 @@ export default function DirectorInterpretationVisualEditor({
                 factsLoading={factsLoading}
                 factsError={factsError}
                 onReloadFacts={onReloadFacts}
+                mindMapOnly={mindMapOnly}
             />
 
-            {listFields.map(field => {
+            {!mindMapOnly && listFields.map(field => {
                 const items = Array.isArray(profile[field]) ? profile[field] as unknown[] : [];
                 return (
                     <section key={field} className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby={`director-${field}`}>

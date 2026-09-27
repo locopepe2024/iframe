@@ -55,7 +55,7 @@ const UNIFIED_STEPS = [
     { id: "assembly", label: "5. Assembly", icon: Film },
 ];
 
-export default function ProjectClient({ id, breadcrumbSegments }: { id: string; breadcrumbSegments?: BreadcrumbSegment[] }) {
+export default function ProjectClient({ id, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
     const [activeStep, setActiveStep] = useState("script");
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
     const [envDialogOpen, setEnvDialogOpen] = useState(false);
@@ -177,6 +177,10 @@ export default function ProjectClient({ id, breadcrumbSegments }: { id: string; 
                 </div>
             </div>
         );
+    }
+
+    if (standaloneDirectorMindMap) {
+        return <main className="min-h-screen w-screen overflow-auto bg-background"><ArtDirection mindMapOnly /></main>;
     }
 
     const segments = breadcrumbSegments || [{ label: "iFrame", hash: "#/" }, { label: currentProject.title }];

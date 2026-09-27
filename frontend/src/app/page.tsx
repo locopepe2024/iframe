@@ -424,7 +424,7 @@ function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
 }
 
 // ── Episode Breadcrumb Wrapper ──
-function EpisodeBreadcrumbWrapper({ seriesId, episodeId }: { seriesId: string; episodeId: string }) {
+function EpisodeBreadcrumbWrapper({ seriesId, episodeId, standaloneDirectorMindMap = false }: { seriesId: string; episodeId: string; standaloneDirectorMindMap?: boolean }) {
   const [seriesTitle, setSeriesTitle] = useState<string>("");
   const [episodeNumber, setEpisodeNumber] = useState<number | null>(null);
   const t = useTranslations("workspace");
@@ -455,7 +455,7 @@ function EpisodeBreadcrumbWrapper({ seriesId, episodeId }: { seriesId: string; e
   ];
 
   return (
-    <ProjectClient id={episodeId} breadcrumbSegments={segments} />
+    <ProjectClient id={episodeId} breadcrumbSegments={segments} standaloneDirectorMindMap={standaloneDirectorMindMap} />
   );
 }
 
@@ -476,6 +476,7 @@ export default function Home() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
+  const [standaloneDirectorMindMap, setStandaloneDirectorMindMap] = useState(false);
   const [seriesEpisodes, setSeriesEpisodes] = useState<Record<string, Project[]>>({});
   const [, setEpisodesLoading] = useState(false);
   const workspaceDataSyncedRef = useRef(false);
@@ -584,6 +585,7 @@ export default function Home() {
         setEpisodeId(seriesEpisodeMatch[2]);
         setProjectId(null);
         setCurrentView('series-episode');
+        setStandaloneDirectorMindMap(hash.includes('directorView=mindmap'));
         return;
       }
       // Match #/series/{id}
@@ -593,6 +595,7 @@ export default function Home() {
         setEpisodeId(null);
         setProjectId(null);
         setCurrentView('series');
+        setStandaloneDirectorMindMap(false);
         return;
       }
       if (hash === '#/studio/editor') {
@@ -692,7 +695,7 @@ export default function Home() {
 
   // 系列集数编辑 — 全屏，BreadcrumbBar 内嵌在 ProjectClient
   if (currentView === 'series-episode' && seriesId && episodeId) {
-    return <EpisodeBreadcrumbWrapper seriesId={seriesId} episodeId={episodeId} />;
+    return <EpisodeBreadcrumbWrapper seriesId={seriesId} episodeId={episodeId} standaloneDirectorMindMap={standaloneDirectorMindMap} />;
   }
 
   // 系列详情页 — 全屏，自带 BreadcrumbBar

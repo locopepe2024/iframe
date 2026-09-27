@@ -20,7 +20,7 @@ const directorTabs: { id: DirectorTab; labelKey: string; icon: typeof BookOpen }
     { id: "style", labelKey: "style", icon: Palette },
 ];
 
-export default function ArtDirection() {
+export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: boolean }) {
     const ta = useTranslations("artDirection");
     const tStep = useTranslations("stepHeader");
     const {
@@ -397,6 +397,10 @@ export default function ArtDirection() {
             setIsSaving(false);
         }
     };
+
+    if (mindMapOnly) {
+        return <div className="min-h-screen bg-background p-6"><DirectorProfilePanel mindMapOnly /></div>;
+    }
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">

@@ -40,7 +40,7 @@ const jobStateKey = (status: string) => {
     return "running";
 };
 
-export default function DirectorProfilePanel() {
+export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapOnly?: boolean }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
     const confirmed = currentProject?.art_direction?.director_profile;
@@ -476,6 +476,7 @@ export default function DirectorProfilePanel() {
                                     factsError={factsError}
                                     onReloadFacts={() => setFactRefreshToken(token => token + 1)}
                                     onChange={value => setDraftText(JSON.stringify(value, null, 2))}
+                                    mindMapOnly={mindMapOnly}
                                 />
                             );
                         } catch {
