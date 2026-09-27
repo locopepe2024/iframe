@@ -1200,6 +1200,8 @@
     "directorDraftStaleActionRequired": "保存草稿后剧本发生了变化。请重新生成导演解读，再保存或确认。",
     "directorDraftSaved": "Director 草稿已保存",
     "directorDraftSaveFailed": "Director 草稿保存失败",
+    "directorDraftConflictRecovering": "发现服务器上有更新的草稿，正在合并当前修改并重试保存……",
+    "directorDraftRetainedLocally": "当前修改已保留在本浏览器中，下次保存时会继续使用。",
     "directorUnsavedHint": "未保存的修改仍是草稿。保存后可继续编辑；确认后才会成为生效版本。",
     "directorTabs": {
       "label": "导演工作台分区",

@@ -1199,6 +1199,8 @@
     "directorDraftStaleActionRequired": "The script changed after this draft was saved. Generate a fresh interpretation before saving or confirming it.",
     "directorDraftSaved": "Director draft saved",
     "directorDraftSaveFailed": "Failed to save Director draft",
+    "directorDraftConflictRecovering": "A newer server draft was found. Merging your edits and retrying the save…",
+    "directorDraftRetainedLocally": "Your edits remain in this browser and will be restored for the next save.",
     "directorUnsavedHint": "Unsaved edits stay a draft. Save them to resume later, or confirm to make this version active.",
     "directorTabs": {
       "label": "Director workbench sections",

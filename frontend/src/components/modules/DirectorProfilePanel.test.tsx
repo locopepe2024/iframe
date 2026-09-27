@@ -189,6 +189,26 @@ it("restores a browser draft when the previous server save failed", async () => 
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
 });
 
+it("retries a draft save against the latest server revision without losing edits", async () => {
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 4, source_revision: 1,
+        draft: profile, updated_at: 10,
+    });
+    const save = vi.spyOn(api, "saveDirectorProfileDraft")
+        .mockRejectedValueOnce({ response: { data: { detail: "Director draft revision changed; reload before saving" } } })
+        .mockImplementation(async (_id, revision, expected, draft) => ({
+            project_id: "film", draft_revision: expected + 1, source_revision: revision,
+            draft, updated_at: 11,
+        }));
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+    await screen.findByText("Saved draft v4");
+    fireEvent.click(screen.getAllByRole("button", { name: "Add item" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]?.[2]).toBe(4);
+    expect(await screen.findByText("Saved draft v5")).toBeInTheDocument();
+});
+
 it("requires a fresh analysis after the source changes, then allows saving it against the new revision", async () => {
     useProjectStore.setState(state => ({
         currentProject: { ...state.currentProject!, source_revision: 2 },

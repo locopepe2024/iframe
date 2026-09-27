@@ -239,6 +239,25 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
         try { window.localStorage.removeItem(directorLocalDraftKey(currentProject.id, sourceRevision)); } catch { /* storage unavailable */ }
     };
 
+    const saveDraftWithRecovery = async (draft: Record<string, unknown>, expectedRevision: number) => {
+        if (!currentProject) throw new Error(t("directorDraftSaveFailed"));
+        try {
+            return await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft);
+        } catch (error) {
+            const detail = extractErrorDetail(error, "");
+            if (!detail.toLowerCase().includes("draft revision changed")) throw error;
+            toast.info(t("directorDraftConflictRecovering"));
+            const latest = await api.getDirectorProfileDraft(currentProject.id);
+            if (latest.source_revision !== null && latest.source_revision !== sourceRevision) {
+                throw new Error(t("directorDraftStaleActionRequired"));
+            }
+            const latestText = latest.draft ? JSON.stringify(latest.draft) : "";
+            const draftTextValue = JSON.stringify(draft);
+            if (latestText === draftTextValue) return latest;
+            return await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft);
+        }
+    };
+
     const queueCandidate = (profile: Record<string, unknown>, action: "analyze" | "refine") => {
         const next = JSON.stringify(profile, null, 2);
         let unchanged = false;
@@ -331,12 +350,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             let expectedDraftRevision = draftRevision;
             let confirmedDraft = draft;
             if (isDirty || draftSourceRevision !== sourceRevision) {
-                const saved = await api.saveDirectorProfileDraft(
-                    currentProject.id,
-                    sourceRevision,
-                    draftRevision,
-                    draft,
-                );
+                const saved = await saveDraftWithRecovery(draft, draftRevision);
                 expectedDraftRevision = saved.draft_revision;
                 setDraftRevision(saved.draft_revision);
                 setDraftSourceRevision(saved.source_revision);
@@ -374,12 +388,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                 throw new Error(t("directorDraftStaleActionRequired"));
             }
             const draft = parseDraft();
-            const saved = await api.saveDirectorProfileDraft(
-                currentProject.id,
-                sourceRevision,
-                draftRevision,
-                draft,
-            );
+            const saved = await saveDraftWithRecovery(draft, draftRevision);
             setDraftRevision(saved.draft_revision);
             setDraftSourceRevision(saved.source_revision);
             setDraftContextSourceRevision(saved.source_revision);
@@ -390,7 +399,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             setStatus({ kind: "success", action: "save" });
             toast.success(t("directorDraftSaved"), { projectId: currentProject.id, projectTitle: currentProject.title });
         } catch (error) {
-            const message = extractErrorDetail(error, t("directorDraftSaveFailed"));
+            const message = `${extractErrorDetail(error, t("directorDraftSaveFailed"))} ${t("directorDraftRetainedLocally")}`;
             setStatus({ kind: "error", action: "save", message });
             toast.error(message);
         } finally {
