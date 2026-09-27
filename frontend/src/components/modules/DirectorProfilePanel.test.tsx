@@ -56,6 +56,7 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(
         (screen.getByLabelText("geography") as HTMLTextAreaElement).value,
     ).toContain("Chinese university and Beijing"));
@@ -114,8 +115,10 @@ it("loads the story map's pinned fact revision and displays exact source evidenc
         </NextIntlClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     fireEvent.click(await screen.findByRole("button", { name: /First/ }));
-    fireEvent.click(screen.getByText(/Script evidence/));
+    fireEvent.click(await screen.findByText(/Script evidence/));
 
     await waitFor(() => expect(getLedger).toHaveBeenCalledWith("film", 1, 2, 0, 100));
     expect(await screen.findByText(/They meet in the university library/)).toBeInTheDocument();
@@ -132,6 +135,7 @@ it("saves an editable Director draft without making it active", async () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(screen.getByLabelText("Format and genre")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Format and genre"), { target: { value: "Romantic drama" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
@@ -182,6 +186,7 @@ it("requires a fresh analysis after the source changes, then allows saving it ag
     expect(await screen.findByText(/script changed after this draft was saved/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Regenerate Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Director analysis complete"));
 
     expect(screen.queryByText(/script changed after this draft was saved/i)).not.toBeInTheDocument();
@@ -205,6 +210,7 @@ it("surfaces the server detail when director revision fails", async () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
@@ -232,6 +238,7 @@ it("shows a visible status while director revision is running and after it compl
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
@@ -258,6 +265,7 @@ it("sends only the current revision instruction after prior changes are merged",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     const input = screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",

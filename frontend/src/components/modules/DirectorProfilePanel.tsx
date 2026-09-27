@@ -187,7 +187,8 @@ export default function DirectorProfilePanel() {
         const next = JSON.stringify(profile, null, 2);
         let unchanged = false;
         try {
-            unchanged = JSON.stringify(JSON.parse(next)) === JSON.stringify(JSON.parse(draftText));
+            unchanged = draftContextSourceRevision === sourceRevision
+                && JSON.stringify(JSON.parse(next)) === JSON.stringify(JSON.parse(draftText));
         } catch {
             unchanged = false;
         }
@@ -198,12 +199,13 @@ export default function DirectorProfilePanel() {
 
     const acceptCandidate = () => {
         if (!candidateText || candidateNoChange) return;
+        const acceptedAction = candidateAction;
         setDraftText(candidateText);
         setDraftContextSourceRevision(sourceRevision);
         setCandidateText(null);
         setCandidateAction(null);
         setCandidateNoChange(false);
-        setStatus({ kind: "success", action: "refine", jobStatus: "candidate_accepted" });
+        setStatus({ kind: "success", action: acceptedAction ?? "refine", jobStatus: "completed" });
     };
 
     const discardCandidate = () => {
