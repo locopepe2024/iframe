@@ -23,6 +23,7 @@
 - Whether a white-model or silhouette video improves target-subject motion retention for any of the three providers.
 - Whether the current media director can import an automatically extracted track without a new extractor and skeleton-mapping adapter.
 - Whether a full-duration render is operationally acceptable without a low-resolution/low-sample preview profile.
+- A 24-frame, 1-second, 640x360, single-sample MP4 smoke test completed and ffprobe reported 24 frames at 24 fps.
 
 ## Blender white-model boundary
 
@@ -33,6 +34,8 @@
 **Not yet proven:** The current renderer does not consume an automatically extracted per-frame pose track. Its existing actor input is state-level pose/trajectory data, so an adapter is still required between `motion-track.v1` and Blender actor keyframes.
 
 **What would verify it:** Import a fixture containing at least 24 frames of target joint rotations and root positions, render a short MP4, and compare the manifest plus sampled overlay frames against the source track.
+
+**Smoke-test result:** A fixture with five target samples (frames 1, 6, 12, 18, and 24) rendered successfully. The manifest retained all three actor IDs and the MP4 was decoded as 640x360, 24 frames, 1.0 seconds. This verifies the renderer path, but not pose accuracy against an extracted source video.
 
 ## Control bundle contract
 
