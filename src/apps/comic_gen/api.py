@@ -4823,7 +4823,21 @@ def list_director_profile_revisions(
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
-    return script.director_profile_revisions
+    if script.director_profile_revisions:
+        return script.director_profile_revisions
+    # Legacy confirmed profiles were embedded in art_direction before the
+    # revision archive was introduced. Expose that immutable profile as a
+    # migration snapshot without rewriting project data on read.
+    legacy = pipeline.effective_director_profile(script)
+    if legacy is None:
+        return []
+    return [DirectorProfileRevision(
+        revision=legacy.revision,
+        content_hash=legacy.content_hash or "legacy-director-profile",
+        profile=legacy,
+        confirmed_at=legacy.confirmed_at,
+        source="migration",
+    )]
 
 
 @app.get("/projects/{script_id}/director-profile/draft")
@@ -4835,14 +4849,26 @@ def get_director_profile_draft(
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
+    draft = script.director_profile_draft
+    draft_revision = script.director_profile_draft_revision
+    draft_source_revision = script.director_profile_draft_source_revision
+    updated_at = script.director_profile_draft_updated_at
+    if draft is None:
+        # Keep the pre-revision Director profile editable after upgrading an
+        # existing workspace. This is a read-only compatibility projection.
+        draft = pipeline.effective_director_profile(script)
+        if draft is not None:
+            draft_revision = draft.revision
+            draft_source_revision = script.source_revision
+            updated_at = draft.confirmed_at
     return {
         "project_id": script.id,
-        "draft_revision": script.director_profile_draft_revision,
-        "source_revision": script.director_profile_draft_source_revision,
-        "draft": script.director_profile_draft.model_dump(exclude={
+        "draft_revision": draft_revision,
+        "source_revision": draft_source_revision,
+        "draft": draft.model_dump(exclude={
             "revision", "content_hash", "confirmed_at",
-        }) if script.director_profile_draft else None,
-        "updated_at": script.director_profile_draft_updated_at,
+        }) if draft else None,
+        "updated_at": updated_at,
     }
 
 
