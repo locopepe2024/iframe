@@ -32,7 +32,7 @@ def main():
         root=[0.0,0.0,0.0]
         if torso and hips: root=[(torso[0]+hips[0]-1.0)*2.4,0.0,0.0]
         rotations={}
-        for name,a,b in [('shoulder_l',ls,le),('shoulder_r',rs,re),('elbow_l',le,point(l,L_WRIST)),('elbow_r',re,point(l,R_WRIST)),('hip_l',lh,lk),('hip_r',rh,rk),('knee_l',lk,point(l,27)),('knee_r',rk,point(l,28))]:
+        for name,a,b in [('upper_arm_l',ls,le),('upper_arm_r',rs,re),('lower_arm_l',le,point(l,L_WRIST)),('lower_arm_r',re,point(l,R_WRIST)),('upper_leg_l',lh,lk),('upper_leg_r',rh,rk),('lower_leg_l',lk,point(l,27)),('lower_leg_r',rk,point(l,28))]:
             v=rel_angle(a,b,90.0 if name.endswith(('_l','_r')) else 0.0)
             if v is not None: rotations[name]=[v,0.0,0.0]
         frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
