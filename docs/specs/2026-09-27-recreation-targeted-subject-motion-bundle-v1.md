@@ -201,3 +201,13 @@ Recreation Project
 **What would verify it:** add a fixture project carrying a review bundle, reload the page at each stage, and verify that the same review status, bundle revision, and generation-attempt lineage survive navigation and refresh. Add an interaction test that a paid-submit control is unreachable until approval and a saved plan exists.
 
 **Implemented slice:** the submit-stage task rows now expose the selected model, local task ID, persisted provider task ID (or an explicit pending state), control revision, and last update time. This makes the existing recovery checkpoint visible after reload without claiming that a separate `collect` endpoint already exists.
+
+## Resolution capability evidence correction
+
+**Observed:** the deployed iframe worker and the current branch use different request values: the deployed container sends `768p`, while the current branch sends `720p`. The deployed `/recreation/models` response declares H3 options `720p` and `2k`. The upstream compatibility statement that UniArt accepts both `720p` and `768p` is a separate fact and does not by itself prove that iframe's catalog maps `768p` as a selectable H3 option.
+
+**Direct implication:** `768p` must not be labeled unsupported solely because the recreation worker sends it. The actual boundary to fix is catalog-to-worker consistency: the selected resolution should come from the catalog snapshot or an explicitly documented provider alias mapping.
+
+**Not yet proven:** whether the deployed H3 route accepts `768p` for this exact reference-video request, and whether the gateway normalizes it to the catalog's `720p` or treats it as a distinct output profile.
+
+**What would verify it:** submit one controlled non-production request using the exact deployed route and `768p`, capture the provider request/response metadata and output dimensions, then compare it with the catalog's `720p` request. Do not infer support or rejection from the field name alone.

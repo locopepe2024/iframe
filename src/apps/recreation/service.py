@@ -913,9 +913,11 @@ class RecreationService:
 
             kwargs = {
                 "model": task["model"], "mode": "reference2video", "duration": task["duration"],
-                # UniArt's video contract accepts 480p/720p for this route.
-                # 768p is not a valid Seedance/H3 resolution and is rejected
-                # by the provider as a metadata conflict.
+                # Keep the recreation request on the verified route default.
+                # The upstream gateway may accept additional resolution aliases
+                # (including 768p), but that is not evidence that this route's
+                # iframe catalog declares or selects them. A future catalog-
+                # driven resolver should replace this fixed request value.
                 "resolution": "720p", "generate_audio": task["generate_audio"],
                 "on_task_submitted": save_provider_task,
             }
