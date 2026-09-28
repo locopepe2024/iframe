@@ -1581,6 +1581,19 @@
         "focus": "导演重点",
         "asset_need": "所需资产"
       },
+      "domains": {
+        "navigation": "导演理解功能域",
+        "overview": "故事总览",
+        "overviewHint": "故事核心、时代、地点和导演意图",
+        "structure": "故事结构",
+        "structureHint": "时间线、事件、人物关系和剧情线",
+        "continuity": "连续性约束",
+        "continuityHint": "后续场景必须保持的状态",
+        "consistency": "严格一致性",
+        "consistencyHint": "禁止新增、改写或无依据推断",
+        "questions": "待确认问题",
+        "questionsHint": "需要导演决定的未知项"
+      },
       "flow": {
         "scene": "场景",
         "beat": "节拍",

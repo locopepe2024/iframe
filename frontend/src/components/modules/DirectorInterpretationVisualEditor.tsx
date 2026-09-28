@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { Character, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorStoryMapSection from "./DirectorStoryMapSection";
@@ -68,6 +69,7 @@ export default function DirectorInterpretationVisualEditor({
     mindMapOnly?: boolean;
 }) {
     const t = useTranslations("artDirection.directorEditor");
+    const [activeDomain, setActiveDomain] = useState<"overview" | "structure" | "continuity" | "consistency" | "questions">("overview");
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
         ? profile.setting as Draft
         : {};
@@ -85,9 +87,34 @@ export default function DirectorInterpretationVisualEditor({
         (Array.isArray(profile[key]) ? profile[key] as unknown[] : []).filter((_item, current) => current !== index),
     );
 
+    const domains = [
+        { id: "overview" as const, label: t("domains.overview"), hint: t("domains.overviewHint") },
+        { id: "structure" as const, label: t("domains.structure"), hint: t("domains.structureHint") },
+        { id: "continuity" as const, label: t("domains.continuity"), hint: t("domains.continuityHint") },
+        { id: "consistency" as const, label: t("domains.consistency"), hint: t("domains.consistencyHint") },
+        { id: "questions" as const, label: t("domains.questions"), hint: t("domains.questionsHint") },
+    ];
+
     return (
-        <div className="space-y-6">
-            {!mindMapOnly && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
+        <div className="space-y-4">
+            {!mindMapOnly && (
+                <nav aria-label={t("domains.navigation")} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    {domains.map(domain => (
+                        <button
+                            key={domain.id}
+                            type="button"
+                            aria-current={activeDomain === domain.id ? "page" : undefined}
+                            onClick={() => setActiveDomain(domain.id)}
+                            className={`min-h-16 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${activeDomain === domain.id ? "border-primary bg-primary/10" : "border-border bg-background/40 hover:border-primary/60"}`}
+                        >
+                            <span className="block text-xs font-semibold text-foreground">{domain.label}</span>
+                            <span className="mt-1 block text-[11px] leading-4 text-text-muted">{domain.hint}</span>
+                        </button>
+                    ))}
+                </nav>
+            )}
+
+            {!mindMapOnly && activeDomain === "overview" && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
                 <div className="mb-4">
                     <h3 id="director-story-overview" className="text-sm font-semibold text-foreground">{t("overviewTitle")}</h3>
                     <p className="mt-1 text-xs leading-5 text-text-secondary">{t("overviewHint")}</p>
@@ -107,7 +134,7 @@ export default function DirectorInterpretationVisualEditor({
                 </div>
             </section>}
 
-            <DirectorStoryMapSection
+            {(mindMapOnly || activeDomain === "structure") && <DirectorStoryMapSection
                 profile={profile}
                 onChange={onChange}
                 sourceRevision={sourceRevision}
@@ -118,9 +145,11 @@ export default function DirectorInterpretationVisualEditor({
                 factsError={factsError}
                 onReloadFacts={onReloadFacts}
                 mindMapOnly={mindMapOnly}
-            />
+            />}
 
-            {!mindMapOnly && listFields.map(field => {
+            {!mindMapOnly && (activeDomain === "continuity" || activeDomain === "consistency" || activeDomain === "questions") && listFields.filter(field =>
+                activeDomain === "continuity" ? field === "continuity_constraints" : activeDomain === "consistency" ? field === "prohibitions" : field === "unresolved_questions",
+            ).map(field => {
                 const items = Array.isArray(profile[field]) ? profile[field] as unknown[] : [];
                 return (
                     <section key={field} className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby={`director-${field}`}>

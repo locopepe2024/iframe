@@ -1580,6 +1580,19 @@
         "focus": "Directing focus",
         "asset_need": "Asset needs"
       },
+      "domains": {
+        "navigation": "Director interpretation domains",
+        "overview": "Story overview",
+        "overviewHint": "Story core, era, setting and intent",
+        "structure": "Story structure",
+        "structureHint": "Timeline, events, relationships and threads",
+        "continuity": "Continuity constraints",
+        "continuityHint": "States that must persist across scenes",
+        "consistency": "Strict consistency",
+        "consistencyHint": "What generation must not add or rewrite",
+        "questions": "Open questions",
+        "questionsHint": "Items that need a director decision"
+      },
       "flow": {
         "scene": "Scene",
         "beat": "Beat",
