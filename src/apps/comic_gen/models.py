@@ -1832,6 +1832,10 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     if "story_map" in normalized and normalized["story_map"] is not None:
         if not isinstance(normalized["story_map"], dict):
             raise TypeError("story_map must be an object")
+        story_map = dict(normalized["story_map"])
+        if story_map.get("source_revision_id") == "":
+            story_map["source_revision_id"] = "__pending__"
+        normalized["story_map"] = story_map
 
     normalized["execution_summary"] = build_director_execution_summary(normalized)
 

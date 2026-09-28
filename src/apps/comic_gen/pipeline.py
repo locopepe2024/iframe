@@ -2510,7 +2510,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Story map source revision changed; refresh it before saving")
         source_revision_id = self.source_revision_id(script, script.source_revision)
         supplied_source_id = story_map.get("source_revision_id")
-        if supplied_source_id and supplied_source_id != source_revision_id:
+        if supplied_source_id and supplied_source_id != "__pending__" and supplied_source_id != source_revision_id:
             raise ValueError("Story map source revision identity does not match the current script")
         story_map["schema_version"] = 1
         story_map["source_revision"] = script.source_revision

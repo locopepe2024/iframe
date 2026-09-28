@@ -835,6 +835,17 @@ def test_director_profile_cannot_confirm_unsaved_or_stale_drafts():
         )
 
 
+def test_director_profile_draft_api_accepts_blank_story_map_source_identity(monkeypatch):
+    from src.apps.comic_gen import api
+    pipeline, script = make_pipeline()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    owner = UserContext("user", "owner", "", "")
+    draft = {**profile_payload(), "story_map": valid_story_map()}
+    draft["story_map"]["source_revision_id"] = ""
+    saved = api.save_director_profile_draft("film", api.DirectorProfileDraftSaveRequest(source_revision=script.source_revision, expected_draft_revision=0, draft=draft), owner)
+    assert saved["draft"]["story_map"]["source_revision_id"]
+
+
 def test_director_profile_draft_api_exposes_save_and_confirm_as_separate_actions(monkeypatch):
     from fastapi import HTTPException
     from src.apps.comic_gen import api
