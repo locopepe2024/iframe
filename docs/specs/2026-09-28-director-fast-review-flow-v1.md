@@ -40,6 +40,36 @@ Director 理解（草稿）
 - `ShootingPlan draft`：基于当前确认 Director 理解生成；Director revision 变化后自动标记 stale。
 - `Script revision diff`：剧本原文版本之间的差异，例如新增、删除或改写的对白、场景和事实。它与 Director diff 分开显示，不把原文变化误认为导演决定。
 
+## 两类 diff 的处理规则
+
+### Script revision diff
+
+剧本从 `source_revision N` 变为 `source_revision N+1` 后，系统先生成原文 diff，再判断影响范围，不默认重跑整本 Director 分析：
+
+| 变化 | Director 处理 |
+|---|---|
+| 错别字、格式、标点 | 不重新分析；保留原 Director revision |
+| 单句对白或局部措辞 | 检查对应事件、人物和剧情线，必要时生成局部 Director patch |
+| 单个场景新增、删除或移动 | 局部重分析，并执行时间线、关系和连续性一致性检查 |
+| 人物关系、结局或核心时间线变化 | 触发全局 Director 重分析 |
+| 大段剧本重写 | 触发全局 Director 重分析 |
+
+局部 patch 完成后必须运行全局一致性检查；如果检查发现其他阶段、关系或结局受到影响，则升级为全局重分析。剧本 diff 只描述原文变化，不直接修改 Director 已采用版本。
+
+### Director diff
+
+Director 草稿可由“提出修改”或手动编辑产生。它比较两个 Director revision，覆盖时间线、人物关系、剧情线、连续性约束、严格一致性、待确认问题和视觉/表演意图。
+
+Director 草稿修改后的生效规则：
+
+1. 自动保存草稿并生成 Director diff。
+2. 未采用前，当前拍摄计划和已生成镜头继续使用旧 Director revision。
+3. 用户点击“采用当前 Director 理解”后，生成新的 Director revision。
+4. 采用后，旧拍摄计划标记为 `stale`，下一次拍摄计划生成使用新 revision。
+5. 已生成镜头不自动删除；保留其原始 Director revision，并标记受影响状态，允许用户按需重新生成。
+
+因此，导演可以快速修改理解而不破坏当前工作；只有采用修改后，变化才进入下一步拍摄计划。
+
 ## 交互要求
 
 1. Director 页面自动保存草稿；用户不需要把“保存草稿”当作工作流确认步骤。
@@ -50,6 +80,8 @@ Director 理解（草稿）
 6. 重新分析只产生新的 Director 草稿和 Director diff，不修改剧本原文，不自动覆盖用户已经采用的拍摄决定。
 7. 计划生成使用最近一次已采用的 Director revision；草稿修改不应被下游消费。
 8. 高级 JSON 不要求用户编辑字段细节；提供 Director 理解的 Markdown 导入/导出，用于备份、迁移和外部审阅。
+9. 剧本 diff 页面必须显示影响范围和建议动作：`无需重分析`、`局部修订` 或 `全局重分析`。
+10. Director diff 页面必须显示受影响的拍摄计划、场景和镜头；未采用的 diff 不得改变下游产物。
 
 ## 不在本切片内
 
@@ -65,3 +97,5 @@ Director 理解（草稿）
 - 不再出现要求用户先单独确认 visual story map 或 fact ledger 才能继续的阻断提示。
 - 剧本版本 diff 与 Director diff 分开展示，用户能明确知道是原文变了，还是导演理解变了。
 - “保存草稿”不再作为独立确认语义；自动保存或显式保存只是防止输入丢失。
+- 剧本小改动不会默认触发整本 Director 重分析；结构性变化会升级为全局重分析。
+- Director 直接修改在采用前不影响拍摄计划；采用后旧计划变为 stale，已生成镜头保留并显示其版本来源。
