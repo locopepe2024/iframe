@@ -145,3 +145,13 @@ ffmpeg -hide_banner -loglevel error -ss <time> -i <source> -frames:v 1 <frame.jp
 - This slice does not claim provider-native ControlNet, OpenPose, or depth support.
 - This slice does not add automatic segmentation or pose extraction until the extractor and license are selected.
 - This slice does not submit another paid generation while target selection is unverified.
+
+## Hypit motion boundary
+
+**Observed:** Hypit's `@hypit/media-track` motion recipes operate on timed visual Items, Sequences, Frames, and sampled media. The supported operators include `fade`, `slide`, `scale`, `bounce`, `wipe`, and `spin`; their outputs are visual properties such as opacity, transform, filter, and clip-path keyframes.
+
+**Direct implication:** Hypit motion is suitable for compositing and timeline presentation: B-roll entrance, card movement, caption/sticker animation, transitions, and whole-media pan/zoom/rotation. It is not a body pose or skeleton control channel.
+
+**Not yet proven:** Hypit's provider packages do not establish that H3, Seedance, or Wan will interpret a media-track motion recipe as human motion guidance. The provider-facing H3 surface remains ordinary text, image, video, and audio references.
+
+**System boundary:** iframe/media owns subject selection, masks, `motion-track.v1`, 3D lift, Blender retargeting, and white-model reference generation. Hypit-style visual motion belongs to the upper composition layer and must not be used as a substitute for joint trajectories.
