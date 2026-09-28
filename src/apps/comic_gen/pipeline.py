@@ -2676,7 +2676,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Adopt a Director interpretation with at least one timeline or event before generating a shooting plan")
         if story_map.get("source_revision") != script.source_revision:
             raise ValueError("The confirmed story map is stale; re-confirm Director interpretation first")
-        if story_map.get("source_revision_id") != self.source_revision_id(script, script.source_revision):
+        current_source_id = self.source_revision_id(script, script.source_revision)
+        if story_map.get("source_revision_id") in ("", "__pending__", None):
+            # Older confirmations and drafts may carry an unbound editor marker.
+            # Bind it lazily to the current script source so the Director apply
+            # action remains the only user-facing confirmation step.
+            story_map["source_revision_id"] = current_source_id
+        elif story_map.get("source_revision_id") != current_source_id:
             raise ValueError("The confirmed story map source content is stale; re-confirm Director interpretation first")
         style = self.storyboard_visual_style(script)
         style_hash = hashlib.sha256(json.dumps(
