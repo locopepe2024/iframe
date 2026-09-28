@@ -2500,6 +2500,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         story_map = profile.get("story_map")
         if story_map is None:
             return
+        if story_map is None:
+            return
         if not isinstance(story_map, dict):
             raise ValueError("story_map must be an object")
         story_map = dict(story_map)
@@ -2516,6 +2518,40 @@ class ComicGenPipeline(StudioOwnerMixin):
         story_map.setdefault("fact_ledger_revision", None)
         story_map["people"] = self._director_story_people(entities.get("characters", []))
         profile["story_map"] = story_map
+
+    def _effective_shooting_story_map(self, script: Script, profile: DirectorProfile) -> Optional[Dict[str, Any]]:
+        """Return the explicit map, or a transient legacy projection for planning.
+
+        Legacy Director profiles remain hash-compatible and are not rewritten.
+        The projection is only used to make a plan; the user can later edit and
+        save the explicit map as part of the Director revision.
+        """
+        if profile.story_map is not None:
+            return profile.story_map.model_dump()
+        raw = profile.model_dump(exclude={"story_map"})
+        projected = self._legacy_story_map_for_planning(raw)
+        if projected is None:
+            return None
+        self._bind_director_story_map(script, self.resolve_episode_assets(script), projected)
+        return projected
+
+    @staticmethod
+    def _legacy_story_map_for_planning(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        timeline = profile.get("timeline") if isinstance(profile.get("timeline"), list) else []
+        events = profile.get("key_events") if isinstance(profile.get("key_events"), list) else []
+        if not timeline and not events:
+            return None
+        phases = []
+        for index, item in enumerate(timeline or [{}]):
+            label = item if isinstance(item, str) else str(item.get("phase") or item.get("title") or item.get("name") or f"阶段 {index + 1}")
+            phases.append({"phase_id": f"legacy-phase-{index + 1}", "order": index, "label": label, "time_anchor": "", "events": []})
+        for index, item in enumerate(events):
+            phase = phases[min(index, len(phases) - 1)]
+            description = item if isinstance(item, str) else str(item.get("description") or item.get("event") or item.get("scene") or f"事件 {index + 1}")
+            phase["events"].append({"event_id": f"legacy-event-{index + 1}", "order": len(phase["events"]), "title": description[:80], "description": description, "character_ids": [], "dramatic_function": "", "source_fact_ids": [], "evidence_status": "interpretation"})
+        if not any(phase["events"] for phase in phases):
+            phases[0]["events"].append({"event_id": "legacy-event-1", "order": 0, "title": phases[0]["label"], "description": phases[0]["label"], "character_ids": [], "dramatic_function": "", "source_fact_ids": [], "evidence_status": "interpretation"})
+        return {"schema_version": 1, "source_revision": None, "source_revision_id": "", "fact_ledger_revision": None, "people": [], "phases": phases, "relationship_arcs": [], "story_threads": []}
 
     def _validate_director_story_map(self, script: Script, value: Any) -> None:
         if value is None:
@@ -2635,11 +2671,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         profile = self.effective_director_profile(script)
         if profile is None:
             raise ValueError("Confirm a Director interpretation before generating a shooting plan")
-        if profile.story_map is None:
-            raise ValueError("Create and confirm the visual story map before generating a shooting plan")
-        if profile.story_map.source_revision != script.source_revision:
+        story_map = self._effective_shooting_story_map(script, profile)
+        if story_map is None:
+            raise ValueError("Adopt a Director interpretation with at least one timeline or event before generating a shooting plan")
+        if story_map.get("source_revision") != script.source_revision:
             raise ValueError("The confirmed story map is stale; re-confirm Director interpretation first")
-        if profile.story_map.source_revision_id != self.source_revision_id(script, script.source_revision):
+        if story_map.get("source_revision_id") != self.source_revision_id(script, script.source_revision):
             raise ValueError("The confirmed story map source content is stale; re-confirm Director interpretation first")
         style = self.storyboard_visual_style(script)
         style_hash = hashlib.sha256(json.dumps(
@@ -2656,14 +2693,16 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _validate_director_shooting_plan(self, script: Script, value: Any) -> DirectorShootingPlan:
         plan = value if isinstance(value, DirectorShootingPlan) else DirectorShootingPlan(**value)
         profile = self.effective_director_profile(script)
-        if profile is None or profile.story_map is None:
-            raise ValueError("A confirmed Director story map is required for the shooting plan")
+        if profile is None:
+            raise ValueError("A confirmed Director interpretation is required for the shooting plan")
         expected = self.director_shooting_plan_lineage(script.id)
         for key, current_value in expected.items():
             if getattr(plan, key) != current_value:
                 raise ValueError(f"Shooting plan lineage is stale: {key} changed")
+        story_map = self._effective_shooting_story_map(script, profile)
+        assert story_map is not None
         valid_event_ids = {
-            event.event_id for phase in profile.story_map.phases for event in phase.events
+            event.get("event_id") for phase in story_map.get("phases", []) for event in phase.get("events", [])
         }
         requested_event_ids = {
             event_id for scene in plan.scenes for beat in scene.beats for event_id in beat.story_event_ids
@@ -2730,7 +2769,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if expected_lineage and expected_lineage != lineage:
             raise ValueError("Shooting plan inputs changed before generation started")
         profile = self.effective_director_profile(script)
-        assert profile is not None and profile.story_map is not None
+        assert profile is not None
+        story_map = self._effective_shooting_story_map(script, profile)
+        assert story_map is not None
         resolved = self.resolve_episode_assets(script)
         entities = {
             "characters": [{
