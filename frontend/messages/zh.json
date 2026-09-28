@@ -1619,6 +1619,7 @@
     "factLedgerImportDirector": "导入导演候选事实",
     "factLedgerImportNote": "导入的导演解读仅作为待核对候选，初始状态为不确定，且没有已核实的原文范围。",
     "factLedgerNoDirectorCandidates": "当前 Director diff 没有可导入的来源绑定事实。请先完成事实提取与证据绑定；导演解读不能直接作为剧本事实。",
+    "factLedgerLegacyMetadataRemoved": "已隐藏旧版本误导入的导演约束和待确认问题；这些内容请在对应 Director 功能域中编辑。",
     "factLedgerWorkflowTitle": "事实审阅怎么做",
     "factLedgerWorkflowImport": "导入导演候选事实，作为待核对清单。",
     "factLedgerWorkflowReview": "逐条对照剧本原文：有明确依据的标为 confirmed，并补充证据范围；剧本没有明确写出的保持 uncertain。",

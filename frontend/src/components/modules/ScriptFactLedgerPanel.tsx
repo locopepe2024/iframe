@@ -27,6 +27,17 @@ type LedgerEvidence = {
 
 const emptyLedger = "[]";
 
+function removeLegacyDirectorMetadata(facts: ScriptFactLedgerEntry[]): ScriptFactLedgerEntry[] {
+    return facts.filter(fact => {
+        const id = String(fact.fact_id || "");
+        // Older builds accidentally imported Director prohibitions and open
+        // questions as script facts. They have no script evidence and must
+        // remain in their Director domains instead of the fact ledger.
+        return !/^(prohibitions|unresolved_questions)-\d+-/.test(id)
+            && !/(?:^|-)(prohibitions|unresolved_questions)uncertain$/.test(id);
+    });
+}
+
 function importDirectorFacts(profile: DirectorProfile | undefined, sourceRevision: number): ScriptFactLedgerEntry[] {
     // Only source-linked canon_state entries are valid fact candidates.
     // The other Director profile fields are interpretation/diff material and
@@ -91,11 +102,14 @@ export default function ScriptFactLedgerPanel({
             if (!active) return;
             const hasSavedDraft = draft.draft_revision > 0;
             const facts = hasSavedDraft
-                ? draft.facts
+                ? removeLegacyDirectorMetadata(draft.facts)
                 : importDirectorFacts(directorProfile, sourceRevision);
+            if (hasSavedDraft && facts.length !== draft.facts.length) {
+                toast.info(t("factLedgerLegacyMetadataRemoved"));
+            }
             const nextText = JSON.stringify(facts, null, 2);
             setDraftText(nextText);
-            setSavedText(hasSavedDraft ? nextText : emptyLedger);
+            setSavedText(hasSavedDraft ? JSON.stringify(draft.facts, null, 2) : emptyLedger);
             setDraftRevision(draft.draft_revision);
             setDraftSourceRevision(draft.source_revision);
             setSavedSourceRevision(draft.source_revision);
@@ -196,7 +210,7 @@ export default function ScriptFactLedgerPanel({
     };
 
     const importCurrentDirectorFacts = () => {
-        const facts = importDirectorFacts(directorProfile, sourceRevision);
+        const facts = removeLegacyDirectorMetadata(importDirectorFacts(directorProfile, sourceRevision));
         if (facts.length === 0) {
             const message = t("factLedgerNoDirectorCandidates");
             setError(message);

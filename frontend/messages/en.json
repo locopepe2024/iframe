@@ -1618,6 +1618,7 @@
     "factLedgerImportDirector": "Import Director candidates",
     "factLedgerImportNote": "Imported interpretation entries start as uncertain and have no verified source ranges.",
     "factLedgerNoDirectorCandidates": "This Director diff has no source-linked facts to import. Extract and bind evidence first; interpretation cannot be treated as a script fact.",
+    "factLedgerLegacyMetadataRemoved": "Legacy Director constraints and open questions imported by an older version were hidden. Edit them in their Director domains instead.",
     "factLedgerWorkflowTitle": "How to review facts",
     "factLedgerWorkflowImport": "Import director candidates as a review checklist.",
     "factLedgerWorkflowReview": "Check each item against the script: mark supported items confirmed and add evidence ranges; keep anything unstated uncertain.",
