@@ -2237,6 +2237,7 @@ class Script(BaseModel):
     director_profile_draft_revision: int = Field(0, ge=0)
     director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
     director_profile_draft_updated_at: Optional[float] = None
+    director_profile_draft_name: Optional[str] = Field(None, max_length=160)
     director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)

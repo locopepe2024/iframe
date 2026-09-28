@@ -4578,6 +4578,7 @@ class DirectorProfileDraftSaveRequest(BaseModel):
     source_revision: int = Field(..., ge=1)
     expected_draft_revision: int = Field(..., ge=0)
     draft: Dict[str, Any]
+    draft_name: Optional[str] = Field(None, max_length=160)
 
 
 class DirectorShootingPlanDraftSaveRequest(BaseModel):
@@ -4873,6 +4874,7 @@ def get_director_profile_draft(
             "revision", "content_hash", "confirmed_at",
         }) if draft else None,
         "updated_at": updated_at,
+        "draft_name": script.director_profile_draft_name,
     }
 
 
@@ -4890,6 +4892,7 @@ def save_director_profile_draft(
             request.source_revision,
             request.expected_draft_revision,
             draft,
+            request.draft_name,
         )
         return {
             "project_id": updated.id,
@@ -4899,6 +4902,7 @@ def save_director_profile_draft(
                 "revision", "content_hash", "confirmed_at",
             }) if updated.director_profile_draft else None,
             "updated_at": updated.director_profile_draft_updated_at,
+            "draft_name": updated.director_profile_draft_name,
         }
     except ValueError as exc:
         message = str(exc)

@@ -1140,11 +1140,13 @@ export const api = {
         sourceRevision: number,
         expectedDraftRevision: number,
         draft: DirectorProfileDraft,
+        draftName?: string,
     ): Promise<DirectorProfileDraftState> => {
         const res = await axios.put<DirectorProfileDraftState>(`${API_URL}/projects/${scriptId}/director-profile/draft`, {
             source_revision: sourceRevision,
             expected_draft_revision: expectedDraftRevision,
             draft,
+            draft_name: draftName,
         });
         return res.data;
     },

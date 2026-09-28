@@ -3087,6 +3087,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         source_revision: int,
         expected_draft_revision: int,
         draft: Dict[str, Any],
+        draft_name: Optional[str] = None,
     ) -> Script:
         with self._save_lock:
             script = self.scripts.get(script_id)
@@ -3109,6 +3110,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             script.director_profile_draft_revision += 1
             script.director_profile_draft_source_revision = source_revision
             script.director_profile_draft_updated_at = time.time()
+            if draft_name is not None:
+                script.director_profile_draft_name = draft_name.strip() or None
             script.updated_at = script.director_profile_draft_updated_at
             self._save_data()
             return script

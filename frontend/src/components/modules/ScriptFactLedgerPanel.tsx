@@ -92,6 +92,9 @@ export default function ScriptFactLedgerPanel({
     const [evidenceOffset, setEvidenceOffset] = useState(0);
     const [busy, setBusy] = useState<"save" | "confirm" | null>(null);
     const [error, setError] = useState("");
+    const [selectedHistoryRevision, setSelectedHistoryRevision] = useState("");
+    const [compareHistoryRevision, setCompareHistoryRevision] = useState("");
+    const [comparisonFacts, setComparisonFacts] = useState<LedgerEvidence | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -243,40 +246,51 @@ export default function ScriptFactLedgerPanel({
 
             {history.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" aria-label={t("factLedgerHistory")}>
-                    <span className="text-text-muted">{t("factLedgerHistory")}:</span>
-                    {history.map(item => (
-                        <button
-                            key={item.revision}
-                            type="button"
-                            className="rounded border border-border px-2 py-1 text-text-secondary hover:border-primary hover:text-foreground"
-                            onClick={() => {
-                                void api.getScriptFactLedger(projectId, item.source_revision, item.revision, 0)
-                                    .then((result: LedgerEvidence) => {
-                                        setEvidence(result);
-                                        setEvidenceOffset(0);
-                                    })
-                                    .catch(cause => {
-                                        const message = extractErrorDetail(cause, t("factLedgerLoadFailed"));
-                                        setError(message);
-                                        toast.error(message);
-                                    });
-                            }}
-                        >
-                            {t("factLedgerHistoryItem", {
-                                revision: item.revision,
-                                sourceRevision: item.source_revision,
-                                count: item.fact_count,
-                            })}
-                        </button>
-                    ))}
+                    <label htmlFor="fact-ledger-version" className="text-text-muted">{t("factLedgerHistory")}:</label>
+                    <select
+                        id="fact-ledger-version"
+                        value={selectedHistoryRevision || String(history[history.length - 1]?.revision ?? "")}
+                        onChange={event => {
+                            const item = history.find(entry => String(entry.revision) === event.target.value);
+                            if (!item) return;
+                            setSelectedHistoryRevision(event.target.value);
+                            void api.getScriptFactLedger(projectId, item.source_revision, item.revision, 0)
+                                .then((result: LedgerEvidence) => { setEvidence(result); setEvidenceOffset(0); })
+                                .catch(cause => { const message = extractErrorDetail(cause, t("factLedgerLoadFailed")); setError(message); toast.error(message); });
+                        }}
+                        className="min-h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                    >
+                        {history.map(item => <option key={item.revision} value={item.revision}>{t("factLedgerHistoryItem", { revision: item.revision, sourceRevision: item.source_revision, count: item.fact_count })}</option>)}
+                    </select>
+                    <span className="text-text-muted">{t("factLedgerCompareLabel")}</span>
+                    <select
+                        aria-label={t("factLedgerCompareLabel")}
+                        value={compareHistoryRevision}
+                        onChange={event => {
+                            const item = history.find(entry => String(entry.revision) === event.target.value);
+                            setCompareHistoryRevision(event.target.value);
+                            if (!item) { setComparisonFacts(null); return; }
+                            void api.getScriptFactLedger(projectId, item.source_revision, item.revision, 0)
+                                .then((result: LedgerEvidence) => setComparisonFacts(result))
+                                .catch(cause => { const message = extractErrorDetail(cause, t("factLedgerLoadFailed")); setError(message); toast.error(message); });
+                        }}
+                        className="min-h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                    >
+                        <option value="">{t("factLedgerComparePlaceholder")}</option>
+                        {history.map(item => <option key={`compare-${item.revision}`} value={item.revision}>{t("factLedgerHistoryItem", { revision: item.revision, sourceRevision: item.source_revision, count: item.fact_count })}</option>)}
+                    </select>
+                    <span className="text-text-muted">{t("factLedgerHistoryHint")}</span>
                 </div>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2">
-                <WorkflowActionButton variant="secondary" size="sm" onClick={importCurrentDirectorFacts} disabled={busy !== null}>
-                    {t("factLedgerImportDirector")}
-                </WorkflowActionButton>
-                <span className="self-center text-xs text-text-muted">{t("factLedgerImportNote")}</span>
+            <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <WorkflowActionButton variant="secondary" size="sm" onClick={importCurrentDirectorFacts} disabled={busy !== null}>
+                        {t("factLedgerImportDirector")}
+                    </WorkflowActionButton>
+                    <span className="text-xs font-medium text-foreground">{t("factLedgerImportSource", { sourceRevision })}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-text-muted">{t("factLedgerImportNote")}</p>
             </div>
 
             <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label={t("factLedgerWorkflowTitle")}>
@@ -289,6 +303,14 @@ export default function ScriptFactLedgerPanel({
                 </ol>
                 <p className="mt-2 text-xs text-text-muted">{t("factLedgerWorkflowImportant")}</p>
             </div>
+
+            {comparisonFacts && evidence && (
+                <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs" aria-label={t("factLedgerDiffTitle")}>
+                    <p className="font-medium text-foreground">{t("factLedgerDiffTitle", { from: comparisonFacts.ledger_revision, to: evidence.ledger_revision })}</p>
+                    <p className="mt-1 text-text-secondary">{t("factLedgerDiffSummary", { fromCount: comparisonFacts.total_facts, toCount: evidence.total_facts, added: Math.max(0, evidence.total_facts - comparisonFacts.total_facts), removed: Math.max(0, comparisonFacts.total_facts - evidence.total_facts) })}</p>
+                    <p className="mt-1 text-text-muted">{t("factLedgerDiffNote")}</p>
+                </div>
+            )}
 
             {parsedFacts.length > 0 && (
                 <details className="mt-3 rounded border border-border bg-background/30 p-3">
@@ -328,18 +350,18 @@ export default function ScriptFactLedgerPanel({
                 </pre>
             </details>
 
-            <label htmlFor="fact-ledger-draft" className="mt-3 block text-xs font-medium text-foreground">
-                {t("factLedgerDraftAdvanced")}
-            </label>
-            <p className="mt-1 text-xs text-text-muted">{t("factLedgerDraftAdvancedHint")}</p>
-            <textarea
-                id="fact-ledger-draft"
-                aria-label={t("factLedgerDraft")}
-                value={draftText}
-                onChange={event => setDraftText(event.target.value)}
-                className="mt-3 min-h-64 w-full resize-y rounded-md border border-border bg-background p-3 font-mono text-xs leading-5 text-foreground outline-none focus:border-primary"
-                spellCheck={false}
-            />
+            <details className="mt-3 rounded-md border border-border bg-background/30 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-text-secondary">{t("factLedgerDraftAdvanced")}</summary>
+                <p className="mt-2 text-xs text-text-muted">{t("factLedgerDraftAdvancedHint")}</p>
+                <textarea
+                    id="fact-ledger-draft"
+                    aria-label={t("factLedgerDraft")}
+                    value={draftText}
+                    onChange={event => setDraftText(event.target.value)}
+                    className="mt-3 min-h-64 w-full resize-y rounded-md border border-border bg-background p-3 font-mono text-xs leading-5 text-foreground outline-none focus:border-primary"
+                    spellCheck={false}
+                />
+            </details>
 
             {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
 

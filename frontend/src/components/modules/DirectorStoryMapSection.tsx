@@ -772,44 +772,11 @@ function StoryMapSection({
                         <Plus size={15} aria-hidden="true" />{t("enterMindMap")}
                     </button>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-md border border-border bg-surface p-3">
-                        <h4 className="text-xs font-semibold text-foreground">{t("legacyPhases", { count: oldTimeline.length })}</h4>
-                        <ol className="mt-2 space-y-2">
-                            {oldTimeline.map((phase, index) => (
-                                <li key={`legacy-phase-${index}`} className="border-l-2 border-primary/30 pl-3 text-xs">
-                                    <span className="font-medium text-foreground">{asText(phase.phase) || t("unnamedPhase")}</span>
-                                    <span className="mt-1 block whitespace-pre-wrap text-text-secondary">{asText(phase.events)}</span>
-                                </li>
-                            ))}
-                            {oldTimeline.length === 0 && <li className="text-xs text-text-muted">{t("noLegacyPhases")}</li>}
-                        </ol>
-                    </div>
-                    <div className="rounded-md border border-border bg-surface p-3">
-                        <h4 className="text-xs font-semibold text-foreground">{t("legacyRelationships", { count: oldRelationships.length })}</h4>
-                        <ul className="mt-2 space-y-2">
-                            {oldRelationships.map((relation, index) => (
-                                <li key={`legacy-relation-${index}`} className="rounded border border-border bg-background p-2 text-xs">
-                                    <span className="font-medium text-foreground">{asText(relation.pair ?? relation.people) || t("unnamedRelationship")}</span>
-                                    <span className="mt-1 block text-text-secondary">{t("legacyArc", {
-                                        initial: asText(relation.initial) || "—",
-                                        change: asText(relation.change) || "—",
-                                        final: asText(relation.final) || "—",
-                                    })}</span>
-                                </li>
-                            ))}
-                            {oldRelationships.length === 0 && <li className="text-xs text-text-muted">{t("noLegacyRelationships")}</li>}
-                        </ul>
-                    </div>
+                <div className="mt-4 rounded-md border border-border bg-surface p-3 text-xs leading-5 text-text-secondary">
+                    {oldTimeline.length + oldRelationships.length + oldKeyEvents.length > 0
+                        ? t("legacyDataNotice", { count: oldTimeline.length + oldRelationships.length + oldKeyEvents.length })
+                        : t("noLegacyDataNotice")}
                 </div>
-                {oldKeyEvents.length > 0 && (
-                    <details className="mt-3 rounded-md border border-border bg-surface p-3">
-                        <summary className="cursor-pointer text-xs font-medium text-foreground">{t("legacyEvents", { count: oldKeyEvents.length })}</summary>
-                        <ul className="mt-2 space-y-2">
-                            {oldKeyEvents.map((event, index) => <li key={`legacy-event-${index}`} className="text-xs text-text-secondary"><strong className="text-foreground">{asText(event.event ?? event.scene) || t("unnamedEvent")}</strong> — {asText(event.function)}</li>)}
-                        </ul>
-                    </details>
-                )}
             </section>
         );
     }

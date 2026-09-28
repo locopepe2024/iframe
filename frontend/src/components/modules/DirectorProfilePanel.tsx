@@ -59,6 +59,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
     const confirmed = currentProject?.art_direction?.director_profile;
     const [draftText, setDraftText] = useState(() => editableProfile(confirmed));
     const [instruction, setInstruction] = useState("");
+    const [draftName, setDraftName] = useState("");
     const [revisionScope, setRevisionScope] = useState<"local" | "full">("local");
     const [history, setHistory] = useState<string[]>([]);
     const [busy, setBusy] = useState<"analyze" | "refine" | "save" | "apply" | null>(null);
@@ -159,6 +160,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             .then(saved => {
                 if (!active) return;
                 const serverLoaded = saved.draft ? JSON.stringify(saved.draft, null, 2) : fallback;
+                setDraftName(saved.draft_name ?? "");
                 let loaded = serverLoaded;
                 let loadedRevision = saved.draft_revision;
                 try {
@@ -243,7 +245,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
     const saveDraftWithRecovery = async (draft: Record<string, unknown>, expectedRevision: number) => {
         if (!currentProject) throw new Error(t("directorDraftSaveFailed"));
         try {
-            return await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft);
+            return draftName
+                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft, draftName)
+                : await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft);
         } catch (error) {
             const detail = extractErrorDetail(error, "");
             if (!detail.toLowerCase().includes("draft revision changed")) throw error;
@@ -405,6 +409,14 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
 
     const saveDraft = async () => {
         if (!currentProject || !draftText) return;
+        const requestedName = window.prompt(t("directorDraftNamePrompt"), draftName || t("directorDraftNameDefault"));
+        if (requestedName === null) return;
+        const trimmedName = requestedName.trim();
+        if (!trimmedName) {
+            toast.info(t("directorDraftNameRequired"));
+            return;
+        }
+        setDraftName(trimmedName);
         setBusy("save");
         setStatus({ kind: "running", action: "save" });
         try {
@@ -580,8 +592,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                     })()}
                     <details className="rounded-md border border-border bg-background/40 p-3">
                         <summary className="cursor-pointer text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
-                            {t("directorAdvancedJson")}
+                            {t("directorTechnicalTools")}
                         </summary>
+                        <p className="mt-2 text-xs leading-5 text-text-muted">{t("directorTechnicalToolsHint")}</p>
                         <textarea
                             aria-label={t("directorDraft")}
                             value={draftText}

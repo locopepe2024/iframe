@@ -8,6 +8,7 @@ export interface DirectorProfileDraftState {
     source_revision: number | null;
     draft: DirectorProfileDraft | null;
     updated_at: number | null;
+    draft_name?: string | null;
 }
 
 interface DirectorProfileJob {
