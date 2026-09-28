@@ -222,7 +222,16 @@ export default function ShotReferences({ project, disabled, stage, onProgress, o
     }}>{t("checkPlan")}</button>
     {planError && <p role="alert">{t("failed")}</p>}
     {!plan && !disabled && (generationTasks.length > 0 || assemblyTask) && <div className="border-t border-border pt-3 space-y-2 text-sm">
-      {generationTasks.map(task => <p key={task.task_id}>{t("shot")} {task.shot_number} · {t(`generationStatus.${task.status}`)}</p>)}
+      {generationTasks.map(task => <details key={task.task_id} className="border-b border-border pb-2">
+        <summary className="cursor-pointer">{t("shot")} {task.shot_number} · {t(`generationStatus.${task.status}`)}</summary>
+        <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-text-muted">
+          <dt>{t("attemptModel")}</dt><dd className="break-all">{task.model}</dd>
+          <dt>{t("attemptTaskId")}</dt><dd className="break-all font-mono">{task.task_id}</dd>
+          <dt>{t("attemptProviderTaskId")}</dt><dd className="break-all font-mono">{task.provider_task_id || t("attemptPendingProvider")}</dd>
+          <dt>{t("attemptRevision")}</dt><dd>{task.revision ?? "—"}</dd>
+          <dt>{t("attemptUpdated")}</dt><dd>{task.updated_at ? new Date(task.updated_at * 1000).toLocaleString() : "—"}</dd>
+        </dl>
+      </details>)}
     </div>}
     {plan && !disabled && <div className="space-y-3">
       <p role="status">{t(plan.ready ? "planReady" : "planBlocked")}</p>
@@ -244,7 +253,7 @@ export default function ShotReferences({ project, disabled, stage, onProgress, o
           finally { setGenerationBusy(false); }
         }}>{generationBusy ? t("submittingGeneration") : t("submitGeneration")}</button>
         {generationError && <p role="alert" className="text-sm text-red-500 break-words">{generationError}</p>}
-        {generationTasks.length > 0 && <ul className="space-y-1 text-sm">{generationTasks.map(task => <li key={task.task_id} className="flex items-center gap-2"><span>{t("shot")} {task.shot_number}</span><span>{t(`generationStatus.${task.status}`)}</span>{(task.status === "pending" || task.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { const cancelled = await recreationApi.cancelGenerationTask(task.task_id); setGenerationTasks(all => all.map(item => item.task_id === cancelled.task_id ? cancelled : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("cancelGeneration")}</button>}{task.status === "failed" && <button type="button" className="glass-button" disabled={!costAccepted} onClick={async () => { try { const retried = await recreationApi.retryGenerationTask(task.task_id, costAccepted); setGenerationTasks(all => all.map(item => item.task_id === retried.task_id ? retried : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("retryGeneration")}</button>}</li>)}</ul>}
+        {generationTasks.length > 0 && <ul className="space-y-1 text-sm">{generationTasks.map(task => <li key={task.task_id} className="flex flex-wrap items-center gap-2"><span>{t("shot")} {task.shot_number}</span><span>{t(`generationStatus.${task.status}`)}</span><span className="text-xs text-text-muted font-mono">{task.provider_task_id ? `provider:${task.provider_task_id}` : t("attemptPendingProvider")}</span>{(task.status === "pending" || task.status === "processing") && <button type="button" className="glass-button" onClick={async () => { try { const cancelled = await recreationApi.cancelGenerationTask(task.task_id); setGenerationTasks(all => all.map(item => item.task_id === cancelled.task_id ? cancelled : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("cancelGeneration")}</button>}{task.status === "failed" && <button type="button" className="glass-button" disabled={!costAccepted} onClick={async () => { try { const retried = await recreationApi.retryGenerationTask(task.task_id, costAccepted); setGenerationTasks(all => all.map(item => item.task_id === retried.task_id ? retried : item)); } catch (error) { setGenerationError(error instanceof Error ? error.message : t("generationFailed")); } }}>{t("retryGeneration")}</button>}</li>)}</ul>}
     </div>}
     </div>}
     </>}

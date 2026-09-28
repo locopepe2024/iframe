@@ -199,3 +199,5 @@ Recreation Project
 **Hypotheses:** once the backend exposes the review bundle, the analyze stage should become a review checkpoint with target overlay, occlusion summary, white-model preview, and an explicit approval transition. The submit stage should show the immutable control-bundle revision and catalog route snapshot before the cost acknowledgement.
 
 **What would verify it:** add a fixture project carrying a review bundle, reload the page at each stage, and verify that the same review status, bundle revision, and generation-attempt lineage survive navigation and refresh. Add an interaction test that a paid-submit control is unreachable until approval and a saved plan exists.
+
+**Implemented slice:** the submit-stage task rows now expose the selected model, local task ID, persisted provider task ID (or an explicit pending state), control revision, and last update time. This makes the existing recovery checkpoint visible after reload without claiming that a separate `collect` endpoint already exists.
