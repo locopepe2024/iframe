@@ -132,7 +132,7 @@ Review 时应能按“视觉、时间、场景、情感、人物”过滤或聚�
 
 - 总览是输入层；story map 是分析结构层；思维导图是 review 投影层。
 - 三者读写同一个 Director draft，但只有编辑器能改变 draft；脑图通过编辑入口改变 draft。
-- “保存草稿”“确认 Director interpretation”“生成 shooting plan”是三个动作。
+- 自动保存、采用 Director interpretation、生成 shooting plan 分别是持久化、采用和生成动作；用户工作流只需要明确采用一次。旧版三动作描述由 2026-09-28 快速审阅规范覆盖。
 - shooting plan 的生成结果不能反向覆盖 story map；如果需要反向修改，必须通过事件/场景引用的明确编辑动作完成。
 
 ## 三、重新生成 / 重新分析逻辑
@@ -274,7 +274,7 @@ Director 的输出契约是“可确认的导演分析输入”，不是新的�
 - source revision、fact ledger revision；
 - 最近一次重新分析的 job 状态；
 - 未保存修改提示；
-- “保存”“重新分析”“确认”三个动作的区别。
+- “自动保存”“重新分析”“采用当前 Director 理解”三个动作的区别。
 
 脑图节点至少显示：
 
