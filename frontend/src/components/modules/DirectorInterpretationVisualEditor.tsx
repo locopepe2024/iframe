@@ -69,7 +69,7 @@ export default function DirectorInterpretationVisualEditor({
     mindMapOnly?: boolean;
 }) {
     const t = useTranslations("artDirection.directorEditor");
-    const [activeDomain, setActiveDomain] = useState<"overview" | "structure" | "continuity" | "consistency" | "questions">("overview");
+    const [activeDomain, setActiveDomain] = useState<"understanding" | "intent" | "questions">("understanding");
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
         ? profile.setting as Draft
         : {};
@@ -88,10 +88,8 @@ export default function DirectorInterpretationVisualEditor({
     );
 
     const domains = [
-        { id: "overview" as const, label: t("domains.overview"), hint: t("domains.overviewHint") },
-        { id: "structure" as const, label: t("domains.structure"), hint: t("domains.structureHint") },
-        { id: "continuity" as const, label: t("domains.continuity"), hint: t("domains.continuityHint") },
-        { id: "consistency" as const, label: t("domains.consistency"), hint: t("domains.consistencyHint") },
+        { id: "understanding" as const, label: t("domains.understanding"), hint: t("domains.understandingHint") },
+        { id: "intent" as const, label: t("domains.intent"), hint: t("domains.intentHint") },
         { id: "questions" as const, label: t("domains.questions"), hint: t("domains.questionsHint") },
     ];
 
@@ -114,7 +112,7 @@ export default function DirectorInterpretationVisualEditor({
                 </nav>
             )}
 
-            {!mindMapOnly && activeDomain === "overview" && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
+            {!mindMapOnly && activeDomain === "understanding" && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-overview">
                 <div className="mb-4">
                     <h3 id="director-story-overview" className="text-sm font-semibold text-foreground">{t("overviewTitle")}</h3>
                     <p className="mt-1 text-xs leading-5 text-text-secondary">{t("overviewHint")}</p>
@@ -128,13 +126,10 @@ export default function DirectorInterpretationVisualEditor({
                             onChange={value => updateSetting(key, value)}
                         />
                     ))}
-                    {longFields.map(field => (
-                        <TextField key={field} label={t(`field.${field}`)} value={asText(profile[field])} onChange={value => updateProfile(field, value)} />
-                    ))}
                 </div>
             </section>}
 
-            {(mindMapOnly || activeDomain === "structure") && <DirectorStoryMapSection
+            {(mindMapOnly || activeDomain === "understanding") && <DirectorStoryMapSection
                 profile={profile}
                 onChange={onChange}
                 sourceRevision={sourceRevision}
@@ -147,8 +142,18 @@ export default function DirectorInterpretationVisualEditor({
                 mindMapOnly={mindMapOnly}
             />}
 
-            {!mindMapOnly && (activeDomain === "continuity" || activeDomain === "consistency" || activeDomain === "questions") && listFields.filter(field =>
-                activeDomain === "continuity" ? field === "continuity_constraints" : activeDomain === "consistency" ? field === "prohibitions" : field === "unresolved_questions",
+            {!mindMapOnly && activeDomain === "intent" && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-intent">
+                <div className="mb-4">
+                    <h3 id="director-intent" className="text-sm font-semibold text-foreground">{t("domains.intent")}</h3>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">{t("domains.intentHint")}</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                    {longFields.map(field => <TextField key={field} label={t(`field.${field}`)} value={asText(profile[field])} onChange={value => updateProfile(field, value)} />)}
+                </div>
+            </section>}
+
+            {!mindMapOnly && (activeDomain === "intent" || activeDomain === "questions") && listFields.filter(field =>
+                activeDomain === "intent" ? field === "continuity_constraints" || field === "prohibitions" : field === "unresolved_questions",
             ).map(field => {
                 const items = Array.isArray(profile[field]) ? profile[field] as unknown[] : [];
                 return (
