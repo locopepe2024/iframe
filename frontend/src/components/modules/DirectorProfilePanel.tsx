@@ -259,7 +259,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             const latestText = latest.draft ? JSON.stringify(latest.draft) : "";
             const draftTextValue = JSON.stringify(draft);
             if (latestText === draftTextValue) return latest;
-            return await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft);
+            return draftName
+                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft, draftName)
+                : await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft);
         }
     };
 
