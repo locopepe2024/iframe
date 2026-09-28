@@ -1197,7 +1197,7 @@
     "directorRevisionScope": {"local": {"title": "局部修订（推荐）", "hint": "只针对当前问题调整相关理解，并检查跨层一致性。"}, "full": {"title": "全部重新分析", "hint": "剧本结构或时代背景发生变化时使用，会重新评估整份 Director 理解。"}},
     "directorRevisionPlaceholder": "提出修改，例如：故事仍发生在中国；日式只用于摄影语言；重点突出未接来电。",
     "directorRefine": "继续修订",
-    "directorApply": "确认导演设定",
+    "directorApply": "应用 Director 理解并进入拍摄计划",
     "directorApplyHint": "确认后资产和故事板会使用此版本；已有内容只标记为需复核，不会被覆盖。",
     "directorSaveDraft": "保存草稿",
     "directorDraftRevision": "已保存草稿 v{revision}",

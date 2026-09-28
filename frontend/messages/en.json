@@ -1196,7 +1196,7 @@
     "directorRevisionScope": {"local": {"title": "Local revision (recommended)", "hint": "Adjust the affected interpretation and run a consistency check across related fields."}, "full": {"title": "Re-analyze everything", "hint": "Use for structural or era changes; the complete Director interpretation is re-evaluated."}},
     "directorRevisionPlaceholder": "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     "directorRefine": "Revise",
-    "directorApply": "Confirm direction",
+    "directorApply": "Apply Director understanding and open shooting plan",
     "directorApplyHint": "Assets and storyboards use the confirmed version. Existing work is marked for review and is never overwritten.",
     "directorSaveDraft": "Save draft",
     "directorDraftRevision": "Saved draft v{revision}",

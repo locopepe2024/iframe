@@ -472,7 +472,7 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                         hidden={activeDirectorTab !== "understanding"}
                         className="space-y-8"
                     >
-                        <DirectorProfilePanel />
+                        <DirectorProfilePanel onApplied={() => setActiveDirectorTab("shooting_plan")} />
                     </section>
                     <section
                         id="director-panel-shooting_plan"

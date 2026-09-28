@@ -53,7 +53,7 @@ type LocalDirectorDraft = {
     savedAt: number;
 };
 
-export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapOnly?: boolean }) {
+export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }: { mindMapOnly?: boolean; onApplied?: () => void }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
     const confirmed = currentProject?.art_direction?.director_profile;
@@ -400,6 +400,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
             updateProject(currentProject.id, updated);
             setStatus({ kind: "success", action: "apply", jobStatus: "completed" });
             toast.success(t("directorApplied"), { projectId: currentProject.id, projectTitle: currentProject.title });
+            onApplied?.();
         } catch (error) {
             const message = extractErrorDetail(error, t("directorApplyFailed"));
             setStatus({ kind: "error", action: "apply", message });
@@ -660,15 +661,6 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                             {needsDraftSave ? t("directorUnsavedHint") : t("directorApplyHint")}
                         </p>
                         <div className="flex items-center gap-2">
-                            <WorkflowActionButton
-                                variant="secondary"
-                                leftIcon={<Save />}
-                                loading={busy === "save"}
-                                disabled={busy !== null || !needsDraftSave || hasStaleDraft}
-                                onClick={saveDraft}
-                            >
-                                {t("directorSaveDraft")}
-                            </WorkflowActionButton>
                             <WorkflowActionButton
                                 leftIcon={<Check />}
                                 loading={busy === "apply"}
