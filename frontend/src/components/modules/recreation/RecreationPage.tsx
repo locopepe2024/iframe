@@ -148,6 +148,12 @@ export default function RecreationPage() {
     if (index === 5) return runProgress.assembly;
     return "pending";
   };
+  const canEnterStep = (next: WorkflowStep): boolean => {
+    if (next === "split" || next === "parse") return true;
+    if (next === "analyze") return Boolean(analysis);
+    if (next === "replace" || next === "submit" || next === "assemble") return project?.status === "confirmed";
+    return false;
+  };
   const updateRunProgress = useCallback((next: RunProgress) => setRunProgress(next), []);
 
   return <div className="h-full overflow-y-auto p-4 md:p-8 text-foreground">
@@ -194,10 +200,12 @@ export default function RecreationPage() {
             <ol className="flex min-w-max items-center gap-1">
               {workflowSteps.map((item, index) => {
                 const state = stepState(index);
+                const enabled = canEnterStep(item);
                 return <li key={item} className="flex items-center gap-1">
                   <button type="button" aria-label={t(`steps.${item}`)} aria-current={step === item ? "step" : undefined}
-                    className={`min-h-11 rounded px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${step === item ? "bg-primary/15 text-foreground" : "text-text-muted hover:bg-hover-bg"}`}
-                    onClick={() => setStep(item)}>
+                    aria-disabled={!enabled} disabled={!enabled}
+                    className={`min-h-11 rounded px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${step === item ? "bg-primary/15 text-foreground" : enabled ? "text-text-muted hover:bg-hover-bg" : "cursor-not-allowed text-text-muted/50"}`}
+                    onClick={() => enabled && setStep(item)}>
                     <span className="mr-2 inline-flex w-5 justify-center font-mono text-xs">{state === "complete" ? <Check size={14} aria-label={t("complete")} /> : state === "failed" ? "!" : String(index + 1).padStart(2, "0")}</span>{t(`steps.${item}`)}
                     <span className="sr-only">{t(`stepStatus.${state}`)}</span>
                   </button>

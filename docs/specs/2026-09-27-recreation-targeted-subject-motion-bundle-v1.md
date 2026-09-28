@@ -155,3 +155,47 @@ ffmpeg -hide_banner -loglevel error -ss <time> -i <source> -frames:v 1 <frame.jp
 **Not yet proven:** Hypit's provider packages do not establish that H3, Seedance, or Wan will interpret a media-track motion recipe as human motion guidance. The provider-facing H3 surface remains ordinary text, image, video, and audio references.
 
 **System boundary:** iframe/media owns subject selection, masks, `motion-track.v1`, 3D lift, Blender retargeting, and white-model reference generation. Hypit-style visual motion belongs to the upper composition layer and must not be used as a substitute for joint trajectories.
+
+## Hypit-inspired process management boundary
+
+This section is a process-management reference, not a claim that iframe adopts Hypit's runtime implementation.
+
+**Observed:** Hypit separates a durable project definition from executable runs, provider bindings, and collected outputs. Remote work is managed as a checkpointable lifecycle (`start` → `poll` → `collect`), and results are retained as reusable outputs with evidence. The iframe recreation flow currently has project, timeline, generation task, and assembly concepts, but the UI does not yet expose one stable control-bundle revision or a complete provider-attempt record.
+
+**Direct implication:** the recreation pipeline should make these boundaries explicit:
+
+```text
+Recreation Project
+  → Recreation Plan / Control Bundle Revision
+  → Generation Attempt
+  → Result Repository Output
+```
+
+- **Project** owns the source media, timeline, target subject identity, and preservation subjects.
+- **Plan / Control Bundle Revision** is an immutable snapshot of the approved source fingerprint, target track revision, reference-role mapping, output ratio, duration, and selected provider capability route.
+- **Generation Attempt** records provider, catalog capability snapshot, request ID, remote task ID, start/poll/collect state, retry lineage, cost acknowledgement, and terminal error.
+- **Result Repository Output** stores generated media, assembly outputs, manifests, previews, and the evidence links needed to compare an attempt with the source and control bundle.
+
+**Checkpoint contract:** each remote attempt must persist its provider task identity before polling. Polling must be resumable after a page refresh or worker restart; collection must be a distinct state that records the final output identity and checksum. A retry creates a new attempt linked to its predecessor instead of mutating the old attempt.
+
+**Route snapshot:** the plan must retain the exact catalog capability snapshot used for submission. This is where iframe records whether the provider was called as `t2v`, `i2v`, `r2v`, or `f2v`, plus the declared reference roles. Pose, depth, OpenPose, ControlNet, or SMPL fields may only be included when the catalog explicitly declares them; a provider name or free-form parameter is not evidence of support.
+
+**Review gate:** `motion-review-bundle.v1` remains `needs_director_review` until the target overlay/contact sheet and white-model preview are accepted. The UI should show this state before the submit action and prevent a paid attempt while the bundle is unresolved. Approval should produce a new control-bundle revision rather than silently changing the existing one.
+
+**Studio Companion reference:** Hypit's semantic timeline editing suggests a useful iframe separation: the director can edit shot meaning, target identity, action intent, camera intent, and replacement instruction at the semantic layer, while generated tracks and provider payloads remain derived artifacts. Editing a description must invalidate the affected plan revision and require a fresh plan check; it must not rewrite a completed attempt or result.
+
+**Not yet proven:** the current iframe API persists all of these fields durably across worker restarts, and the current provider adapters expose a first-class collect phase distinct from task completion. These are implementation gaps to verify before presenting the lifecycle as complete.
+
+**What would verify it:** inspect the recreation task schema and worker restart behavior, then run a test attempt through start, forced process restart, resumed poll, collect, retry, and result comparison. The UI should be able to show the same attempt lineage and control-bundle revision after reload.
+
+## Recreation UI interaction review
+
+**Observed:** the recreation page presents split, parse, analyze, replace, submit, and assemble as a horizontal workflow. Before this change, every step button was clickable even when its required project state was absent. The page already explains some blocked content after navigation, but the navigation itself did not communicate that the step was unavailable.
+
+**Direct implication:** navigation now follows the current data boundary: parse is available after source registration, analyze after analysis exists, and replace/submit/assemble after the timeline is confirmed. Disabled steps remain visible so the user can see the complete process, while keyboard users cannot focus or activate an unavailable action.
+
+**Not yet proven:** the UI does not yet receive a durable `motion-review-bundle.v1` from the API, so it cannot show target-subject selection, tracked/occluded ratios, white-model preview, or director approval as live project state. The current contact sheet is a visual analysis artifact and is not an approval record.
+
+**Hypotheses:** once the backend exposes the review bundle, the analyze stage should become a review checkpoint with target overlay, occlusion summary, white-model preview, and an explicit approval transition. The submit stage should show the immutable control-bundle revision and catalog route snapshot before the cost acknowledgement.
+
+**What would verify it:** add a fixture project carrying a review bundle, reload the page at each stage, and verify that the same review status, bundle revision, and generation-attempt lineage survive navigation and refresh. Add an interaction test that a paid-submit control is unreachable until approval and a saved plan exists.
