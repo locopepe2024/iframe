@@ -59,6 +59,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
     const confirmed = currentProject?.art_direction?.director_profile;
     const [draftText, setDraftText] = useState(() => editableProfile(confirmed));
     const [instruction, setInstruction] = useState("");
+    const [revisionScope, setRevisionScope] = useState<"local" | "full">("local");
     const [history, setHistory] = useState<string[]>([]);
     const [busy, setBusy] = useState<"analyze" | "refine" | "save" | "apply" | null>(null);
     const [status, setStatus] = useState<DirectorStatus>({ kind: "idle" });
@@ -314,6 +315,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
         setBusy("refine");
         setStatus({ kind: "running", action: "refine", jobStatus: "queued" });
         const currentInstruction = instruction.trim();
+        const scopedInstruction = revisionScope === "full"
+            ? `[FULL_REANALYSIS] ${currentInstruction}`
+            : currentInstruction;
         const nextHistory = [...history, currentInstruction];
         try {
             const profile = await api.refineDirectorProfile(
@@ -322,7 +326,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                 // Earlier changes are already merged into the visible draft;
                 // resending the full history would recreate the context
                 // avalanche on every rethink.
-                [currentInstruction],
+                [scopedInstruction],
                 jobStatus => setStatus({ kind: "running", action: "refine", jobStatus }),
             );
             queueCandidate(profile, "refine");
@@ -591,26 +595,51 @@ export default function DirectorProfilePanel({ mindMapOnly = false }: { mindMapO
                             {t("directorDraftStaleActionRequired")}
                         </p>
                     )}
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <textarea
-                            value={instruction}
-                            onChange={event => setInstruction(event.target.value)}
-                            maxLength={2000}
-                            placeholder={t("directorRevisionPlaceholder")}
-                            className="min-h-20 flex-1 resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-                        />
-                        <div className="flex shrink-0 items-end gap-2">
-                            <WorkflowActionButton
-                                variant="secondary"
-                                leftIcon={<Send />}
-                                loading={busy === "refine"}
-                                disabled={busy !== null || !instruction.trim() || history.length >= 12}
-                                onClick={refine}
-                            >
-                                {t("directorRefine")}
-                            </WorkflowActionButton>
+                    <section className="rounded-lg border border-border bg-background/30 p-3" aria-labelledby="director-revision-title">
+                        <div className="mb-3">
+                            <h3 id="director-revision-title" className="text-sm font-semibold text-foreground">{t("directorRevisionTitle")}</h3>
+                            <p className="mt-1 text-xs leading-5 text-text-secondary">{t("directorRevisionHint")}</p>
                         </div>
-                    </div>
+                        <div className="mb-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("directorRevisionScopeLabel")}>
+                            {(["local", "full"] as const).map(scope => (
+                                <label key={scope} className={`flex min-h-16 cursor-pointer items-start gap-2 rounded-md border p-3 transition-colors ${revisionScope === scope ? "border-primary bg-primary/10" : "border-border bg-background/40 hover:border-primary/60"}`}>
+                                    <input
+                                        type="radio"
+                                        name="director-revision-scope"
+                                        value={scope}
+                                        checked={revisionScope === scope}
+                                        onChange={() => setRevisionScope(scope)}
+                                        className="mt-0.5 accent-primary"
+                                    />
+                                    <span>
+                                        <span className="block text-xs font-semibold text-foreground">{t(`directorRevisionScope.${scope}.title`)}</span>
+                                        <span className="mt-1 block text-[11px] leading-4 text-text-muted">{t(`directorRevisionScope.${scope}.hint`)}</span>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <textarea
+                                value={instruction}
+                                onChange={event => setInstruction(event.target.value)}
+                                maxLength={2000}
+                                aria-label={t("directorRevisionInstructionLabel")}
+                                placeholder={t("directorRevisionPlaceholder")}
+                                className="min-h-20 flex-1 resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/70"
+                            />
+                            <div className="flex shrink-0 items-end gap-2">
+                                <WorkflowActionButton
+                                    variant="secondary"
+                                    leftIcon={<Send />}
+                                    loading={busy === "refine"}
+                                    disabled={busy !== null || !instruction.trim() || history.length >= 12}
+                                    onClick={refine}
+                                >
+                                    {t("directorRefine")}
+                                </WorkflowActionButton>
+                            </div>
+                        </div>
+                    </section>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="text-xs text-text-muted">
                             {needsDraftSave ? t("directorUnsavedHint") : t("directorApplyHint")}

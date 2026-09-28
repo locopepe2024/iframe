@@ -1189,6 +1189,11 @@
     "directorDraft": "Director profile draft",
     "directorRevision": "Confirmed v{revision}",
     "directorHistory": "Confirmed versions",
+    "directorRevisionTitle": "Revise the Director interpretation",
+    "directorRevisionHint": "This changes the Director analysis, not the script text. Choose the impact range before submitting a request.",
+    "directorRevisionScopeLabel": "Revision scope",
+    "directorRevisionInstructionLabel": "Director revision request",
+    "directorRevisionScope": {"local": {"title": "Local revision (recommended)", "hint": "Adjust the affected interpretation and run a consistency check across related fields."}, "full": {"title": "Re-analyze everything", "hint": "Use for structural or era changes; the complete Director interpretation is re-evaluated."}},
     "directorRevisionPlaceholder": "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
     "directorRefine": "Revise",
     "directorApply": "Confirm direction",
@@ -1586,8 +1591,8 @@
         "understandingHint": "Confirm the original, timeline, relationships and source basis",
         "intent": "Director intent",
         "intentHint": "Shape visual, performance, sound and continuity treatment",
-        "questions": "Open questions",
-        "questionsHint": "Items that need a director decision"
+        "questions": "Director questions / revision",
+        "questionsHint": "Answer, add questions, or request a local/full revision"
       },
       "flow": {
         "scene": "Scene",
