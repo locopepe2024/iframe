@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type {
@@ -118,16 +118,20 @@ function makePeople(characters: Character[]): DirectorStoryPerson[] {
 
 export function inferEventCharacterIds(description: string, phaseLabel: string, people: DirectorStoryPerson[], characters: Character[]): string[] {
     const byId = new Map(characters.map(character => [character.id, character]));
+    const normalize = (value: string) => value.replace(/[（(].*?[）)]/g, "").replace(/时期|阶段/g, "").trim();
+    const phaseKey = normalize(phaseLabel);
     const result: string[] = [];
     for (const person of people) {
         const variants = person.variant_character_ids.filter(id => byId.has(id));
         const explicit = variants.filter(id => {
-            const name = byId.get(id)?.name?.trim() ?? "";
-            return name.length > 1 && description.includes(name);
+            const character = byId.get(id);
+            const names = [character?.name ?? "", character?.persona ?? "", person.display_name]
+                .map(name => name.trim()).filter(name => name.length > 1);
+            return names.some(name => description.includes(name));
         });
         const phaseMatches = variants.filter(id => {
             const name = byId.get(id)?.name ?? "";
-            return phaseLabel.length > 0 && name.includes(phaseLabel);
+            return phaseKey.length > 0 && normalize(name).includes(phaseKey);
         });
         const selected = explicit.length === 1 ? explicit[0]
             : explicit.length > 1 ? null
@@ -462,6 +466,7 @@ function StoryMapSection({
     };
     const graphCanvasRef = useRef<HTMLDivElement>(null);
     const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
+    const autoSyncedMapRef = useRef<string>("");
     useLayoutEffect(() => {
         const canvas = graphCanvasRef.current;
         if (!canvas || viewMode !== "graph") return;
@@ -548,6 +553,30 @@ function StoryMapSection({
             character_ids: Array.from(new Set([...event.character_ids, ...inferred])),
         });
     };
+    useEffect(() => {
+        if (!map || characters.length === 0) return;
+        const signature = JSON.stringify(map.phases.map(phase => [phase.phase_id, phase.label, phase.events.map(event => [event.event_id, event.description, event.character_ids])]));
+        if (autoSyncedMapRef.current === signature) return;
+        const patches = map.phases.flatMap(phase => phase.events.map(event => {
+            const inferred = inferEventCharacterIds(event.description, phase.label, people, characters)
+                .filter(id => !event.character_ids.includes(id) && !suppressedAutoPeople.current.has(`${event.event_id}:${id}`));
+            return inferred.length > 0 ? { phaseId: phase.phase_id, eventId: event.event_id, ids: inferred } : null;
+        }).filter(Boolean) as Array<{ phaseId: string; eventId: string; ids: string[] }>);
+        autoSyncedMapRef.current = signature;
+        if (patches.length > 0) {
+            updateMap(current => ({
+                ...current,
+                phases: current.phases.map(phase => ({
+                    ...phase,
+                    events: phase.events.map(event => {
+                        const patch = patches.find(item => item.phaseId === phase.phase_id && item.eventId === event.event_id);
+                        return patch ? { ...event, character_ids: Array.from(new Set([...event.character_ids, ...patch.ids])) } : event;
+                    }),
+                })),
+            }));
+        }
+        return undefined;
+    }, [map, people, characters]);
     const openEvent = (phase: DirectorStoryPhase, event: DirectorStoryEvent) => {
         if (expandedEventId === event.event_id) {
             setExpandedEventId(null);
