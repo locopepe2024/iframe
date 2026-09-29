@@ -45,6 +45,7 @@ def _prompt_json(value: Any) -> str:
 
 
 DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
+DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
 DIRECTOR_PROFILE_MAX_RETRIES = 0
 DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
 DIRECTOR_PROFILE_OUTPUT_BUDGET = (
@@ -1666,7 +1667,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 messages=[{"role": "system", "content": prompt},
                           {"role": "user", "content": "按完整视觉拍摄计划契约返回 JSON。"}],
                 response_format={"type": "json_object"},
-                timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                timeout_seconds=DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
                 max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
             ).strip()
             try:
