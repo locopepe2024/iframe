@@ -198,8 +198,11 @@ class LLMAdapter:
                 options["max_retries"] = max_retries
             if options and hasattr(client, "with_options"):
                 request_client = client.with_options(**options)
+            logger.info("LLM chat response received: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            logger.info("LLM chat response body decoded: model=%s chars=%s", model, len(content or ""))
+            return content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} API error: {e}") from e

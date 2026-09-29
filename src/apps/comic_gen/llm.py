@@ -1685,7 +1685,15 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                     shot.setdefault(key, "")
                                 shot.setdefault("lighting", {})
                                 shot.setdefault("duration_seconds", None)
-                                shot.setdefault("dialogue", [])
+                                dialogue = shot.get("dialogue")
+                                if not isinstance(dialogue, list):
+                                    shot["dialogue"] = []
+                                else:
+                                    shot["dialogue"] = [
+                                        {"speaker": str(line.get("speaker", "")), "line": str(line.get("line", ""))}
+                                        for line in dialogue
+                                        if isinstance(line, dict) and str(line.get("speaker", "")).strip() and str(line.get("line", "")).strip()
+                                    ]
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
                 last_error = self._validate_director_shooting_chunk(result) or ""
