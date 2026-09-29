@@ -268,6 +268,12 @@ class ExtractionJobs:
                 if row and row['fingerprint'].startswith('director_shooting_plan:')
                 else '剧本分析失败，请检查模型配置后重试。'
             )
+            if row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
+                detail = str(exc).strip()
+                if 'timed out' in detail.lower() or 'timeout' in detail.lower():
+                    message = '导演分析请求超时；请稍后重试，已保留当前 Director 草稿。'
+                elif detail:
+                    message = f'导演分析失败：{detail[:300]}'
             self._finish(job_id, error=message)
 
     def get(self, owner, project, job_id):

@@ -175,7 +175,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "现实/当下开头锚点" in prompt
     assert "不是默认的‘回忆录风格’" in prompt
     assert "用户没有明确标注该结构时，不得自行套用" in prompt
-    assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 300
+    assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 1800
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
     assert result["setting"]["geography"] == "中国大学校园与北京"
 

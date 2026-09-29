@@ -44,7 +44,11 @@ def _prompt_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-DIRECTOR_PROFILE_TIMEOUT_SECONDS = 300
+# Director analysis can legitimately return a large structured profile. The
+# upstream gateway may spend several minutes generating it; five minutes was
+# shorter than observed provider response times and caused a local timeout
+# even when the API key and route were valid.
+DIRECTOR_PROFILE_TIMEOUT_SECONDS = 1800
 DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
 DIRECTOR_PROFILE_MAX_RETRIES = 0
 DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
