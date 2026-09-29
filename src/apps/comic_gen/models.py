@@ -1102,6 +1102,8 @@ class DirectorShootingPlanRevision(BaseModel):
     revision: int = Field(..., ge=1)
     content_hash: str = Field(..., min_length=1)
     plan: DirectorShootingPlan
+    user_title: str = Field("", max_length=160)
+    summary: str = Field("", max_length=1000)
     confirmed_at: float = Field(..., ge=0)
 
 

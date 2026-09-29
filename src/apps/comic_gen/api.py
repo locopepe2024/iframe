@@ -4591,6 +4591,8 @@ class DirectorShootingPlanConfirmRequest(BaseModel):
     expected_current_revision: int = Field(..., ge=0)
     expected_draft_revision: int = Field(..., ge=0)
     plan: DirectorShootingPlan
+    user_title: str = Field("", max_length=160)
+    summary: str = Field("", max_length=1000)
 
 
 class DirectorShootingPlanRestoreRequest(BaseModel):
@@ -4702,6 +4704,8 @@ def confirm_script_fact_ledger(
             script_id,
             request.expected_revision,
             request.expected_draft_revision,
+            user_title=request.user_title,
+            summary=request.summary,
         )
         return signed_response(updated)
     except ValueError as exc:
@@ -4929,6 +4933,8 @@ def _director_shooting_plan_revision_summary(revision: DirectorShootingPlanRevis
     return {
         "revision": revision.revision,
         "content_hash": revision.content_hash,
+        "user_title": revision.user_title,
+        "summary": revision.summary,
         "confirmed_at": revision.confirmed_at,
         "source_revision": revision.plan.source_revision,
         "source_revision_id": revision.plan.source_revision_id,

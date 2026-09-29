@@ -3009,6 +3009,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         plan: Any,
         expected_current_revision: int,
         expected_draft_revision: int,
+        *,
+        user_title: str = "",
+        summary: str = "",
     ) -> Script:
         with self._save_lock:
             script = self.scripts.get(script_id)
@@ -3036,6 +3039,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 revision=revision,
                 content_hash=content_hash,
                 plan=validated.model_copy(deep=True),
+                user_title=user_title.strip()[:160],
+                summary=summary.strip()[:1000],
                 confirmed_at=time.time(),
             )
             script.director_shooting_plan_revisions.append(confirmed)
