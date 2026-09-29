@@ -1344,6 +1344,8 @@
         "eventDescription": "发生了什么",
         "eventNeedsDescription": "确认前请补充事件描述。",
         "dramaticFunction": "戏剧作用",
+        "dramaticFunctionSuggestions": "戏剧作用快捷建议",
+        "dramaticSuggestions": {"relationship":"建立人物关系","conflict":"推动冲突","reveal":"揭示信息","turn":"完成转折","closure":"收束阶段"},
         "eventPeople": "事件中的人物",
         "addPeopleFromDescription": "从“发生了什么”添加识别到的 {count} 个人物",
         "noPeople": "Assets 中还没有可用角色。",

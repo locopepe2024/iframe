@@ -36,6 +36,11 @@ const asText = (value: unknown): string => {
     return JSON.stringify(value, null, 2) ?? String(value);
 };
 
+function eventTitleFromDescription(description: string): string {
+    const first = description.replace(/\s+/g, " ").split(/[。！？.!?；;]/)[0]?.trim() ?? "";
+    return first.length > 32 ? `${first.slice(0, 32)}…` : first;
+}
+
 function isDirectorStoryMap(value: unknown): value is DirectorStoryMap {
     if (!isRecord(value) || value.schema_version !== 1
         || !Number.isInteger(value.source_revision)
@@ -153,10 +158,10 @@ function legacyEvents(value: unknown): DirectorStoryEvent[] {
         return {
             event_id: createId("event"),
             order,
-            title: asText(entry.title ?? entry.name ?? ""),
+            title: asText(entry.title ?? entry.name ?? "") || eventTitleFromDescription(description),
             description,
             character_ids: [],
-            dramatic_function: "",
+            dramatic_function: asText(entry.dramatic_function ?? entry.function ?? entry.purpose ?? ""),
             source_fact_ids: [],
             evidence_status: "interpretation",
         };
@@ -560,8 +565,9 @@ function StoryMapSection({
         const patches = map.phases.flatMap(phase => phase.events.map(event => {
             const inferred = inferEventCharacterIds(event.description, phase.label, people, characters)
                 .filter(id => !event.character_ids.includes(id) && !suppressedAutoPeople.current.has(`${event.event_id}:${id}`));
-            return inferred.length > 0 ? { phaseId: phase.phase_id, eventId: event.event_id, ids: inferred } : null;
-        }).filter(Boolean) as Array<{ phaseId: string; eventId: string; ids: string[] }>);
+            const title = !event.title.trim() && event.description.trim() ? eventTitleFromDescription(event.description) : "";
+            return inferred.length > 0 || title ? { phaseId: phase.phase_id, eventId: event.event_id, ids: inferred, title } : null;
+        }).filter(Boolean) as Array<{ phaseId: string; eventId: string; ids: string[]; title: string }>);
         autoSyncedMapRef.current = signature;
         if (patches.length > 0) {
             updateMap(current => ({
@@ -570,7 +576,11 @@ function StoryMapSection({
                     ...phase,
                     events: phase.events.map(event => {
                         const patch = patches.find(item => item.phaseId === phase.phase_id && item.eventId === event.event_id);
-                        return patch ? { ...event, character_ids: Array.from(new Set([...event.character_ids, ...patch.ids])) } : event;
+                        return patch ? {
+                            ...event,
+                            ...(patch.title ? { title: patch.title } : {}),
+                            character_ids: Array.from(new Set([...event.character_ids, ...patch.ids])),
+                        } : event;
                     }),
                 })),
             }));
@@ -895,6 +905,13 @@ function StoryMapSection({
                         <Field label={t("eventTitle")} value={event.title} onChange={value => updateEvent(phase.phase_id, event.event_id, { title: value })} />
                         <Field label={t("eventDescription")} value={event.description} multiline onChange={value => updateEventDescription(phase, event, value)} />
                         <Field label={t("dramaticFunction")} value={event.dramatic_function} multiline onChange={value => updateEvent(phase.phase_id, event.event_id, { dramatic_function: value })} />
+                        <div className="flex flex-wrap gap-2" aria-label={t("dramaticFunctionSuggestions")}>
+                            {(["relationship", "conflict", "reveal", "turn", "closure"] as const).map(suggestion => (
+                                <button key={suggestion} type="button" className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:border-primary hover:text-foreground" onClick={() => updateEvent(phase.phase_id, event.event_id, { dramatic_function: t(`dramaticSuggestions.${suggestion}`) })}>
+                                    {t(`dramaticSuggestions.${suggestion}`)}
+                                </button>
+                            ))}
+                        </div>
                         <fieldset className="space-y-2">
                             <legend className="text-xs font-medium text-text-secondary">{t("eventPeople")}</legend>
                             {people.length === 0 && <p className="text-xs text-text-muted">{t("noPeople")}</p>}

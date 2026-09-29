@@ -1343,6 +1343,8 @@
         "eventDescription": "What happens",
         "eventNeedsDescription": "Add an event description before confirming.",
         "dramaticFunction": "Dramatic function",
+        "dramaticFunctionSuggestions": "Dramatic function suggestions",
+        "dramaticSuggestions": {"relationship":"Establish relationship","conflict":"Advance conflict","reveal":"Reveal information","turn":"Create a turn","closure":"Close a phase"},
         "eventPeople": "People in this event",
         "addPeopleFromDescription": "Add {count} people detected in “What happens”",
         "noPeople": "No characters are available from Assets yet.",
