@@ -116,6 +116,29 @@ function makePeople(characters: Character[]): DirectorStoryPerson[] {
     return Array.from(grouped.values()).sort((a, b) => a.display_name.localeCompare(b.display_name));
 }
 
+export function inferEventCharacterIds(description: string, phaseLabel: string, people: DirectorStoryPerson[], characters: Character[]): string[] {
+    const byId = new Map(characters.map(character => [character.id, character]));
+    const result: string[] = [];
+    for (const person of people) {
+        const variants = person.variant_character_ids.filter(id => byId.has(id));
+        const explicit = variants.filter(id => {
+            const name = byId.get(id)?.name?.trim() ?? "";
+            return name.length > 1 && description.includes(name);
+        });
+        const phaseMatches = variants.filter(id => {
+            const name = byId.get(id)?.name ?? "";
+            return phaseLabel.length > 0 && name.includes(phaseLabel);
+        });
+        const selected = explicit.length === 1 ? explicit[0]
+            : explicit.length > 1 ? null
+            : description.includes(person.display_name) && variants.length === 1 ? variants[0]
+            : description.includes(person.display_name) && phaseMatches.length === 1 ? phaseMatches[0]
+            : null;
+        if (selected) result.push(selected);
+    }
+    return result;
+}
+
 function legacyEvents(value: unknown): DirectorStoryEvent[] {
     const inputs = Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value];
     return inputs.map((input, order) => {
@@ -422,6 +445,7 @@ function StoryMapSection({
     const map = isDirectorStoryMap(rawStoryMap) ? rawStoryMap : null;
     const invalidMap = rawStoryMap !== undefined && rawStoryMap !== null && !map;
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+    const suppressedAutoPeople = useRef(new Set<string>());
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
@@ -516,6 +540,28 @@ function StoryMapSection({
             ? { ...phase, events: phase.events.map(event => event.event_id === eventId ? { ...event, ...patch } : event) }
             : phase),
     }));
+    const updateEventDescription = (phase: DirectorStoryPhase, event: DirectorStoryEvent, description: string) => {
+        const inferred = inferEventCharacterIds(description, phase.label, people, characters)
+            .filter(id => !suppressedAutoPeople.current.has(`${event.event_id}:${id}`));
+        updateEvent(phase.phase_id, event.event_id, {
+            description,
+            character_ids: Array.from(new Set([...event.character_ids, ...inferred])),
+        });
+    };
+    const openEvent = (phase: DirectorStoryPhase, event: DirectorStoryEvent) => {
+        if (expandedEventId === event.event_id) {
+            setExpandedEventId(null);
+            return;
+        }
+        const inferred = inferEventCharacterIds(event.description, phase.label, people, characters)
+            .filter(id => !suppressedAutoPeople.current.has(`${event.event_id}:${id}`));
+        if (inferred.some(id => !event.character_ids.includes(id))) {
+            updateEvent(phase.phase_id, event.event_id, {
+                character_ids: Array.from(new Set([...event.character_ids, ...inferred])),
+            });
+        }
+        setExpandedEventId(event.event_id);
+    };
     const orderedPhases = (next: DirectorStoryPhase[]) => next.map((phase, order) => ({ ...phase, order }));
     const movePhase = (phaseId: string, direction: -1 | 1) => updateMap(current => {
         const next = current.phases.slice().sort((a, b) => a.order - b.order);
@@ -798,16 +844,11 @@ function StoryMapSection({
             label: characterById.get(id)?.name || characterById.get(id)?.persona || person.display_name,
         })));
         const unknownSelectedIds = event.character_ids.filter(id => !possibleVariants.some(item => item.id === id));
-        const inferredIds = possibleVariants
-            .filter(item => !event.character_ids.includes(item.id))
-            .filter(item => [item.label, item.person.display_name, characterById.get(item.id)?.persona || ""]
-                .some(name => name.trim().length > 1 && event.description.includes(name)))
-            .map(item => item.id);
         const selectedFacts = event.source_fact_ids;
         return (
             <article key={event.event_id} className="rounded-md border border-border bg-background/60 p-3">
                 <div className="flex items-start justify-between gap-2">
-                    <button type="button" aria-expanded={isOpen} onClick={() => setExpandedEventId(isOpen ? null : event.event_id)} className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
+                    <button type="button" aria-expanded={isOpen} onClick={() => openEvent(phase, event)} className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
                         <span className="block truncate text-xs font-semibold text-foreground">{event.title || event.description || t("unnamedEvent")}</span>
                         <span className="mt-1 line-clamp-2 block whitespace-pre-wrap text-[11px] leading-4 text-text-secondary">{event.description || t("eventNeedsDescription")}</span>
                     </button>
@@ -823,7 +864,7 @@ function StoryMapSection({
                 {isOpen && (
                     <div className="mt-3 space-y-3 border-t border-border pt-3">
                         <Field label={t("eventTitle")} value={event.title} onChange={value => updateEvent(phase.phase_id, event.event_id, { title: value })} />
-                        <Field label={t("eventDescription")} value={event.description} multiline onChange={value => updateEvent(phase.phase_id, event.event_id, { description: value })} />
+                        <Field label={t("eventDescription")} value={event.description} multiline onChange={value => updateEventDescription(phase, event, value)} />
                         <Field label={t("dramaticFunction")} value={event.dramatic_function} multiline onChange={value => updateEvent(phase.phase_id, event.event_id, { dramatic_function: value })} />
                         <fieldset className="space-y-2">
                             <legend className="text-xs font-medium text-text-secondary">{t("eventPeople")}</legend>
@@ -831,17 +872,21 @@ function StoryMapSection({
                             <div className="flex flex-wrap gap-2">
                                 {possibleVariants.map(item => (
                                     <label key={item.id} className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary">
-                                        <input type="checkbox" checked={event.character_ids.includes(item.id)} onChange={change => updateEvent(phase.phase_id, event.event_id, {
-                                            character_ids: change.target.checked
-                                                ? Array.from(new Set([...event.character_ids, item.id]))
-                                                : event.character_ids.filter(id => id !== item.id),
-                                        })} className="accent-primary" />
+                                        <input type="checkbox" checked={event.character_ids.includes(item.id)} onChange={change => {
+                                            const key = `${event.event_id}:${item.id}`;
+                                            if (change.target.checked) suppressedAutoPeople.current.delete(key);
+                                            else suppressedAutoPeople.current.add(key);
+                                            updateEvent(phase.phase_id, event.event_id, {
+                                                character_ids: change.target.checked
+                                                    ? Array.from(new Set([...event.character_ids, item.id]))
+                                                    : event.character_ids.filter(id => id !== item.id),
+                                            });
+                                        }} className="accent-primary" />
                                         {item.label}
                                     </label>
                                 ))}
                                 {unknownSelectedIds.map(id => <span key={id} className="rounded bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">{t("unknownCharacter", { id })}</span>)}
                             </div>
-                            {inferredIds.length > 0 && <button type="button" className="mt-2 rounded border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] text-primary hover:bg-primary/20" onClick={() => updateEvent(phase.phase_id, event.event_id, { character_ids: Array.from(new Set([...event.character_ids, ...inferredIds])) })}>{t("addPeopleFromDescription", { count: inferredIds.length })}</button>}
                         </fieldset>
                         <p className="rounded-md border border-border bg-background/30 px-3 py-2 text-xs text-text-muted">
                             {selectedFacts.length > 0

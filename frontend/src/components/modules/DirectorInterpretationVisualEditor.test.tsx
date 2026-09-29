@@ -6,7 +6,18 @@ import { expect, it, vi } from "vitest";
 import messages from "../../../messages/en.json";
 import type { DirectorProfile, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
-import { createDirectorStoryMapFromLegacy } from "./DirectorStoryMapSection";
+import { createDirectorStoryMapFromLegacy, inferEventCharacterIds } from "./DirectorStoryMapSection";
+
+it("selects one known character variant from an event description without binding ambiguous eras", () => {
+    const variants = [
+        { id: "shen-college", name: "Shen Xia (college)", persona: "Shen Xia", base_character_id: "shen" },
+        { id: "shen-wedding", name: "Shen Xia (wedding)", persona: "Shen Xia", base_character_id: "shen" },
+    ];
+    const people = [{ person_id: "shen", display_name: "Shen Xia", variant_character_ids: ["shen-college", "shen-wedding"] }];
+    expect(inferEventCharacterIds("Shen Xia (college) enters", "college", people, variants)).toEqual(["shen-college"]);
+    expect(inferEventCharacterIds("Shen Xia enters", "college", people, variants)).toEqual(["shen-college"]);
+    expect(inferEventCharacterIds("Shen Xia enters", "", people, variants)).toEqual([]);
+});
 
 const people = [
     { person_id: "shen", display_name: "Shen Xia", variant_character_ids: ["shen-college"] },
@@ -235,21 +246,14 @@ it("selects a relationship edge and edits its state for a specific phase", () =>
     }));
 });
 
-it("links an event to exact confirmed ledger text and adds an event to a story thread lane", () => {
+it("keeps event source review in the single read-only source panel and adds an event to a story thread lane", () => {
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap }, onChange, [fact]);
 
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
-    fireEvent.click(screen.getByText(/Script evidence/));
-    fireEvent.click(screen.getAllByRole("checkbox", { name: /fact-meet/ })[0]);
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-        story_map: expect.objectContaining({
-            fact_ledger_revision: 1,
-            phases: [expect.objectContaining({ events: [expect.objectContaining({ source_fact_ids: ["fact-meet"] })] })],
-        }),
-    }));
+    expect(screen.queryByRole("checkbox", { name: /fact-meet/ })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Add an existing event in University"), { target: { value: "event-meet" } });
     const result = onChange.mock.lastCall?.[0] as Record<string, unknown>;
@@ -318,7 +322,7 @@ it("cleans deleted event references and clears the ledger pin when no citations 
     confirm.mockRestore();
 });
 
-it("does not offer citations from a different pinned ledger revision", () => {
+it("does not offer inline citations from a different pinned ledger revision", () => {
     const mismatchedProfile = {
         ...profile,
         story_map: { ...storyMap, fact_ledger_revision: 2 },
@@ -328,8 +332,5 @@ it("does not offer citations from a different pinned ledger revision", () => {
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.click(screen.getByRole("button", { name: /First meeting/ }));
-    fireEvent.click(screen.getByText(/Script evidence/));
-
-    expect(screen.getAllByRole("alert").some(alert => alert.textContent?.includes("ledger v2"))).toBe(true);
     expect(screen.queryByRole("checkbox", { name: /fact-meet/ })).not.toBeInTheDocument();
 });
