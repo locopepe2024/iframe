@@ -44,3 +44,16 @@ def test_explicit_sound_is_preserved():
                                audio_policy='generated', soundscape='Footsteps only. No dialogue.')
     assert not errors
     assert 'Footsteps only. No dialogue.' in prompt
+
+
+def test_person_replacement_prompt_does_not_invent_product_semantics():
+    prompt, errors = compile_h3(
+        'Three people dance in a horizontal scene.',
+        'Replace only the centered person with <Picture 2>; preserve the side dancers.',
+        replacement=True, duration=13, audio_policy='silent', soundscape='', source_video=True,
+    )
+    assert errors == []
+    assert 'replacement subject from <Picture 2>' in prompt
+    assert 'replacement product' not in prompt
+    assert 'packaging' not in prompt
+    assert 'centered person' in prompt
