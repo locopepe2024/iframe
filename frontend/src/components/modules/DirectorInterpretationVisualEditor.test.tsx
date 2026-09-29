@@ -275,6 +275,7 @@ it("filters the relationship graph by phase without changing the story map", () 
     expect(screen.getByRole("group", { name: "Character relationship graph with 2 people and 2 relationships. Select an edge or use the relationship cards below." })).toBeInTheDocument();
     fireEvent.change(filter, { target: { value: "phase-graduation" } });
     expect(screen.getByRole("group", { name: "Character relationship graph with 2 people and 1 relationships. Select an edge or use the relationship cards below." })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Relationship change review" })).toHaveTextContent("They drift apart");
     expect(onChange).not.toHaveBeenCalled();
 });
 

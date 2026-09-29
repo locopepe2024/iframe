@@ -1086,6 +1086,29 @@ function StoryMapSection({
                 )}
                 {people.length < 2 && <p className="rounded-md border border-dashed border-border p-4 text-xs text-text-muted">{t("needPeople")}</p>}
 
+                {relationshipPhaseFilter && (
+                    <section className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3" aria-label={t("relationshipEvolutionTitle")}>
+                        <h4 className="text-xs font-semibold text-foreground">{t("relationshipEvolutionTitle")}</h4>
+                        <p className="mt-1 text-[11px] leading-5 text-text-secondary">{t("relationshipEvolutionHint")}</p>
+                        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                            {filteredRelationshipArcs.map(arc => {
+                                const state = arc.states.find(item => item.phase_id === relationshipPhaseFilter);
+                                if (!state) return null;
+                                const phaseIndex = phases.findIndex(phase => phase.phase_id === relationshipPhaseFilter);
+                                const previousPhaseIds = new Set(phases.slice(0, Math.max(0, phaseIndex)).map(phase => phase.phase_id));
+                                const previous = arc.states.slice().reverse().find(item => previousPhaseIds.has(item.phase_id));
+                                const triggerTitles = state.trigger_event_ids.map(eventId => allEvents.find(event => event.event_id === eventId)?.title).filter(Boolean);
+                                return <article key={arc.relationship_id} className="rounded-md border border-border bg-background/60 p-3">
+                                    <p className="text-xs font-semibold text-foreground">{relationshipLabel(arc, people)}</p>
+                                    <p className="mt-1 text-xs text-text-secondary">{previous?.state ? `${previous.state} → ` : ""}{state.state}</p>
+                                    {triggerTitles.length > 0 && <p className="mt-2 text-[10px] text-text-muted">{t("relationshipTriggeredBy", { events: triggerTitles.join(" · ") })}</p>}
+                                </article>;
+                            })}
+                            {filteredRelationshipArcs.length === 0 && <p className="text-xs text-text-muted">{t("relationshipNoStateInPhase")}</p>}
+                        </div>
+                    </section>
+                )}
+
                 {viewMode === "editor" && <div className="mt-4 space-y-3">
                     {map.relationship_arcs.map((arc, index) => (
                         <article id={`relationship-${arc.relationship_id}`} key={arc.relationship_id} className="scroll-mt-4 rounded-lg border border-border bg-surface p-3 sm:p-4">
