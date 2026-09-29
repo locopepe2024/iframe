@@ -578,6 +578,22 @@ def test_model_summary_is_clipped_during_draft_normalization():
     DirectorProfile(**normalized)
 
 
+def test_director_normalization_derives_storyline_and_scene_memory_when_model_omits_them():
+    draft = normalize_director_profile_draft({
+        **profile_payload(),
+        "story_map": {
+            **valid_story_map(),
+            "story_threads": [],
+        },
+        "scene_summaries": [],
+    })
+
+    assert draft["story_map"]["story_threads"]
+    assert draft["story_map"]["story_threads"][0]["milestones"][0]["event_id"] == "event-meet"
+    assert draft["scene_summaries"]
+    assert draft["scene_summaries"][0]["scene_ref"] == "21"
+
+
 def test_story_map_validates_stable_references_and_rejects_cross_phase_relationship_triggers():
     story_map = valid_story_map()
     DirectorStoryMap(**story_map)

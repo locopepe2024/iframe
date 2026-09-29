@@ -1838,7 +1838,31 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         story_map = dict(normalized["story_map"])
         if story_map.get("source_revision_id") == "":
             story_map["source_revision_id"] = "__pending__"
+        phases = story_map.get("phases") if isinstance(story_map.get("phases"), list) else []
+        threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []
+        event_ids = [
+            event.get("event_id")
+            for phase in phases if isinstance(phase, dict)
+            for event in (phase.get("events") if isinstance(phase.get("events"), list) else [])
+            if isinstance(event, dict) and isinstance(event.get("event_id"), str) and event.get("event_id")
+        ]
+        if event_ids and not threads:
+            people = story_map.get("people") if isinstance(story_map.get("people"), list) else []
+            story_map["story_threads"] = [{
+                "thread_id": "derived-main-thread",
+                "label": "待整理主线",
+                "person_ids": [item.get("person_id") for item in people if isinstance(item, dict) and item.get("person_id")],
+                "milestones": [
+                    {"event_id": event_id, "role": "setup" if index == 0 else "close" if index == len(event_ids) - 1 else "progress", "note": "由时间线自动整理，需导演审阅"}
+                    for index, event_id in enumerate(event_ids)
+                ],
+            }]
         normalized["story_map"] = story_map
+
+    if not normalized.get("scene_summaries"):
+        derived_scenes = build_director_scene_summaries(normalized)
+        if derived_scenes:
+            normalized["scene_summaries"] = derived_scenes
 
     normalized["execution_summary"] = build_director_execution_summary(normalized)
 

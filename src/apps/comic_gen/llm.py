@@ -1412,6 +1412,7 @@ character_ids 必须精确使用已确认实体中对应时期的角色变体 id
 relationship_arcs 的 person_ids 必须是两个不同的、来自实体上下文的 person_id；states 必须用 phase_id
 表达关系在对应故事阶段的状态，并通过 trigger_event_ids 指向真实 event_id。
 story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/reveal/payoff/open/close。
+只要 phases 中存在 event，就至少生成 1 条 story_thread；如果无法判断多个独立剧情线，生成一条“主线”并用 milestones 按事件顺序引用，标记为 interpretation，不能返回空数组。
 people、source_revision、source_revision_id 由服务端补齐。当前提示未提供可引用的 Fact Ledger ID，
 所有 source_fact_ids 必须返回空数组；不得猜 range 或 fact_id。未链接事实的模型内容标为 interpretation，
 来源不清或内部矛盾标为 uncertain/conflicted。不得从旧 relationship initial/change/final 猜测阶段状态。
@@ -1424,6 +1425,7 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
+只要剧本存在可定位的事件或场景，就至少输出 1 条 scene_summary；每个事件至少归入一个叙事场景候选。没有明确的入场/出场状态时留空，不要因此省略场景记录。scene_summary 是叙事场景候选，不是 Assets 场景实体，也不是最终拍摄场次。
 只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。
 canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
 人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
