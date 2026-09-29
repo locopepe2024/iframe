@@ -2982,7 +2982,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                             ("camera angle", shot.camera_angle),
                             ("composition", shot.composition),
                             ("camera movement", shot.camera_movement),
-                            ("ambient sound", shot.ambient_sound),
                         ) if not text.strip()
                     ]
                     if missing:
