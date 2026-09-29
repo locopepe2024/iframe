@@ -5060,6 +5060,8 @@ def confirm_director_shooting_plan(
             request.plan,
             request.expected_current_revision,
             request.expected_draft_revision,
+            user_title=request.user_title,
+            summary=request.summary,
         )
         current = updated.director_shooting_plan_revisions[-1]
         return {
