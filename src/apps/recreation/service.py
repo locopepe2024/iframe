@@ -912,7 +912,15 @@ class RecreationService:
                                    (json.dumps(current), task_id, self.user.owner_profile_id))
 
             kwargs = {
-                "model": task["model"], "mode": "reference2video", "duration": task["duration"],
+                "model": task["model"],
+                # UniArt's reference2video wire mode is the public full-reference
+                # (omni reference / 933) contract: ordered images, videos, and
+                # optional audio are carried by typed reference roles below.
+                "mode": "reference2video",
+                "duration": task["duration"],
+                # H3/933 does not admit the provider's implicit adaptive ratio.
+                # Recreation currently targets the horizontal source composition.
+                "ratio": "16:9",
                 # Keep the recreation request on the verified route default.
                 # The upstream gateway may accept additional resolution aliases
                 # (including 768p), but that is not evidence that this route's
