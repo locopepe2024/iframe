@@ -1603,8 +1603,8 @@
         "understandingHint": "Confirm the original, timeline, relationships and source basis",
         "intent": "Director intent",
         "intentHint": "Shape visual, performance, sound and continuity treatment",
-        "questions": "Director questions / revision",
-        "questionsHint": "Answer, add questions, or request a local/full revision"
+        "questions": "Director questions / open decisions",
+        "questionsHint": "Answer open questions or request a local/full revision; answers enter the next Director revision"
       },
       "flow": {
         "scene": "Scene",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { Character, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorStoryMapSection from "./DirectorStoryMapSection";
 
@@ -69,6 +69,23 @@ export default function DirectorInterpretationVisualEditor({
     mindMapOnly?: boolean;
 }) {
     const t = useTranslations("artDirection.directorEditor");
+    const locale = useLocale();
+    // Some deployed bundles were built with an older message tree and rendered
+    // the namespace key itself. Keep the three primary workbench domains
+    // readable while those bundles are refreshed.
+    const domainText = (key: "understanding" | "intent" | "questions" | "understandingHint" | "intentHint" | "questionsHint") => {
+        const value = t(`domains.${key}`);
+        if (!value.startsWith("artDirection.directorEditor.")) return value;
+        const fallback: Record<typeof key, [string, string]> = {
+            understanding: ["导演理解", "确认原作、时间线、人物关系和原文依据"],
+            intent: ["导演意图", "对修订后剧本进行视觉、表演、声音和连续性加工"],
+            questions: ["导演问题 / 待确认", "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"],
+            understandingHint: ["确认原作、时间线、人物关系和原文依据", "Confirm the original, timeline, relationships and source basis"],
+            intentHint: ["对修订后剧本进行视觉、表演、声音和连续性加工", "Shape visual, performance, sound and continuity treatment"],
+            questionsHint: ["回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定", "Answer open questions or request a local/full revision; answers enter the next Director revision"],
+        };
+        return fallback[key][locale.startsWith("zh") ? 0 : 1];
+    };
     const [activeDomain, setActiveDomain] = useState<"understanding" | "intent" | "questions">("understanding");
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
         ? profile.setting as Draft
@@ -88,9 +105,9 @@ export default function DirectorInterpretationVisualEditor({
     );
 
     const domains = [
-        { id: "understanding" as const, label: t("domains.understanding"), hint: t("domains.understandingHint") },
-        { id: "intent" as const, label: t("domains.intent"), hint: t("domains.intentHint") },
-        { id: "questions" as const, label: t("domains.questions"), hint: t("domains.questionsHint") },
+        { id: "understanding" as const, label: domainText("understanding"), hint: domainText("understandingHint") },
+        { id: "intent" as const, label: domainText("intent"), hint: domainText("intentHint") },
+        { id: "questions" as const, label: domainText("questions"), hint: domainText("questionsHint") },
     ];
 
     return (
@@ -144,8 +161,8 @@ export default function DirectorInterpretationVisualEditor({
 
             {!mindMapOnly && activeDomain === "intent" && <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-intent">
                 <div className="mb-4">
-                    <h3 id="director-intent" className="text-sm font-semibold text-foreground">{t("domains.intent")}</h3>
-                    <p className="mt-1 text-xs leading-5 text-text-secondary">{t("domains.intentHint")}</p>
+                    <h3 id="director-intent" className="text-sm font-semibold text-foreground">{domainText("intent")}</h3>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">{domainText("intentHint")}</p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                     {longFields.map(field => <TextField key={field} label={t(`field.${field}`)} value={asText(profile[field])} onChange={value => updateProfile(field, value)} />)}

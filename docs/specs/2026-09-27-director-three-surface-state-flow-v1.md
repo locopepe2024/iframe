@@ -301,3 +301,21 @@ Director 的输出契约是“可确认的导演分析输入”，不是新的�
 - 重新分析失败或冲突时，旧 draft 和 confirmed revision 可继续恢复。
 - shooting plan 只能读取明确的 confirmed Director revision，不能读取未保存或未确认 draft。
 - 用户能在脑图中快速发现模型理解错误和导演要求未覆盖的位置，并可定位到视觉、时间、场景、情感、人物关系中的具体对象。
+
+## 2026-09-30 clarification: read-only analysis vs editable revision
+
+The Director workbench exposes three distinct surfaces:
+
+1. **导演分析（只读）**：the latest confirmed Director interpretation. It is a review surface for the script-grounded understanding, including setting, timeline, people, relationships, plot threads and scene analysis. It does not expose direct mutation controls.
+2. **导演修订（可写草稿）**：the editable draft for answers, additions and corrections. This includes setting additions such as `学校所在地=西安`, `2016–2024`, and regional visual constraints for Xi'an and Beijing. Editing this surface changes only the draft.
+3. **重新分析候选（待采用）**：a model result produced by local or full revision. It is never applied automatically. The user accepts or discards it, then saves the draft and confirms a new Director revision.
+
+The workbench must always show these actions separately:
+
+- **保存草稿**: persist the editable Director draft; does not change the confirmed interpretation.
+- **重新分析**: submit the current draft plus one revision instruction and return a candidate; does not save or confirm it automatically.
+- **确认 Director 理解**: adopt the saved draft as the next confirmed revision; this is the only action that makes it available to shooting-plan generation.
+
+`导演问题 / 待确认` is a visible editable domain. Existing unresolved questions are displayed there; an answer becomes a draft edit and a new question can be added. If the domain is empty, the UI still shows the add action and explains that user decisions can be entered manually. `剧情线` and `场景分析` are analysis projections: empty means the current analysis did not return those structures, not that the user should edit the original script.
+
+The overview fields are therefore not a hidden autosave surface. They belong to the editable draft only, and the visible Save draft action must remain available whenever the draft is dirty. The original script and its fact evidence stay read-only.

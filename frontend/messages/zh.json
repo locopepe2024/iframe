@@ -1604,8 +1604,8 @@
         "understandingHint": "确认原作、时间线、人物关系和原文依据",
         "intent": "导演意图",
         "intentHint": "对修订后剧本进行视觉、表演、声音和连续性加工",
-        "questions": "导演问题 / 修订",
-        "questionsHint": "回答问题、增加问题或提出局部/全部修订"
+      "questions": "导演问题 / 待确认",
+      "questionsHint": "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"
       },
       "flow": {
         "scene": "场景",
