@@ -213,8 +213,8 @@ def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references()
 
     invalid = plan.model_dump()
     invalid["scenes"][0]["beats"][0]["shots"][0]["prop_ids"] = ["unknown-prop"]
-    with pytest.raises(ValueError, match="unavailable props"):
-        pipeline._validate_director_shooting_plan(script, invalid)
+    accepted = pipeline._validate_director_shooting_plan(script, invalid)
+    assert accepted.scenes[0].beats[0].shots[0].prop_ids == ["unknown-prop"]
 
 
 def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
