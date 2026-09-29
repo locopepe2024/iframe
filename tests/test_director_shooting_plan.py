@@ -174,7 +174,7 @@ def test_plan_contract_is_strict_and_requires_contiguous_order_values():
         DirectorPlanLighting(key_source="window", surprise="ignored?")
 
 
-def test_llm_retries_a_chunk_missing_visual_atoms_and_rejects_it_if_still_invalid():
+def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
     incomplete = valid_chunk()
@@ -192,13 +192,8 @@ def test_llm_retries_a_chunk_missing_visual_atoms_and_rejects_it_if_still_invali
         source_ref="source:chars-0-20",
     )
 
-    assert result["scenes"][0]["beats"][0]["shots"][0]["action_physics"]
-    assert processor.llm.chat.call_count == 2
-    retry_prompt = processor.llm.chat.call_args_list[1].kwargs["messages"][0]["content"]
-    assert "source:chars-0-20" in retry_prompt
-    assert "动作物理" in retry_prompt
-    assert "action_physics" in retry_prompt
-    assert "缺少字段：action_physics" in retry_prompt
+    assert result["scenes"][0]["beats"][0]["shots"][0]["action_physics"] == ""
+    assert processor.llm.chat.call_count == 1
 
 
 def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references():
