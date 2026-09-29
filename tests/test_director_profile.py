@@ -591,7 +591,21 @@ def test_director_normalization_derives_storyline_and_scene_memory_when_model_om
     assert draft["story_map"]["story_threads"]
     assert draft["story_map"]["story_threads"][0]["milestones"][0]["event_id"] == "event-meet"
     assert draft["scene_summaries"]
-    assert draft["scene_summaries"][0]["scene_ref"] == "21"
+    assert draft["scene_summaries"][0]["scene_ref"] == "大学阶段 · event-meet"
+
+
+def test_scene_memory_uses_story_map_events_when_top_level_scene_fields_are_empty():
+    profile = {
+        "story_map": {
+            **valid_story_map(),
+            "story_threads": [],
+        },
+        "scene_summaries": [],
+    }
+    normalized = normalize_director_profile_draft(profile)
+    assert normalized["scene_summaries"]
+    assert normalized["scene_summaries"][0]["scene_ref"] == "大学阶段 · event-meet"
+    assert normalized["story_map"]["story_threads"]
 
 
 def test_story_map_validates_stable_references_and_rejects_cross_phase_relationship_triggers():

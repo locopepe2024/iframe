@@ -1588,6 +1588,28 @@ def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, st
     source = profile.get("scene_summaries")
     candidates: List[Any] = list(source) if isinstance(source, list) else []
     if not candidates:
+        story_map = profile.get("story_map")
+        if isinstance(story_map, dict):
+            phases = story_map.get("phases") if isinstance(story_map.get("phases"), list) else []
+            for phase in phases:
+                if not isinstance(phase, dict):
+                    continue
+                phase_label = str(phase.get("label") or phase.get("phase_id") or "").strip()
+                events = phase.get("events") if isinstance(phase.get("events"), list) else []
+                for event in events:
+                    if not isinstance(event, dict):
+                        continue
+                    event_id = str(event.get("event_id") or "").strip()
+                    description = str(event.get("description") or event.get("title") or "").strip()
+                    if not event_id and not description:
+                        continue
+                    candidates.append({
+                        "scene_ref": f"{phase_label} · {event_id}" if phase_label and event_id else phase_label or event_id,
+                        "summary": description,
+                        "state_in": "",
+                        "state_out": "",
+                    })
+    if not candidates:
         for field in ("key_events", "timeline"):
             values = profile.get(field)
             if isinstance(values, list):
