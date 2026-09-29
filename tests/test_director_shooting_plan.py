@@ -243,7 +243,7 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
     assert restored.frames[0].model_dump() == original_frames[0]
 
 
-def test_confirmation_rejects_missing_performance_physics_or_lighting():
+def test_confirmation_allows_missing_performance_physics_or_lighting_for_later_editing():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline).model_dump()
     shot = plan["scenes"][0]["beats"][0]["shots"][0]
@@ -251,8 +251,8 @@ def test_confirmation_rejects_missing_performance_physics_or_lighting():
     shot["lighting"]["key_source"] = ""
 
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
-    with pytest.raises(ValueError, match="physical action"):
-        pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    confirmed = pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    assert confirmed.director_shooting_plan_revisions[-1].revision == 1
 
 
 def test_long_plan_batch_cache_shape_resumes_completed_chunks(monkeypatch):

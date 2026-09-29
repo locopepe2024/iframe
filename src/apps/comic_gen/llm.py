@@ -1674,6 +1674,19 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             except json.JSONDecodeError as exc:
                 last_error = f"JSON 格式错误：{exc}"
             else:
+                # Keep the plan usable when creative details are omitted. The
+                # storyboard editor exposes these empty fields for later completion.
+                for scene in result.get("scenes", []) if isinstance(result, dict) else []:
+                    for beat in scene.get("beats", []) if isinstance(scene, dict) else []:
+                        for shot in beat.get("shots", []) if isinstance(beat, dict) else []:
+                            if isinstance(shot, dict):
+                                for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
+                                    shot.setdefault(key, "")
+                                shot.setdefault("lighting", {})
+                                shot.setdefault("duration_seconds", None)
+                                shot.setdefault("dialogue", [])
+                                shot.setdefault("character_ids", [])
+                                shot.setdefault("prop_ids", [])
                 last_error = self._validate_director_shooting_chunk(result) or ""
                 if not last_error:
                     return result
