@@ -196,6 +196,28 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
     assert processor.llm.chat.call_count == 1
 
 
+def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
+
+    processor.plan_director_shooting_chunk(
+        "大学宿舍里，两人讨论毕业去向。",
+        {"characters": [], "props": []},
+        {
+            "execution_summary": "SETTING: 学校所在地为西安。",
+            "setting": {"locations": "西安"},
+        },
+        {"style": "生活化电影"},
+        source_ref="source:chars-0-20",
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "可选导演视觉锚点" in prompt
+    assert "不得伪装成已发生的剧本事实" in prompt
+    assert "unresolved_questions" in prompt
+
+
 def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
