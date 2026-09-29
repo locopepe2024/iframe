@@ -2719,6 +2719,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         available_entities = self.resolve_episode_assets(script)
         available_characters = {character.id for character in available_entities["characters"]}
+        available_props = {prop.id for prop in available_entities["props"]}
         requested_characters = {
             character_id
             for scene in plan.scenes
@@ -2726,11 +2727,6 @@ class ComicGenPipeline(StudioOwnerMixin):
             for shot in beat.shots
             for character_id in shot.character_ids
         }
-        missing_characters = requested_characters - available_characters
-        if missing_characters:
-            raise ValueError("Shooting plan references unavailable character variants: " + ", ".join(sorted(missing_characters)))
-
-        available_props = {prop.id for prop in available_entities["props"]}
         requested_props = {
             prop_id
             for scene in plan.scenes
@@ -2742,10 +2738,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             for shot in beat.shots
             for prop_id in shot.prop_ids
         }
-        missing_props = requested_props - available_props
-        if missing_props:
-            raise ValueError("Shooting plan references unavailable props: " + ", ".join(sorted(missing_props)))
-
+        unresolved_characters = sorted(requested_characters - available_characters)
+        unresolved_props = sorted(requested_props - available_props)
+        if unresolved_characters or unresolved_props:
+            logger.warning(
+                "Shooting plan contains unbound entity references: characters=%s props=%s",
+                unresolved_characters,
+                unresolved_props,
+            )
         from .llm import split_director_source
         allowed_source_refs = {
             item["source_ref"] for item in split_director_source(
