@@ -198,8 +198,9 @@ class LLMAdapter:
                 options["max_retries"] = max_retries
             if options and hasattr(client, "with_options"):
                 request_client = client.with_options(**options)
-            logger.info("LLM chat response received: model=%s", model)
+            logger.info("LLM chat request started: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
+            logger.info("LLM chat HTTP response received: model=%s", model)
             content = response.choices[0].message.content
             logger.info("LLM chat response body decoded: model=%s chars=%s", model, len(content or ""))
             return content
