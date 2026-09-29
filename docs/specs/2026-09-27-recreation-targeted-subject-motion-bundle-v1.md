@@ -80,6 +80,8 @@ The state advertises `XYZ` Euler values, but the generated values are `[0, angle
 
 **Direct implication:** The white-model output currently has 3-axis root translation plus single-axis planar limb rotation. It is not a full 3D skeletal retarget, even though the state contains three-component position and rotation arrays.
 
+**Observed correction:** The source track contains left and right hip landmarks for all 79 tracked samples. The previous Blender adapter used their midpoint only for root translation; it did not write a `pelvis` or `spine_*` pose. The adapter now records `body_centers.hips`, `body_centers.shoulders`, and `pelvis_width`, and emits legacy planar rotations for `pelvis`, `spine_lower`, `spine_mid`, and `spine_chest`. This proves hip data is present and consumed by the state generator, but does not yet prove the retargeted pelvis motion is anatomically correct.
+
 **Not yet proven:** Whether the target rig's local bone axes happen to align closely enough with the adapter's Blender-Y assumption for any particular shot. The current v4 render shows the output is not reliable as a dance-action reference.
 
 **Next implementation slice:** Add an explicit `retarget_mode` and per-joint source/target vectors to the state. The Blender adapter should compute a quaternion delta from each target bone's rest vector to the source pose vector in the parent rest frame, then apply that delta in local bone space. Existing Euler states remain readable as a legacy mode until the vector path is validated.
