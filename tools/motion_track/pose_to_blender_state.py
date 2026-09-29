@@ -20,6 +20,43 @@ def point(lms,i):
 def rel_angle(a,b,base=0.0):
     x=angle(a,b)
     return None if x is None else max(-180.0,min(180.0,x-base))
+
+def _interpolate_samples(samples, total_frames):
+    """Fill detector gaps and reject obvious center-track jumps."""
+    if not samples:
+        return []
+    by_frame = {int(item["frame"]): item for item in samples}
+    known = sorted(by_frame)
+    out = []
+    for frame in range(1, total_frames + 1):
+        if frame in by_frame:
+            item = dict(by_frame[frame])
+            item["selection_status"] = "tracked"
+            out.append(item)
+            continue
+        before = max((n for n in known if n < frame), default=known[0])
+        after = min((n for n in known if n > frame), default=known[-1])
+        left, right = by_frame[before], by_frame[after]
+        t = 0.0 if after == before else (frame - before) / (after - before)
+        rotations = {}
+        for name in set(left["joint_rotations_deg"]) | set(right["joint_rotations_deg"]):
+            lv = left["joint_rotations_deg"].get(name, right["joint_rotations_deg"].get(name, [0, 0, 0]))
+            rv = right["joint_rotations_deg"].get(name, lv)
+            rotations[name] = [float(a) + (float(b) - float(a)) * t for a, b in zip(lv, rv)]
+        root = [float(a) + (float(b) - float(a)) * t for a, b in zip(left["root_position"], right["root_position"])]
+        out.append({"frame": frame, "source_frame": left.get("source_frame", frame),
+                    "root_position": root, "joint_rotations_deg": rotations,
+                    "source_timestamp_seconds": left.get("source_timestamp_seconds", 0.0),
+                    "selection_status": "interpolated"})
+    # A center-track detector swap can create a single-frame root spike.
+    for index in range(1, len(out) - 1):
+        prev_x = out[index - 1]["root_position"][0]
+        cur_x = out[index]["root_position"][0]
+        next_x = out[index + 1]["root_position"][0]
+        if abs(cur_x - prev_x) > 0.45 and abs(next_x - cur_x) > 0.45 and abs(next_x - prev_x) < 0.25:
+            out[index]["root_position"][0] = (prev_x + next_x) / 2.0
+            out[index]["selection_status"] = "outlier_corrected"
+    return out
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--track',required=True); ap.add_argument('--out',required=True); ap.add_argument('--fps',type=float,default=24.0)
     args=ap.parse_args(); src=json.loads(Path(args.track).read_text()); source_fps=float(src['source']['fps']); fps=float(args.fps); frames=[]
@@ -36,7 +73,9 @@ def main():
             v=rel_angle(a,b,90.0 if name.endswith(('_l','_r')) else 0.0)
             if v is not None: rotations[name]=[v,0.0,0.0]
         frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
+    total_frames=max((int(round(float(f.get('timestamp_seconds',0.0))*fps))+1 for f in src['frames']),default=1)
+    frames=_interpolate_samples(frames,total_frames)
     source_duration=max((float(f.get('timestamp_seconds',0.0)) for f in src['frames']),default=0.0)
-    state={'state_id':'motion-track-blender-adapter-v1','schema_version':'director_reference_state.v1','revision':1,'title':'Center subject motion-track white model','duration_seconds':max(1.0, source_duration + 1.0/source_fps),'fps':round(fps,6),'reference_frame':max(1,frames[len(frames)//2]['frame'] if frames else 1),'outputs':['director_reference_image','camera_motion_reference_video'],'actors':[{'actor_id':'preserve-left','color':'#3B82F6','pose':'neutral','placement':{'position':[-1.7,0,0]},'trajectory':{'end_position':[-1.7,0,0]}},{'actor_id':'target-center','color':'#F59E0B','pose':'neutral','placement':{'position':[0,0,0]},'trajectory':{'end_position':[0,0,0]},'motion_track':frames},{'actor_id':'preserve-right','color':'#22C55E','pose':'neutral','placement':{'position':[1.7,0,0]},'trajectory':{'end_position':[1.7,0,0]}}],'camera':{'camera_id':'camera-main','preset':'push_in','position':[0,-9.5,4.8],'end_position':[0,-9.5,4.8],'look_at':[0,0,1.25],'fov':50},'motion_track_source':{'schema':src['schema'],'target_subject_id':src['target_selection']['target_subject_id'],'source_fps':source_fps,'output_fps':fps,'source_duration_seconds':source_duration,'tracked_samples':len(frames),'occluded_samples':sum(f.get('selection_status')!='tracked' for f in src['frames']),'mapping':'2d_landmarks_to_image_plane_joint_angles_v1'}}
+    state={'state_id':'motion-track-blender-adapter-v1','schema_version':'director_reference_state.v1','revision':2,'title':'Center subject motion-track white model','duration_seconds':max(1.0, source_duration + 1.0/source_fps),'fps':round(fps,6),'reference_frame':max(1,frames[len(frames)//2]['frame'] if frames else 1),'outputs':['director_reference_image','camera_motion_reference_video'],'actors':[{'actor_id':'preserve-left','color':'#3B82F6','pose':'neutral','placement':{'position':[-1.7,0,0]},'trajectory':{'end_position':[-1.7,0,0]}},{'actor_id':'target-center','color':'#F59E0B','pose':'neutral','placement':{'position':[0,0,0]},'trajectory':{'end_position':[0,0,0]},'motion_track':frames},{'actor_id':'preserve-right','color':'#22C55E','pose':'neutral','placement':{'position':[1.7,0,0]},'trajectory':{'end_position':[1.7,0,0]}}],'camera':{'camera_id':'camera-main','preset':'push_in','position':[0,-9.5,4.8],'end_position':[0,-9.5,4.8],'look_at':[0,0,1.25],'fov':50},'motion_track_source':{'schema':src['schema'],'target_subject_id':src['target_selection']['target_subject_id'],'source_fps':source_fps,'output_fps':fps,'source_duration_seconds':source_duration,'tracked_samples':sum(f.get('selection_status')=='tracked' for f in frames),'interpolated_samples':sum(f.get('selection_status')=='interpolated' for f in frames),'outlier_corrected_samples':sum(f.get('selection_status')=='outlier_corrected' for f in frames),'occluded_samples':sum(f.get('selection_status')!='tracked' for f in src['frames']),'mapping':'2d_landmarks_to_image_plane_joint_angles_v2_interpolated'}}
     Path(args.out).write_text(json.dumps(state,ensure_ascii=False,indent=2)); print(json.dumps({'out':args.out,'samples':len(frames),'occluded':state['motion_track_source']['occluded_samples']}))
 if __name__=='__main__':main()
