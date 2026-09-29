@@ -1549,7 +1549,9 @@
       "exampleNumber": "Director note {number}",
       "noExamples": "No sample notes are attached to the current Director interpretation.",
       "fields": {
-        "sceneRef": "Script scene marker",
+        "sceneRef": "Shooting scene name (editable)",
+        "sceneRefPlaceholder": "For example: Beijing late-night last train",
+        "sceneRefHint": "When the script has no scene marker, add the name used for shooting.",
         "heading": "Scene heading",
         "location": "Location",
         "timeAnchor": "Time",

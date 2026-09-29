@@ -1550,7 +1550,9 @@
       "exampleNumber": "导演备注 {number}",
       "noExamples": "当前 Director 解读中没有场次示例。",
       "fields": {
-        "sceneRef": "剧本场景标记",
+        "sceneRef": "拍摄场景名（可补充）",
+        "sceneRefPlaceholder": "例如：北京深夜末班车",
+        "sceneRefHint": "原文未标明时，由导演补充拍摄时使用的场景名称。",
         "heading": "场景标题",
         "location": "地点",
         "timeAnchor": "时间",

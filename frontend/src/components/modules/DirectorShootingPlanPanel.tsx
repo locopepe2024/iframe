@@ -89,6 +89,7 @@ function Field({
     min,
     max,
     hint,
+    placeholder,
 }: {
     label: string;
     value: string | number | null;
@@ -98,6 +99,7 @@ function Field({
     min?: number;
     max?: number;
     hint?: string;
+    placeholder?: string;
 }) {
     const id = useId();
     return (
@@ -107,6 +109,7 @@ function Field({
                 <textarea
                     id={id}
                     value={value ?? ""}
+                    placeholder={placeholder}
                     onChange={event => onChange(event.target.value)}
                     rows={3}
                     className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
@@ -119,6 +122,7 @@ function Field({
                     max={max}
                     step={type === "number" ? 1 : undefined}
                     value={value ?? ""}
+                    placeholder={placeholder}
                     onChange={event => onChange(event.target.value)}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
@@ -621,7 +625,7 @@ export default function DirectorShootingPlanPanel() {
                                 </div>
                                 <div className="space-y-5 p-4">
                                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                        <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
+                                        <Field label={t("fields.sceneRef")} value={scene.scene_ref} placeholder={t("fields.sceneRefPlaceholder")} hint={t("fields.sceneRefHint")} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
                                         <Field label={t("fields.heading")} value={scene.heading} onChange={value => updateScene(sceneIndex, { heading: value })} />
                                         <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
