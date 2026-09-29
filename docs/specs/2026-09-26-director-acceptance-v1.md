@@ -93,7 +93,7 @@ Director 只有同时满足以下五项，才算达到可测试能力：
 | 导演风格 | 新增/编辑风格；项目/系列作用域；保存后重新打开仍能恢复；显示当前生效版本 | Code fact：已有 `art_direction` 保存与继承；需补“新增导演风格”独立验收，避免与视觉风格预设混称 |
 | 可视化分析 | 人物关系、时间线、事件、场景均可查看和编辑；视图间修改同步；场景不能只存在于 shooting plan 的 JSON | Code fact：story map 已覆盖 people/phases/events/relationship arcs；需补 scene 视图和端到端交互测试 |
 | 重分析 | source/fact revision 变化可触发重分析；结果进 draft；确认 revision 不被静默改写；失败和取消可重试 | Code fact：profile analysis/refine job 和 draft revision 存在；需补“确认版本保留 + 重分析 stale”测试 |
-| 标注修改 | 至少覆盖 shot 的 `visual_intent`、表演/动作效果、lighting、sound、transition/continuity；保存后再读一致；缺字段阻止确认 | Code fact：shooting plan 有部分视觉字段；缺口是独立的用户标注语义、编辑入口和 round-trip 测试 |
+| 标注修改 | 至少覆盖 shot 的 `visual_intent`、表演/动作效果、lighting、sound、transition/continuity；保存后再读一致；缺字段只产生可忽略的补充建议，不阻止确认 | Code fact：shooting plan 有部分视觉字段；缺口是独立的用户标注语义、编辑入口和 round-trip 测试 |
 | 全局生效 | Director confirm 后 storyboard analysis 请求包含确认 profile revision/hash 和执行摘要；草稿不能被消费；旧 storyboard/frame 标记 review/stale | Code fact：Storyboard analysis 已消费 effective director profile；需补 revision/hash 断言、旧 frame review 门和“确认前不生效”测试 |
 
 ### F. 必须补齐的遗漏边界
