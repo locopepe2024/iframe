@@ -1596,9 +1596,13 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         if key in shot and not isinstance(shot[key], str):
                             return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
                     lighting = shot.get("lighting")
-                    if not isinstance(lighting, dict) or set(lighting) != lighting_keys:
+                    if lighting is not None and (not isinstance(lighting, dict) or set(lighting) - lighting_keys):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 光影结构无效"
-                    practical_sources = lighting.get("practical_sources")
+                    lighting = lighting or {}
+                    for key in ("key_source", "color_tone", "contrast"):
+                        if key in lighting and not isinstance(lighting[key], str):
+                            return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
+                    practical_sources = lighting.get("practical_sources", [])
                     if not isinstance(practical_sources, list) or any(not isinstance(item, str) for item in practical_sources):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} practical_sources 必须是字符串数组"
                     duration = shot.get("duration_seconds")

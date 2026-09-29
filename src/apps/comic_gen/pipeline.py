@@ -2956,44 +2956,10 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     @staticmethod
     def _validate_director_shooting_plan_for_confirmation(value: DirectorShootingPlan) -> None:
+        # A confirmed plan records the user's decision to proceed. Missing creative
+        # details remain editable in the shot and storyboard stages.
         if not value.scenes:
             raise ValueError("Add at least one scene before confirming the shooting plan")
-        for scene in value.scenes:
-            if not scene.scene_ref.strip():
-                raise ValueError("Name every scene before confirming the shooting plan")
-            if not scene.environment_atmosphere.strip():
-                raise ValueError("Describe the scene environment and atmosphere before confirming")
-            if not scene.source_chunk_refs:
-                raise ValueError("Link every scene to at least one source chunk before confirming")
-            if not scene.beats:
-                raise ValueError("Add at least one dramatic beat to every scene before confirming")
-            for beat in scene.beats:
-                if not beat.title.strip() or not beat.dramatic_purpose.strip():
-                    raise ValueError("Describe each dramatic beat before confirming the shooting plan")
-                if not beat.shots:
-                    raise ValueError("Add at least one shot to every beat before confirming")
-                for shot in beat.shots:
-                    missing = [
-                        name for name, text in (
-                            ("visual intent", shot.visual_intent),
-                            ("character performance", shot.performance_action),
-                            ("physical action", shot.action_physics),
-                            ("shot size", shot.shot_size),
-                            ("camera angle", shot.camera_angle),
-                            ("composition", shot.composition),
-                            ("camera movement", shot.camera_movement),
-                        ) if not text.strip()
-                    ]
-                    if missing:
-                        raise ValueError("Complete shot " + ", ".join(missing) + " before confirming")
-                    if any(not item.strip() for item in (
-                        shot.lighting.key_source,
-                        shot.lighting.color_tone,
-                        shot.lighting.contrast,
-                    )):
-                        raise ValueError("Complete shot lighting source, color tone, and contrast before confirming")
-                    if shot.duration_seconds is None:
-                        raise ValueError("Set a duration for every shot before confirming the shooting plan")
 
     def save_director_shooting_plan_draft(
         self,
