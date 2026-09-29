@@ -32,8 +32,8 @@ def compile_h3(description, instruction, *, replacement, duration, audio_policy,
     subject += "."
     retention = "<Subject 1>: partially_preserved - Preserve identity, scene, composition and camera framing; apply only the explicit changes below."
     if replacement:
-        subject += "\n<Subject 2> is the replacement product from <Picture 2>."
-        retention += "\n<Subject 2>: fully_preserved - Preserve the replacement packaging appearance; adapt lighting, perspective and occlusion to the scene."
+        subject += "\n<Subject 2> is the replacement subject from <Picture 2>."
+        retention += "\n<Subject 2>: fully_preserved - Preserve the replacement subject identity and appearance; adapt scale, pose, lighting and occlusion to the scene."
     prompt = (f"subject_definitions:\n{source}{subject}\nsummary:\n[reference generation] Recreate one continuous shot.\n"
               f"retention_analysis:\n{retention}\ndetailed_description:\n[Shot 1] {description}\n{instruction}\n"
               f"Continue for {duration} seconds. No additional cuts or invented actions.\n"
