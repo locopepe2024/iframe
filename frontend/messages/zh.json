@@ -1624,7 +1624,8 @@
       "practicalSourceHint": "例如电影院门头灯、售票窗口灯或街道灯；没有画内实际光源时留空。",
       "noProject": "请先打开一个项目。"
     },
-    "factLedgerTitle": "剧本事实与证据",
+    "factLedgerTitle": "剧本事实来源",
+    "factSourceHint": "查看 Director 解读引用的剧本事实、原文出处和不确定性。此处只读，不修改剧本，也不需要单独确认事实。",
     "factLedgerHint": "请对照剧本版本 {sourceRevision} 审阅候选事实。先核对剧本原文，再保存草稿；只有确认账本后，事实才会供后续导演分析和生成使用。",
     "factLedgerCurrent": "当前事实账本 v{revision}",
     "factLedgerHistory": "已确认版本",

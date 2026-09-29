@@ -1623,7 +1623,8 @@
       "practicalSourceHint": "Examples: cinema sign, ticket-window light, or street lamp. Leave blank when no practical source is visible.",
       "noProject": "Open a project first."
     },
-    "factLedgerTitle": "Script facts and evidence",
+    "factLedgerTitle": "Script fact sources",
+    "factSourceHint": "Review the script facts, source excerpts, and uncertainty behind the Director interpretation. Read-only: it does not edit the script or require a separate fact confirmation.",
     "factLedgerHint": "Review candidate facts against script revision {sourceRevision}. Check the script first, save your draft, then confirm the ledger before downstream director analysis uses it.",
     "factLedgerCurrent": "Active ledger v{revision}",
     "factLedgerHistory": "Confirmed revisions",

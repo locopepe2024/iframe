@@ -75,10 +75,12 @@ export default function ScriptFactLedgerPanel({
     projectId,
     sourceRevision,
     directorProfile,
+    readOnly = false,
 }: {
     projectId: string;
     sourceRevision: number;
     directorProfile?: DirectorProfile;
+    readOnly?: boolean;
 }) {
     const t = useTranslations("artDirection");
     const [draftText, setDraftText] = useState(emptyLedger);
@@ -233,7 +235,7 @@ export default function ScriptFactLedgerPanel({
                         {t("factLedgerTitle")}
                     </h3>
                     <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">
-                        {t("factLedgerHint", { sourceRevision })}
+                        {t(readOnly ? "factSourceHint" : "factLedgerHint", { sourceRevision })}
                     </p>
                     {staleDraft && (
                         <p role="alert" className="mt-2 text-xs text-amber-200">
@@ -283,7 +285,7 @@ export default function ScriptFactLedgerPanel({
                 </div>
             )}
 
-            <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
+            {!readOnly && <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                     <WorkflowActionButton variant="secondary" size="sm" onClick={importCurrentDirectorFacts} disabled={busy !== null}>
                         {t("factLedgerImportDirector")}
@@ -291,9 +293,9 @@ export default function ScriptFactLedgerPanel({
                     <span className="text-xs font-medium text-foreground">{t("factLedgerImportSource", { sourceRevision })}</span>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-text-muted">{t("factLedgerImportNote")}</p>
-            </div>
+            </div>}
 
-            <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label={t("factLedgerWorkflowTitle")}>
+            {!readOnly && <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label={t("factLedgerWorkflowTitle")}>
                 <h4 className="text-xs font-semibold text-foreground">{t("factLedgerWorkflowTitle")}</h4>
                 <ol className="mt-2 grid gap-1.5 text-xs leading-5 text-text-secondary sm:grid-cols-2">
                     <li><span className="font-medium text-foreground">1.</span> {t("factLedgerWorkflowImport")}</li>
@@ -302,7 +304,7 @@ export default function ScriptFactLedgerPanel({
                     <li><span className="font-medium text-foreground">4.</span> {t("factLedgerWorkflowConfirm")}</li>
                 </ol>
                 <p className="mt-2 text-xs text-text-muted">{t("factLedgerWorkflowImportant")}</p>
-            </div>
+            </div>}
 
             {comparisonFacts && evidence && (
                 <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs" aria-label={t("factLedgerDiffTitle")}>
@@ -312,7 +314,7 @@ export default function ScriptFactLedgerPanel({
                 </div>
             )}
 
-            {parsedFacts.length > 0 && (
+            {!readOnly && parsedFacts.length > 0 && (
                 <details className="mt-3 rounded border border-border bg-background/30 p-3">
                     <summary className="cursor-pointer text-xs font-medium text-foreground">
                         {t("factLedgerCandidateSummary", { count: parsedFacts.length })}
@@ -332,7 +334,7 @@ export default function ScriptFactLedgerPanel({
                 </details>
             )}
 
-            <details className="mt-3 text-xs text-text-secondary">
+            {!readOnly && <details className="mt-3 text-xs text-text-secondary">
                 <summary className="cursor-pointer">{t("factLedgerSchema")}</summary>
                 <pre className="mt-2 overflow-x-auto rounded border border-border bg-background p-3 text-[11px] leading-5">
 {JSON.stringify([{
@@ -348,9 +350,9 @@ export default function ScriptFactLedgerPanel({
     conflict_group_id: null,
 }], null, 2)}
                 </pre>
-            </details>
+            </details>}
 
-            <details className="mt-3 rounded-md border border-border bg-background/30 p-3">
+            {!readOnly && <details className="mt-3 rounded-md border border-border bg-background/30 p-3">
                 <summary className="cursor-pointer text-xs font-medium text-text-secondary">{t("factLedgerDraftAdvanced")}</summary>
                 <p className="mt-2 text-xs text-text-muted">{t("factLedgerDraftAdvancedHint")}</p>
                 <textarea
@@ -361,11 +363,11 @@ export default function ScriptFactLedgerPanel({
                     className="mt-3 min-h-64 w-full resize-y rounded-md border border-border bg-background p-3 font-mono text-xs leading-5 text-foreground outline-none focus:border-primary"
                     spellCheck={false}
                 />
-            </details>
+            </details>}
 
             {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            {!readOnly && <div className="mt-3 flex flex-wrap items-center gap-2">
                 <WorkflowActionButton
                     variant="secondary"
                     leftIcon={busy === "save" ? <Loader2 className="animate-spin" /> : <Save />}
@@ -384,7 +386,7 @@ export default function ScriptFactLedgerPanel({
                     {t("factLedgerConfirm")}
                 </WorkflowActionButton>
                 <span className="text-xs text-text-muted">{t("factLedgerConfirmHint")}</span>
-            </div>
+            </div>}
 
             {evidence && evidence.facts.length > 0 && (
                 <details className="mt-4 rounded border border-border p-3">

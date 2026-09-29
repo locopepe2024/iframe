@@ -716,6 +716,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 projectId={currentProject.id}
                 sourceRevision={currentProject.source_revision ?? 1}
                 directorProfile={confirmed}
+                readOnly
             />
         )}
         </>
