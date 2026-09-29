@@ -2779,6 +2779,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         story_map = self._effective_shooting_story_map(script, profile)
         assert story_map is not None
         resolved = self.resolve_episode_assets(script)
+        available_character_ids = {item.id for item in resolved["characters"]}
+        available_scene_ids = {item.id for item in resolved["scenes"]}
+        available_prop_ids = {item.id for item in resolved["props"]}
+        unbound_entity_refs: set[str] = set()
         entities = {
             "characters": [{
                 "id": item.id,
@@ -2896,7 +2900,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                     target["unresolved_questions"].extend(str(item)[:500] for item in questions[:20] if str(item).strip())
                 scene_prop_ids = raw_scene.get("prop_ids", [])
                 if isinstance(scene_prop_ids, list):
-                    target["prop_ids"] = list(dict.fromkeys(target["prop_ids"] + scene_prop_ids))
+                    valid_scene_props = [item for item in scene_prop_ids if item in available_prop_ids]
+                    unbound_entity_refs.update(str(item) for item in scene_prop_ids if item not in available_prop_ids)
+                    target["prop_ids"] = list(dict.fromkeys(target["prop_ids"] + valid_scene_props))
                 raw_beats = raw_scene.get("beats", [])
                 if not isinstance(raw_beats, list):
                     raise RuntimeError("拍摄计划的 beats 必须是数组。")
@@ -2924,6 +2930,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                         dialogue = raw_shot.get("dialogue", [])
                         if not isinstance(dialogue, list):
                             raise RuntimeError("shot dialogue 必须是数组。")
+                        raw_character_ids = raw_shot.get("character_ids", [])
+                        raw_prop_ids = raw_shot.get("prop_ids", [])
+                        character_ids = [item for item in raw_character_ids if item in available_character_ids] if isinstance(raw_character_ids, list) else []
+                        prop_ids = [item for item in raw_prop_ids if item in available_prop_ids] if isinstance(raw_prop_ids, list) else []
+                        if isinstance(raw_character_ids, list):
+                            unbound_entity_refs.update(str(item) for item in raw_character_ids if item not in available_character_ids)
+                        if isinstance(raw_prop_ids, list):
+                            unbound_entity_refs.update(str(item) for item in raw_prop_ids if item not in available_prop_ids)
                         beat["shots"].append({
                             "shot_id": f"plan-shot-{uuid.uuid4().hex}",
                             "order": shot_index,
@@ -2940,12 +2954,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "duration_seconds": raw_shot.get("duration_seconds"),
                             "dialogue": dialogue,
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
-                            "character_ids": raw_shot.get("character_ids", []),
-                            "prop_ids": raw_shot.get("prop_ids", []),
+                            "character_ids": character_ids,
+                            "prop_ids": prop_ids,
                         })
                     target["beats"].append(beat)
         if not scenes:
             raise RuntimeError("Director shooting-plan analysis returned no scenes")
+        if unbound_entity_refs:
+            unresolved_questions.append("模型返回了未登记实体引用，已忽略：" + ", ".join(sorted(unbound_entity_refs)[:20]))
         plan = DirectorShootingPlan(
             **lineage,
             scenes=scenes,
