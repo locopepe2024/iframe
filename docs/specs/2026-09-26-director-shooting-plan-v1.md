@@ -114,3 +114,7 @@ The primary review surface is a three-lane graph rather than nested drawers:
 The first implementation may use a lightweight DOM graph with semantic connectors. A graph library
 such as XYFlow can be introduced only if pan/zoom, edge editing, or large-plan performance requires
 it; adopting a library is not itself a change to the Director data contract.
+
+## Revision catalog and retrieval boundary
+
+A shooting-plan revision has a lightweight searchable catalog entry: user title, summary, revision, created time, source script revision, source Director revision, structural counts, and content hash. The latest revision is the default. Users may select historical revisions by title, summary, revision, time, or source lineage. Restoring a historical revision creates a new draft revision and never overwrites the original snapshot. This is a structured version index, not an embedding or RAG system.
