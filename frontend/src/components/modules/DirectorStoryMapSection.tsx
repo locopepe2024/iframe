@@ -474,7 +474,16 @@ function StoryMapSection({
             window.removeEventListener("resize", measure);
         };
     }, [viewMode, map?.source_revision, expandedMindMapNodes, mindMapFilter]);
-    const people = map?.people ?? [];
+    const people = useMemo(() => {
+        const generated = makePeople(characters);
+        const existing = map?.people ?? [];
+        if (existing.length === 0) return generated;
+        return existing.map(person => {
+            if (person.variant_character_ids.length > 0) return person;
+            const fallback = generated.find(item => item.person_id === person.person_id);
+            return fallback ? { ...person, variant_character_ids: fallback.variant_character_ids } : person;
+        });
+    }, [characters, map?.people]);
     const phases = (map?.phases ?? []).slice().sort((a, b) => a.order - b.order);
     const allEvents = phases.flatMap(phase => phase.events);
     const characterById = useMemo(() => new Map(characters.map(character => [character.id, character])), [characters]);
@@ -789,6 +798,11 @@ function StoryMapSection({
             label: characterById.get(id)?.name || characterById.get(id)?.persona || person.display_name,
         })));
         const unknownSelectedIds = event.character_ids.filter(id => !possibleVariants.some(item => item.id === id));
+        const inferredIds = possibleVariants
+            .filter(item => !event.character_ids.includes(item.id))
+            .filter(item => [item.label, item.person.display_name, characterById.get(item.id)?.persona || ""]
+                .some(name => name.trim().length > 1 && event.description.includes(name)))
+            .map(item => item.id);
         const selectedFacts = event.source_fact_ids;
         return (
             <article key={event.event_id} className="rounded-md border border-border bg-background/60 p-3">
@@ -827,25 +841,13 @@ function StoryMapSection({
                                 ))}
                                 {unknownSelectedIds.map(id => <span key={id} className="rounded bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">{t("unknownCharacter", { id })}</span>)}
                             </div>
+                            {inferredIds.length > 0 && <button type="button" className="mt-2 rounded border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] text-primary hover:bg-primary/20" onClick={() => updateEvent(phase.phase_id, event.event_id, { character_ids: Array.from(new Set([...event.character_ids, ...inferredIds])) })}>{t("addPeopleFromDescription", { count: inferredIds.length })}</button>}
                         </fieldset>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <EvidenceStatusField value={event.evidence_status} onChange={value => updateEvent(phase.phase_id, event.event_id, { evidence_status: value })} />
-                            <FactPicker
-                                label={t("eventEvidence")}
-                                selectedIds={selectedFacts}
-                                facts={facts}
-                                factLedgerRevision={factLedgerRevision}
-                                mapLedgerRevision={map.fact_ledger_revision}
-                                loading={factsLoading}
-                                onChange={ids => setFactRefs(ids, (nextIds, current) => ({
-                                    ...current,
-                                    phases: current.phases.map(item => item.phase_id === phase.phase_id ? {
-                                        ...item,
-                                        events: item.events.map(candidate => candidate.event_id === event.event_id ? { ...candidate, source_fact_ids: nextIds } : candidate),
-                                    } : item),
-                                }))}
-                            />
-                        </div>
+                        <p className="rounded-md border border-border bg-background/30 px-3 py-2 text-xs text-text-muted">
+                            {selectedFacts.length > 0
+                                ? t("eventSourceLinked", { count: selectedFacts.length, status: t(`evidence.${event.evidence_status}`) })
+                                : t("eventSourceReviewHint", { status: t(`evidence.${event.evidence_status}`) })}
+                        </p>
                     </div>
                 )}
             </article>
@@ -1008,7 +1010,11 @@ function StoryMapSection({
                                                     }
                                                 }} />
                                                 {state && <>
-                                                    <EvidenceStatusField value={state.evidence_status} onChange={next => updateRelationshipState(arc, phase, { evidence_status: next })} />
+                                                    <p className="rounded-md border border-border bg-background/30 px-3 py-2 text-xs text-text-muted">
+                                                        {state.source_fact_ids.length > 0
+                                                            ? t("relationshipSourceLinked", { count: state.source_fact_ids.length, status: t(`evidence.${state.evidence_status}`) })
+                                                            : t("relationshipSourceReviewHint", { status: t(`evidence.${state.evidence_status}`) })}
+                                                    </p>
                                                     {phaseEvents.length > 0 && (
                                                         <fieldset className="space-y-2">
                                                             <legend className="text-xs font-medium text-text-secondary">{t("triggerEvents")}</legend>
@@ -1026,21 +1032,6 @@ function StoryMapSection({
                                                             </div>
                                                         </fieldset>
                                                     )}
-                                                    <FactPicker
-                                                        label={t("relationshipEvidence")}
-                                                        selectedIds={state.source_fact_ids}
-                                                        facts={facts}
-                                                        factLedgerRevision={factLedgerRevision}
-                                                        mapLedgerRevision={map.fact_ledger_revision}
-                                                        loading={factsLoading}
-                                                        onChange={ids => setFactRefs(ids, (nextIds, current) => ({
-                                                            ...current,
-                                                            relationship_arcs: current.relationship_arcs.map(candidate => candidate.relationship_id === arc.relationship_id ? {
-                                                                ...candidate,
-                                                                states: candidate.states.map(candidateState => candidateState.phase_id === phase.phase_id ? { ...candidateState, source_fact_ids: nextIds } : candidateState),
-                                                            } : candidate),
-                                                        }))}
-                                                    />
                                                 </>}
                                             </section>
                                         );

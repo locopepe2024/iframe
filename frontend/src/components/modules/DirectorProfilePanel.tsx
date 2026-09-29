@@ -555,18 +555,25 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                         </section>
                     )}
                     {revisions.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorHistory")}>
-                            <span>{t("directorHistory")}</span>
-                            {revisions.slice().reverse().map(revision => (
-                                <button
-                                    key={`${revision.revision}-${revision.content_hash}`}
-                                    type="button"
-                                    className="rounded border border-border px-2 py-1 hover:border-primary"
-                                    onClick={() => setDraftText(JSON.stringify(revision.profile, null, 2))}
-                                >
-                                    {t("directorRevision", { revision: revision.revision })}
-                                </button>
-                            ))}
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorVersionManagement")}>
+                            <label htmlFor="director-version-management">{t("directorVersionManagement")}</label>
+                            <select
+                                id="director-version-management"
+                                defaultValue=""
+                                onChange={event => {
+                                    const revision = revisions.find(item => String(item.revision) === event.target.value);
+                                    if (revision) setDraftText(JSON.stringify(revision.profile, null, 2));
+                                    event.currentTarget.value = "";
+                                }}
+                                className="min-h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            >
+                                <option value="">{t("directorVersionManagementPlaceholder")}</option>
+                                {revisions.slice().reverse().map(revision => (
+                                    <option key={`${revision.revision}-${revision.content_hash}`} value={revision.revision}>
+                                        {t("directorRevision", { revision: revision.revision })}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     )}
                     {(() => {
