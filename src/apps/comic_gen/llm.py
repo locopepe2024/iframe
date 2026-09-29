@@ -1548,10 +1548,6 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 return f"scene {scene_index + 1} 字段不符合结构"
             if any(key in scene and not isinstance(scene[key], str) for key in ("heading", "location", "time_anchor")):
                 return f"scene {scene_index + 1} 的场景标记、地点和时间必须是字符串"
-            if not nonempty(scene.get("scene_ref")):
-                return f"scene {scene_index + 1} 缺少原文场景标记"
-            if not nonempty(scene.get("environment_atmosphere")):
-                return f"scene {scene_index + 1} 缺少环境氛围"
             if "continues_previous_scene" in scene and not isinstance(scene["continues_previous_scene"], bool):
                 return f"scene {scene_index + 1} continues_previous_scene 必须是布尔值"
             for key in ("continuity_in", "continuity_out"):
@@ -1573,8 +1569,6 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                     return f"scene {scene_index + 1} beat {beat_index + 1} 字段不符合结构"
                 if any(key in beat and not isinstance(beat[key], str) for key in ("emotional_change",)):
                     return f"scene {scene_index + 1} beat {beat_index + 1} 的情绪变化必须是字符串"
-                if not nonempty(beat.get("title")) or not nonempty(beat.get("dramatic_purpose")):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} 缺少标题或戏剧目的"
                 if "duration_seconds" in beat and (not isinstance(beat["duration_seconds"], int) or isinstance(beat["duration_seconds"], bool) or not 1 <= beat["duration_seconds"] <= 300):
                     return f"scene {scene_index + 1} beat {beat_index + 1} duration_seconds 必须是 1–300 的整数"
                 if "keep_with_next" in beat and not isinstance(beat["keep_with_next"], bool):
@@ -1596,26 +1590,19 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
                     if "director_effect" in shot and not isinstance(shot["director_effect"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
-                    required_text = (
-                        "visual_intent", "performance_action", "action_physics",
-                        "shot_size", "camera_angle", "composition", "camera_movement",
-                    )
-                    missing = [key for key in required_text if not nonempty(shot.get(key))]
-                    if missing:
-                        return (
-                            f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} "
-                            f"缺少字段：{', '.join(missing)}"
-                        )
+                    # Shot details are editable downstream. Generation validates shape and types;
+                    # missing creative details remain visible as fields to complete later.
+                    for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
+                        if key in shot and not isinstance(shot[key], str):
+                            return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
                     lighting = shot.get("lighting")
                     if not isinstance(lighting, dict) or set(lighting) != lighting_keys:
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 光影结构无效"
-                    if any(not nonempty(lighting.get(key)) for key in ("key_source", "color_tone", "contrast")):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 光影信息不完整"
                     practical_sources = lighting.get("practical_sources")
                     if not isinstance(practical_sources, list) or any(not isinstance(item, str) for item in practical_sources):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} practical_sources 必须是字符串数组"
                     duration = shot.get("duration_seconds")
-                    if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 30:
+                    if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 30):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 时长必须为 1–30 秒"
                     for key in ("character_ids", "prop_ids"):
                         value = shot.get(key, [])
