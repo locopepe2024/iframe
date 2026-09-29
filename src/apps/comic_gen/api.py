@@ -4870,13 +4870,27 @@ def get_director_profile_draft(
             draft_revision = script.director_profile_draft_revision
             draft_source_revision = script.source_revision
             updated_at = draft.confirmed_at
+    # Older drafts may already contain story-map events but empty storyline
+    # and scene-summary arrays. Normalize on read as well as on save so the
+    # Director editor does not require a second model submission to reveal
+    # structures that can be derived from the existing events.
+    if draft is not None:
+        projected = normalize_director_profile_draft(draft.model_dump(exclude={
+            "revision", "content_hash", "confirmed_at",
+        }))
+        pipeline._bind_director_story_map(
+            script,
+            pipeline.resolve_episode_assets(script),
+            projected,
+        )
+        draft_payload = projected
+    else:
+        draft_payload = None
     return {
         "project_id": script.id,
         "draft_revision": draft_revision,
         "source_revision": draft_source_revision,
-        "draft": draft.model_dump(exclude={
-            "revision", "content_hash", "confirmed_at",
-        }) if draft else None,
+        "draft": draft_payload,
         "updated_at": updated_at,
         "draft_name": script.director_profile_draft_name,
     }
