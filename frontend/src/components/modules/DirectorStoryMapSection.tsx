@@ -196,17 +196,14 @@ export function createDirectorStoryMapFromLegacy(
         phases,
         // Legacy initial/change/final summaries deliberately remain unconverted.
         relationship_arcs: [],
-        // Legacy profiles did not have explicit story_threads. Create one
-        // editable candidate lane from the existing ordered events so the
-        // timeline does not appear to lose its storyline during migration.
         story_threads: allEvents.length > 0 ? [{
             thread_id: createId("thread"),
-            label: "主线",
+            label: "待整理主线",
             person_ids: legacyPeople.map(person => person.person_id),
             milestones: allEvents.map((event, index) => ({
                 event_id: event.event_id,
                 role: index === 0 ? "setup" as const : index === allEvents.length - 1 ? "close" as const : "progress" as const,
-                note: "",
+                note: "由时间线自动整理，需导演审阅",
             })),
         }] : [],
     };
@@ -487,7 +484,6 @@ function StoryMapSection({
     const graphCanvasRef = useRef<HTMLDivElement>(null);
     const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
     const autoSyncedMapRef = useRef<string>("");
-    const autoMigratedThreadsRef = useRef<string>("");
     useLayoutEffect(() => {
         const canvas = graphCanvasRef.current;
         if (!canvas || viewMode !== "graph") return;
@@ -543,25 +539,6 @@ function StoryMapSection({
     }, [map, relationshipPhaseFilter]);
     const staleSource = map !== null && map.source_revision !== sourceRevision;
     const replaceMap = (next: DirectorStoryMap) => onChange({ ...profile, story_map: next });
-    useEffect(() => {
-        if (!map || map.story_threads.length > 0 || allEvents.length === 0) return;
-        const signature = `${map.source_revision}:${allEvents.map(event => event.event_id).join(",")}`;
-        if (autoMigratedThreadsRef.current === signature) return;
-        autoMigratedThreadsRef.current = signature;
-        updateMap(current => current.story_threads.length > 0 ? current : {
-            ...current,
-            story_threads: [{
-                thread_id: createId("thread"),
-                label: "主线",
-                person_ids: current.people.map(person => person.person_id),
-                milestones: allEvents.map((event, index) => ({
-                    event_id: event.event_id,
-                    role: index === 0 ? "setup" as const : index === allEvents.length - 1 ? "close" as const : "progress" as const,
-                    note: "",
-                })),
-            }],
-        });
-    }, [map, allEvents]);
     const updateMap = (updater: (current: DirectorStoryMap) => DirectorStoryMap) => {
         if (!map) return;
         const next = updater(map);
@@ -782,18 +759,7 @@ function StoryMapSection({
     const oldRelationships = rows(profile.relationships).map(asEntry);
     const oldTimeline = rows(profile.timeline).map(asEntry);
     const oldKeyEvents = rows(profile.key_events).map(asEntry);
-    const explicitSceneSummaries = rows(profile.scene_summaries).map(asEntry);
-    const sceneSummaries = explicitSceneSummaries.length > 0
-        ? explicitSceneSummaries
-        : rows(profile.key_events).map((item, index) => {
-            const entry = asEntry(item);
-            return {
-                scene_ref: asText(entry.scene_ref ?? entry.scene ?? entry.event ?? `key-event-${index + 1}`),
-                summary: asText(entry.summary ?? entry.description ?? entry.event ?? ""),
-                state_in: asText(entry.state_in ?? ""),
-                state_out: asText(entry.state_out ?? ""),
-            };
-        });
+    const sceneSummaries = rows(profile.scene_summaries).map(asEntry);
     const updateSceneSummary = (index: number, patch: Draft) => onChange({
         ...profile,
         scene_summaries: sceneSummaries.map((scene, sceneIndex) => sceneIndex === index ? { ...scene, ...patch } : scene),
