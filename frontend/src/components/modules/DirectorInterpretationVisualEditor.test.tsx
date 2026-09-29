@@ -246,6 +246,38 @@ it("selects a relationship edge and edits its state for a specific phase", () =>
     }));
 });
 
+it("filters the relationship graph by phase without changing the story map", () => {
+    const onChange = vi.fn();
+    const secondPhase = {
+        phase_id: "phase-graduation",
+        order: 1,
+        label: "Graduation",
+        time_anchor: "After college",
+        events: [],
+    };
+    const secondArc = {
+        relationship_id: "relationship-secondary",
+        person_ids: ["shen", "zhou"] as [string, string],
+        label: "Former classmates",
+        legacy_summary: "",
+        states: [{
+            phase_id: "phase-graduation",
+            state: "They drift apart",
+            trigger_event_ids: [],
+            source_fact_ids: [],
+            evidence_status: "interpretation" as const,
+        }],
+    };
+    renderEditor({ ...profile, story_map: { ...storyMap, phases: [...storyMap.phases, secondPhase], relationship_arcs: [...storyMap.relationship_arcs, secondArc] } }, onChange);
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+
+    const filter = screen.getByLabelText("Relationship phase");
+    expect(screen.getByRole("group", { name: "Character relationship graph with 2 people and 2 relationships. Select an edge or use the relationship cards below." })).toBeInTheDocument();
+    fireEvent.change(filter, { target: { value: "phase-graduation" } });
+    expect(screen.getByRole("group", { name: "Character relationship graph with 2 people and 1 relationships. Select an edge or use the relationship cards below." })).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+});
+
 it("keeps event source review in the single read-only source panel and adds an event to a story thread lane", () => {
     const onChange = vi.fn();
     renderEditor({ ...profile, story_map: storyMap }, onChange, [fact]);

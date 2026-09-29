@@ -1383,6 +1383,8 @@
         "relationshipsHint": "选择图中的关系连线或下方关系卡片，再编辑各阶段的关系状态。触发事件必须属于同一阶段。",
         "relationshipPersonA": "第一位人物",
         "relationshipPersonB": "第二位人物",
+        "relationshipPhaseFilter": "关系阶段",
+        "relationshipAllPhases": "全部阶段",
         "choosePerson": "选择人物",
         "addRelationship": "添加关系",
         "relationshipGraphDescription": "人物关系图包含 {people} 位人物和 {relationships} 组关系。可选择连线，也可在下方关系卡片中编辑。",

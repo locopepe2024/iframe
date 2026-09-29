@@ -457,6 +457,7 @@ function StoryMapSection({
     const suppressedAutoPeople = useRef(new Set<string>());
     const [relationshipPeople, setRelationshipPeople] = useState<[string, string]>(["", ""]);
     const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
+    const [relationshipPhaseFilter, setRelationshipPhaseFilter] = useState("");
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
     const [mindMapFilter, setMindMapFilter] = useState<"all" | "review">("all");
@@ -521,6 +522,10 @@ function StoryMapSection({
     const phases = (map?.phases ?? []).slice().sort((a, b) => a.order - b.order);
     const allEvents = phases.flatMap(phase => phase.events);
     const characterById = useMemo(() => new Map(characters.map(character => [character.id, character])), [characters]);
+    const filteredRelationshipArcs = useMemo(() => {
+        if (!relationshipPhaseFilter || !map) return map?.relationship_arcs ?? [];
+        return map.relationship_arcs.filter(arc => arc.states.some(state => state.phase_id === relationshipPhaseFilter));
+    }, [map, relationshipPhaseFilter]);
     const staleSource = map !== null && map.source_revision !== sourceRevision;
     const replaceMap = (next: DirectorStoryMap) => onChange({ ...profile, story_map: next });
     const updateMap = (updater: (current: DirectorStoryMap) => DirectorStoryMap) => {
@@ -1040,6 +1045,13 @@ function StoryMapSection({
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                         <label className="space-y-1.5">
+                            <span className="block text-[10px] text-text-secondary">{t("relationshipPhaseFilter")}</span>
+                            <select aria-label={t("relationshipPhaseFilter")} value={relationshipPhaseFilter} onChange={event => setRelationshipPhaseFilter(event.target.value)} className="max-w-52 rounded-md border border-border bg-background px-2 py-2 text-xs text-foreground">
+                                <option value="">{t("relationshipAllPhases")}</option>
+                                {phases.map(phase => <option key={phase.phase_id} value={phase.phase_id}>{phase.label || t("unnamedPhase")}</option>)}
+                            </select>
+                        </label>
+                        <label className="space-y-1.5">
                             <span className="block text-[10px] text-text-secondary">{t("relationshipPersonA")}</span>
                             <select aria-label={t("relationshipPersonA")} value={relationshipPeople[0]} onChange={event => setRelationshipPeople([event.target.value, relationshipPeople[1]])} className="max-w-44 rounded-md border border-border bg-background px-2 py-2 text-xs text-foreground">
                                 <option value="">{t("choosePerson")}</option>
@@ -1060,8 +1072,9 @@ function StoryMapSection({
                 {people.length >= 2 && (
                     <RelationshipGraph
                         people={people}
-                        arcs={map.relationship_arcs}
-                        selectedId={selectedRelationshipId || map.relationship_arcs[0]?.relationship_id || ""}
+                        arcs={filteredRelationshipArcs}
+                        selectedId={selectedRelationshipId || filteredRelationshipArcs[0]?.relationship_id || ""}
+                        phaseId={relationshipPhaseFilter}
                         onSelect={relationshipId => {
                             setSelectedRelationshipId(relationshipId);
                             setViewMode("editor");
@@ -1264,12 +1277,14 @@ function RelationshipGraph({
     people,
     arcs,
     selectedId,
+    phaseId,
     onSelect,
     t,
 }: {
     people: DirectorStoryPerson[];
     arcs: DirectorRelationshipArc[];
     selectedId: string;
+    phaseId?: string;
     onSelect: (relationshipId: string) => void;
     t: (key: string, values?: Record<string, string | number>) => string;
 }) {
@@ -1295,6 +1310,7 @@ function RelationshipGraph({
                     const midX = (from.x + to.x) / 2;
                     const midY = (from.y + to.y) / 2 + (index % 2 === 0 ? -7 : 7);
                     const label = relationshipLabel(arc, people);
+                    const state = phaseId ? arc.states.find(item => item.phase_id === phaseId)?.state : "";
                     return (
                         <g key={arc.relationship_id} role="button" tabIndex={0} aria-label={t("selectRelationship", { relationship: label })} onClick={() => onSelect(arc.relationship_id)} onKeyDown={event => {
                             if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(arc.relationship_id); }
@@ -1302,6 +1318,7 @@ function RelationshipGraph({
                             <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="transparent" strokeWidth="18" />
                             <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={active ? "#818cf8" : "#64748b"} strokeOpacity={active ? "0.9" : "0.62"} strokeWidth={active ? "3" : "2"} />
                             {arc.label && <text x={midX} y={midY} textAnchor="middle" className="fill-text-secondary text-[9px]">{arc.label.slice(0, 22)}</text>}
+                            {state && <text x={midX} y={midY + 13} textAnchor="middle" className="fill-text-muted text-[8px]">{state.slice(0, 28)}</text>}
                         </g>
                     );
                 })}

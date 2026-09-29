@@ -1384,6 +1384,8 @@
         "relationshipsHint": "Select an edge or relationship card, then edit its state for each phase. Trigger events must belong to that same phase.",
         "relationshipPersonA": "First person",
         "relationshipPersonB": "Second person",
+        "relationshipPhaseFilter": "Relationship phase",
+        "relationshipAllPhases": "All phases",
         "choosePerson": "Choose a person",
         "addRelationship": "Add relationship",
         "relationshipGraphDescription": "Character relationship graph with {people} people and {relationships} relationships. Select an edge or use the relationship cards below.",
