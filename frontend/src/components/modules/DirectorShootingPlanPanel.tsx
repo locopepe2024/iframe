@@ -190,7 +190,7 @@ function ShotFlowMap({
                         </div>
                         <div className="min-w-0">
                             <p className="text-xs font-medium uppercase tracking-wide text-primary">{labels.scene}</p>
-                            <p className="truncate text-sm font-semibold text-foreground">{scene.scene_ref || labels.untitledScene}</p>
+                            <p className="truncate text-sm font-semibold text-foreground">{scene.heading || scene.scene_ref || labels.untitledScene}</p>
                         </div>
                     </div>
                     <div className="ml-4 space-y-3 border-l-2 border-primary/30 pl-4 sm:ml-5 sm:pl-6">
@@ -547,7 +547,7 @@ export default function DirectorShootingPlanPanel() {
                                 return (
                                     <li key={scene.scene_id} className="min-w-0 rounded-md border border-border bg-surface p-3">
                                         <p className="truncate text-xs font-semibold text-text-muted">{t("sceneNumber", { number: index + 1 })}</p>
-                                        <p className="mt-1 truncate text-sm font-medium text-foreground">{scene.scene_ref || t("unnamedScene")}</p>
+                                        <p className="mt-1 truncate text-sm font-medium text-foreground">{scene.heading || scene.scene_ref || t("unnamedScene")}</p>
                                         <p className="mt-1 text-xs text-text-secondary">{t("sceneTimelineCounts", { beats: scene.beats.length, shots: shotsByScene[index], duration: durationByScene[index] })}</p>
                                         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background" aria-label={t("sceneTimelineDuration", { percent })}>
                                             <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
@@ -615,7 +615,7 @@ export default function DirectorShootingPlanPanel() {
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/60 px-4 py-3">
                                     <div className="min-w-0">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t("sceneNumber", { number: sceneIndex + 1 })}</p>
-                                        <h3 id={`director-plan-scene-${scene.scene_id}`} className="mt-1 truncate text-base font-semibold text-foreground">{scene.scene_ref || t("unnamedScene")}</h3>
+                                        <h3 id={`director-plan-scene-${scene.scene_id}`} className="mt-1 truncate text-base font-semibold text-foreground">{scene.heading || scene.scene_ref || t("unnamedScene")}</h3>
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: reindex(moveItem(current.scenes, sceneIndex, -1)) }))} disabled={locked || sceneIndex === 0} aria-label={t("moveSceneUp", { number: sceneIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronUp size={16} aria-hidden="true" /></button>
@@ -625,8 +625,8 @@ export default function DirectorShootingPlanPanel() {
                                 </div>
                                 <div className="space-y-5 p-4">
                                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                        <Field label={t("fields.sceneRef")} value={scene.scene_ref} placeholder={t("fields.sceneRefPlaceholder")} hint={t("fields.sceneRefHint")} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
-                                        <Field label={t("fields.heading")} value={scene.heading} onChange={value => updateScene(sceneIndex, { heading: value })} />
+                                        <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
+                                        <Field label={t("fields.heading")} value={scene.heading} placeholder={t("fields.headingPlaceholder")} hint={t("fields.headingHint")} onChange={value => updateScene(sceneIndex, { heading: value })} />
                                         <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
                                         <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
