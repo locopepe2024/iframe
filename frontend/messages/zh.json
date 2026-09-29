@@ -1324,6 +1324,7 @@
         "unnamedEvent": "未命名事件",
         "invalidMap": "高级 JSON 中的故事地图结构不完整或格式错误。请先修复结构，再使用可视化编辑器。",
         "mapHint": "导演故事结构统一保存在一份地图中。修改先进入草稿，采用当前 Director 理解后才会用于拍摄计划。",
+        "draftSaveHint": "这里的修改先保存在当前草稿；完成后请使用页面底部“保存草稿”。只有“采用当前 Director 理解”后才会影响拍摄计划。",
         "sourceRevision": "剧本 v{revision}",
         "staleSource": "这份地图绑定剧本 v{mapRevision}；当前剧本为 v{currentRevision}。",
         "reloadEvidence": "重新加载证据",

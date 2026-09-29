@@ -1323,6 +1323,7 @@
         "unnamedEvent": "Untitled event",
         "invalidMap": "The story map in Advanced JSON is incomplete or malformed. Repair its structure there before editing the visual map.",
         "mapHint": "Edit the Director's story structure in one source map. Changes remain a draft until you adopt the current Director interpretation, then they can drive the shooting plan.",
+        "draftSaveHint": "These edits stay in the current draft first. Use “Save draft” at the bottom when finished; they affect the shooting plan only after adopting the current Director interpretation.",
         "sourceRevision": "Script v{revision}",
         "staleSource": "This map uses script v{mapRevision}; current script is v{currentRevision}.",
         "reloadEvidence": "Reload evidence",

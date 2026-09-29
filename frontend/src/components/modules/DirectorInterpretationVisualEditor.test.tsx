@@ -163,6 +163,17 @@ it("builds an explicit story map from a legacy timeline without inventing phase 
     expect(result.people).toEqual(people);
     expect(result.phases[0].events[0].evidence_status).toBe("interpretation");
     expect(result.relationship_arcs).toEqual([]);
+    expect(result.story_threads[0]).toEqual(expect.objectContaining({
+        label: "主线",
+        milestones: [expect.objectContaining({ event_id: result.phases[0].events[0].event_id, role: "setup" })],
+    }));
+});
+
+it("projects legacy key events into the editable scene analysis surface", () => {
+    const onChange = vi.fn();
+    renderEditor({ ...profile, story_map: storyMap, scene_summaries: undefined }, onChange);
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+    expect(screen.getByLabelText("Scene summary")).toHaveValue("Leaving");
 });
 
 it("edits scene analysis summaries without changing the story map or unknown fields", () => {

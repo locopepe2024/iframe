@@ -184,17 +184,31 @@ export function createDirectorStoryMapFromLegacy(
             events: legacyEvents(sourceEvents),
         };
     });
+    const allEvents = phases.flatMap(phase => phase.events);
+    const legacyPeople = makePeople(characters);
     return {
         schema_version: 1,
         source_revision: sourceRevision,
         // The server binds the stable source identity when this user-created map is saved.
         source_revision_id: "",
         fact_ledger_revision: null,
-        people: makePeople(characters),
+        people: legacyPeople,
         phases,
         // Legacy initial/change/final summaries deliberately remain unconverted.
         relationship_arcs: [],
-        story_threads: [],
+        // Legacy profiles did not have explicit story_threads. Create one
+        // editable candidate lane from the existing ordered events so the
+        // timeline does not appear to lose its storyline during migration.
+        story_threads: allEvents.length > 0 ? [{
+            thread_id: createId("thread"),
+            label: "主线",
+            person_ids: legacyPeople.map(person => person.person_id),
+            milestones: allEvents.map((event, index) => ({
+                event_id: event.event_id,
+                role: index === 0 ? "setup" as const : index === allEvents.length - 1 ? "close" as const : "progress" as const,
+                note: "",
+            })),
+        }] : [],
     };
 }
 
@@ -473,6 +487,7 @@ function StoryMapSection({
     const graphCanvasRef = useRef<HTMLDivElement>(null);
     const [graphEdges, setGraphEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
     const autoSyncedMapRef = useRef<string>("");
+    const autoMigratedThreadsRef = useRef<string>("");
     useLayoutEffect(() => {
         const canvas = graphCanvasRef.current;
         if (!canvas || viewMode !== "graph") return;
@@ -528,6 +543,25 @@ function StoryMapSection({
     }, [map, relationshipPhaseFilter]);
     const staleSource = map !== null && map.source_revision !== sourceRevision;
     const replaceMap = (next: DirectorStoryMap) => onChange({ ...profile, story_map: next });
+    useEffect(() => {
+        if (!map || map.story_threads.length > 0 || allEvents.length === 0) return;
+        const signature = `${map.source_revision}:${allEvents.map(event => event.event_id).join(",")}`;
+        if (autoMigratedThreadsRef.current === signature) return;
+        autoMigratedThreadsRef.current = signature;
+        updateMap(current => current.story_threads.length > 0 ? current : {
+            ...current,
+            story_threads: [{
+                thread_id: createId("thread"),
+                label: "主线",
+                person_ids: current.people.map(person => person.person_id),
+                milestones: allEvents.map((event, index) => ({
+                    event_id: event.event_id,
+                    role: index === 0 ? "setup" as const : index === allEvents.length - 1 ? "close" as const : "progress" as const,
+                    note: "",
+                })),
+            }],
+        });
+    }, [map, allEvents]);
     const updateMap = (updater: (current: DirectorStoryMap) => DirectorStoryMap) => {
         if (!map) return;
         const next = updater(map);
@@ -748,7 +782,18 @@ function StoryMapSection({
     const oldRelationships = rows(profile.relationships).map(asEntry);
     const oldTimeline = rows(profile.timeline).map(asEntry);
     const oldKeyEvents = rows(profile.key_events).map(asEntry);
-    const sceneSummaries = rows(profile.scene_summaries).map(asEntry);
+    const explicitSceneSummaries = rows(profile.scene_summaries).map(asEntry);
+    const sceneSummaries = explicitSceneSummaries.length > 0
+        ? explicitSceneSummaries
+        : rows(profile.key_events).map((item, index) => {
+            const entry = asEntry(item);
+            return {
+                scene_ref: asText(entry.scene_ref ?? entry.scene ?? entry.event ?? `key-event-${index + 1}`),
+                summary: asText(entry.summary ?? entry.description ?? entry.event ?? ""),
+                state_in: asText(entry.state_in ?? ""),
+                state_out: asText(entry.state_out ?? ""),
+            };
+        });
     const updateSceneSummary = (index: number, patch: Draft) => onChange({
         ...profile,
         scene_summaries: sceneSummaries.map((scene, sceneIndex) => sceneIndex === index ? { ...scene, ...patch } : scene),
@@ -957,6 +1002,7 @@ function StoryMapSection({
                     <div>
                         <h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3>
                         <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("mapHint")}</p>
+                        <p className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] leading-5 text-text-secondary">{t("draftSaveHint")}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                             <span className="rounded bg-primary/10 px-2 py-1 text-primary">{t("sourceRevision", { revision: map.source_revision })}</span>
                             {map.fact_ledger_revision !== null && <span className="rounded bg-background px-2 py-1 text-text-secondary">{t("pinnedLedger", { revision: map.fact_ledger_revision })}</span>}
