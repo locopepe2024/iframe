@@ -197,6 +197,8 @@ export async function saveDirectorShootingPlanDraft(
     sourceRevision: number,
     expectedDraftRevision: number,
     plan: DirectorShootingPlan,
+    userTitle = "",
+    summary = "",
 ) {
     const response = await axios.put<DirectorShootingPlanDraftSaveResult>(
         `${baseUrl}/projects/${projectId}/director-shooting-plan/draft`,
@@ -204,6 +206,8 @@ export async function saveDirectorShootingPlanDraft(
             source_revision: sourceRevision,
             expected_draft_revision: expectedDraftRevision,
             plan,
+            user_title: userTitle,
+            summary,
         },
     );
     return response.data;
@@ -215,6 +219,8 @@ export async function confirmDirectorShootingPlan(
     expectedCurrentRevision: number,
     expectedDraftRevision: number,
     plan: DirectorShootingPlan,
+    userTitle = "",
+    summary = "",
 ) {
     const response = await axios.post<DirectorShootingPlanConfirmResult>(
         `${baseUrl}/projects/${projectId}/director-shooting-plan/confirm`,
@@ -222,6 +228,8 @@ export async function confirmDirectorShootingPlan(
             expected_current_revision: expectedCurrentRevision,
             expected_draft_revision: expectedDraftRevision,
             plan,
+            user_title: userTitle,
+            summary,
         },
     );
     return response.data;

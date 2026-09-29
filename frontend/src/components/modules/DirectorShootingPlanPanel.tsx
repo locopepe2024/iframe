@@ -255,6 +255,8 @@ export default function DirectorShootingPlanPanel() {
     const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
+    const [revisionTitle, setRevisionTitle] = useState("");
+    const [revisionSummary, setRevisionSummary] = useState("");
 
     const sourceRevision = currentProject?.source_revision ?? 1;
     const styleToken = JSON.stringify(currentProject?.art_direction?.style_config ?? {
@@ -407,6 +409,8 @@ export default function DirectorShootingPlanPanel() {
                 serverState?.current_revision ?? 0,
                 serverState?.draft_revision ?? 0,
                 plan,
+                revisionTitle,
+                revisionSummary,
             );
             setNotice(t("confirmed", { revision: result.current_revision }));
             await load();
@@ -793,6 +797,10 @@ export default function DirectorShootingPlanPanel() {
                         <div className="flex items-center gap-2 text-sm text-text-secondary">
                             {dirty ? <AlertCircle size={16} className="text-amber-300" aria-hidden="true" /> : <Check size={16} className="text-emerald-300" aria-hidden="true" />}
                             <span>{dirty ? t("unsaved") : t("savedDraft", { revision: serverState?.draft_revision ?? 0 })}</span>
+                        </div>
+                        <div className="flex min-w-[18rem] flex-1 flex-wrap gap-2">
+                            <input value={revisionTitle} onChange={event => setRevisionTitle(event.target.value)} placeholder={t("revisionTitlePlaceholder")} aria-label={t("revisionTitle")} className="min-h-9 min-w-48 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground" />
+                            <input value={revisionSummary} onChange={event => setRevisionSummary(event.target.value)} placeholder={t("revisionSummaryPlaceholder")} aria-label={t("revisionSummary")} className="min-h-9 min-w-56 flex-[2] rounded-md border border-border bg-background px-2 text-xs text-foreground" />
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}

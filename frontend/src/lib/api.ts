@@ -1188,8 +1188,10 @@ export const api = {
         expectedCurrentRevision: number,
         expectedDraftRevision: number,
         plan: DirectorShootingPlan,
+        userTitle?: string,
+        summary?: string,
     ) => confirmDirectorShootingPlan(
-        API_URL, scriptId, expectedCurrentRevision, expectedDraftRevision, plan,
+        API_URL, scriptId, expectedCurrentRevision, expectedDraftRevision, plan, userTitle, summary,
     ),
 
     listDirectorShootingPlanRevisions: (scriptId: string) =>
