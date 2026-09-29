@@ -1476,6 +1476,7 @@
         "chooseEvent": "Choose an event",
         "needPhasesForStorylines": "Add phases and events before placing storyline milestones.",
         "noStorylines": "No explicit storyline yet. Add one from the timeline events.",
+        "createStorylineFromTimeline": "Create a reviewable storyline from the timeline",
         "legacyDataTitle": "Earlier Director summaries",
         "legacyDataHint": "These entries are preserved as legacy summaries. They were not converted into stage specific facts or relationship states.",
         "confirmDeletePhase": "Delete the phase {phase}? Its relationship states and storyline milestones will also be removed.",

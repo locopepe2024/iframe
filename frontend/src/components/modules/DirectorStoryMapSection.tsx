@@ -747,6 +747,23 @@ function StoryMapSection({
             thread_id: createId("thread"), label: "", person_ids: [], milestones: [],
         }],
     }));
+    const addSuggestedThread = () => updateMap(current => {
+        const events = current.phases.slice().sort((a, b) => a.order - b.order).flatMap(phase => phase.events.slice().sort((a, b) => a.order - b.order));
+        if (events.length === 0 || current.story_threads.length > 0) return current;
+        return {
+            ...current,
+            story_threads: [{
+                thread_id: createId("thread"),
+                label: "待整理主线",
+                person_ids: current.people.map(person => person.person_id),
+                milestones: events.map((event, index) => ({
+                    event_id: event.event_id,
+                    role: index === 0 ? "setup" as const : index === events.length - 1 ? "close" as const : "progress" as const,
+                    note: "由时间线自动整理，需导演审阅",
+                })),
+            }],
+        };
+    });
     const updateThread = (thread: DirectorStoryThread, patch: Partial<DirectorStoryThread>) => updateMap(current => ({
         ...current,
         story_threads: current.story_threads.map(item => item.thread_id === thread.thread_id ? { ...item, ...patch } : item),
@@ -1254,7 +1271,7 @@ function StoryMapSection({
                             </div>
                         </article>
                     ))}
-                    {map.story_threads.length === 0 && <p className="text-xs text-text-muted">{t("noStorylines")}</p>}
+                    {map.story_threads.length === 0 && <div className="rounded-md border border-dashed border-border p-3 text-xs text-text-muted"><p>{t("noStorylines")}</p>{allEvents.length > 0 && <button type="button" onClick={addSuggestedThread} className="mt-2 rounded border border-primary/40 px-2.5 py-1.5 text-[11px] text-primary hover:bg-primary/10">{t("createStorylineFromTimeline")}</button>}</div>}
                 </div>}
             </section>
 

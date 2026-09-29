@@ -1477,6 +1477,7 @@
         "chooseEvent": "选择事件",
         "needPhasesForStorylines": "请先添加阶段和事件，再放置剧情线里程碑。",
         "noStorylines": "还没有明确的剧情线。可以从时间线事件添加一条剧情线。",
+        "createStorylineFromTimeline": "从时间线创建待整理主线",
         "legacyDataTitle": "旧版 Director 摘要",
         "legacyDataHint": "这些条目以旧摘要形式保留，没有自动转换为阶段事实或关系状态。",
         "confirmDeletePhase": "删除阶段“{phase}”吗？该阶段的关系状态和剧情线里程碑也会一并删除。",
