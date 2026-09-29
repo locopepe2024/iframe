@@ -2820,6 +2820,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 previous_scene = None
                 if scenes:
                     last = scenes[-1]
+                    recent_character_ids = []
+                    recent_prop_ids = []
+                    for prior_beat in last.get("beats", [])[-2:]:
+                        for prior_shot in prior_beat.get("shots", [])[-4:]:
+                            for value in prior_shot.get("character_ids", []):
+                                if value not in recent_character_ids:
+                                    recent_character_ids.append(value)
+                            for value in prior_shot.get("prop_ids", []):
+                                if value not in recent_prop_ids:
+                                    recent_prop_ids.append(value)
                     previous_scene = {
                         "scene_ref": last["scene_ref"],
                         "heading": last["heading"],
@@ -2827,6 +2837,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "time_anchor": last["time_anchor"],
                         "environment_atmosphere": last["environment_atmosphere"],
                         "last_beat": last["beats"][-1]["title"] if last["beats"] else "",
+                        # Explicit handoff state keeps the next chunk grounded
+                        # without resending the entire accumulated plan. This
+                        # is continuity memory, not a new screenplay fact.
+                        "continuity_out": last.get("continuity_out", ""),
+                        "recent_character_ids": recent_character_ids[:40],
+                        "recent_prop_ids": recent_prop_ids[:40],
+                        "unresolved_questions": last.get("unresolved_questions", [])[:20],
                     }
                 chunk_result = self.script_processor.plan_director_shooting_chunk(
                     chunk["text"],

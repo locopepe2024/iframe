@@ -1,5 +1,6 @@
 import hashlib
 import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -1166,6 +1167,41 @@ def test_long_director_source_uses_source_digest_and_reuses_map_cache():
         ["强化首尾框架的样片节奏"],
     )
     assert len(calls) == map_call_count + 2
+
+
+def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+    source = "".join(f"第{i}段：连续性测试。\n" for i in range(2400))
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def chat_side_effect(**kwargs):
+        nonlocal active, peak
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_chunk" not in prompt:
+            return json.dumps(profile_payload(), ensure_ascii=False)
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.01)
+        marker = prompt.split("<source_chunk", 1)[1].split(">", 1)[0]
+        with lock:
+            active -= 1
+        return json.dumps({
+            "summary": marker,
+            "continuity_in": "",
+            "continuity_out": marker,
+        }, ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    digest = processor._director_source_digest(source)
+    payload = json.loads(digest[len("<source_digest>"):-len("</source_digest>")])
+    refs = [item["source_ref"] for item in payload["chunk_summaries"]]
+    assert peak > 1
+    assert refs == [chunk["source_ref"] for chunk in split_director_source(source)]
 
 
 def test_long_source_map_response_keeps_server_owned_source_ranges():

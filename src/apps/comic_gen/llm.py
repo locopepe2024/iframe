@@ -6,6 +6,7 @@ import uuid
 import logging
 import traceback
 import re
+from concurrent.futures import ThreadPoolExecutor
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 
@@ -940,8 +941,8 @@ class ScriptProcessor:
             # direct threshold, but it keeps the helper safe when used alone.
             return text
 
-        notes: List[Dict[str, Any]] = []
-        for index, chunk in enumerate(chunks, start=1):
+        def map_chunk(item: tuple[int, Dict[str, Any]]) -> Dict[str, Any]:
+            index, chunk = item
             note_prompt = f"""你是长篇剧本的连续性编辑。只分析下面一个来源片段，不能调用片段之外的信息，也不能补写剧情。
 输出纯 JSON 对象，不要 Markdown：
 {{
@@ -956,19 +957,34 @@ class ScriptProcessor:
 <source_chunk source_ref="{chunk['source_ref']}" chunk_number="{index}/{len(chunks)}" char_start="{chunk['char_start']}" char_end="{chunk['char_end']}">
 {chunk['text']}
 </source_chunk>"""
-            content = self.llm.chat(
-                messages=[{"role": "user", "content": note_prompt}],
-                response_format={"type": "json_object"},
-                timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
-                max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-            ).strip()
+            try:
+                content = self.llm.chat(
+                    messages=[{"role": "user", "content": note_prompt}],
+                    response_format={"type": "json_object"},
+                    timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                    max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                ).strip()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"长文本 Director 分块 {chunk['source_ref']} 请求失败：{exc}"
+                ) from exc
             try:
                 payload = json.loads(_strip_markdown_json(content))
             except json.JSONDecodeError as exc:
                 raise RuntimeError(
                     f"长文本 Director 分块 {chunk['source_ref']} 摘要格式错误: {exc}"
                 ) from exc
-            notes.append(self._normalize_director_source_note(payload, chunk))
+            return self._normalize_director_source_note(payload, chunk)
+
+        # Chunk summaries are independent map operations. Run a small bounded
+        # pool so a long source does not add one full provider wait per chunk;
+        # collect futures in source order so the digest remains deterministic.
+        worker_count = min(4, len(chunks))
+        with ThreadPoolExecutor(
+            max_workers=worker_count, thread_name_prefix="director-source-map"
+        ) as executor:
+            mapped = list(executor.map(map_chunk, enumerate(chunks, start=1)))
+        notes: List[Dict[str, Any]] = mapped
 
         anchor_limit = DIRECTOR_SOURCE_ANCHOR_MAX_CHARS
         head_end = min(len(text), anchor_limit)
@@ -1669,6 +1685,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 <confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <previous_scene_handoff>{_prompt_json(previous_scene or {})}</previous_scene_handoff>
+上一段 handoff 仅用于连续性：如果当前片段开头确实承接上一场，复用其中的时空、人物/道具状态和 continuity_out；如果没有明确承接证据，必须开始新场景。不要因为地点名称相同而续接，也不要把 handoff 中的 unresolved refs 当作已登记实体。
 {retry_note}"""
             content = self.llm.chat(
                 messages=[{"role": "system", "content": prompt},
