@@ -662,6 +662,15 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                         </p>
                         <div className="flex items-center gap-2">
                             <WorkflowActionButton
+                                variant="secondary"
+                                leftIcon={<Save />}
+                                loading={busy === "save"}
+                                disabled={busy !== null || !needsDraftSave || hasStaleDraft}
+                                onClick={saveDraft}
+                            >
+                                {t("directorSaveDraft")}
+                            </WorkflowActionButton>
+                            <WorkflowActionButton
                                 leftIcon={<Check />}
                                 loading={busy === "apply"}
                                 disabled={busy !== null || hasStaleDraft || (!needsDraftSave && draftRevision === 0)}
