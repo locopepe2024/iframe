@@ -1684,6 +1684,13 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             except json.JSONDecodeError as exc:
                 last_error = f"JSON 格式错误：{exc}"
             else:
+                # Models may omit an otherwise empty ambient-sound field or return null/non-string.
+                # Normalize only this explicitly optional field; keep all core shot fields strict.
+                for scene in result.get("scenes", []) if isinstance(result, dict) else []:
+                    for beat in scene.get("beats", []) if isinstance(scene, dict) else []:
+                        for shot in beat.get("shots", []) if isinstance(beat, dict) else []:
+                            if isinstance(shot, dict) and (not isinstance(shot.get("ambient_sound"), str) or not shot.get("ambient_sound", "").strip()):
+                                shot["ambient_sound"] = "无明确环境声"
                 last_error = self._validate_director_shooting_chunk(result) or ""
                 if not last_error:
                     return result
