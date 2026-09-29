@@ -129,19 +129,19 @@ export function inferEventCharacterIds(description: string, phaseLabel: string, 
     for (const person of people) {
         const variants = person.variant_character_ids.filter(id => byId.has(id));
         const explicit = variants.filter(id => {
-            const character = byId.get(id);
-            const names = [character?.name ?? "", character?.persona ?? "", person.display_name]
-                .map(name => name.trim()).filter(name => name.length > 1);
-            return names.some(name => description.includes(name));
+            const name = byId.get(id)?.name?.trim() ?? "";
+            return name.length > 1 && name !== person.display_name && description.includes(name);
         });
         const phaseMatches = variants.filter(id => {
             const name = byId.get(id)?.name ?? "";
-            return phaseKey.length > 0 && normalize(name).includes(phaseKey);
+            return phaseKey.length > 0 && name.includes(phaseLabel) && normalize(name) === normalize(person.display_name);
         });
+        const baseNamed = [person.display_name, ...variants.map(id => byId.get(id)?.persona ?? "")]
+            .some(name => name.length > 1 && description.includes(name));
         const selected = explicit.length === 1 ? explicit[0]
             : explicit.length > 1 ? null
-            : description.includes(person.display_name) && variants.length === 1 ? variants[0]
-            : description.includes(person.display_name) && phaseMatches.length === 1 ? phaseMatches[0]
+            : baseNamed && variants.length === 1 ? variants[0]
+            : baseNamed && phaseMatches.length === 1 ? phaseMatches[0]
             : null;
         if (selected) result.push(selected);
     }
