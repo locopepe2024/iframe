@@ -1537,7 +1537,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             "title", "visual_intent", "director_effect", "performance_action", "action_physics",
             "shot_size", "camera_angle", "composition", "camera_movement",
             "lighting", "duration_seconds", "dialogue", "ambient_sound",
-            "character_ids", "prop_ids",
+            "character_ids", "prop_ids", "unresolved_entity_refs",
         }
         lighting_keys = {"key_source", "color_tone", "contrast", "practical_sources"}
 

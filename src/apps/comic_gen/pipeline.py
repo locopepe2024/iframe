@@ -2934,10 +2934,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                         raw_prop_ids = raw_shot.get("prop_ids", [])
                         character_ids = [item for item in raw_character_ids if item in available_character_ids] if isinstance(raw_character_ids, list) else []
                         prop_ids = [item for item in raw_prop_ids if item in available_prop_ids] if isinstance(raw_prop_ids, list) else []
+                        unresolved_entity_refs = []
                         if isinstance(raw_character_ids, list):
-                            unbound_entity_refs.update(str(item) for item in raw_character_ids if item not in available_character_ids)
+                            unresolved_entity_refs.extend(f"character:{item}" for item in raw_character_ids if item not in available_character_ids)
                         if isinstance(raw_prop_ids, list):
-                            unbound_entity_refs.update(str(item) for item in raw_prop_ids if item not in available_prop_ids)
+                            unresolved_entity_refs.extend(f"prop:{item}" for item in raw_prop_ids if item not in available_prop_ids)
+                        unbound_entity_refs.update(unresolved_entity_refs)
                         beat["shots"].append({
                             "shot_id": f"plan-shot-{uuid.uuid4().hex}",
                             "order": shot_index,
@@ -2956,6 +2958,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
                             "character_ids": character_ids,
                             "prop_ids": prop_ids,
+                            "unresolved_entity_refs": unresolved_entity_refs,
                         })
                     target["beats"].append(beat)
         if not scenes:

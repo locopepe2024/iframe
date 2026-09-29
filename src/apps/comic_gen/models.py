@@ -1000,6 +1000,7 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     ambient_sound: str = Field("", max_length=1000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
     prop_ids: List[str] = Field(default_factory=list, max_length=20)
+    unresolved_entity_refs: List[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def validate_character_ids(self):

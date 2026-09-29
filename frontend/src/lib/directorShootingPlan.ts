@@ -30,6 +30,7 @@ export interface DirectorPlanShot {
     ambient_sound: string;
     character_ids: string[];
     prop_ids: string[];
+    unresolved_entity_refs?: string[];
 }
 
 export interface DirectorPlanBeat {
