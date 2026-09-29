@@ -319,3 +319,41 @@ The workbench must always show these actions separately:
 `导演问题 / 待确认` is a visible editable domain. Existing unresolved questions are displayed there; an answer becomes a draft edit and a new question can be added. If the domain is empty, the UI still shows the add action and explains that user decisions can be entered manually. `剧情线` and `场景分析` are analysis projections: empty means the current analysis did not return those structures, not that the user should edit the original script.
 
 The overview fields are therefore not a hidden autosave surface. They belong to the editable draft only, and the visible Save draft action must remain available whenever the draft is dirty. The original script and its fact evidence stay read-only.
+
+## 2026-09-30 decision: manual Director edits do not trigger re-analysis
+
+The workbench uses two separate kinds of change.
+
+### A. Manual Director revision (no model call)
+
+The user may directly edit the Director draft in these domains:
+
+- story and Director overview: setting, era, social context and regional visual constraints;
+- story timeline and events;
+- people, relationship states and plot threads;
+- scene analysis and continuity notes;
+- Director questions / open decisions.
+
+These edits are Director decisions, not corrections to the screenplay. They update the draft only. Saving them creates or updates a recoverable draft snapshot; it does not run Director analysis, create a new confirmed revision, or change the script source revision. The user can confirm the current Director understanding directly when the edits are ready.
+
+### B. Explicit model re-analysis (model call)
+
+The model is called only when the user clicks **重新分析** or **继续修订** and submits an instruction. The instruction chooses local or full scope. The result is a candidate that must be reviewed and accepted into the draft; it is not an automatic replacement. A local revision is still a model proposal, while a direct field edit remains the user's own decision.
+
+### Evidence terminology
+
+`剧本事实与证据` is a read-only provenance view, not an additional Director editing step. Its purpose is to show which source text supports a script fact or which item is still uncertain. It does not mean the user must separately confirm evidence after confirming Director understanding. The user can use it to review a claim, but the Director draft remains the place where interpretation and intent are edited.
+
+### Effective-state table
+
+| Surface | User can edit | Model call required | Affects shooting plan |
+|---|---:|---:|---:|
+| Script text | No in Director workbench | No | Source only |
+| Script facts and evidence | No; review only | No | Evidence only |
+| Story and Director overview | Yes, Director draft | No for manual edit | After Director confirmation |
+| Timeline, relationships, plot threads, scene analysis | Yes, Director draft | No for manual edit | After Director confirmation |
+| Director questions / open decisions | Yes: answer, add, or leave open | No for manual answer; yes only if user requests model revision | After Director confirmation |
+| Re-analysis candidate | Accept or discard | Yes | Only after accepted and confirmed |
+| Shooting plan | Yes, in its own draft | No | Downstream artifact |
+
+The single downstream gate is **确认 Director 理解**. “保存草稿” protects work and increments draft state; it does not require a new full screenplay analysis. “重新分析” is optional and user initiated. “确认 Director 理解” makes the current draft available to shooting-plan generation.
