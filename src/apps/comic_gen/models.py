@@ -774,6 +774,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
     title: str = Field("", max_length=180)
     description: str = Field("", max_length=3000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
+    unresolved_character_refs: List[str] = Field(default_factory=list, max_length=20)
     dramatic_function: str = Field("", max_length=1200)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
     evidence_status: DirectorEvidenceStatus = "interpretation"
@@ -905,9 +906,8 @@ class DirectorStoryMap(_DirectorStoryMapModel):
         for phase in self.phases:
             if len([event.order for event in phase.events]) != len(set(event.order for event in phase.events)):
                 raise ValueError(f"event order values must be unique in phase {phase.phase_id}")
-            for event in phase.events:
-                if not set(event.character_ids).issubset(variant_ids):
-                    raise ValueError(f"event {event.event_id} references an unknown character variant")
+            # Unknown model supplied IDs are moved to unresolved_character_refs
+            # at the pipeline binding boundary instead of rejecting the draft.
 
         relationship_ids = [arc.relationship_id for arc in self.relationship_arcs]
         if len(relationship_ids) != len(set(relationship_ids)):
@@ -1763,6 +1763,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
                 "title": _bounded_director_text(event.get("title", ""), 100),
                 "description": _bounded_director_text(event.get("description", ""), 360),
                 "character_ids": event.get("character_ids", [])[:20],
+                "unresolved_character_refs": event.get("unresolved_character_refs", [])[:20],
                 "dramatic_function": _bounded_director_text(event.get("dramatic_function", ""), 180),
                 "source_fact_ids": event.get("source_fact_ids", [])[:20],
                 "evidence_status": event.get("evidence_status", "interpretation"),
@@ -1936,7 +1937,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                     if not isinstance(event, dict):
                         projected_events.append(event)
                         continue
-                    item = {key: event[key] for key in ("event_id", "order", "title", "description", "character_ids", "dramatic_function", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in event}
+                    item = {key: event[key] for key in ("event_id", "order", "title", "description", "character_ids", "unresolved_character_refs", "dramatic_function", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in event}
                     if "evidence_status" in item:
                         status, raw_status = _normalize_director_evidence_status(item["evidence_status"])
                         item["evidence_status"] = status

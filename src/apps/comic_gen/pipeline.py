@@ -2517,6 +2517,27 @@ class ComicGenPipeline(StudioOwnerMixin):
         story_map["source_revision_id"] = source_revision_id
         story_map.setdefault("fact_ledger_revision", None)
         story_map["people"] = self._director_story_people(entities.get("characters", []))
+        known_character_ids = {
+            character_id
+            for person in story_map["people"]
+            for character_id in person.get("variant_character_ids", [])
+        }
+        for phase in story_map.get("phases", []):
+            if not isinstance(phase, dict):
+                continue
+            for event in phase.get("events", []):
+                if not isinstance(event, dict):
+                    continue
+                raw_ids = event.get("character_ids", [])
+                if not isinstance(raw_ids, list):
+                    raw_ids = []
+                valid_ids = [item for item in raw_ids if item in known_character_ids]
+                unknown_ids = [item for item in raw_ids if item not in known_character_ids]
+                existing_unknown = event.get("unresolved_character_refs", [])
+                if not isinstance(existing_unknown, list):
+                    existing_unknown = []
+                event["character_ids"] = list(dict.fromkeys(valid_ids))
+                event["unresolved_character_refs"] = list(dict.fromkeys(existing_unknown + unknown_ids))[:20]
         profile["story_map"] = story_map
 
     def _effective_shooting_story_map(self, script: Script, profile: DirectorProfile) -> Optional[Dict[str, Any]]:

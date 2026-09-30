@@ -1503,8 +1503,9 @@ execution_summary, scene_summaries, canon_state。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
 phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
-event 使用 event_id/order/title/description/character_ids/dramatic_function/source_fact_ids/evidence_status。
+event 使用 event_id/order/title/description/character_ids/unresolved_character_refs/dramatic_function/source_fact_ids/evidence_status。
 character_ids 必须精确使用已确认实体中对应时期的角色变体 id；不能填角色姓名代替 id。
+无法匹配的角色引用放入 unresolved_character_refs，不要伪造 ID，也不要因此拒绝整份结果。
 relationship_arcs 的 person_ids 必须是两个不同的、来自实体上下文的 person_id；states 必须用 phase_id
 表达关系在对应故事阶段的状态，并通过 trigger_event_ids 指向真实 event_id。
 story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/reveal/payoff/open/close。

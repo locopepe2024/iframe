@@ -237,6 +237,24 @@ def test_director_preview_normalizes_structured_text_fields_without_losing_conte
     DirectorProfile(**result)
 
 
+def test_director_preview_moves_unknown_character_refs_to_unresolved_list():
+    pipeline, _ = make_pipeline()
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["source_revision_id"] = ""
+    payload["story_map"]["people"] = []
+    payload["story_map"]["story_threads"] = []
+    payload["story_map"]["phases"][0]["events"][0]["character_ids"] = ["shen", "model-person-1"]
+    pipeline.script_processor.analyze_director_profile.return_value = payload
+
+    script = pipeline.scripts["film"]
+    pipeline._bind_director_story_map(script, {"characters": script.characters}, payload)
+
+    event = payload["story_map"]["phases"][0]["events"][0]
+    assert event["character_ids"] == ["shen"]
+    assert event["unresolved_character_refs"] == ["model-person-1"]
+
+
 def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
     pipeline, _ = make_pipeline()
     pipeline.script_processor.refine_director_profile.return_value = structured_profile_payload()
