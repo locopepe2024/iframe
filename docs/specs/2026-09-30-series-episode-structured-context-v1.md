@@ -193,6 +193,60 @@ Agent Rules
 
 这样可以同时拥有 Markdown 的可读交接和结构化数据的精确校验。模型请求结束后，结果必须先通过 schema、source refs 和 lineage 校验，再生成新的 Markdown 投影。
 
+## 当前阶段采用 Markdown 预设模板，而不是 Director Agent
+
+当前 iframe Director 没有独立的 Agent runtime，也不需要为了使用这些交接文档而新增一个聊天 Agent。第一阶段应把 Markdown 设计转换成版本化的**阶段预设模板 / prompt contract**：
+
+```text
+Director request
+  = 阶段预设模板
+  + 当前任务的结构化 context bundle
+  + 用户已经采用的 revision
+  + 本次局部修订指令
+```
+
+### 预设模板的职责
+
+- 规定 Director 理解、导演意图和拍摄计划各自要回答的问题；
+- 规定输入的事实边界、来源回指和未知状态；
+- 规定输出 schema、字段上限和允许为空的创作字段；
+- 规定本阶段不得修改的上游内容；
+- 规定下一阶段可以读取的交接字段；
+- 规定失败、重试和局部修订时的行为。
+
+### 预设模板不负责的事情
+
+- 不保存模型对话历史；
+- 不替代 Director profile、Episode Context 或 Shooting Plan revision；
+- 不自动把模型建议变成用户决定；
+- 不绕过 source refs、lineage 或 schema 校验；
+- 不把静态规则文件当成项目事实。
+
+### 推荐的模板分层
+
+```text
+presets/
+├── director-interpretation.md
+├── director-intent.md
+├── director-consistency-review.md
+├── episode-context.md
+└── shooting-plan-handoff.md
+```
+
+这些文件可以由产品随版本发布，并在请求记录中保存 `preset_id` 和 `preset_revision`。用户可以在项目层覆盖允许编辑的模板参数，但不能修改系统安全边界、来源规则和确认语义。
+
+### 模板与项目 Markdown 的关系
+
+```text
+系统预设模板（静态）
+  + 项目分集剧本.md（动态 artifact）
+  + 项目视觉设定.md（动态 artifact）
+  + Director / Episode 结构化 revision
+  → bounded prompt context
+```
+
+系统模板定义“怎么读、怎么输出、哪些不能做”；项目 Markdown 定义“这个项目已经决定了什么”。两者必须在 generation attempt 中分别记录，便于后续复现和审计。
+
 ### 重要边界
 
 - Markdown 是上下文交接面，但不是自动事实证明。
