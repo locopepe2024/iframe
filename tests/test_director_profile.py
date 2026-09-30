@@ -169,7 +169,11 @@ def make_pipeline():
 def test_director_refinement_prompt_contains_source_entities_style_draft_and_history():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.side_effect = lambda **kwargs: (
+        json.dumps({"summary": "短片段摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []}, ensure_ascii=False)
+        if "<source_chunk" in kwargs["messages"][0]["content"]
+        else json.dumps(profile_payload(), ensure_ascii=False)
+    )
 
     result = processor.refine_director_profile(
         "场景21 周涵离校",

@@ -110,16 +110,16 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
 # into source-linked notes before the Director call.  These are character
 # budgets (not token budgets) so the boundary remains deterministic for
 # Chinese and mixed-language scripts.
-DIRECTOR_SOURCE_DIRECT_MAX_CHARS = 16000
+DIRECTOR_SOURCE_DIRECT_MAX_CHARS = 4000
 DIRECTOR_SOURCE_CHUNK_TARGET_CHARS = 5200
 DIRECTOR_SOURCE_CHUNK_MAX_CHARS = 6500
 DIRECTOR_SOURCE_CHUNK_MIN_CHARS = 2800
-DIRECTOR_SOURCE_ANCHOR_MAX_CHARS = 5000
+DIRECTOR_SOURCE_ANCHOR_MAX_CHARS = 240
 DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS = 360
 DIRECTOR_SOURCE_FACT_MAX_CHARS = 72
 DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS = 64
 DIRECTOR_SOURCE_NOTE_MAX_ITEMS = 2
-DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 64000
+DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 3000
 DIRECTOR_SOURCE_CACHE_MAX_ENTRIES = 4
 
 
@@ -999,10 +999,6 @@ class ScriptProcessor:
             return cached
 
         chunks = split_director_source(text)
-        if len(chunks) <= 1:
-            # This branch is mostly defensive because callers gate on the
-            # direct threshold, but it keeps the helper safe when used alone.
-            return text
 
         def map_chunk(item: tuple[int, Dict[str, Any]]) -> Dict[str, Any]:
             index, chunk = item
