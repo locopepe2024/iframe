@@ -34,6 +34,13 @@ motion-track.v1
 - 每帧左右脚接触评估和 IK 结果
 - warnings 和 preview 状态
 
+导出入口产生两个 JSON 文档：
+
+- `full_motion.bundle.json`：完整逐帧结果，包含脚部接触、IK、quaternion 和 warning。
+- `retarget_manifest.json`：轻量核对清单，只包含来源、映射、坐标系、帧数、每帧关节 ID 和 warning，不包含完整 local quaternion 数值。
+
+两份文档都带有版本化 `schema`，可独立解析。浏览器导出前不写入服务器；后续上传或 Blender 编译必须由用户明确触发。
+
 预览状态只描述是否具备白模编译输入，不伪造 MP4、GLB 或渲染 URL。
 
 ## 验收
