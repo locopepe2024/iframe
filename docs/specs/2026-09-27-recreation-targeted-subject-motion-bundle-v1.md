@@ -249,7 +249,7 @@ The source structure includes semantic core joints such as `PELVIS`, `SPINE_01`,
 
 **Implementation slice completed:** `pose_to_blender_state.py` now emits `foot_contact_candidates` for each side using visible ankle/heel/foot-index points, confidence, low local 2D velocity, and a lower-image-envelope heuristic. This is explicitly a candidate signal for review and later IK; it does not claim a calibrated floor or lock the foot in Blender.
 
-The media rig inspection found `ankle_l/r`, `foot_l/r`, `toe_l/r`, and `toe_attachment_l/r` bones, but no existing foot IK constraints. The state now also preserves per-frame `foot_targets.{left,right}.{ankle,heel,toe}`. A future Blender adapter can use these targets after establishing a calibrated floor and IK control policy; the current renderer still leaves them as data.
+The media rig inspection found `ankle_l/r`, `foot_l/r`, `toe_l/r`, and `toe_attachment_l/r` bones. `lower_leg_l/r`, `DEF_foot_l/r`, `toe_l/r`, and `toe_attachment_l/r` are deform bones; `ankle_l/r` and `foot_l/r` are non-deform helper joints. There are no existing foot IK constraints (`IK_COUNT=0`). This means the rig has usable foot joints even though it has no IK controller layer. The state also preserves per-frame `foot_targets.{left,right}.{ankle,heel,toe}`. The first Blender integration can directly drive the existing helper/deform chain; a later layer can add IK after establishing a calibrated floor and pole-target policy.
 
 ## Hypit motion boundary
 
