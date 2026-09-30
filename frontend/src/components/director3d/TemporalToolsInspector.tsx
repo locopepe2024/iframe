@@ -8,8 +8,9 @@ import { PathEventPanel } from "./path/PathEventPanel";
 import { ConfigPanelToggle } from "./ConfigPanelToggle";
 import { FrameManifestImporter } from "./reference/FrameManifestImporter";
 import { ActionProposalPanel } from "./action/ActionProposalPanel";
+import { MotionTrackImporter } from "./reference/MotionTrackImporter";
 
-type TemporalTool = "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "action";
+type TemporalTool = "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "action";
 
 const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
   { id: "dialogue", label: "对白" },
@@ -18,6 +19,7 @@ const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
   { id: "actor-path", label: "人物路径" },
   { id: "path-event", label: "路径事件" },
   { id: "frame-reference", label: "参考帧" },
+  { id: "motion-track", label: "动作轨迹" },
   { id: "action", label: "动作" },
 ];
 
@@ -27,6 +29,7 @@ function renderTemporalTool(tool: TemporalTool) {
   if (tool === "interaction") return <InteractionAnchorPanel />;
   if (tool === "actor-path") return <ActorPathPanel />;
   if (tool === "frame-reference") return <FrameManifestImporter />;
+  if (tool === "motion-track") return <MotionTrackImporter />;
   if (tool === "action") return <ActionProposalPanel />;
   return <PathEventPanel />;
 }

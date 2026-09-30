@@ -532,6 +532,50 @@ export interface FrameManifestImportState {
   errors: string[];
   importedAt: string | null;
 }
+
+export type MotionTrackImportStatus = "idle" | "ready" | "error";
+export type MotionTrackSelectionStatus = "tracked" | "interpolated" | "occluded" | "rejected" | "unknown";
+export type MotionTrackVector3 = [number, number, number];
+export interface MotionTrackCoordinateSystem {
+  image_x: "blender_x";
+  image_y: "blender_z";
+  depth_z: "blender_y";
+}
+export interface MotionTrackFootTarget {
+  ankle: MotionTrackVector3 | null;
+  heel: MotionTrackVector3 | null;
+  toe: MotionTrackVector3 | null;
+}
+export interface MotionTrackFootContactCandidate {
+  candidate: boolean;
+  confidence: number;
+}
+export interface MotionTrackFrame {
+  frame: number;
+  sourceFrame: number | null;
+  sourceTimestampSeconds: number | null;
+  selectionStatus: MotionTrackSelectionStatus;
+  rootPosition: MotionTrackVector3 | null;
+  semanticJoints: Record<string, MotionTrackVector3>;
+  jointConfidence: Record<string, number>;
+  footTargets: { left: MotionTrackFootTarget; right: MotionTrackFootTarget };
+  footContactCandidates: { left: MotionTrackFootContactCandidate; right: MotionTrackFootContactCandidate };
+}
+export interface MotionTrackManifest {
+  schema: "motion-track.v1";
+  trackId: string;
+  coordinateSystem: MotionTrackCoordinateSystem;
+  frames: MotionTrackFrame[];
+  sourceRevision: string | null;
+}
+export interface MotionTrackImportState {
+  status: MotionTrackImportStatus;
+  fileName: string | null;
+  manifest: MotionTrackManifest | null;
+  errors: string[];
+  warnings: string[];
+  importedAt: string | null;
+}
 export interface DialogueReferenceInputState {
   inputId: string;
   label: string;
