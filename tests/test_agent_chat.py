@@ -216,6 +216,24 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     assert call.call_args.args[2][1]['content'] == parts
 
 
+def test_h3_agent_restores_original_filenames_in_optimized_prompt(setup, monkeypatch):
+    call = Mock(return_value='请让 @1、2 在镜头中唱歌，并保持 @3 的外观')
+    monkeypatch.setattr(agent, 'complete', call)
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(
+        sid,
+        agent.MessageCreate(
+            content='请优化为 H3：让 @Weixin Image_20260922133813_485_51.jpg 在唱歌',
+            input_media=['/tmp/weixin.jpg', '/tmp/character.png', '/tmp/song.mp4'],
+            asset_names=['Weixin Image_20260922133813_485_51.jpg', 'character.png', 'song.mp4'],
+        ),
+        setup,
+    )
+    assistant = agent.messages(sid, setup)['messages'][-1]
+    assert assistant['content'] == '请让 @Weixin Image_20260922133813_485_51.jpg、@character.png 在镜头中唱歌，并保持 @song.mp4 的外观'
+
+
 def test_chat_large_inline_history_is_rejected_before_network(setup, monkeypatch):
     monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'api_key': 'test', 'base_url': 'https://example.test/v1'})))
     with pytest.raises(HTTPException) as exc:

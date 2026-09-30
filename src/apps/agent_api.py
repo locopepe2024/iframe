@@ -5,6 +5,7 @@ import sqlite3
 import time
 import uuid
 import logging
+import re
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit, unquote
@@ -23,6 +24,39 @@ from ..utils.reference_files import AUDIO_EXTENSIONS, TEXT_EXTENSIONS, chat_audi
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
 logger = logging.getLogger(__name__)
+
+
+def _restore_h3_reference_names(answer: str, asset_names: list[str], request: str, history=()) -> str:
+    """Keep Agent-facing H3 drafts addressable by the original attachment names.
+
+    The Agent uses ``@filename`` as its stable, user-visible reference. Numeric
+    labels are only an internal transport form used while attaching multimodal
+    parts and by the provider adapter. Models occasionally copy that transport
+    form into their prose (``@1``), which would make the returned draft point at
+    a different or nonexistent file when the user submits it again.
+    """
+    if not answer:
+        return answer
+    effective_names = list(asset_names)
+    if not effective_names:
+        for item in reversed(history):
+            if item.get("role") == "user" and item.get("asset_names"):
+                effective_names = list(item["asset_names"])
+                break
+    if not effective_names:
+        return answer
+    target = request or ""
+    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I):
+        target = "\n".join(str(item.get("content", "")) for item in history[-6:] if item.get("role") in {"user", "assistant"})
+    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I):
+        return answer
+    names = {index: name for index, name in enumerate(effective_names, 1) if name}
+    def restore(match):
+        indexes = re.split(r"[、,，]", match.group(1))
+        return "、".join("@" + names.get(int(index), index) for index in indexes)
+
+    # Handle both ``@1 @2`` and the compact model form ``@1、2、3``.
+    return re.sub(r"@([1-9][0-9]*(?:[、,，][1-9][0-9]*)*)(?![0-9A-Za-z_.])", restore, answer)
 
 
 def chat_timeout_seconds():
@@ -321,6 +355,9 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                     content.append(content_for(ref))
             history.append({"role": message["role"], "content": content})
         answer = complete(ctx, session["model"], history)
+        answer = _restore_h3_reference_names(
+            str(answer), body.asset_names, body.content, session["messages"],
+        )
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
         session["messages"].extend([user, assistant])
         session["updated_at"] = time.time()
