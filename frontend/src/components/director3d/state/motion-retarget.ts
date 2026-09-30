@@ -13,6 +13,8 @@ import { cleanupRetargetFrames, type MotionCleanupOptions } from "./motion-clean
 
 const EPSILON = 1e-8;
 export const MOTION_MAPPING_SCHEMA = "director-rig-mapping.v1" as const;
+export const IMAGE_TO_BLENDER_BASIS_QUATERNION: MotionTrackQuaternion = [-Math.SQRT1_2, 0, 0, Math.SQRT1_2];
+export const IMAGE_TO_BLENDER_BASIS_REVISION = "image_xy_depth_to_blender_xzy_neg_y_v1";
 
 const RIG_SOURCE_PAIRS: Array<[string, string, string]> = [
   ["pelvis", "left_hip", "right_hip"],
@@ -91,8 +93,8 @@ export function createRigMappingManifest(
     revision: "director-humanoid-motion-map.v1",
     rigProfileId,
     coordinateSystem,
-    sourceBasisQuaternion: [0, 0, 0, 1],
-    sourceBasisRevision: "uncalibrated_identity_v1",
+    sourceBasisQuaternion: IMAGE_TO_BLENDER_BASIS_QUATERNION,
+    sourceBasisRevision: IMAGE_TO_BLENDER_BASIS_REVISION,
     entries,
   };
 }
@@ -122,8 +124,8 @@ export function createRigMappingManifestFromRestEvidence(
     revision: `director-${evidence.rigSha256.slice(0, 12)}-mapping-v2`,
     rigProfileId: evidence.rigAsset,
     coordinateSystem,
-    sourceBasisQuaternion: [0, 0, 0, 1],
-    sourceBasisRevision: "uncalibrated_identity_v1",
+    sourceBasisQuaternion: IMAGE_TO_BLENDER_BASIS_QUATERNION,
+    sourceBasisRevision: IMAGE_TO_BLENDER_BASIS_REVISION,
     entries,
   };
 }

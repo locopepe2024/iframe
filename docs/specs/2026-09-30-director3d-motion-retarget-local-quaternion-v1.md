@@ -11,7 +11,7 @@
 
 `sourceStartJoint` 和 `sourceEndJoint` 定义源方向；`restDirection` 是该方向在参考姿态中的单位向量；`restQuaternion` 是目标 rig 该关节的参考局部旋转，四元数顺序为 `[x, y, z, w]`。
 
-`sourceBasisQuaternion` 定义源 motion-track 坐标到目标 `armature_local_rest` 坐标的显式 basis 旋转。当前自动生成的 mapping 使用 `uncalibrated_identity_v1`，只能用于对照预览；生产 mapping 必须提供经过校准的 basis revision，并绑定 rig evidence 的 SHA-256。
+`sourceBasisQuaternion` 定义源 motion-track 坐标到目标 `armature_local_rest` 坐标的显式 basis 旋转。当前已确定图像平面轴变换 `image_x → Blender X`、`image_y_down → Blender Z_up`、`depth_z → Blender Y`，对应 `image_xy_depth_to_blender_xzy_neg_y_v1` 和 quaternion `[-sqrt(1/2), 0, 0, sqrt(1/2)]`。这只证明轴方向变换；相机深度尺度、人物朝向和每根骨骼的父空间仍需单独校准。生产 mapping 必须提供 basis revision 并绑定 rig evidence 的 SHA-256。
 
 ## 算法边界
 

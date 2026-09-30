@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRigMappingManifest, createRigMappingManifestFromRestEvidence, normalizeRigRestEvidence, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
+import { createRigMappingManifest, createRigMappingManifestFromRestEvidence, IMAGE_TO_BLENDER_BASIS_QUATERNION, IMAGE_TO_BLENDER_BASIS_REVISION, normalizeRigRestEvidence, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
 import type { MotionRetargetMappingManifest, MotionTrackManifest } from "../components/director3d/types";
 
 const mapping: MotionRetargetMappingManifest = {
@@ -41,6 +41,17 @@ describe("motion-track local quaternion retarget", () => {
     const calibrated = createRigMappingManifestFromRestEvidence(evidence, mapping.coordinateSystem);
     expect(calibrated.revision).toBe("director-abcdef123456-mapping-v2");
     expect(calibrated.entries.find((entry) => entry.targetJointId === "foot_l")?.restDirection).toEqual([0, 0, 1]);
+    expect(calibrated.sourceBasisRevision).toBe(IMAGE_TO_BLENDER_BASIS_REVISION);
+    expect(calibrated.sourceBasisQuaternion).toEqual(IMAGE_TO_BLENDER_BASIS_QUATERNION);
+  });
+  it("maps image y down to Blender z up", () => {
+    const source = track();
+    source.frames[0].semanticJoints = { shoulder_l: [0, 0, 0], elbow_l: [0, 1, 0] };
+    const result = retargetMotionTrack(source, { ...mapping, sourceBasisQuaternion: IMAGE_TO_BLENDER_BASIS_QUATERNION, sourceBasisRevision: IMAGE_TO_BLENDER_BASIS_REVISION });
+    const q = result.frames[0].localQuaternions.upper_arm_l;
+    expect(q).toBeDefined();
+    expect(q![1]).toBeCloseTo(Math.SQRT1_2, 5);
+    expect(q![3]).toBeCloseTo(Math.SQRT1_2, 5);
   });
   it("normalizes the Blender snake_case evidence export", () => {
     const normalized = normalizeRigRestEvidence({ schema: "director-rig-rest-evidence.v1", rig_asset: "a.blend", rig_sha256: "hash", blender_version: "4.5.9", armature: "a", coordinate_space: "armature_local_rest", quaternion_order: "xyzw", bone_count: 1, bones: [{ name: "pelvis", parent: null, deform: true, head_armature: [0, 0, 0], tail_armature: [0, 0, 1], direction_armature: [0, 0, 1], rest_quaternion_armature_xyzw: [0, 0, 0, 1], length_m: 1 }] });
