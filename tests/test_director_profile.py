@@ -682,6 +682,23 @@ def test_director_profile_normalizes_model_arc_id_alias():
     DirectorProfile(**normalized)
 
 
+def test_director_profile_direct_validation_accepts_model_arc_id_alias():
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["people"].append({
+        "person_id": "zhou",
+        "display_name": "周涵",
+        "variant_character_ids": ["zhou"],
+    })
+    payload["story_map"]["relationship_arcs"] = [{
+        "arc_id": "arc-direct-validation",
+        "person_ids": ["shen", "zhou"],
+        "states": [],
+    }]
+    profile = DirectorProfile(**payload)
+    assert profile.story_map.relationship_arcs[0].relationship_id == "arc-direct-validation"
+
+
 def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
     projected = build_director_story_map_execution(valid_story_map())
 

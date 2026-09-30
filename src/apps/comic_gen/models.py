@@ -799,6 +799,25 @@ class DirectorRelationshipArc(_DirectorStoryMapModel):
     legacy_summary: str = Field("", max_length=1200)
     states: List[DirectorRelationshipState] = Field(default_factory=list, max_length=100)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_model_aliases(cls, value: Any) -> Any:
+        """Accept the model's common ``arc_id`` alias at every schema entrypoint.
+
+        Director results can be validated directly as a ``DirectorProfile``
+        (for example after a refinement merge), so normalization only at the
+        pipeline draft boundary is insufficient.  Keep the public schema
+        canonical while translating this recoverable naming difference before
+        Pydantic reports a missing ``relationship_id``.
+        """
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        if not normalized.get("relationship_id") and normalized.get("arc_id"):
+            normalized["relationship_id"] = normalized["arc_id"]
+        normalized.pop("arc_id", None)
+        return normalized
+
     @model_validator(mode="after")
     def validate_pair(self):
         if self.person_ids[0] == self.person_ids[1]:
