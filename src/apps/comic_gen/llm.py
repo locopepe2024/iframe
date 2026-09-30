@@ -7,6 +7,7 @@ import logging
 import traceback
 import re
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -1042,7 +1043,16 @@ class ScriptProcessor:
         with ThreadPoolExecutor(
             max_workers=worker_count, thread_name_prefix="director-source-map"
         ) as executor:
-            mapped = list(executor.map(map_chunk, enumerate(chunks, start=1)))
+            # ``current_studio_user`` and the owner-scoped UniArt credential
+            # are ContextVar-backed. ThreadPoolExecutor does not propagate
+            # ContextVars, so without an explicit copy each map call falls
+            # back to the process token and can fail with a misleading 401.
+            parent_context = copy_context()
+            futures = [
+                executor.submit(parent_context.copy().run, map_chunk, item)
+                for item in enumerate(chunks, start=1)
+            ]
+            mapped = [future.result() for future in futures]
         notes: List[Dict[str, Any]] = mapped
 
         anchor_limit = DIRECTOR_SOURCE_ANCHOR_MAX_CHARS

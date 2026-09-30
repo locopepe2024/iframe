@@ -1286,6 +1286,31 @@ def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
     assert refs == [chunk["source_ref"] for chunk in split_director_source(source)]
 
 
+def test_long_director_source_propagates_request_context_to_map_workers(monkeypatch):
+    from contextvars import ContextVar
+
+    request_owner = ContextVar("test_director_owner", default=None)
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    source = "第1场：人物进入教室。" * 500
+    seen = []
+
+    def chat_side_effect(**kwargs):
+        seen.append(request_owner.get())
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_chunk" in prompt:
+            return json.dumps({"summary": "摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []})
+        return json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    token = request_owner.set("owner-a")
+    try:
+        processor._director_source_digest(source)
+    finally:
+        request_owner.reset(token)
+    assert seen and all(value == "owner-a" for value in seen)
+
+
 def test_long_source_map_response_keeps_server_owned_source_ranges():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
