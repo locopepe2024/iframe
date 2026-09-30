@@ -59,6 +59,7 @@ function PlaygroundContent() {
   const startGeneration = usePlaygroundStore((state) => state.startGeneration);
   const updateGeneration = usePlaygroundStore((state) => state.updateGeneration);
   const enqueueRequest = usePlaygroundStore((state) => state.enqueueRequest);
+  const setPrompt = usePlaygroundStore((state) => state.setPrompt);
   const markDispatching = usePlaygroundStore((state) => state.markDispatching);
   const removeFromQueue = usePlaygroundStore((state) => state.removeFromQueue);
 
@@ -223,7 +224,8 @@ function PlaygroundContent() {
       sessionId: activeSessionId,
       parentGenerationId: parentGenerationId || undefined,
     });
-  }, [activeSessionId, batchSize, enqueueRequest, inputMedia, mediaNames, history, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt]);
+    setPrompt('');
+  }, [activeSessionId, batchSize, enqueueRequest, inputMedia, mediaNames, history, mode, modelId, negativePrompt, parameters, parentGenerationId, prompt, setPrompt]);
 
   const dispatchRequest = useCallback(async (request: QueuedRequest) => {
     try {
