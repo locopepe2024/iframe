@@ -247,6 +247,8 @@ The source structure includes semantic core joints such as `PELVIS`, `SPINE_01`,
 
 **What would verify it:** Reproduce these steps on the existing center-person clip and compare the current planar render against a semantic full-body render at pelvis, spine, knee, ankle, and foot-contact checkpoints.
 
+**Implementation slice completed:** `pose_to_blender_state.py` now emits `foot_contact_candidates` for each side using visible ankle/heel/foot-index points, confidence, low local 2D velocity, and a lower-image-envelope heuristic. This is explicitly a candidate signal for review and later IK; it does not claim a calibrated floor or lock the foot in Blender.
+
 ## Hypit motion boundary
 
 **Observed:** Hypit's `@hypit/media-track` motion recipes operate on timed visual Items, Sequences, Frames, and sampled media. The supported operators include `fade`, `slide`, `scale`, `bounce`, `wipe`, and `spin`; their outputs are visual properties such as opacity, transform, filter, and clip-path keyframes.

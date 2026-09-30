@@ -66,6 +66,15 @@ def test_hip_landmarks_drive_body_centers_pelvis_and_spine(tmp_path):
         assert name in sample["joint_confidence"]
 
 
+def test_foot_contact_is_only_a_candidate_signal(tmp_path):
+    sample = _run_adapter(tmp_path, _landmarks())
+
+    assert "foot_contact_candidates" in sample
+    assert set(sample["foot_contact_candidates"]) == {"left", "right"}
+    assert all("candidate" in value and "confidence" in value for value in sample["foot_contact_candidates"].values())
+    assert all(value["method"].startswith("2d_") for value in sample["foot_contact_candidates"].values())
+
+
 def test_missing_hip_landmark_does_not_fabricate_pelvis_pose(tmp_path):
     landmarks = _landmarks()
     landmarks[23][3] = 0.0

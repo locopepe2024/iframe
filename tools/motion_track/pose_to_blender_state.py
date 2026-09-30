@@ -101,6 +101,45 @@ def _interpolate_samples(samples, total_frames):
             out[index]["root_position"][0] = (prev_x + next_x) / 2.0
             out[index]["selection_status"] = "outlier_corrected"
     return out
+
+def _infer_foot_contact_candidates(samples):
+    """Mark conservative 2D foot-contact candidates for later IK solving.
+
+    This is intentionally a review signal, not a claim that the foot is on a
+    calibrated 3D floor.  A candidate needs visible heel/ankle/foot points,
+    low local image velocity, and proximity to the subject's lower envelope.
+    """
+    if not samples:
+        return samples
+    for side in ('left', 'right'):
+        key = f'{side}_foot_index'
+        values = [s.get('semantic_joints', {}).get(key) for s in samples]
+        valid_y = [p[1] for p in values if p is not None]
+        if not valid_y:
+            continue
+        floor_y = sorted(valid_y)[max(0, int(len(valid_y) * 0.75))]
+        for i, sample in enumerate(samples):
+            p = values[i]
+            ankle = sample.get('semantic_joints', {}).get(f'{side}_ankle')
+            heel = sample.get('semantic_joints', {}).get(f'{side}_heel')
+            if not p or not ankle or not heel:
+                continue
+            prev_p = values[i - 1] if i > 0 else p
+            next_p = values[i + 1] if i + 1 < len(values) and values[i + 1] else p
+            velocity = math.sqrt(sum((float(next_p[j]) - float(prev_p[j])) ** 2 for j in (0, 1)))
+            confidence = min(
+                float(sample.get('joint_confidence', {}).get(f'{side}_ankle', 0.0)),
+                float(sample.get('joint_confidence', {}).get(f'{side}_heel', 0.0)),
+                float(sample.get('joint_confidence', {}).get(f'{side}_foot_index', 0.0)),
+            )
+            candidate = velocity <= 0.035 and float(p[1]) >= floor_y - 0.025 and confidence >= 0.5
+            contacts = sample.setdefault('foot_contact_candidates', {})
+            contacts[side] = {
+                'candidate': bool(candidate),
+                'confidence': round(max(0.0, min(1.0, confidence)), 4),
+                'method': '2d_lower_envelope_low_velocity_v1',
+            }
+    return samples
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--track',required=True); ap.add_argument('--out',required=True); ap.add_argument('--fps',type=float,default=24.0)
     args=ap.parse_args(); src=json.loads(Path(args.track).read_text()); source_fps=float(src['source']['fps']); fps=float(args.fps); frames=[]
@@ -187,6 +226,7 @@ def main():
         frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
     total_frames=max((int(round(float(f.get('timestamp_seconds',0.0))*fps))+1 for f in src['frames']),default=1)
     frames=_interpolate_samples(frames,total_frames)
+    frames=_infer_foot_contact_candidates(frames)
     source_duration=max((float(f.get('timestamp_seconds',0.0)) for f in src['frames']),default=0.0)
     state={'state_id':'motion-track-blender-adapter-v1','schema_version':'director_reference_state.v1','revision':3,'retarget_mode':'planar_euler_legacy_with_source_vectors','title':'Center subject motion-track white model','duration_seconds':max(1.0, source_duration + 1.0/source_fps),'fps':round(fps,6),'reference_frame':max(1,frames[len(frames)//2]['frame'] if frames else 1),'outputs':['director_reference_image','camera_motion_reference_video'],'actors':[{'actor_id':'preserve-left','color':'#3B82F6','pose':'neutral','placement':{'position':[-1.7,0,0]},'trajectory':{'end_position':[-1.7,0,0]}},{'actor_id':'target-center','color':'#F59E0B','pose':'neutral','placement':{'position':[0,0,0]},'trajectory':{'end_position':[0,0,0]},'motion_track':frames},{'actor_id':'preserve-right','color':'#22C55E','pose':'neutral','placement':{'position':[1.7,0,0]},'trajectory':{'end_position':[1.7,0,0]}}],'camera':{'camera_id':'camera-main','preset':'push_in','position':[0,-9.5,4.8],'end_position':[0,-9.5,4.8],'look_at':[0,0,1.25],'fov':50},'motion_track_source':{'schema':src['schema'],'target_subject_id':src['target_selection']['target_subject_id'],'source_fps':source_fps,'output_fps':fps,'source_duration_seconds':source_duration,'tracked_samples':sum(f.get('selection_status')=='tracked' for f in frames),'interpolated_samples':sum(f.get('selection_status')=='interpolated' for f in frames),'outlier_corrected_samples':sum(f.get('selection_status')=='outlier_corrected' for f in frames),'occluded_samples':sum(f.get('selection_status')!='tracked' for f in src['frames']),'mapping':'2d_landmarks_to_blender_xz_rest_pose_v4_interpolated'
             ,'coordinate_system':{'image_x':'blender_x','image_y':'blender_z','depth_z':'blender_y','joint_rotation_axis':'blender_y'}}}
