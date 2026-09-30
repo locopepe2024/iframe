@@ -65,3 +65,14 @@ The 2026-09-30 media fixture at `/home/ubuntu/motion-track/output/recreation2-fi
 Use `scripts/director3d/normalize_motion_track.py` as an explicit one-way adapter. It preserves the raw source SHA-256 as `source_revision`, maps MediaPipe joints by index, leaves occluded frames without semantic joints, and initializes contact candidates to false. It does not infer root motion, ground contact, or 3D depth. The importer remains strict.
 
 The media fixture conversion produced 120 frames, 79 tracked frames with semantic joints, and 79 frames with left ankle data. This verifies structural conversion, not retarget quality.
+
+## Blender bundle compile verification
+
+`scripts/director3d/render_full_motion_bundle.py` now compiles a `director-full-motion-bundle.v1` into the existing media rig without re-running retargeting. A 24-frame fixture was executed on media with Blender 4.5.9 and produced:
+
+- `white_model_video.mp4`: 640×360, 24 fps, 1.0 s;
+- `white_model_preview.png`: 640×360 PNG;
+- `full_motion.bundle.json`;
+- `retarget_manifest.json` with `director-media-render-result.v1` status `completed`.
+
+This verifies the Blender artifact path and codec settings. It does not yet verify calibrated dance motion because the fixture used identity pose quaternions.
