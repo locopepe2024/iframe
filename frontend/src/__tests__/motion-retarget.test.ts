@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRigMappingManifest, createRigMappingManifestFromRestEvidence, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
+import { createRigMappingManifest, createRigMappingManifestFromRestEvidence, normalizeRigRestEvidence, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
 import type { MotionRetargetMappingManifest, MotionTrackManifest } from "../components/director3d/types";
 
 const mapping: MotionRetargetMappingManifest = {
@@ -41,6 +41,11 @@ describe("motion-track local quaternion retarget", () => {
     const calibrated = createRigMappingManifestFromRestEvidence(evidence, mapping.coordinateSystem);
     expect(calibrated.revision).toBe("director-abcdef123456-mapping-v2");
     expect(calibrated.entries.find((entry) => entry.targetJointId === "foot_l")?.restDirection).toEqual([0, 0, 1]);
+  });
+  it("normalizes the Blender snake_case evidence export", () => {
+    const normalized = normalizeRigRestEvidence({ schema: "director-rig-rest-evidence.v1", rig_asset: "a.blend", rig_sha256: "hash", blender_version: "4.5.9", armature: "a", coordinate_space: "armature_local_rest", quaternion_order: "xyzw", bone_count: 1, bones: [{ name: "pelvis", parent: null, deform: true, head_armature: [0, 0, 0], tail_armature: [0, 0, 1], direction_armature: [0, 0, 1], rest_quaternion_armature_xyzw: [0, 0, 0, 1], length_m: 1 }] });
+    expect(normalized.rigAsset).toBe("a.blend");
+    expect(normalized.bones[0].directionArmature).toEqual([0, 0, 1]);
   });
   it("keeps root separate and maps a quarter turn direction", () => {
     const result = retargetMotionTrack(track(), mapping);

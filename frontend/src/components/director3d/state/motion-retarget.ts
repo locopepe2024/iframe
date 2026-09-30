@@ -29,6 +29,41 @@ const RIG_SOURCE_PAIRS: Array<[string, string, string]> = [
   ["toe_r", "right_heel", "right_foot_index"],
 ];
 
+export function normalizeRigRestEvidence(input: unknown): DirectorRigRestEvidence {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("rig rest evidence 必须是对象。");
+  const source = input as Record<string, unknown>;
+  if (source.schema !== "director-rig-rest-evidence.v1") throw new Error("rig rest evidence schema 不受支持。");
+  const bones = source.bones;
+  if (!Array.isArray(bones)) throw new Error("rig rest evidence bones 必须是数组。");
+  const vector = (value: unknown, field: string): MotionTrackVector3 => {
+    if (!Array.isArray(value) || value.length !== 3 || value.some((item) => typeof item !== "number" || !Number.isFinite(item))) throw new Error(`${field} 必须是有限三维向量。`);
+    return value as MotionTrackVector3;
+  };
+  const quaternion = (value: unknown, field: string): MotionTrackQuaternion => {
+    if (!Array.isArray(value) || value.length !== 4 || value.some((item) => typeof item !== "number" || !Number.isFinite(item))) throw new Error(`${field} 必须是有限四元数。`);
+    return value as MotionTrackQuaternion;
+  };
+  return {
+    schema: "director-rig-rest-evidence.v1",
+    rigAsset: String(source.rigAsset ?? source.rig_asset ?? ""),
+    rigSha256: String(source.rigSha256 ?? source.rig_sha256 ?? ""),
+    blenderVersion: String(source.blenderVersion ?? source.blender_version ?? ""),
+    armature: String(source.armature ?? ""),
+    coordinateSpace: (source.coordinateSpace ?? source.coordinate_space) as DirectorRigRestEvidence["coordinateSpace"],
+    quaternionOrder: (source.quaternionOrder ?? source.quaternion_order) as DirectorRigRestEvidence["quaternionOrder"],
+    boneCount: Number(source.boneCount ?? source.bone_count ?? bones.length),
+    bones: bones.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`bones[${index}] 必须是对象。`);
+      const bone = item as Record<string, unknown>;
+      return {
+        name: String(bone.name ?? ""), parent: bone.parent === null || bone.parent === undefined ? null : String(bone.parent), deform: Boolean(bone.deform),
+        headArmature: vector(bone.headArmature ?? bone.head_armature, `bones[${index}].head`), tailArmature: vector(bone.tailArmature ?? bone.tail_armature, `bones[${index}].tail`),
+        directionArmature: vector(bone.directionArmature ?? bone.direction_armature, `bones[${index}].direction`), restQuaternionArmatureXyzw: quaternion(bone.restQuaternionArmatureXyzw ?? bone.rest_quaternion_armature_xyzw, `bones[${index}].restQuaternion`), lengthM: Number(bone.lengthM ?? bone.length_m),
+      };
+    }),
+  };
+}
+
 export function createRigMappingManifest(
   rigProfileId: string,
   coordinateSystem: MotionRetargetMappingManifest["coordinateSystem"],
@@ -61,9 +96,10 @@ export function createRigMappingManifest(
 }
 
 export function createRigMappingManifestFromRestEvidence(
-  evidence: DirectorRigRestEvidence,
+  input: DirectorRigRestEvidence | unknown,
   coordinateSystem: MotionRetargetMappingManifest["coordinateSystem"],
 ): MotionRetargetMappingManifest {
+  const evidence = normalizeRigRestEvidence(input);
   if (evidence.schema !== "director-rig-rest-evidence.v1" || evidence.quaternionOrder !== "xyzw") {
     throw new Error("rig rest evidence schema 或 quaternion 顺序不受支持。");
   }
