@@ -1526,13 +1526,15 @@ scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件
 canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
 人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
 删除或把未知内容标成 active。"""
-        content = self.llm.chat(
+        content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
             response_format={"type": "json_object"},
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-        ).strip()
+        ) or "").strip()
+        if not content:
+            raise RuntimeError("导演设定模型未返回内容，请重试。")
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
@@ -1605,13 +1607,15 @@ canon_state 只返回本次受影响的事实分类；优先复用已有
 fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
 不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
-        content = self.llm.chat(
+        content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "只返回本次导演修订的 JSON 变更补丁。"}],
             response_format={"type": "json_object"},
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-        ).strip()
+        ) or "").strip()
+        if not content:
+            raise RuntimeError("导演修订模型未返回内容，请重试。")
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")

@@ -1249,6 +1249,22 @@ def test_short_director_source_stays_on_single_call_path():
     assert "原文事实、导演解释、用户要求和未决问题必须分开" in prompt
 
 
+def test_director_analysis_reports_empty_model_response_instead_of_attribute_error():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = None
+    with pytest.raises(RuntimeError, match="未返回内容"):
+        processor.analyze_director_profile("短剧本。", {"characters": []}, {})
+
+
+def test_director_refinement_reports_empty_model_response_instead_of_attribute_error():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = None
+    with pytest.raises(RuntimeError, match="未返回内容"):
+        processor.refine_director_profile("短剧本。", {"characters": []}, {}, profile_payload(), ["保留原意"])
+
+
 def test_long_director_source_uses_source_digest_and_reuses_map_cache():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True, provider="mock")
