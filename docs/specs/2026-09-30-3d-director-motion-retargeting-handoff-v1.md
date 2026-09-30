@@ -248,3 +248,32 @@ manifest 至少记录：
 6. 增加 IK target/pole target 和失败回退。
 7. 输出 `full_motion.bundle.json`、白模视频和可编辑 Blender 动画。
 
+## Implementation status
+
+### Phase 1 — completed by 3D Director
+
+Commit: `840f79dc feat(director3d): import motion-track v1 evidence`
+
+Completed:
+
+- strict `motion-track.v1` JSON contract parsing;
+- coordinate-system declaration validation;
+- read-only import of `semantic_joints`, confidence, `foot_targets`, and contact candidates;
+- motion-track panel in the 3D Director UI;
+- explicit handling for missing foot points without fabricating targets;
+- typecheck and two motion-track contract tests.
+
+Phase 1 deliberately does not write pose, bone rotations, root transforms, or IK state. The imported track remains evidence until a director explicitly starts a retarget run.
+
+### Phase 2 — next handoff
+
+Implement `local_quaternion_v1` as a separate, reviewable operation:
+
+1. Build and persist a rig rest-pose mapping manifest.
+2. Convert source semantic segment vectors into the target parent rest frame.
+3. Compute local quaternion deltas with sign continuity.
+4. Solve pelvis and spine before limbs, then evaluate the armature.
+5. Store per-frame residuals and rejected joints without mutating the source track.
+6. Export a low-resolution preview and a retarget manifest before enabling IK.
+
+Phase 2 success requires a visual preview plus numeric checks for pelvis, spine, knee, ankle, and quaternion continuity. IK, foot locking, cleanup, and `full_motion.bundle.json` remain later phases.
