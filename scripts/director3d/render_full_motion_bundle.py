@@ -45,18 +45,42 @@ def setup_scene(bundle, output):
     if not scene.world:
         scene.world = bpy.data.worlds.new("director-world")
     scene.world.use_nodes = True
-    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.012, 0.018, 0.04, 1)
-    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.9
+    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.035, 0.05, 0.09, 1)
+    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.55
+    # The source rig is authored without a guaranteed lighting setup.  Add a
+    # deterministic three point rig so review renders expose the silhouette
+    # and joint motion instead of producing a near-black outline.
+    for name, location, energy, size in (
+        ("director-key", (3.5, -4.0, 5.5), 900.0, 4.0),
+        ("director-fill", (-3.0, -2.0, 3.0), 500.0, 3.0),
+        ("director-rim", (0.0, 3.5, 4.5), 700.0, 3.0),
+    ):
+        light = bpy.data.objects.get(name)
+        if light is None:
+            data = bpy.data.lights.new(name + "-data", "AREA")
+            light = bpy.data.objects.new(name, data)
+            bpy.context.collection.objects.link(light)
+        light.location = location
+        light.data.energy = energy
+        light.data.shape = "DISK"
+        light.data.size = size
+        target = bpy.data.objects.get("director-camera-target")
+        if target is not None:
+            light.rotation_euler = (target.location - light.location).to_track_quat("-Z", "Y").to_euler()
     if not bpy.data.objects.get("director-camera"):
         camera_data = bpy.data.cameras.new("director-camera-data")
         camera = bpy.data.objects.new("director-camera", camera_data)
         bpy.context.collection.objects.link(camera)
         scene.camera = camera
-        camera.location = (0, -9.5, 4.8)
-        camera_data.lens = 52
+        camera.location = (0, -4.2, 2.4)
+        camera_data.lens = 58
         target = bpy.data.objects.new("director-camera-target", None)
         bpy.context.collection.objects.link(target)
         target.location = (0, 0, 1.15)
+        for light_name in ("director-key", "director-fill", "director-rim"):
+            light = bpy.data.objects.get(light_name)
+            if light is not None:
+                light.rotation_euler = (target.location - light.location).to_track_quat("-Z", "Y").to_euler()
         constraint = camera.constraints.new("TRACK_TO")
         constraint.target = target
         constraint.track_axis = "TRACK_NEGATIVE_Z"
