@@ -2,6 +2,7 @@ import type {
   MotionRetargetFrameResult,
   MotionRetargetMappingEntry,
   MotionRetargetMappingManifest,
+  DirectorRigRestEvidence,
   MotionRetargetResult,
   MotionTrackFrame,
   MotionTrackManifest,
@@ -12,6 +13,21 @@ import { cleanupRetargetFrames, type MotionCleanupOptions } from "./motion-clean
 
 const EPSILON = 1e-8;
 export const MOTION_MAPPING_SCHEMA = "director-rig-mapping.v1" as const;
+
+const RIG_SOURCE_PAIRS: Array<[string, string, string]> = [
+  ["pelvis", "left_hip", "right_hip"],
+  ["spine_lower", "left_hip", "left_shoulder"],
+  ["spine_mid", "left_hip", "left_shoulder"],
+  ["spine_chest", "left_hip", "left_shoulder"],
+  ["upper_leg_l", "left_hip", "left_knee"],
+  ["lower_leg_l", "left_knee", "left_ankle"],
+  ["upper_leg_r", "right_hip", "right_knee"],
+  ["lower_leg_r", "right_knee", "right_ankle"],
+  ["foot_l", "left_heel", "left_foot_index"],
+  ["toe_l", "left_heel", "left_foot_index"],
+  ["foot_r", "right_heel", "right_foot_index"],
+  ["toe_r", "right_heel", "right_foot_index"],
+];
 
 export function createRigMappingManifest(
   rigProfileId: string,
@@ -39,6 +55,34 @@ export function createRigMappingManifest(
     schema: MOTION_MAPPING_SCHEMA,
     revision: "director-humanoid-motion-map.v1",
     rigProfileId,
+    coordinateSystem,
+    entries,
+  };
+}
+
+export function createRigMappingManifestFromRestEvidence(
+  evidence: DirectorRigRestEvidence,
+  coordinateSystem: MotionRetargetMappingManifest["coordinateSystem"],
+): MotionRetargetMappingManifest {
+  if (evidence.schema !== "director-rig-rest-evidence.v1" || evidence.quaternionOrder !== "xyzw") {
+    throw new Error("rig rest evidence schema 或 quaternion 顺序不受支持。");
+  }
+  const bones = new Map(evidence.bones.map((bone) => [bone.name, bone]));
+  const entries = RIG_SOURCE_PAIRS.map(([targetJointId, sourceStartJoint, sourceEndJoint]) => {
+    const bone = bones.get(targetJointId);
+    if (!bone) throw new Error(`rig rest evidence 缺少骨骼 ${targetJointId}。`);
+    return {
+      targetJointId,
+      sourceStartJoint,
+      sourceEndJoint,
+      restDirection: bone.directionArmature,
+      restQuaternion: bone.restQuaternionArmatureXyzw,
+    };
+  });
+  return {
+    schema: MOTION_MAPPING_SCHEMA,
+    revision: `director-${evidence.rigSha256.slice(0, 12)}-mapping-v2`,
+    rigProfileId: evidence.rigAsset,
     coordinateSystem,
     entries,
   };

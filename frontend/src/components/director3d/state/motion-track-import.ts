@@ -5,6 +5,7 @@ export const MOTION_TRACK_MAX_BYTES = 16 * 1024 * 1024;
 export const MOTION_TRACK_MAX_FRAMES = 120_000;
 
 const SEMANTIC_JOINTS = new Set([
+  "left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist",
   "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle",
   "left_heel", "right_heel", "left_foot_index", "right_foot_index",
 ]);

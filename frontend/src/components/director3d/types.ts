@@ -591,6 +591,27 @@ export interface MotionRetargetMappingManifest {
   coordinateSystem: MotionTrackCoordinateSystem;
   entries: MotionRetargetMappingEntry[];
 }
+export interface DirectorRigRestEvidenceBone {
+  name: string;
+  parent: string | null;
+  deform: boolean;
+  headArmature: MotionTrackVector3;
+  tailArmature: MotionTrackVector3;
+  directionArmature: MotionTrackVector3;
+  restQuaternionArmatureXyzw: MotionTrackQuaternion;
+  lengthM: number;
+}
+export interface DirectorRigRestEvidence {
+  schema: "director-rig-rest-evidence.v1";
+  rigAsset: string;
+  rigSha256: string;
+  blenderVersion: string;
+  armature: string;
+  coordinateSpace: "armature_local_rest";
+  quaternionOrder: "xyzw";
+  boneCount: number;
+  bones: DirectorRigRestEvidenceBone[];
+}
 export interface MotionRetargetFrameResult {
   frame: number;
   rootPosition: MotionTrackVector3 | null;

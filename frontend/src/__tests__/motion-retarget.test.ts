@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRigMappingManifest, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
+import { createRigMappingManifest, createRigMappingManifestFromRestEvidence, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
 import type { MotionRetargetMappingManifest, MotionTrackManifest } from "../components/director3d/types";
 
 const mapping: MotionRetargetMappingManifest = {
@@ -30,6 +30,18 @@ const track = (status: "tracked" | "occluded" = "tracked"): MotionTrackManifest 
   }],
 });
 describe("motion-track local quaternion retarget", () => {
+  it("binds calibrated mapping revision to rig evidence hash", () => {
+    const names = ["pelvis", "spine_lower", "spine_mid", "spine_chest", "upper_leg_l", "lower_leg_l", "upper_leg_r", "lower_leg_r", "foot_l", "toe_l", "foot_r", "toe_r"];
+    const evidence = {
+      schema: "director-rig-rest-evidence.v1" as const,
+      rigAsset: "white-model.blend", rigSha256: "abcdef1234567890", blenderVersion: "4.5.9", armature: "armature",
+      coordinateSpace: "armature_local_rest" as const, quaternionOrder: "xyzw" as const, boneCount: names.length,
+      bones: names.map((name) => ({ name, parent: null, deform: true, headArmature: [0, 0, 0] as [number, number, number], tailArmature: [0, 0, 1] as [number, number, number], directionArmature: [0, 0, 1] as [number, number, number], restQuaternionArmatureXyzw: [0, 0, 0, 1] as [number, number, number, number], lengthM: 1 })),
+    };
+    const calibrated = createRigMappingManifestFromRestEvidence(evidence, mapping.coordinateSystem);
+    expect(calibrated.revision).toBe("director-abcdef123456-mapping-v2");
+    expect(calibrated.entries.find((entry) => entry.targetJointId === "foot_l")?.restDirection).toEqual([0, 0, 1]);
+  });
   it("keeps root separate and maps a quarter turn direction", () => {
     const result = retargetMotionTrack(track(), mapping);
     const frame = result.frames[0];
