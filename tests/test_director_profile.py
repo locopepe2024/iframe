@@ -721,6 +721,24 @@ def test_director_profile_rejects_conflicting_relationship_arc_aliases():
         DirectorProfile(**payload)
 
 
+def test_director_profile_accepts_relationship_arc_evidence_status():
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["people"].append({
+        "person_id": "zhou",
+        "display_name": "周涵",
+        "variant_character_ids": ["zhou"],
+    })
+    payload["story_map"]["relationship_arcs"] = [{
+        "relationship_id": "arc-with-evidence",
+        "person_ids": ["shen", "zhou"],
+        "evidence_status": "interpretation",
+        "states": [],
+    }]
+    profile = DirectorProfile(**payload)
+    assert profile.story_map.relationship_arcs[0].evidence_status == "interpretation"
+
+
 def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
     projected = build_director_story_map_execution(valid_story_map())
 

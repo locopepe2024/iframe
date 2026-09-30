@@ -797,6 +797,7 @@ class DirectorRelationshipArc(_DirectorStoryMapModel):
     person_ids: List[str] = Field(..., min_length=2, max_length=2)
     label: str = Field("", max_length=180)
     legacy_summary: str = Field("", max_length=1200)
+    evidence_status: DirectorEvidenceStatus = "interpretation"
     states: List[DirectorRelationshipState] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="before")
