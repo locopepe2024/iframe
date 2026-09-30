@@ -11,6 +11,8 @@
 
 `sourceStartJoint` 和 `sourceEndJoint` 定义源方向；`restDirection` 是该方向在参考姿态中的单位向量；`restQuaternion` 是目标 rig 该关节的参考局部旋转，四元数顺序为 `[x, y, z, w]`。
 
+`sourceBasisQuaternion` 定义源 motion-track 坐标到目标 `armature_local_rest` 坐标的显式 basis 旋转。当前自动生成的 mapping 使用 `uncalibrated_identity_v1`，只能用于对照预览；生产 mapping 必须提供经过校准的 basis revision，并绑定 rig evidence 的 SHA-256。
+
 ## 算法边界
 
 1. 每帧用 `end - start` 得到当前方向并归一化。
@@ -18,7 +20,8 @@
 3. 输出 `restQuaternion × delta` 作为目标局部 quaternion。
 4. `rootPosition` 原样独立输出；不把 root 位移混入 pelvis 旋转。
 5. `pelvis` 映射单独输出 `pelvisQuaternion`，不替代 root 位移。
-6. 缺失源关节、零长度方向、非 tracked/interpolated 状态只输出 warning，并跳过该关节；不得复制邻帧或邻人姿态。
+6. 在计算 delta 前应用 `sourceBasisQuaternion`；没有显式 basis 时不得声称完成坐标校准。
+7. 缺失源关节、零长度方向、非 tracked/interpolated 状态只输出 warning，并跳过该关节；不得复制邻帧或邻人姿态。
 
 ## 明确不实现
 

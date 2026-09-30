@@ -589,6 +589,8 @@ export interface MotionRetargetMappingManifest {
   revision: string;
   rigProfileId: string;
   coordinateSystem: MotionTrackCoordinateSystem;
+  sourceBasisQuaternion?: MotionTrackQuaternion;
+  sourceBasisRevision?: string;
   entries: MotionRetargetMappingEntry[];
 }
 export interface DirectorRigRestEvidenceBone {

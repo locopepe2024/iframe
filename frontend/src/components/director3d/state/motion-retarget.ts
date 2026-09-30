@@ -91,6 +91,8 @@ export function createRigMappingManifest(
     revision: "director-humanoid-motion-map.v1",
     rigProfileId,
     coordinateSystem,
+    sourceBasisQuaternion: [0, 0, 0, 1],
+    sourceBasisRevision: "uncalibrated_identity_v1",
     entries,
   };
 }
@@ -120,6 +122,8 @@ export function createRigMappingManifestFromRestEvidence(
     revision: `director-${evidence.rigSha256.slice(0, 12)}-mapping-v2`,
     rigProfileId: evidence.rigAsset,
     coordinateSystem,
+    sourceBasisQuaternion: [0, 0, 0, 1],
+    sourceBasisRevision: "uncalibrated_identity_v1",
     entries,
   };
 }
@@ -135,6 +139,13 @@ const normalize = (value: MotionTrackVector3): MotionTrackVector3 | null => {
   const size = length(value);
   return size > EPSILON ? [value[0] / size, value[1] / size, value[2] / size] : null;
 };
+
+function rotateVector(quaternion: MotionTrackQuaternion, value: MotionTrackVector3): MotionTrackVector3 {
+  const inverse: MotionTrackQuaternion = [-quaternion[0], -quaternion[1], -quaternion[2], quaternion[3]];
+  const vectorQuaternion: MotionTrackQuaternion = [value[0], value[1], value[2], 0];
+  const rotated = multiplyQuaternion(multiplyQuaternion(quaternion, vectorQuaternion), inverse);
+  return [rotated[0], rotated[1], rotated[2]];
+}
 
 function multiplyQuaternion(a: MotionTrackQuaternion, b: MotionTrackQuaternion): MotionTrackQuaternion {
   const [ax, ay, az, aw] = a;
@@ -211,7 +222,10 @@ export function retargetMotionTrack(
         result.warnings.push(`frame ${frame.frame}: missing or zero direction for ${entry.targetJointId}`);
         continue;
       }
-      const delta = quaternionFromDirection(entry.restDirection, direction);
+      const sourceDirection = mapping.sourceBasisQuaternion
+        ? rotateVector(mapping.sourceBasisQuaternion, direction)
+        : direction;
+      const delta = quaternionFromDirection(entry.restDirection, sourceDirection);
       const rawQuaternion = normalizeQuaternion(multiplyQuaternion(entry.restQuaternion, delta));
       if (entry.targetJointId === "pelvis") {
         result.pelvisQuaternion = keepQuaternionSign(rawQuaternion, previous?.pelvisQuaternion ?? undefined);
