@@ -605,6 +605,29 @@ export interface MotionRetargetResult {
   warnings: string[];
   cleanupProcessors?: MotionCleanupProcessor[];
 }
+export interface MotionFullBundleFrame {
+  frame: number;
+  rootPosition: MotionTrackVector3 | null;
+  pelvisQuaternion: MotionTrackQuaternion | null;
+  localQuaternions: Record<string, MotionTrackQuaternion>;
+  footContacts: MotionFootContactEvaluation[];
+  ik: { left: MotionIkResult | null; right: MotionIkResult | null };
+  warnings: string[];
+}
+export interface MotionFullBundle {
+  schema: "full_motion.bundle.v1";
+  source: { trackId: string; sourceRevision: string | null };
+  rig: { profileId: string; mappingRevision: string };
+  mode: "retarget_cleanup_contact_ik_v1";
+  cleanupProcessors: MotionCleanupProcessor[];
+  preview: {
+    status: "ready_for_white_model" | "needs_review";
+    renderer: "blender" | null;
+    artifactUrl: string | null;
+  };
+  frames: MotionFullBundleFrame[];
+  warnings: string[];
+}
 export interface MotionCleanupProcessor {
   id: "quaternion_continuity" | "short_gap_interpolation" | "single_frame_outlier" | "torso_smoothing";
   version: string;
