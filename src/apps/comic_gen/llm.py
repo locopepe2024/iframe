@@ -8,6 +8,7 @@ import traceback
 import re
 from concurrent.futures import ThreadPoolExecutor
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from .models import (
@@ -85,6 +86,23 @@ DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS = 64
 DIRECTOR_SOURCE_NOTE_MAX_ITEMS = 2
 DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 64000
 DIRECTOR_SOURCE_CACHE_MAX_ENTRIES = 4
+
+
+_DIRECTOR_PRESET_FALLBACKS = {
+    "director-interpretation": """阶段：Director 理解。先确认原作的时间、地点、人物关系、事件因果、剧情线和叙事场景。原文事实、导演解释、用户要求和未决问题必须分开。不得改写剧本原文，不得把来源不明的推断写成事实。输出必须可回指 source_ref、事件或事实账本；结果进入 draft，等待用户审阅和采用。""",
+    "director-intent": """阶段：导演意图。基于已采用的 Director 理解提出视觉、表演、声音、节奏和连续性方向。新增的地标、生活细节或视觉锚点必须标记为导演补充或可选建议，不得伪装成剧本事件。导演意图不能反向修改剧本原文。""",
+    "shooting-plan-handoff": """阶段：拍摄计划。只读取已采用的 Director 理解/意图、当前剧本片段、实体和上一段 continuity handoff。按 scene → beat → shot 组织提案。source chunk 边界不是语义场景边界；只有明确连续证据才合并场景。缺失的环境声、灯光或未绑定实体可以作为待补项，不得因此拒绝整份计划。""",
+}
+
+
+def _load_director_preset(name: str) -> str:
+    """Load a versioned Markdown stage preset without introducing an Agent runtime."""
+    preset_path = Path(__file__).with_name("presets") / f"{name}.md"
+    try:
+        value = preset_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        value = ""
+    return value or _DIRECTOR_PRESET_FALLBACKS[name]
 
 
 def _director_source_boundary_positions(text: str) -> List[int]:
@@ -1400,7 +1418,10 @@ class ScriptProcessor:
             if is_source_digest
             else "原始剧本"
         )
+        preset = _load_director_preset("director-interpretation")
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
+
+<stage_preset name="director-interpretation">{preset}</stage_preset>
 
 {source_label}：
 <script>{source_context}</script>
@@ -1492,7 +1513,12 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         numbered = "\n".join(
             f"{index}. {item}" for index, item in enumerate(bounded_instructions, 1)
         )
+        preset = _load_director_preset("director-interpretation")
+        intent_preset = _load_director_preset("director-intent")
         prompt = f"""你是电影导演和剧本统筹。修订导演设定时，原始剧本和实体是事实边界。
+本次修订仍处于 Director 理解/意图阶段，必须遵守以下阶段预设：
+<stage_preset name="director-interpretation">{preset}</stage_preset>
+<stage_preset name="director-intent">{intent_preset}</stage_preset>
 视觉风格只控制电影语言，不改变故事地点、时代或文化。未知信息继续保留为 unresolved_questions。
 
 {source_label}：
@@ -1662,7 +1688,10 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         retry_note = ""
         last_error = ""
         for attempt in range(2):
+            handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
+
+<stage_preset name="shooting-plan-handoff">{handoff_preset}</stage_preset>
 
 事实边界：剧本片段是剧情事实来源；Director story_map 只提供已确认的事件 ID 和叙事组织；实体只提供可引用 ID；视觉风格只决定拍摄表达。不得添加剧本没有的对白、动作或剧情事实。来源片段边界由系统切分，不能把片段边界直接当作场景边界。
 

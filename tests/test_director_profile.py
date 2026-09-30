@@ -1116,6 +1116,8 @@ def test_short_director_source_stays_on_single_call_path():
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert source in prompt
     assert "source_digest" not in prompt
+    assert '<stage_preset name="director-interpretation">' in prompt
+    assert "原文事实、导演解释、用户要求和未决问题必须分开" in prompt
 
 
 def test_long_director_source_uses_source_digest_and_reuses_map_cache():
