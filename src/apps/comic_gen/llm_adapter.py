@@ -206,4 +206,28 @@ class LLMAdapter:
             return content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
-            raise RuntimeError(f"{provider_label} API error: {e}") from e
+            # Preserve the provider's diagnostic boundary.  OpenAI-compatible
+            # gateways often collapse the useful upstream cause into a bare
+            # ``Error code: 502`` string; response headers/body may still carry
+            # a request ID and a short failure reason.  Never log the request
+            # payload or credentials.
+            status = getattr(e, "status_code", None)
+            response = getattr(e, "response", None)
+            if status is None and response is not None:
+                status = getattr(response, "status_code", None)
+            request_id = None
+            headers = getattr(response, "headers", None)
+            if headers:
+                request_id = headers.get("x-request-id") or headers.get("request-id")
+            detail = str(e)
+            body = getattr(e, "body", None)
+            if body and isinstance(body, (str, dict)):
+                detail = f"{detail}; body={str(body)[:500]}"
+            logger.error(
+                "LLM provider request failed: provider=%s model=%s status=%s request_id=%s detail=%s",
+                provider_label, model, status, request_id, detail[:800],
+            )
+            suffix = f" status={status}" if status is not None else ""
+            if request_id:
+                suffix += f" request_id={request_id}"
+            raise RuntimeError(f"{provider_label} API error{suffix}: {detail}") from e
