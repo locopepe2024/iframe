@@ -84,7 +84,10 @@ def build_visual_style_summary(style_config: Optional[Dict[str, Any]]) -> str:
 # even when the API key and route were valid.
 DIRECTOR_PROFILE_TIMEOUT_SECONDS = 1800
 DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
-DIRECTOR_PROFILE_MAX_RETRIES = 0
+# The provider occasionally returns a transient 502/503 after accepting a
+# long Director request.  Allow one SDK retry for retryable HTTP failures;
+# keep this bounded so a costly analysis cannot loop indefinitely.
+DIRECTOR_PROFILE_MAX_RETRIES = 1
 DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
 DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"

@@ -199,7 +199,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert '<stage_preset name="director-interpretation">' in prompt
     assert '<stage_preset name="director-intent">' in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 1800
-    assert processor.llm.chat.call_args.kwargs["max_retries"] == 0
+    assert processor.llm.chat.call_args.kwargs["max_retries"] == 1
     assert result["setting"]["geography"] == "中国大学校园与北京"
 
 
