@@ -1,5 +1,6 @@
 import type {
   MotionRetargetFrameResult,
+  MotionRetargetMappingEntry,
   MotionRetargetMappingManifest,
   MotionRetargetResult,
   MotionTrackFrame,
@@ -7,6 +8,7 @@ import type {
   MotionTrackQuaternion,
   MotionTrackVector3,
 } from "../types";
+import { cleanupRetargetFrames, type MotionCleanupOptions } from "./motion-cleanup";
 
 const EPSILON = 1e-8;
 export const MOTION_MAPPING_SCHEMA = "director-rig-mapping.v1" as const;
@@ -15,12 +17,30 @@ export function createRigMappingManifest(
   rigProfileId: string,
   coordinateSystem: MotionRetargetMappingManifest["coordinateSystem"],
 ): MotionRetargetMappingManifest {
+  const defaults: Array<[string, string, string, MotionTrackVector3]> = [
+    ["pelvis", "left_hip", "right_hip", [1, 0, 0]],
+    ["upper_leg_l", "left_hip", "left_knee", [0, -1, 0]],
+    ["lower_leg_l", "left_knee", "left_ankle", [0, -1, 0]],
+    ["upper_leg_r", "right_hip", "right_knee", [0, -1, 0]],
+    ["lower_leg_r", "right_knee", "right_ankle", [0, -1, 0]],
+    ["foot_l", "left_heel", "left_foot_index", [0, 0, 1]],
+    ["toe_l", "left_heel", "left_foot_index", [0, 0, 1]],
+    ["foot_r", "right_heel", "right_foot_index", [0, 0, 1]],
+    ["toe_r", "right_heel", "right_foot_index", [0, 0, 1]],
+  ];
+  const entries: MotionRetargetMappingEntry[] = defaults.map(([targetJointId, sourceStartJoint, sourceEndJoint, restDirection]) => ({
+    targetJointId,
+    sourceStartJoint,
+    sourceEndJoint,
+    restDirection: restDirection as MotionTrackVector3,
+    restQuaternion: [0, 0, 0, 1],
+  }));
   return {
     schema: MOTION_MAPPING_SCHEMA,
     revision: "director-humanoid-motion-map.v1",
     rigProfileId,
     coordinateSystem,
-    entries: [],
+    entries,
   };
 }
 
@@ -73,6 +93,12 @@ function currentDirection(frame: MotionTrackFrame, startJoint: string, endJoint:
   return [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
 }
 
+function keepQuaternionSign(quaternion: MotionTrackQuaternion, previous: MotionTrackQuaternion | undefined): MotionTrackQuaternion {
+  if (!previous) return quaternion;
+  const product = quaternion[0] * previous[0] + quaternion[1] * previous[1] + quaternion[2] * previous[2] + quaternion[3] * previous[3];
+  return product < 0 ? quaternion.map((value) => -value) as MotionTrackQuaternion : quaternion;
+}
+
 export function retargetMotionTrack(
   manifest: MotionTrackManifest,
   mapping: MotionRetargetMappingManifest,
@@ -83,7 +109,9 @@ export function retargetMotionTrack(
     || mapping.coordinateSystem.depth_z !== manifest.coordinateSystem.depth_z) {
     throw new Error("motion track 与 rig mapping 的坐标系或 schema 不一致。");
   }
-  const frames: MotionRetargetFrameResult[] = manifest.frames.map((frame) => {
+  const frames: MotionRetargetFrameResult[] = [];
+  for (let frameIndex = 0; frameIndex < manifest.frames.length; frameIndex += 1) {
+    const frame = manifest.frames[frameIndex];
     const result: MotionRetargetFrameResult = {
       frame: frame.frame,
       rootPosition: frame.rootPosition ? [...frame.rootPosition] as MotionTrackVector3 : null,
@@ -91,10 +119,12 @@ export function retargetMotionTrack(
       localQuaternions: {},
       warnings: [],
     };
-    if (frame.selectionStatus === "occluded" || frame.selectionStatus === "rejected") {
+    if (frame.selectionStatus !== "tracked" && frame.selectionStatus !== "interpolated") {
       result.warnings.push(`frame ${frame.frame}: selection status ${frame.selectionStatus}; no pose was fabricated`);
-      return result;
+      frames.push(result);
+      continue;
     }
+    const previous = frames[frameIndex - 1];
     for (const entry of mapping.entries) {
       const direction = currentDirection(frame, entry.sourceStartJoint, entry.sourceEndJoint);
       if (!direction || !normalize(direction)) {
@@ -102,12 +132,30 @@ export function retargetMotionTrack(
         continue;
       }
       const delta = quaternionFromDirection(entry.restDirection, direction);
-      const quaternion = normalizeQuaternion(multiplyQuaternion(entry.restQuaternion, delta));
-      if (entry.targetJointId === "pelvis") result.pelvisQuaternion = quaternion;
-      else result.localQuaternions[entry.targetJointId] = quaternion;
+      const rawQuaternion = normalizeQuaternion(multiplyQuaternion(entry.restQuaternion, delta));
+      if (entry.targetJointId === "pelvis") {
+        result.pelvisQuaternion = keepQuaternionSign(rawQuaternion, previous?.pelvisQuaternion ?? undefined);
+      } else {
+        result.localQuaternions[entry.targetJointId] = keepQuaternionSign(rawQuaternion, previous?.localQuaternions[entry.targetJointId]);
+      }
     }
-    return result;
-  });
+    frames.push(result);
+  }
   const warnings = frames.flatMap((frame) => frame.warnings);
   return { mappingRevision: mapping.revision, mode: "local_quaternion_v1", frames, warnings };
+}
+
+export function retargetAndCleanupMotionTrack(
+  manifest: MotionTrackManifest,
+  mapping: MotionRetargetMappingManifest,
+  options?: MotionCleanupOptions,
+): MotionRetargetResult {
+  const result = retargetMotionTrack(manifest, mapping);
+  const cleaned = cleanupRetargetFrames(result.frames, options);
+  return {
+    ...result,
+    frames: cleaned.frames,
+    warnings: [...result.warnings, ...cleaned.warnings],
+    cleanupProcessors: cleaned.processors,
+  };
 }

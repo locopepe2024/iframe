@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { retargetMotionTrack } from "../components/director3d/state/motion-retarget";
+import { createRigMappingManifest, retargetMotionTrack } from "../components/director3d/state/motion-retarget";
 import type { MotionRetargetMappingManifest, MotionTrackManifest } from "../components/director3d/types";
 
 const mapping: MotionRetargetMappingManifest = {
@@ -51,5 +51,41 @@ describe("motion-track local quaternion retarget", () => {
       ...mapping,
       coordinateSystem: { image_x: "blender_x", image_y: "blender_y", depth_z: "blender_z" } as never,
     })).toThrow("坐标系");
+  });
+
+  it("creates the default hip-knee-ankle and foot mappings", () => {
+    const manifest = createRigMappingManifest("humanoid-v1", track().coordinateSystem);
+    expect(manifest.entries.map((entry) => entry.targetJointId)).toEqual([
+      "pelvis", "upper_leg_l", "lower_leg_l", "upper_leg_r", "lower_leg_r", "foot_l", "toe_l", "foot_r", "toe_r",
+    ]);
+    const result = retargetMotionTrack({
+      ...track(),
+      frames: [{ ...track().frames[0], semanticJoints: {
+        left_hip: [-1, 1, 0], right_hip: [1, 1, 0], left_knee: [-1, 0, 0], right_knee: [1, 0, 0],
+        left_ankle: [-1, -1, 0], right_ankle: [1, -1, 0], left_heel: [-1, -1, 0], right_heel: [1, -1, 0],
+        left_foot_index: [-1, -1, 1], right_foot_index: [1, -1, 1],
+      }}],
+    }, manifest);
+    expect(result.frames[0].localQuaternions.upper_leg_l).toHaveLength(4);
+    expect(result.frames[0].localQuaternions.foot_r).toHaveLength(4);
+    expect(result.frames[0].pelvisQuaternion).toHaveLength(4);
+  });
+
+  it("keeps adjacent quaternion signs continuous", () => {
+    const twoFrames = {
+      ...track(),
+      frames: [track().frames[0], { ...track().frames[0], frame: 2, sourceFrame: 2, sourceTimestampSeconds: 1 }],
+    };
+    const result = retargetMotionTrack(twoFrames, mapping);
+    const first = result.frames[0].localQuaternions.upper_arm_l!;
+    const second = result.frames[1].localQuaternions.upper_arm_l!;
+    expect(first[0] * second[0] + first[1] * second[1] + first[2] * second[2] + first[3] * second[3]).toBeGreaterThanOrEqual(0);
+  });
+
+  it("warns and skips only the mapping whose source joint is missing", () => {
+    const result = retargetMotionTrack({ ...track(), frames: [{ ...track().frames[0], semanticJoints: { shoulder_l: [0, 0, 0], elbow_l: [0, 1, 0], hip_l: [0, 0, 0] } }] }, mapping);
+    expect(result.frames[0].localQuaternions.upper_arm_l).toHaveLength(4);
+    expect(result.frames[0].pelvisQuaternion).toBeNull();
+    expect(result.frames[0].warnings.some((warning) => warning.includes("pelvis"))).toBe(true);
   });
 });

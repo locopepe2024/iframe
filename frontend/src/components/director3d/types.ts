@@ -603,6 +603,12 @@ export interface MotionRetargetResult {
   mode: "local_quaternion_v1";
   frames: MotionRetargetFrameResult[];
   warnings: string[];
+  cleanupProcessors?: MotionCleanupProcessor[];
+}
+export interface MotionCleanupProcessor {
+  id: "quaternion_continuity" | "short_gap_interpolation" | "single_frame_outlier" | "torso_smoothing";
+  version: string;
+  parameters: Record<string, number | boolean>;
 }
 export type MotionFootContactStatus = "accepted" | "rejected";
 export interface MotionFootContactEvaluation {
