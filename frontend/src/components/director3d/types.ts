@@ -628,6 +628,20 @@ export interface MotionFullBundle {
   frames: MotionFullBundleFrame[];
   warnings: string[];
 }
+export interface MotionRetargetManifest {
+  schema: "retarget_manifest.v1";
+  source: { trackId: string; sourceRevision: string | null; frameCount: number };
+  rig: { profileId: string; mappingRevision: string; coordinateSystem: MotionTrackCoordinateSystem };
+  mode: "local_quaternion_v1";
+  frames: Array<{
+    frame: number;
+    rootPosition: MotionTrackVector3 | null;
+    pelvisQuaternion: MotionTrackQuaternion | null;
+    localJointIds: string[];
+    warnings: string[];
+  }>;
+  warnings: string[];
+}
 export interface MotionCleanupProcessor {
   id: "quaternion_continuity" | "short_gap_interpolation" | "single_frame_outlier" | "torso_smoothing";
   version: string;
@@ -647,6 +661,35 @@ export interface MotionIkResult {
   reason: "accepted" | "target_unreachable" | "missing_target" | "degenerate_chain" | "residual_above_threshold";
   residualM: number;
   localQuaternions: Record<string, MotionTrackQuaternion>;
+}
+export interface MotionBundleBuildInput {
+  sourceTrackRevision: string | null;
+  rigAsset: string;
+  rigMapping: MotionRetargetMappingManifest;
+  retarget: MotionRetargetResult;
+  frameRange: [number, number];
+  fps: number;
+  coordinateSystem: MotionTrackCoordinateSystem;
+  ikEnabled: boolean;
+  ikStatuses?: Array<{ frame: number; side: "left" | "right"; status: MotionIkStatus; reason: MotionIkResult["reason"] }>;
+  warnings?: string[];
+  reviewStatus?: "needs_director_review" | "ready_for_review";
+}
+export interface FullMotionBundle {
+  schema: "director-full-motion-bundle.v1";
+  source_track_revision: string | null;
+  rig_asset: string;
+  rig_mapping_revision: string;
+  retarget_mode: "local_quaternion_v1";
+  ik_enabled: boolean;
+  cleanup_processors: MotionCleanupProcessor[];
+  frame_range: [number, number];
+  fps: number;
+  coordinate_system: MotionTrackCoordinateSystem;
+  warnings: string[];
+  review_status: "needs_director_review" | "ready_for_review";
+  frames: MotionRetargetFrameResult[];
+  ik_statuses: Array<{ frame: number; side: "left" | "right"; status: MotionIkStatus; reason: MotionIkResult["reason"] }>;
 }
 export interface DialogueReferenceInputState {
   inputId: string;
