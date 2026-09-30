@@ -612,6 +612,13 @@ export interface MotionFootContactEvaluation {
   confidence: number;
   reason: "accepted" | "insufficient_confidence" | "insufficient_continuity" | "velocity_above_threshold" | "height_above_threshold" | "ground_not_calibrated" | "missing_target";
 }
+export type MotionIkStatus = "accepted" | "rejected";
+export interface MotionIkResult {
+  status: MotionIkStatus;
+  reason: "accepted" | "target_unreachable" | "missing_target" | "degenerate_chain" | "residual_above_threshold";
+  residualM: number;
+  localQuaternions: Record<string, MotionTrackQuaternion>;
+}
 export interface DialogueReferenceInputState {
   inputId: string;
   label: string;
