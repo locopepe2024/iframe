@@ -576,6 +576,34 @@ export interface MotionTrackImportState {
   warnings: string[];
   importedAt: string | null;
 }
+export interface MotionRetargetMappingEntry {
+  targetJointId: string;
+  sourceStartJoint: string;
+  sourceEndJoint: string;
+  restDirection: MotionTrackVector3;
+  restQuaternion: MotionTrackQuaternion;
+}
+export type MotionTrackQuaternion = [number, number, number, number];
+export interface MotionRetargetMappingManifest {
+  schema: "director-rig-mapping.v1";
+  revision: string;
+  rigProfileId: string;
+  coordinateSystem: MotionTrackCoordinateSystem;
+  entries: MotionRetargetMappingEntry[];
+}
+export interface MotionRetargetFrameResult {
+  frame: number;
+  rootPosition: MotionTrackVector3 | null;
+  pelvisQuaternion: MotionTrackQuaternion | null;
+  localQuaternions: Record<string, MotionTrackQuaternion>;
+  warnings: string[];
+}
+export interface MotionRetargetResult {
+  mappingRevision: string;
+  mode: "local_quaternion_v1";
+  frames: MotionRetargetFrameResult[];
+  warnings: string[];
+}
 export interface DialogueReferenceInputState {
   inputId: string;
   label: string;
