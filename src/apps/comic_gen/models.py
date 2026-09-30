@@ -1908,22 +1908,39 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         story_map = dict(normalized["story_map"])
         if story_map.get("source_revision_id") == "":
             story_map["source_revision_id"] = "__pending__"
+        # Models sometimes attach classification metadata (for example
+        # ``status`` or ``evidence_status`` on a story thread).  Those fields
+        # are useful to the model but are outside the versioned UI contract;
+        # project each nested item onto the canonical keys before Pydantic
+        # validation instead of rejecting an otherwise usable analysis.
+        people = story_map.get("people") if isinstance(story_map.get("people"), list) else []
+        story_map["people"] = [
+            {key: item[key] for key in ("person_id", "display_name", "variant_character_ids") if key in item}
+            if isinstance(item, dict) else item
+            for item in people
+        ]
         phases = story_map.get("phases") if isinstance(story_map.get("phases"), list) else []
         normalized_phases = []
         for phase in phases:
             if not isinstance(phase, dict):
                 normalized_phases.append(phase)
                 continue
-            phase_item = dict(phase)
+            phase_item = {key: phase[key] for key in ("phase_id", "order", "label", "time_anchor", "events") if key in phase}
             events = phase_item.get("events")
             if isinstance(events, list):
-                phase_item["events"] = [
-                    ({**event, "evidence_status": _normalize_director_evidence_status(event.get("evidence_status"))[0],
-                      **({"evidence_status_raw": _normalize_director_evidence_status(event.get("evidence_status"))[1]}
-                         if _normalize_director_evidence_status(event.get("evidence_status"))[1] else {})}
-                     if isinstance(event, dict) and "evidence_status" in event else event)
-                    for event in events
-                ]
+                projected_events = []
+                for event in events:
+                    if not isinstance(event, dict):
+                        projected_events.append(event)
+                        continue
+                    item = {key: event[key] for key in ("event_id", "order", "title", "description", "character_ids", "dramatic_function", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in event}
+                    if "evidence_status" in item:
+                        status, raw_status = _normalize_director_evidence_status(item["evidence_status"])
+                        item["evidence_status"] = status
+                        if raw_status:
+                            item["evidence_status_raw"] = raw_status
+                    projected_events.append(item)
+                phase_item["events"] = projected_events
             normalized_phases.append(phase_item)
         phases = normalized_phases
         story_map["phases"] = phases
@@ -1938,7 +1955,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                 if not isinstance(arc, dict):
                     normalized_arcs.append(arc)
                     continue
-                item = dict(arc)
+                item = {key: arc[key] for key in ("relationship_id", "arc_id", "person_ids", "label", "legacy_summary", "evidence_status", "evidence_status_raw", "states") if key in arc}
                 if item.get("relationship_id") and item.get("arc_id") and item["relationship_id"] != item["arc_id"]:
                     raise ValueError("relationship_id and arc_id must match when both are provided")
                 if not item.get("relationship_id") and item.get("arc_id"):
@@ -1951,16 +1968,27 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                         item["evidence_status_raw"] = raw_status
                 states = item.get("states")
                 if isinstance(states, list):
-                    item["states"] = [
-                        ({**state, "evidence_status": _normalize_director_evidence_status(state.get("evidence_status"))[0],
-                          **({"evidence_status_raw": _normalize_director_evidence_status(state.get("evidence_status"))[1]}
-                             if _normalize_director_evidence_status(state.get("evidence_status"))[1] else {})}
-                         if isinstance(state, dict) and "evidence_status" in state else state)
-                        for state in states
-                    ]
+                    projected_states = []
+                    for state in states:
+                        if not isinstance(state, dict):
+                            projected_states.append(state)
+                            continue
+                        state_item = {key: state[key] for key in ("phase_id", "state", "trigger_event_ids", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in state}
+                        if "evidence_status" in state_item:
+                            status, raw_status = _normalize_director_evidence_status(state_item["evidence_status"])
+                            state_item["evidence_status"] = status
+                            if raw_status:
+                                state_item["evidence_status_raw"] = raw_status
+                        projected_states.append(state_item)
+                    item["states"] = projected_states
                 normalized_arcs.append(item)
             story_map["relationship_arcs"] = normalized_arcs
         threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []
+        story_map["story_threads"] = [
+            {key: item[key] for key in ("thread_id", "label", "person_ids", "milestones") if key in item}
+            if isinstance(item, dict) else item
+            for item in threads
+        ]
         event_ids = [
             event.get("event_id")
             for phase in phases if isinstance(phase, dict)
