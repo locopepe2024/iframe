@@ -758,6 +758,18 @@ def test_normalize_director_profile_maps_summary_supported_to_interpretation():
     DirectorProfile(**normalized)
 
 
+def test_normalize_director_profile_accepts_arbitrary_non_empty_model_evidence_label():
+    payload = profile_payload()
+    story_map = valid_story_map()
+    story_map["phases"][0]["events"][0]["evidence_status"] = "model_confident_summary"
+    payload["story_map"] = story_map
+    normalized = normalize_director_profile_draft(payload)
+    event = normalized["story_map"]["phases"][0]["events"][0]
+    assert event["evidence_status"] == "interpretation"
+    assert event["evidence_status_raw"] == "model_confident_summary"
+    DirectorProfile(**normalized)
+
+
 def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
     projected = build_director_story_map_execution(valid_story_map())
 

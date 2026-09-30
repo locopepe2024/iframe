@@ -738,16 +738,23 @@ class ModelSettings(BaseModel):
 DirectorEvidenceStatus = Literal["explicit", "interpretation", "uncertain", "conflicted"]
 
 
-def _normalize_director_evidence_status(value: Any) -> Any:
-    """Map known model summary labels to the canonical evidence vocabulary.
+_DIRECTOR_EVIDENCE_STATUSES = {"explicit", "interpretation", "uncertain", "conflicted"}
 
-    ``summary_supported`` is an interpretation-layer signal, not direct
-    script evidence, so it must not be upgraded to ``explicit``. Unknown
-    labels remain unchanged and are rejected by the strict Pydantic contract.
+
+def _normalize_director_evidence_status(value: Any) -> tuple[Any, str | None]:
+    """Keep model results usable while retaining non-canonical labels.
+
+    Evidence status is a display/classification vocabulary, not a semantic
+    gate. A model may introduce a useful label such as ``summary_supported``
+    or another non-empty status. Treat those labels as interpretation-layer
+    output for the strict contract and preserve the original in
+    ``evidence_status_raw``. Never upgrade an unknown label to ``explicit``.
     """
-    if value == "summary_supported":
-        return "interpretation"
-    return value
+    if value in _DIRECTOR_EVIDENCE_STATUSES:
+        return value, None
+    if isinstance(value, str) and value.strip():
+        return "interpretation", value.strip()
+    return "interpretation", None
 
 
 class _DirectorStoryMapModel(BaseModel):
@@ -770,6 +777,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
     dramatic_function: str = Field("", max_length=1200)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
     evidence_status: DirectorEvidenceStatus = "interpretation"
+    evidence_status_raw: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_fact_status(self):
@@ -794,6 +802,7 @@ class DirectorRelationshipState(_DirectorStoryMapModel):
     trigger_event_ids: List[str] = Field(default_factory=list, max_length=40)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
     evidence_status: DirectorEvidenceStatus = "interpretation"
+    evidence_status_raw: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_fact_status(self):
@@ -810,6 +819,7 @@ class DirectorRelationshipArc(_DirectorStoryMapModel):
     label: str = Field("", max_length=180)
     legacy_summary: str = Field("", max_length=1200)
     evidence_status: DirectorEvidenceStatus = "interpretation"
+    evidence_status_raw: Optional[str] = None
     states: List[DirectorRelationshipState] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="before")
@@ -1904,7 +1914,9 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
             events = phase_item.get("events")
             if isinstance(events, list):
                 phase_item["events"] = [
-                    ({**event, "evidence_status": _normalize_director_evidence_status(event.get("evidence_status"))}
+                    ({**event, "evidence_status": _normalize_director_evidence_status(event.get("evidence_status"))[0],
+                      **({"evidence_status_raw": _normalize_director_evidence_status(event.get("evidence_status"))[1]}
+                         if _normalize_director_evidence_status(event.get("evidence_status"))[1] else {})}
                      if isinstance(event, dict) and "evidence_status" in event else event)
                     for event in events
                 ]
@@ -1929,11 +1941,16 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                     item["relationship_id"] = item["arc_id"]
                 item.pop("arc_id", None)
                 if "evidence_status" in item:
-                    item["evidence_status"] = _normalize_director_evidence_status(item["evidence_status"])
+                    status, raw_status = _normalize_director_evidence_status(item["evidence_status"])
+                    item["evidence_status"] = status
+                    if raw_status:
+                        item["evidence_status_raw"] = raw_status
                 states = item.get("states")
                 if isinstance(states, list):
                     item["states"] = [
-                        ({**state, "evidence_status": _normalize_director_evidence_status(state.get("evidence_status"))}
+                        ({**state, "evidence_status": _normalize_director_evidence_status(state.get("evidence_status"))[0],
+                          **({"evidence_status_raw": _normalize_director_evidence_status(state.get("evidence_status"))[1]}
+                             if _normalize_director_evidence_status(state.get("evidence_status"))[1] else {})}
                          if isinstance(state, dict) and "evidence_status" in state else state)
                         for state in states
                     ]
