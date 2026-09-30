@@ -865,6 +865,8 @@ class DirectorStoryThread(_DirectorStoryMapModel):
     label: str = Field("", max_length=180)
     person_ids: List[str] = Field(default_factory=list, max_length=20)
     milestones: List[DirectorStorylineMilestone] = Field(default_factory=list, max_length=100)
+    evidence_status: DirectorEvidenceStatus = "interpretation"
+    evidence_status_raw: Optional[str] = None
 
 
 class DirectorStoryMap(_DirectorStoryMapModel):
@@ -1809,6 +1811,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
             "thread_id": thread.get("thread_id", ""),
             "label": _bounded_director_text(thread.get("label", ""), 100),
             "person_ids": thread.get("person_ids", [])[:20],
+            "evidence_status": thread.get("evidence_status", "interpretation"),
             "milestones": [
                 {"event_id": item.get("event_id", ""), "role": item.get("role", "progress")}
                 for item in milestones[:80] if isinstance(item, dict)
@@ -1984,11 +1987,20 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                 normalized_arcs.append(item)
             story_map["relationship_arcs"] = normalized_arcs
         threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []
-        story_map["story_threads"] = [
-            {key: item[key] for key in ("thread_id", "label", "person_ids", "milestones") if key in item}
-            if isinstance(item, dict) else item
-            for item in threads
-        ]
+        normalized_threads = []
+        for thread in threads:
+            if not isinstance(thread, dict):
+                normalized_threads.append(thread)
+                continue
+            item = {key: thread[key] for key in ("thread_id", "label", "person_ids", "milestones", "evidence_status", "evidence_status_raw") if key in thread}
+            raw_status = thread.get("evidence_status", thread.get("status"))
+            if "evidence_status" in thread or "status" in thread:
+                status, original = _normalize_director_evidence_status(raw_status)
+                item["evidence_status"] = status
+                if original:
+                    item["evidence_status_raw"] = original
+            normalized_threads.append(item)
+        story_map["story_threads"] = normalized_threads
         event_ids = [
             event.get("event_id")
             for phase in phases if isinstance(phase, dict)

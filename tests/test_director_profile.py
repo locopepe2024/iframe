@@ -739,6 +739,23 @@ def test_director_profile_accepts_relationship_arc_evidence_status():
     assert profile.story_map.relationship_arcs[0].evidence_status == "interpretation"
 
 
+def test_normalize_director_profile_accepts_thread_status_alias_and_preserves_raw_label():
+    payload = profile_payload()
+    story_map = valid_story_map()
+    story_map["story_threads"] = [{
+        "thread_id": "thread-main",
+        "label": "主线",
+        "status": "summary_supported",
+        "milestones": [{"event_id": "event-meet", "role": "setup"}],
+    }]
+    payload["story_map"] = story_map
+    normalized = normalize_director_profile_draft(payload)
+    thread = normalized["story_map"]["story_threads"][0]
+    assert thread["evidence_status"] == "interpretation"
+    assert thread["evidence_status_raw"] == "summary_supported"
+    assert DirectorProfile(**normalized).story_map.story_threads[0].evidence_status == "interpretation"
+
+
 def test_director_profile_keeps_relationship_state_without_model_description():
     payload = profile_payload()
     payload["story_map"] = valid_story_map()

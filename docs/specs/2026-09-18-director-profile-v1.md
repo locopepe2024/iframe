@@ -42,6 +42,23 @@ it. Apply increments its revision and content hash.
 
 ## Boundaries
 
+### Model-output compatibility boundary (2026-10-01)
+
+Director model output is treated as a semantic adaptation boundary. Non-canonical
+labels are expected model variation, not a failed generation. The adapter must:
+
+- map any non-empty evidence label to the canonical `interpretation` class;
+- preserve the original label in `evidence_status_raw`;
+- accept common aliases such as `arc_id` → `relationship_id` and `status` →
+  `evidence_status` where the target object has an evidence classification;
+- project unsupported metadata fields out of the strict persisted contract;
+- keep structural failures (missing IDs, broken references, invalid JSON) as
+  failures because they cannot be repaired without inventing story data.
+
+This boundary applies to events, relationship arcs/states, and story threads.
+It does not upgrade model output to `explicit` or treat a model label as script
+evidence.
+
 - Existing visual style selection remains available in Step 2.
 - Applying a director profile never overwrites confirmed assets or frames.
 - Existing frames/assets are marked for review when the confirmed profile hash
