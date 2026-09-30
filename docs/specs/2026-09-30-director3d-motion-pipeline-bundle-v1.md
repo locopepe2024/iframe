@@ -36,7 +36,7 @@ motion-track.v1
 
 导出入口产生两个 JSON 文档：
 
-- `full_motion.bundle.json`：完整逐帧结果，包含脚部接触、IK、quaternion 和 warning。
+- `full_motion.bundle.json`：完整逐帧结果。现有稳定导出契约的 schema 是 `director-full-motion-bundle.v1`；编排器内部的逐帧审阅结果使用 `full_motion.bundle.v1`，两者都不代表已完成 Blender 渲染。
 - `retarget_manifest.json`：轻量核对清单，只包含来源、映射、坐标系、帧数、每帧关节 ID 和 warning，不包含完整 local quaternion 数值。
 
 两份文档都带有版本化 `schema`，可独立解析。浏览器导出前不写入服务器；后续上传或 Blender 编译必须由用户明确触发。
