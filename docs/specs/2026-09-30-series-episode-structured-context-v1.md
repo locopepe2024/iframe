@@ -26,6 +26,118 @@
 
 当前 Director 到拍摄计划的上下文传递最完整；分集结果目前主要用于切分原文，尚未形成可供每集 Director 读取的系列级叙事上下文。
 
+## Director 理解优先的记忆流水线
+
+用户提供的长文本方案提出“滑动窗口摘要 + 记忆状态机 + 故事线追踪”。这与 iframe 的结构化上下文方向一致，但 iframe 在进入任何拍摄或分镜阶段前增加一个明确的人工审阅层：
+
+```text
+原始剧本
+  ↓
+逐场 / 分片摘要
+  ↓
+Series / Episode 记忆与故事线候选
+  ↓
+Director 理解（事实、结构、关系、时间线）
+  ↓ 用户保存并采用
+导演意图（视觉、表演、声音、节奏）
+  ↓ 用户保存并采用
+后续制作阶段
+```
+
+### 微观层：场次摘要
+
+每个自然来源片段或叙事场景可以产生有界摘要，至少包含：
+
+- 核心事件；
+- 参与人物；
+- 地点和时间锚点；
+- 角色当场目标/状态变化；
+- 新出现的信息、秘密或未决线索；
+- `source_ref` 与 `[char_start, char_end)`。
+
+摘要是压缩记忆，不是原文替代物。摘要遗漏的内容不能被解释为剧本没有该内容。
+
+### 中观层：故事线与认知状态
+
+当前 `story_map`、`relationship_arcs`、`story_threads` 和 `scene_summaries` 已经可以承载：
+
+- 阶段与事件顺序；
+- 人物关系状态及触发事件；
+- 主线/支线的 setup、progress、turn、reveal、payoff、open、close；
+- 场景入场/出场状态。
+
+后续可增加“认知状态”作为关系或事件的有来源扩展，例如：
+
+```text
+人物 A 是否知道秘密 S
+  - unknown
+  - suspected
+  - confirmed
+  - disproved
+```
+
+该状态必须绑定触发事件、来源范围和 revision，不能只由模型在某次请求中口头判断。它属于 Director 理解候选或用户确认的结构化状态，不是自动写回剧本原文。
+
+### 宏观层：压缩记忆检索
+
+当用户询问“哪些伏笔尚未回收”“某角色在哪些阶段改变立场”时，第一检索层应优先使用：
+
+1. scene summaries；
+2. story thread milestones；
+3. relationship / epistemic state 变更日志；
+4. unresolved questions 和 canon state；
+5. 必要时回到原文 source range 做证据核验。
+
+压缩记忆用于召回和定位，不能取代原文证据。任何输出都应显示来源事件、集号和 source range。
+
+## 分析维度的工程边界
+
+### 情感弧光
+
+Director 可以为角色和阶段记录定性情绪状态，也可以附带有限的数值标记用于排序或可视化。数值不是剧本事实，也不是自动质量分数。
+
+高斯平滑或其他曲线平滑算法属于可选展示层算法，不能在没有评测的情况下作为 Director 理解的确定性算法。原始情绪观测、平滑参数和最终展示结果必须可区分、可回溯。
+
+### 节拍与结构检测
+
+系统可以检查催化剂、中点、低谷、转折等候选位置，但 10%–15%、50%、75% 等比例只是编剧理论启发式，不是所有剧本的硬规则。
+
+建议输出：
+
+- 候选节拍位置；
+- 关联事件和来源范围；
+- 结构解释；
+- 置信度或不确定性；
+- 用户接受、修改或忽略的入口。
+
+不能因为缺少某个理论节拍而阻止用户采用 Director 理解。
+
+### 一致性审查
+
+一致性审查可以比较：
+
+- 人物行为与已确认性格/禁用项；
+- 人物知道什么与事件顺序；
+- 地点、时代、天气和道具状态；
+- 关系状态与触发事件；
+- 伏笔 setup 与 payoff；
+- 前后场景的 continuity_in / continuity_out。
+
+审查结果应是带证据的 review finding 或候选 patch。所谓 Writer Agent / Critic Agent 可以作为内部执行角色，但不能形成没有来源、没有 revision 的隐式“集体记忆”，也不能自动修改 Director 理解。
+
+## 与当前实现的差异
+
+- **已实现**：长文 source chunk、scene summaries、story map、story threads、relationship arcs、canon state、unresolved questions、Director revision 和 continuity handoff。
+- **已实现但仍需增强**：剧情线跨段追踪、跨集 Series Context、失败后记忆重建。
+- **尚未实现为独立对象**：角色认知状态日志、伏笔回收索引、可解释的一致性 finding 历史。
+- **不应直接引入**：强制三幕式 gate、固定百分比节拍 gate、未经评估的情绪曲线平滑、隐式多 Agent 长期 session。
+
+因此，iframe 的关键产品差异是：
+
+> 模型先生成 Director 理解候选，用户审阅并采用后，才成为后续流程的上下文。
+
+这使“模型认为发生了什么”“导演希望如何理解”“原文明确写了什么”保持可区分。
+
 ## 术语边界
 
 ### 1. Series Context
