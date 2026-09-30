@@ -691,6 +691,29 @@ export interface FullMotionBundle {
   frames: MotionRetargetFrameResult[];
   ik_statuses: Array<{ frame: number; side: "left" | "right"; status: MotionIkStatus; reason: MotionIkResult["reason"] }>;
 }
+export interface MediaHostRenderRequest {
+  schema: "director-media-render-request.v1";
+  requestId: string;
+  bundle: FullMotionBundle;
+  rigAsset: string;
+  outputs: {
+    whiteModelVideo: string;
+    whiteModelPreview: string;
+    fullMotionBundle: string;
+    retargetManifest: string;
+  };
+  render: { width: 640; height: 360; fps: number; engine: "blender"; hostClass: "media" };
+}
+export type MediaHostRenderStatus = "queued" | "running" | "completed" | "failed";
+export interface MediaHostRenderResult {
+  schema: "director-media-render-result.v1";
+  requestId: string;
+  status: MediaHostRenderStatus;
+  outputs: Partial<Record<keyof MediaHostRenderRequest["outputs"], string>>;
+  blenderVersion: string | null;
+  warnings: string[];
+  error: string | null;
+}
 export interface DialogueReferenceInputState {
   inputId: string;
   label: string;
