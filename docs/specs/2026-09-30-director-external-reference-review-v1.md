@@ -10,6 +10,69 @@
 
 阿里云文章 `https://developer.aliyun.com/article/1717944` 在本次审阅中返回安全验证页面，未取得正文。因此本文不把该文章的观点当作证据，也不根据标题推断实现方案。
 
+本次新增审阅对象：`zenstory-ai/drama-skills` 公开仓库的 README、公开设计入口和目录索引。以下事实仅基于公开仓库内容；没有把 README 中的项目宣传、样片成本或累计项目数量当作 iframe 的运行性能证据。
+
+## Drama Skills 参考审阅（公开 README / 目录）
+
+### Observed
+
+公开 README 明确描述：
+
+1. 项目提供 11 个面向短剧/漫剧的 Agent skills，覆盖原著分析、故事开发、分集剧本、资产、图片提示词、分镜、视频提示词、确认后生产、剪辑和审查。
+2. 每集主要维护多份 Markdown 文档，例如剧本、视觉设定、分镜、图片提示词、视频提示词和剪辑单；README 将这些文件描述为创作事实的主要载体。
+3. 生产前先预览、确认，再调用外部图片、视频、配音或音乐接口。
+4. 角色和跨镜一致性通过文件中的“连续性锁”、镜头引用和确定性检查脚本维护。
+5. 公开示例展示了同一镜头在剧本、视觉设定、分镜和视频提示词之间的分层交接。
+6. 仓库包含 `evaluations/`、内容质量案例、评分规则和模型行为探针等评估材料。
+7. 目录中包含 `short-drama-novel-analyze`、`short-drama-develop`、`short-drama-storyboard` 等分阶段 skill；README 将长材料的分集地图、断点续做和按当前集处理列为工作方式。
+
+### Direct implication
+
+- 该项目把“每层决定的可读文本”作为上下文载体，而不是依赖一个长期模型 conversation。
+- 连续性不是一次全局 prompt，而是写入可引用的锁、镜头依据、起止状态和跨文档检查。
+- 生产确认和内容生成分离，能避免模型结果直接触发计费任务。
+- 评估案例与检查脚本是独立工程资产，说明长流程需要验证“内容交接是否完整”，不能只测 API 是否返回 JSON。
+
+### Not yet proven
+
+- README 和目录索引不能证明其内部是否使用持久化数据库、RAG 或 provider conversation session。
+- README 不能证明连续性锁对所有题材和模型都有效，也不能证明样片成本、项目数量或质量指标可迁移到 iframe。
+- 未从公开材料确认其分集摘要、关系状态和伏笔追踪的具体 schema 或合并算法。
+
+### 对 iframe 的可借鉴部分
+
+| Drama Skills 做法 | iframe 可采用的等价物 | 采用边界 |
+|---|---|---|
+| 多份 Markdown 分层交接 | Script / Fact Ledger / Director Interpretation / Director Intent / Shooting Plan 独立 artifact | iframe 使用结构化 JSON + 可读视图，不把所有内容塞进一个长页面 |
+| 连续性锁 | `canon_state`、`scene_summaries`、角色/道具状态、source refs、continuity handoff | 每条锁必须能回指 revision 或 source range；不能把模型猜测写成事实 |
+| 生产前确认 | 保存草稿 → 用户采用 Director → 预览/确认生成任务 | 用户确认是业务动作，不等同于模型 session 或硬性内容评分 gate |
+| 跨文件检查脚本 | Director / shooting plan schema 校验、lineage 校验、story event 引用校验 | 结构错误可阻止；空的创作字段和未知实体应提示并允许继续 |
+| 评估案例与行为探针 | Director 验收样例、跨集一致性测试、分片恢复测试、provider 返回/本地状态测试 | 评估结果记录事实，不自动替用户采用模型建议 |
+| 当前集优先处理 | Episode Context + bounded Series Context projection | 当前集原文仍是事实来源，系列摘要只做有来源的辅助上下文 |
+
+### iframe 与 Drama Skills 的关键差异
+
+1. **存储形态**：Drama Skills 以项目目录和 Markdown 文件作为主要工作面；iframe 以服务端结构化 artifact、revision、job 和 API-key scoped workspace 作为权威存储。
+2. **导演理解位置**：iframe 明确把 Director 理解放在剧本解析之后、导演意图和拍摄计划之前，并要求用户保存/采用；Drama Skills README 更强调从故事开发直接交接到分集剧本、资产和分镜文件。
+3. **事实与解释分层**：iframe 需要区分原文事实、Director interpretation、用户决定、假设和 unresolved；Markdown 文件本身不自动提供这些状态语义，需要额外元数据或检查规则。
+4. **任务恢复**：iframe 有 owner、generation attempt、批次、lineage 和 provider 任务状态；Drama Skills 的公开材料更强调文件和 CLI 工作流，不能据此推断相同的异步任务模型。
+5. **用户界面**：iframe 必须把结构化数据变成可视化时间线、关系图、故事线和 Director 编辑视图；Markdown 是可审计交接格式，但不能替代图形交互。
+
+### 对 Director 设计的新增建议
+
+从该仓库可以增加一条明确原则：
+
+> 每个 Director 决定都应有一个可读、可引用、可检查的“交接面”，而不是只存在于 prompt 或模型返回 JSON 中。
+
+在 iframe 中，这个交接面可以是：
+
+- Director 理解：事件、人物关系、时间线、故事线和待决问题；
+- Director 意图：视觉/表演/声音/节奏和连续性锁；
+- 拍摄计划：场景、节拍、镜头以及每镜的来源和状态；
+- Review findings：每个问题的证据、严重程度、建议动作和用户决定。
+
+每次生成或局部修订都应保留可读摘要和 machine-readable payload；二者必须由同一个 revision 产生，不能让 UI 展示一套文本、下游 prompt 使用另一套隐藏数据。
+
 用户随后提供了该文章中“AnalyticDB PostgreSQL 版 AI 剧本创作解决方案”的第 3 节摘录。以下对该部分的分析以用户提供的原文为依据；文章未提供的实现细节、评测方法和部署数据仍视为未验证。
 
 ## 已观察到的参考能力
