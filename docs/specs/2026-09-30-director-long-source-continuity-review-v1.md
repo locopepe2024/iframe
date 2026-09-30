@@ -22,6 +22,21 @@
 
 ## Contract
 
+### Per-request input budget
+
+Director provider calls use a character budget of approximately 5,000–7,000
+characters per submission. This is a deterministic source/prompt budget, not a
+provider tokenizer promise. The source is split at sentence or paragraph
+boundaries with a target of 5,200 and a hard limit of 6,500 characters. Even a
+short source is mapped to a bounded source digest before final synthesis, so
+the final request does not repeat the raw script together with entities,
+presets and the output schema.
+
+The final synthesis receives the bounded digest and compact context only. It
+must not receive the complete raw source plus all stage Markdown files. Exact
+provider input/output token counts remain provider billing data and must be
+recorded from the upstream response when available.
+
 ### Director map note
 
 每个 chunk 保留服务端拥有的 `source_ref` 与 `[char_start, char_end)`。模型只能返回摘要、continuity_in/out、facts、open_threads。服务端不得采用模型伪造的来源区间。
