@@ -46,6 +46,38 @@ def _prompt_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def build_visual_style_summary(style_config: Optional[Dict[str, Any]]) -> str:
+    """Build a bounded, medium-aware style contract for Director prompts."""
+    if not isinstance(style_config, dict) or not style_config:
+        return "未指定视觉媒介；不要自行假设真人、动漫或 3D 表现形式。"
+    nested = style_config.get("style_config")
+    if isinstance(nested, dict):
+        style_config = {**nested, **{
+            key: value for key, value in style_config.items()
+            if key not in ("style_config",)
+        }}
+    category = str(style_config.get("category", "")).strip().lower()
+    if "anime" in category or "animation" in category or "graphic" in category:
+        medium = "动画/图像化媒介"
+    elif "live" in category or "film" in category or "commercial" in category:
+        medium = "真人/电影化媒介"
+    else:
+        medium = "由当前风格 preset 明确的视觉媒介"
+    name = str(style_config.get("name_zh") or style_config.get("name") or "未命名风格").strip()
+    description = str(style_config.get("description") or style_config.get("subtitle_zh") or "").strip()
+    positive = str(style_config.get("positive_prompt") or "").strip()
+    negative = str(style_config.get("negative_prompt") or "").strip()
+    parts = [f"媒介：{medium}", f"风格：{name}"]
+    if description:
+        parts.append(f"特征：{description[:360]}")
+    if positive:
+        parts.append(f"允许的视觉语言：{positive[:700]}")
+    if negative:
+        parts.append(f"避免的视觉语言：{negative[:500]}")
+    parts.append("风格只约束视觉、表演、材质、摄影和声音表达，不改变剧本事实、地点、时代、人物身份或事件因果。")
+    return "；".join(parts)
+
+
 # Director analysis can legitimately return a large structured profile. The
 # upstream gateway may spend several minutes generating it; five minutes was
 # shorter than observed provider response times and caused a local timeout
@@ -1428,6 +1460,7 @@ class ScriptProcessor:
             if is_source_digest
             else "原始剧本"
         )
+        style_summary = build_visual_style_summary(style_config)
         preset = _load_director_preset("director-interpretation")
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
 
@@ -1445,6 +1478,7 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 
 用户选择的视觉风格：
 <visual_style>{_prompt_json(style_config)}</visual_style>
+<visual_style_summary>{style_summary}</visual_style_summary>
 
 视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
 剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
@@ -1505,6 +1539,7 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             if is_source_digest
             else "原始剧本"
         )
+        style_summary = build_visual_style_summary(style_config)
         # The visible draft already contains the effects of earlier revisions.
         # Keep the newest instructions within a small budget for callers that
         # still submit accumulated history (the UI now submits only one).
@@ -1538,6 +1573,7 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 <entities>{_prompt_json(entities_json)}</entities>
 <visual_style>{_prompt_json(style_config)}</visual_style>
+<visual_style_summary>{style_summary}</visual_style_summary>
 <current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
 <revision_instructions>{numbered}</revision_instructions>
 
@@ -1697,6 +1733,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
         retry_note = ""
         last_error = ""
+        style_summary = build_visual_style_summary(style_config)
         for attempt in range(2):
             handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
@@ -1723,6 +1760,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 <entities>{_prompt_json(entities_json)}</entities>
 <confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
 <visual_style>{_prompt_json(style_config)}</visual_style>
+<visual_style_summary>{style_summary}</visual_style_summary>
 <previous_scene_handoff>{_prompt_json(previous_scene or {})}</previous_scene_handoff>
 上一段 handoff 仅用于连续性：如果当前片段开头确实承接上一场，复用其中的时空、人物/道具状态和 continuity_out；如果没有明确承接证据，必须开始新场景。不要因为地点名称相同而续接，也不要把 handoff 中的 unresolved refs 当作已登记实体。
 {retry_note}"""

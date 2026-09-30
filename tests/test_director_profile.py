@@ -39,10 +39,30 @@ from src.apps.comic_gen.models import (
 )
 from src.apps.comic_gen.llm import (
     DIRECTOR_SOURCE_DIRECT_MAX_CHARS,
+    build_visual_style_summary,
     ScriptProcessor,
     split_director_source,
 )
 from src.apps.identity import UserContext
+
+
+def test_visual_style_summary_distinguishes_animation_and_live_action_without_changing_story_facts():
+    anime = build_visual_style_summary({
+        "category": "japanese_anime",
+        "name_zh": "日式动漫",
+        "description": "手绘线条与赛璐璐色块",
+        "positive_prompt": "cel shading",
+        "negative_prompt": "photorealistic",
+    })
+    live = build_visual_style_summary({
+        "category": "live_action",
+        "name_zh": "电影级写实",
+        "positive_prompt": "natural skin texture",
+    })
+    assert "动画/图像化媒介" in anime
+    assert "真人/电影化媒介" in live
+    assert "不改变剧本事实" in anime
+    assert "cel shading" in anime
 
 
 def profile_payload():
