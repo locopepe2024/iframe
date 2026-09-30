@@ -813,6 +813,8 @@ class DirectorRelationshipArc(_DirectorStoryMapModel):
         if not isinstance(value, dict):
             return value
         normalized = dict(value)
+        if normalized.get("relationship_id") and normalized.get("arc_id") and normalized["relationship_id"] != normalized["arc_id"]:
+            raise ValueError("relationship_id and arc_id must match when both are provided")
         if not normalized.get("relationship_id") and normalized.get("arc_id"):
             normalized["relationship_id"] = normalized["arc_id"]
         normalized.pop("arc_id", None)
@@ -1892,6 +1894,8 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                     normalized_arcs.append(arc)
                     continue
                 item = dict(arc)
+                if item.get("relationship_id") and item.get("arc_id") and item["relationship_id"] != item["arc_id"]:
+                    raise ValueError("relationship_id and arc_id must match when both are provided")
                 if not item.get("relationship_id") and item.get("arc_id"):
                     item["relationship_id"] = item["arc_id"]
                 item.pop("arc_id", None)
