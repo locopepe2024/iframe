@@ -663,6 +663,25 @@ def test_story_map_validates_stable_references_and_rejects_cross_phase_relations
         DirectorStoryMap(**invalid)
 
 
+def test_director_profile_normalizes_model_arc_id_alias():
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["people"].append({
+        "person_id": "zhou",
+        "display_name": "周涵",
+        "variant_character_ids": ["zhou"],
+    })
+    payload["story_map"]["relationship_arcs"] = [{
+        "arc_id": "arc-shen-zhou",
+        "person_ids": ["shen", "zhou"],
+        "states": [],
+    }]
+    normalized = normalize_director_profile_draft(payload)
+    assert normalized["story_map"]["relationship_arcs"][0]["relationship_id"] == "arc-shen-zhou"
+    assert "arc_id" not in normalized["story_map"]["relationship_arcs"][0]
+    DirectorProfile(**normalized)
+
+
 def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
     projected = build_director_story_map_execution(valid_story_map())
 

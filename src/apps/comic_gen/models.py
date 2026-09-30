@@ -1861,6 +1861,23 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         if story_map.get("source_revision_id") == "":
             story_map["source_revision_id"] = "__pending__"
         phases = story_map.get("phases") if isinstance(story_map.get("phases"), list) else []
+        # Model variants commonly call a relationship arc's stable key
+        # ``arc_id``.  The canonical contract uses ``relationship_id``;
+        # normalize the alias at the profile boundary so a recoverable naming
+        # difference does not reject the entire Director result.
+        relationship_arcs = story_map.get("relationship_arcs")
+        if isinstance(relationship_arcs, list):
+            normalized_arcs = []
+            for arc in relationship_arcs:
+                if not isinstance(arc, dict):
+                    normalized_arcs.append(arc)
+                    continue
+                item = dict(arc)
+                if not item.get("relationship_id") and item.get("arc_id"):
+                    item["relationship_id"] = item["arc_id"]
+                item.pop("arc_id", None)
+                normalized_arcs.append(item)
+            story_map["relationship_arcs"] = normalized_arcs
         threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []
         event_ids = [
             event.get("event_id")
