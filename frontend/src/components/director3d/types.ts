@@ -604,6 +604,14 @@ export interface MotionRetargetResult {
   frames: MotionRetargetFrameResult[];
   warnings: string[];
 }
+export type MotionFootContactStatus = "accepted" | "rejected";
+export interface MotionFootContactEvaluation {
+  frame: number;
+  side: "left" | "right";
+  status: MotionFootContactStatus;
+  confidence: number;
+  reason: "accepted" | "insufficient_confidence" | "insufficient_continuity" | "velocity_above_threshold" | "height_above_threshold" | "ground_not_calibrated" | "missing_target";
+}
 export interface DialogueReferenceInputState {
   inputId: string;
   label: string;
