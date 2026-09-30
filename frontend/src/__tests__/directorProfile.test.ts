@@ -45,7 +45,7 @@ it("submits the exact visible profile and accumulated revision history", async (
     expect(axios.post).toHaveBeenCalledWith(
         "/api/projects/film/director-profile-jobs/refine",
         { draft: profile, instructions: ["Keep China", "Emphasize missed calls"] },
-        { timeout: 15000 },
+        { timeout: 60000 },
     );
 });
 
@@ -73,5 +73,21 @@ it("continues polling queued worker states until a profile is returned", async (
     expect(axios.get).toHaveBeenCalledWith(
         "/api/projects/film/director-profile-jobs/director-job",
         { timeout: 15000 },
+    );
+});
+
+it("does not report a submit timeout as a model analysis failure", async () => {
+    vi.mocked(axios.post).mockRejectedValue({
+        isAxiosError: true,
+        code: "ECONNABORTED",
+        message: "timeout of 60000ms exceeded",
+    });
+
+    await expect(analyzeDirectorProfile("/api", "film"))
+        .rejects.toThrow("任务提交连接超时");
+    expect(axios.post).toHaveBeenCalledWith(
+        "/api/projects/film/director-profile-jobs",
+        {},
+        { timeout: 60000 },
     );
 });

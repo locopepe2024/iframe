@@ -23,6 +23,16 @@ interface DirectorProfileJob {
 export type DirectorProfileJobStatusListener = (status: string) => void;
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Creating a Director job must return a durable job id (202) before model
+// work starts. Keep a bounded connection timeout for a stalled API/gateway,
+// while allowing more time than the old 15s value for a busy host. Polls are
+// short because they only read the durable job row.
+const DIRECTOR_SUBMIT_TIMEOUT_MS = 60_000;
+const DIRECTOR_POLL_TIMEOUT_MS = 15_000;
+
+const isTimeout = (error: unknown) => axios.isAxiosError(error) &&
+    (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT" ||
+        String(error.message || "").toLowerCase().includes("timeout"));
 const transient = (error: unknown) => axios.isAxiosError(error) &&
     (!error.response || [408, 429, 502, 503, 504].includes(error.response.status));
 
@@ -43,7 +53,19 @@ async function runJob(
     payload?: unknown,
     onStatus?: DirectorProfileJobStatusListener,
 ) {
-    const response = await axios.post<DirectorProfileJob>(endpoint, payload ?? {}, { timeout: 15000 });
+    let response;
+    try {
+        response = await axios.post<DirectorProfileJob>(
+            endpoint,
+            payload ?? {},
+            { timeout: DIRECTOR_SUBMIT_TIMEOUT_MS },
+        );
+    } catch (error) {
+        if (isTimeout(error)) {
+            throw new Error("Director 分析任务提交连接超时；任务可能已经创建，请刷新任务状态后重试。", { cause: error });
+        }
+        throw error;
+    }
     let job = response.data;
     let failures = 0;
     if (!job?.id) throw new Error("Invalid director analysis task response");
@@ -54,13 +76,21 @@ async function runJob(
     while (isPending(job)) {
         await pause(2000);
         try {
-            const next = (await axios.get<DirectorProfileJob>(`${pollBase}/${job.id}`, { timeout: 15000 })).data;
+            const next = (await axios.get<DirectorProfileJob>(
+                `${pollBase}/${job.id}`,
+                { timeout: DIRECTOR_POLL_TIMEOUT_MS },
+            )).data;
             if (!next || next.id !== job.id) throw new Error("Invalid director analysis task response");
             job = next;
             onStatus?.(job.status);
             failures = 0;
         } catch (error) {
-            if (!transient(error) || ++failures >= 5) throw error;
+            if (!transient(error) || ++failures >= 5) {
+                if (isTimeout(error)) {
+                    throw new Error("Director 分析任务状态查询超时；请稍后刷新查看任务结果。", { cause: error });
+                }
+                throw error;
+            }
         }
     }
     if (hasProfile(job)) {
