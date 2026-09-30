@@ -169,6 +169,30 @@ ffmpeg -hide_banner -loglevel error -ss <time> -i <source> -frames:v 1 <frame.jp
 - This slice does not add automatic segmentation or pose extraction until the extractor and license are selected.
 - This slice does not submit another paid generation while target selection is unverified.
 
+## QuickMagic comparison (public page checked 2026-09-30)
+
+**Observed:** The requested URL returned QuickMagic's public home content rather than a separate tutorial article. The page describes a markerless video-to-3D-motion workflow with subject selection, body/hand/facial motion options, single- and multi-subject capture, pose/frame-rate/motion-cleanup controls, and exports including FBX and BVH for Blender and other tools. It also states that full-body framing is preferred and that motion blur, long occlusion, fast spins, close interaction, camera shake, and rapid viewpoint changes can reduce stability. These are public product claims, not a validation of their internal model.
+
+**Direct implication:** QuickMagic's workflow confirms the missing layers in the current iframe slice:
+
+```text
+video
+  → selected subject
+  → full-body motion capture
+  → motion cleanup / frame-rate normalization
+  → humanoid rig retarget
+  → FBX/BVH or Blender import
+  → preview and manual correction
+```
+
+For the current three-person test, subject selection and occlusion reporting already exist, but the iframe adapter only emits a partial planar state. Hip landmarks are now carried into pelvis/spine fields; the next gap is full-body rig coverage and cleanup constraints rather than another provider prompt change.
+
+**Not yet proven:** QuickMagic's public page does not establish its exact skeleton, coordinate system, hip/root convention, retarget algorithm, foot-contact solver, or whether its export can be used as a drop-in input for this specific Blender rig. We must not treat the marketing workflow as evidence that its output is directly compatible with `white-model-neutral-female-v1.blend`.
+
+**Hypotheses:** A QuickMagic-style intermediate artifact would be more useful for iframe than directly sending a white-model video to H3. The artifact should preserve per-frame body joints, pelvis/root transform, confidence/occlusion, cleanup flags, skeleton metadata, and an importable animation format. A Blender-side FBX/BVH import path could then be compared against the current heuristic adapter on the same 7.79-second source clip.
+
+**What would verify it:** Obtain a real QuickMagic export for the test clip or a compatible public sample, import it into the media rig, and compare pelvis, spine, knee, ankle, and foot-contact trajectories at matched frames. Record source fingerprint, skeleton profile, axis convention, retarget settings, and visual error before considering it as a production extractor.
+
 ## Hypit motion boundary
 
 **Observed:** Hypit's `@hypit/media-track` motion recipes operate on timed visual Items, Sequences, Frames, and sampled media. The supported operators include `fade`, `slide`, `scale`, `bounce`, `wipe`, and `spin`; their outputs are visual properties such as opacity, transform, filter, and clip-path keyframes.
