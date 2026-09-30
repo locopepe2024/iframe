@@ -738,6 +738,18 @@ class ModelSettings(BaseModel):
 DirectorEvidenceStatus = Literal["explicit", "interpretation", "uncertain", "conflicted"]
 
 
+def _normalize_director_evidence_status(value: Any) -> Any:
+    """Map known model summary labels to the canonical evidence vocabulary.
+
+    ``summary_supported`` is an interpretation-layer signal, not direct
+    script evidence, so it must not be upgraded to ``explicit``. Unknown
+    labels remain unchanged and are rejected by the strict Pydantic contract.
+    """
+    if value == "summary_supported":
+        return "interpretation"
+    return value
+
+
 class _DirectorStoryMapModel(BaseModel):
     """Strict nested contract for the visual, versioned story map."""
     model_config = ConfigDict(extra="forbid")
@@ -1883,6 +1895,22 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         if story_map.get("source_revision_id") == "":
             story_map["source_revision_id"] = "__pending__"
         phases = story_map.get("phases") if isinstance(story_map.get("phases"), list) else []
+        normalized_phases = []
+        for phase in phases:
+            if not isinstance(phase, dict):
+                normalized_phases.append(phase)
+                continue
+            phase_item = dict(phase)
+            events = phase_item.get("events")
+            if isinstance(events, list):
+                phase_item["events"] = [
+                    ({**event, "evidence_status": _normalize_director_evidence_status(event.get("evidence_status"))}
+                     if isinstance(event, dict) and "evidence_status" in event else event)
+                    for event in events
+                ]
+            normalized_phases.append(phase_item)
+        phases = normalized_phases
+        story_map["phases"] = phases
         # Model variants commonly call a relationship arc's stable key
         # ``arc_id``.  The canonical contract uses ``relationship_id``;
         # normalize the alias at the profile boundary so a recoverable naming
@@ -1900,6 +1928,15 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                 if not item.get("relationship_id") and item.get("arc_id"):
                     item["relationship_id"] = item["arc_id"]
                 item.pop("arc_id", None)
+                if "evidence_status" in item:
+                    item["evidence_status"] = _normalize_director_evidence_status(item["evidence_status"])
+                states = item.get("states")
+                if isinstance(states, list):
+                    item["states"] = [
+                        ({**state, "evidence_status": _normalize_director_evidence_status(state.get("evidence_status"))}
+                         if isinstance(state, dict) and "evidence_status" in state else state)
+                        for state in states
+                    ]
                 normalized_arcs.append(item)
             story_map["relationship_arcs"] = normalized_arcs
         threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []

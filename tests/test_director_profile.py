@@ -739,6 +739,25 @@ def test_director_profile_accepts_relationship_arc_evidence_status():
     assert profile.story_map.relationship_arcs[0].evidence_status == "interpretation"
 
 
+def test_normalize_director_profile_maps_summary_supported_to_interpretation():
+    payload = profile_payload()
+    story_map = valid_story_map()
+    story_map["people"].append({"person_id": "zhou", "display_name": "周涵", "variant_character_ids": ["zhou"]})
+    story_map["phases"][0]["events"][0]["evidence_status"] = "summary_supported"
+    story_map["relationship_arcs"] = [{
+        "relationship_id": "arc-summary-supported",
+        "person_ids": ["shen", "zhou"],
+        "evidence_status": "summary_supported",
+        "states": [{"phase_id": "phase-campus", "state": "相互试探", "evidence_status": "summary_supported"}],
+    }]
+    payload["story_map"] = story_map
+    normalized = normalize_director_profile_draft(payload)
+    assert normalized["story_map"]["phases"][0]["events"][0]["evidence_status"] == "interpretation"
+    assert normalized["story_map"]["relationship_arcs"][0]["evidence_status"] == "interpretation"
+    assert normalized["story_map"]["relationship_arcs"][0]["states"][0]["evidence_status"] == "interpretation"
+    DirectorProfile(**normalized)
+
+
 def test_director_story_map_execution_projection_is_bounded_and_preserves_story_structure():
     projected = build_director_story_map_execution(valid_story_map())
 
