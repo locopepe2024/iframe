@@ -249,6 +249,8 @@ The source structure includes semantic core joints such as `PELVIS`, `SPINE_01`,
 
 **Implementation slice completed:** `pose_to_blender_state.py` now emits `foot_contact_candidates` for each side using visible ankle/heel/foot-index points, confidence, low local 2D velocity, and a lower-image-envelope heuristic. This is explicitly a candidate signal for review and later IK; it does not claim a calibrated floor or lock the foot in Blender.
 
+The media rig inspection found `ankle_l/r`, `foot_l/r`, `toe_l/r`, and `toe_attachment_l/r` bones, but no existing foot IK constraints. The state now also preserves per-frame `foot_targets.{left,right}.{ankle,heel,toe}`. A future Blender adapter can use these targets after establishing a calibrated floor and IK control policy; the current renderer still leaves them as data.
+
 ## Hypit motion boundary
 
 **Observed:** Hypit's `@hypit/media-track` motion recipes operate on timed visual Items, Sequences, Frames, and sampled media. The supported operators include `fade`, `slide`, `scale`, `bounce`, `wipe`, and `spin`; their outputs are visual properties such as opacity, transform, filter, and clip-path keyframes.

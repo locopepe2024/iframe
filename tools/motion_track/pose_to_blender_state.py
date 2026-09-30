@@ -85,11 +85,23 @@ def _interpolate_samples(samples, total_frames):
             lv = float(left.get('joint_confidence', {}).get(name, right.get('joint_confidence', {}).get(name, 0.0)))
             rv = float(right.get('joint_confidence', {}).get(name, lv))
             joint_confidence[name] = lv + (rv - lv) * t
+        foot_targets = {}
+        for side in set(left.get('foot_targets', {})) | set(right.get('foot_targets', {})):
+            left_target = left.get('foot_targets', {}).get(side, {})
+            right_target = right.get('foot_targets', {}).get(side, left_target)
+            merged = {}
+            for name in set(left_target) | set(right_target):
+                lv = left_target.get(name, right_target.get(name))
+                rv = right_target.get(name, lv)
+                if lv is not None and rv is not None:
+                    merged[name] = [float(a) + (float(b) - float(a)) * t for a, b in zip(lv, rv)]
+            if merged:
+                foot_targets[side] = merged
         root = [float(a) + (float(b) - float(a)) * t for a, b in zip(left["root_position"], right["root_position"])]
         out.append({"frame": frame, "source_frame": left.get("source_frame", frame),
                     "root_position": root, "joint_rotations_deg": rotations, "joint_vectors": vectors,
                     "body_centers": {name: ([float(a)+(float(b)-float(a))*t for a,b in zip(lv, right.get('body_centers', {}).get(name, lv))] if isinstance(lv,list) else float(lv)+(float(right.get('body_centers', {}).get(name,lv))-float(lv))*t) for name,lv in left.get('body_centers', {}).items()},
-                    "semantic_joints": semantic_joints, "joint_confidence": joint_confidence,
+                    "semantic_joints": semantic_joints, "joint_confidence": joint_confidence, "foot_targets": foot_targets,
                     "source_timestamp_seconds": left.get("source_timestamp_seconds", 0.0),
                     "selection_status": "interpolated"})
     # A center-track detector swap can create a single-frame root spike.
@@ -223,7 +235,17 @@ def main():
             'right_heel': R_HEEL, 'left_foot_index': L_FOOT_INDEX,
             'right_foot_index': R_FOOT_INDEX,
         }.items() if l and i < len(l) and len(l[i]) > 3}
-        frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
+        foot_targets = {}
+        for side, indices in {
+            'left': (L_ANKLE, L_HEEL, L_FOOT_INDEX),
+            'right': (R_ANKLE, R_HEEL, R_FOOT_INDEX),
+        }.items():
+            names = ('ankle', 'heel', 'toe')
+            target = {name: xyz_point(l, index) for name, index in zip(names, indices)}
+            target = {name: value for name, value in target.items() if value is not None}
+            if target:
+                foot_targets[side] = target
+        frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'foot_targets':foot_targets,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
     total_frames=max((int(round(float(f.get('timestamp_seconds',0.0))*fps))+1 for f in src['frames']),default=1)
     frames=_interpolate_samples(frames,total_frames)
     frames=_infer_foot_contact_candidates(frames)

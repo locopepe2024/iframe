@@ -73,6 +73,8 @@ def test_foot_contact_is_only_a_candidate_signal(tmp_path):
     assert set(sample["foot_contact_candidates"]) == {"left", "right"}
     assert all("candidate" in value and "confidence" in value for value in sample["foot_contact_candidates"].values())
     assert all(value["method"].startswith("2d_") for value in sample["foot_contact_candidates"].values())
+    assert set(sample["foot_targets"]) == {"left", "right"}
+    assert set(sample["foot_targets"]["left"]) == {"ankle", "heel", "toe"}
 
 
 def test_missing_hip_landmark_does_not_fabricate_pelvis_pose(tmp_path):
