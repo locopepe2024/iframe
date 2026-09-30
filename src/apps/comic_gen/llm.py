@@ -105,6 +105,16 @@ def _load_director_preset(name: str) -> str:
     return value or _DIRECTOR_PRESET_FALLBACKS[name]
 
 
+def director_preset_identity(name: str) -> Dict[str, str]:
+    """Return stable metadata used to bind jobs to the exact stage preset."""
+    content = _load_director_preset(name)
+    return {
+        "preset_id": name,
+        "preset_revision": "1",
+        "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+    }
+
+
 def _director_source_boundary_positions(text: str) -> List[int]:
     """Return character offsets that are safe-ish narrative break points.
 

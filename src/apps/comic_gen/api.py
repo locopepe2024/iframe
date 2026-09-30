@@ -77,7 +77,7 @@ from .models import (
     AssetLibraryReference,
     normalize_director_profile_draft,
 )
-from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, director_preset_identity
 from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
@@ -4771,6 +4771,8 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         script.original_text, entities, style, draft, instructions,
+        director_preset_identity("director-interpretation"),
+        director_preset_identity("director-intent"),
         llm.provider, llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
@@ -5134,6 +5136,7 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any])
         selected_fields(entities["characters"], ("id", "name", "persona", "base_character_id", "description")),
         selected_fields(entities["scenes"], ("id", "name", "description")),
         selected_fields(entities["props"], ("id", "name", "description")),
+        director_preset_identity("shooting-plan-handoff"),
         llm.provider,
         llm._get_default_model(),
     ]
