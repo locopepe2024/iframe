@@ -138,7 +138,67 @@ Director 可以为角色和阶段记录定性情绪状态，也可以附带有�
 
 这使“模型认为发生了什么”“导演希望如何理解”“原文明确写了什么”保持可区分。
 
-## 术语边界
+## Markdown 交接文件与 Agent 上下文
+
+Drama Skills 的 `分集剧本.md`、`视觉设定.md`、`分镜.md` 等文件，不只是导出格式，也承担了阶段之间的上下文约束。它们把“上一阶段已经决定什么、下一阶段可以读取什么、哪些内容必须保持不变”写成 Agent 能读取、用户能审阅的交接面。
+
+iframe 可以借鉴这种做法，但需要把三类内容分开：
+
+### 1. Agent 规则文件（静态约束）
+
+类似仓库级 `AGENTS.md` 或 skill reference，规定：
+
+- 当前阶段的职责和输入/输出边界；
+- 哪些字段是原文事实、哪些是导演解释；
+- 不得改写剧本原文；
+- 必须保留 source refs、revision 和 unresolved 状态；
+- 允许为空的创作字段不能被当作结构错误；
+- 生成前必须经过用户采用或确认。
+
+这类文件属于产品/Agent 版本，修改它会影响整个工作区或一类任务，不应被每集用户随意编辑。
+
+### 2. 项目阶段 Markdown（动态上下文）
+
+等价于：
+
+```text
+剧本.md / 分集剧本.md
+视觉设定.md
+分镜.md
+提示词.md
+```
+
+它们属于项目 artifact，记录当前项目的创作决定和可读交接内容。iframe 不必把它们作为第二套权威存储，可以由结构化 revision 生成，并提供 Markdown 导入/导出视图：
+
+| Markdown 交接物 | iframe 结构化来源 | 下游作用 |
+|---|---|---|
+| 分集剧本.md | Episode source revision + Episode Context | 当前集原文、事件顺序、人物出场和用户修订边界 |
+| 视觉设定.md | adopted Director Intent + style config + continuity locks | 视觉风格、人物/场景/道具连续性和可选视觉锚点 |
+| 分镜.md | Director Shooting Plan revision | scene → beat → shot、镜头顺序、起止状态和导演效果 |
+| 图片/视频提示词.md | Storyboard / generation prompt artifact | 可执行提示词、参考图槽位、模型参数和生成前预览 |
+
+Markdown 导出必须带上：artifact revision、source revision、Director revision、更新时间和生成契约版本。导入时先进入 draft，不能直接覆盖已采用 revision。
+
+### 3. Agent 运行时上下文包（动态投影）
+
+真正提交给模型的不是整个项目目录，而是按当前任务生成的 bounded context bundle：
+
+```text
+Agent Rules
+  + Current Artifact Markdown projection
+  + Structured IDs / source refs / lineage
+  + Relevant Series Context projection
+  + Previous chunk or scene handoff
+```
+
+这样可以同时拥有 Markdown 的可读交接和结构化数据的精确校验。模型请求结束后，结果必须先通过 schema、source refs 和 lineage 校验，再生成新的 Markdown 投影。
+
+### 重要边界
+
+- Markdown 是上下文交接面，但不是自动事实证明。
+- Agent 规则是静态约束；项目 Markdown 是用户可修改的 artifact；运行时 context bundle 是按任务裁剪的投影，三者不能混存。
+- UI 展示的 Markdown 与下游 prompt 使用的结构化 payload 必须来自同一个 revision，不能出现两套内容。
+- 用户修改 `分集剧本.md` 或 `视觉设定.md` 后，系统应生成新 draft revision，并显示哪些下游产物需要重新采用；不能静默重跑全部剧本分析。
 
 ### 1. Series Context
 
