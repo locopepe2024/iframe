@@ -234,6 +234,16 @@ def test_h3_agent_restores_original_filenames_in_optimized_prompt(setup, monkeyp
     assert assistant['content'] == '请让 @Weixin Image_20260922133813_485_51.jpg、@character.png 在镜头中唱歌，并保持 @song.mp4 的外观'
 
 
+def test_h3_restore_uses_answer_marker_when_followup_does_not_repeat_model(setup, monkeypatch):
+    call = Mock(return_value='以下是优化后的 H3 提示词：@1 在湖边唱歌')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='先用 H3 优化 @lake.jpg', asset_names=['lake.jpg']), setup)
+    agent.send(sid, agent.MessageCreate(content='继续', asset_names=[]), setup)
+    assistant = agent.messages(sid, setup)['messages'][-1]
+    assert '@lake.jpg' in assistant['content']
+
+
 def test_chat_large_inline_history_is_rejected_before_network(setup, monkeypatch):
     monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'api_key': 'test', 'base_url': 'https://example.test/v1'})))
     with pytest.raises(HTTPException) as exc:

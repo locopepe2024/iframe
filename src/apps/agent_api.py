@@ -48,7 +48,9 @@ def _restore_h3_reference_names(answer: str, asset_names: list[str], request: st
     target = request or ""
     if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I):
         target = "\n".join(str(item.get("content", "")) for item in history[-6:] if item.get("role") in {"user", "assistant"})
-    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I):
+    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I) and not re.search(
+        r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", answer, re.I,
+    ):
         return answer
     names = {index: name for index, name in enumerate(effective_names, 1) if name}
     def restore(match):
