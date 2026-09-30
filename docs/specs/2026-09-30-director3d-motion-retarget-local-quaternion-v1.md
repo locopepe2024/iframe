@@ -34,3 +34,14 @@
 - 缺失关节和 occluded 帧不产生伪造 quaternion，并有稳定 warning。
 - 反向向量选择确定性的正交轴，结果仍为单位 quaternion。
 
+## Rig rest-pose evidence export
+
+The browser mapping directions are candidate values until they are calibrated against the real Blender rig. Use:
+
+```bash
+blender -b <character.blend> \
+  --python scripts/director3d/export_blender_rig_rest.py -- \
+  --output <rig-rest.json>
+```
+
+The script is read-only and emits `director-rig-rest-evidence.v1`, including the `.blend` SHA-256, Blender version, armature name, parent chain, deform flag, local rest head/tail, normalized rest direction, and rest quaternion in `xyzw` order. The next mapping revision must be derived from this evidence and record the rig hash; it must not replace candidate values silently.
