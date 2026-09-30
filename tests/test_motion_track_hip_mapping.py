@@ -61,6 +61,9 @@ def test_hip_landmarks_drive_body_centers_pelvis_and_spine(tmp_path):
     for name in ("pelvis", "spine_lower", "spine_mid", "spine_chest"):
         assert name in sample["joint_rotations_deg"]
         assert name in sample["joint_vectors"]
+    for name in ("left_ankle", "right_ankle", "left_heel", "right_heel", "left_foot_index", "right_foot_index"):
+        assert name in sample["semantic_joints"]
+        assert name in sample["joint_confidence"]
 
 
 def test_missing_hip_landmark_does_not_fabricate_pelvis_pose(tmp_path):

@@ -8,6 +8,9 @@ L_ELBOW,R_ELBOW=13,14
 L_WRIST,R_WRIST=15,16
 L_HIP,R_HIP=23,24
 L_KNEE,R_KNEE=25,26
+L_ANKLE,R_ANKLE=27,28
+L_HEEL,R_HEEL=29,30
+L_FOOT_INDEX,R_FOOT_INDEX=31,32
 
 def angle(a,b):
     if not a or not b:return None
@@ -36,6 +39,11 @@ def direction(a,b):
     if length < 1e-6:
         return None
     return [dx/length, 0.0, dz/length]
+def xyz_point(lms,i):
+    p=point(lms,i)
+    if not p:
+        return None
+    return [float(p[0]), float(p[1]), float(p[2])]
 
 def _interpolate_samples(samples, total_frames):
     """Fill detector gaps and reject obvious center-track jumps."""
@@ -66,10 +74,22 @@ def _interpolate_samples(samples, total_frames):
             raw = [float(a) + (float(b) - float(a)) * t for a, b in zip(lv, rv)]
             length = math.sqrt(sum(x*x for x in raw))
             vectors[name] = [x / length for x in raw] if length > 1e-6 else [0.0, 0.0, 0.0]
+        semantic_joints = {}
+        for name in set(left.get('semantic_joints', {})) | set(right.get('semantic_joints', {})):
+            lv = left.get('semantic_joints', {}).get(name, right.get('semantic_joints', {}).get(name))
+            rv = right.get('semantic_joints', {}).get(name, lv)
+            if lv is not None and rv is not None:
+                semantic_joints[name] = [float(a) + (float(b) - float(a)) * t for a, b in zip(lv, rv)]
+        joint_confidence = {}
+        for name in set(left.get('joint_confidence', {})) | set(right.get('joint_confidence', {})):
+            lv = float(left.get('joint_confidence', {}).get(name, right.get('joint_confidence', {}).get(name, 0.0)))
+            rv = float(right.get('joint_confidence', {}).get(name, lv))
+            joint_confidence[name] = lv + (rv - lv) * t
         root = [float(a) + (float(b) - float(a)) * t for a, b in zip(left["root_position"], right["root_position"])]
         out.append({"frame": frame, "source_frame": left.get("source_frame", frame),
                     "root_position": root, "joint_rotations_deg": rotations, "joint_vectors": vectors,
                     "body_centers": {name: ([float(a)+(float(b)-float(a))*t for a,b in zip(lv, right.get('body_centers', {}).get(name, lv))] if isinstance(lv,list) else float(lv)+(float(right.get('body_centers', {}).get(name,lv))-float(lv))*t) for name,lv in left.get('body_centers', {}).items()},
+                    "semantic_joints": semantic_joints, "joint_confidence": joint_confidence,
                     "source_timestamp_seconds": left.get("source_timestamp_seconds", 0.0),
                     "selection_status": "interpolated"})
     # A center-track detector swap can create a single-frame root spike.
@@ -148,7 +168,23 @@ def main():
             body_centers['hips'] = [float(hips[0]), float(hips[1])]
         if lh and rh:
             body_centers['pelvis_width'] = math.sqrt((rh[0]-lh[0])**2 + (rh[1]-lh[1])**2)
-        frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
+        semantic_points = {
+            'left_shoulder': xyz_point(l, L_SHOULDER), 'right_shoulder': xyz_point(l, R_SHOULDER),
+            'left_elbow': xyz_point(l, L_ELBOW), 'right_elbow': xyz_point(l, R_ELBOW),
+            'left_wrist': xyz_point(l, L_WRIST), 'right_wrist': xyz_point(l, R_WRIST),
+            'left_hip': xyz_point(l, L_HIP), 'right_hip': xyz_point(l, R_HIP),
+            'left_knee': xyz_point(l, L_KNEE), 'right_knee': xyz_point(l, R_KNEE),
+            'left_ankle': xyz_point(l, L_ANKLE), 'right_ankle': xyz_point(l, R_ANKLE),
+            'left_heel': xyz_point(l, L_HEEL), 'right_heel': xyz_point(l, R_HEEL),
+            'left_foot_index': xyz_point(l, L_FOOT_INDEX), 'right_foot_index': xyz_point(l, R_FOOT_INDEX),
+        }
+        semantic_points = {name: value for name, value in semantic_points.items() if value is not None}
+        confidence = {name: float(l[i][3]) for name, i in {
+            'left_ankle': L_ANKLE, 'right_ankle': R_ANKLE, 'left_heel': L_HEEL,
+            'right_heel': R_HEEL, 'left_foot_index': L_FOOT_INDEX,
+            'right_foot_index': R_FOOT_INDEX,
+        }.items() if l and i < len(l) and len(l[i]) > 3}
+        frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
     total_frames=max((int(round(float(f.get('timestamp_seconds',0.0))*fps))+1 for f in src['frames']),default=1)
     frames=_interpolate_samples(frames,total_frames)
     source_duration=max((float(f.get('timestamp_seconds',0.0)) for f in src['frames']),default=0.0)

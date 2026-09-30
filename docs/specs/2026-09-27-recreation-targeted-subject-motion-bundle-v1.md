@@ -193,6 +193,60 @@ For the current three-person test, subject selection and occlusion reporting alr
 
 **What would verify it:** Obtain a real QuickMagic export for the test clip or a compatible public sample, import it into the media rig, and compare pelvis, spine, knee, ankle, and foot-contact trajectories at matched frames. Record source fingerprint, skeleton profile, axis convention, retarget settings, and visual error before considering it as a production extractor.
 
+## Qwen-assisted frame analysis boundary
+
+**Observed:** A vision-language model can inspect sampled frames and return structured descriptions, subject identity judgments, action labels, occlusion notes, shot boundaries, and approximate 2D points when explicitly requested. Those outputs are language-model inferences and do not inherently provide temporally consistent metric 3D coordinates, a calibrated camera, a stable skeleton, or foot-contact constraints.
+
+**Direct implication:** Qwen should be an analysis and correction layer, not the sole motion-coordinate extractor:
+
+```text
+video
+  → dense frame sampling / timestamped thumbnails
+  → numeric pose estimator (RTMPose, ViTPose, MediaPipe, or 3D lift)
+  → Qwen review of identity, action beats, occlusion, bad frames, and semantic joints
+  → deterministic validator / smoother / gap policy
+  → 3D lift or SMPL/SMPL-X
+  → Blender retarget and preview
+```
+
+Qwen can also produce a normalized 2D review record such as `{timestamp, subject_id, bbox, visible_joints, action_phase, confidence, occlusion_reason}`. That record is useful for director review and for deciding where to re-run a pose detector. It must not overwrite the numeric pose track without an explicit correction event.
+
+**Not yet proven:** Whether the selected Qwen deployment can reliably emit all 33/whole-body landmarks at video-rate sampling, preserve left/right identity across three people, or infer depth and camera-relative bone rotations well enough for Blender retargeting. Prompted JSON validity is not evidence of geometric accuracy.
+
+**Hypotheses:** The best use of Qwen for the current clip is sparse keyframe annotation and anomaly review, while a dedicated pose/3D body model supplies dense coordinates. Qwen can identify the dance beat, hip drop, turn, or occluded interval and request denser sampling around those times; it should not be asked to hallucinate a complete coordinate system from a few extracted frames.
+
+**What would verify it:** Run an A/B fixture on the same 120-frame track: (A) numeric pose estimator alone, (B) estimator plus Qwen review/correction proposals. Compare hip/shoulder/knee trajectory continuity, left/right identity switches, occlusion precision, and Blender render error at manually labeled keyframes. Promote Qwen corrections only when they improve these metrics without introducing temporal jumps.
+
+## GitHub implementation comparison (public repositories checked 2026-09-30)
+
+**Observed:** The public `KitsuMate/MediaToPose` Blender extension describes a video-to-pose/animation workflow and exposes source modules for canonical detections, rig mapping, retargeting, motion filtering, animation cleanup, camera-motion correction, grounded cleanup, and rig planning. Its README explicitly lists:
+
+- body, hand, and face capture;
+- short-gap repair;
+- torso curve and shoulder post-processors;
+- elbow/arm-twist and knee/leg-twist stabilization;
+- camera-induced root-sliding reduction;
+- bad-detection rejection and gap filling;
+- motion smoothing and foot-contact stabilization;
+- optional SAM 3D Body, AnyCalib, and RoHM cleanup models.
+
+The source structure includes semantic core joints such as `PELVIS`, `SPINE_01`, `SPINE_02`, `CHEST`, both shoulders and both upper legs, plus source landmarks through ankles, heels, and foot indices. The retarget module imports Blender `Quaternion`, `Matrix`, and `Vector` operations; the filter module evaluates temporal and geometric spikes rather than only interpolating missing frames.
+
+**Direct implication:** The open-source implementation validates the architecture we are moving toward: hip/pelvis must be a first-class semantic joint, retargeting should operate in quaternion/rig-local space, and cleanup should include camera correction, limb twist, gap rejection, smoothing, and foot contact. Our current iframe adapter has only a subset: pelvis/spine planar fields, simple interpolation, and a bounded depth proxy.
+
+**Not yet proven:** The repository's model outputs, exact coordinate conventions, license compatibility with iframe, and compatibility with `white-model-neutral-female-v1.blend` have not been validated. We should not copy its implementation or assume its optional models are available on media without a license and runtime review.
+
+**Recommended order for iframe:**
+
+1. Adopt a provider-neutral semantic joint vocabulary including pelvis, spine, ankles, heels, and toes.
+2. Add confidence and rejection decisions per joint/frame before interpolation.
+3. Add source-camera correction as a separate track instead of folding all horizontal movement into root motion.
+4. Replace single-axis Euler application with rest-pose quaternion deltas.
+5. Add foot-contact detection and planted-foot stabilization before judging dance similarity.
+6. Keep Qwen as sparse semantic review and anomaly labeling around the numeric track.
+
+**What would verify it:** Reproduce these steps on the existing center-person clip and compare the current planar render against a semantic full-body render at pelvis, spine, knee, ankle, and foot-contact checkpoints.
+
 ## Hypit motion boundary
 
 **Observed:** Hypit's `@hypit/media-track` motion recipes operate on timed visual Items, Sequences, Frames, and sampled media. The supported operators include `fade`, `slide`, `scale`, `bounce`, `wipe`, and `spin`; their outputs are visual properties such as opacity, transform, filter, and clip-path keyframes.
