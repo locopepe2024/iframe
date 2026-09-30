@@ -1462,9 +1462,11 @@ class ScriptProcessor:
         )
         style_summary = build_visual_style_summary(style_config)
         preset = _load_director_preset("director-interpretation")
+        intent_preset = _load_director_preset("director-intent")
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
 
 <stage_preset name="director-interpretation">{preset}</stage_preset>
+<stage_preset name="director-intent">{intent_preset}</stage_preset>
 
 {source_label}：
 <script>{source_context}</script>

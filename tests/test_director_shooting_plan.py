@@ -216,6 +216,8 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "可选导演视觉锚点" in prompt
     assert "不得伪装成已发生的剧本事实" in prompt
     assert "unresolved_questions" in prompt
+    assert '<stage_preset name="shooting-plan-handoff">' in prompt
+    assert "视觉风格摘要约束镜头的可见表达" in prompt
 
 
 def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references():
