@@ -57,3 +57,11 @@ motion-track.v1
 - spine 分摊、全身 IK、地面求交和动作质量评分
 - Blender 实际导出、视频渲染、provider 提交
 - 将 bundle 自动应用到现有姿态时间线
+
+## Legacy media track normalization
+
+The 2026-09-30 media fixture at `/home/ubuntu/motion-track/output/recreation2-final120.json` is labeled `motion-track.v1` but still uses the legacy `target_landmarks` frame shape. It lacks the canonical root `coordinate_system`, `semantic_joints`, `joint_confidence`, `foot_targets`, and `foot_contact_candidates` fields required by the Director 3D importer.
+
+Use `scripts/director3d/normalize_motion_track.py` as an explicit one-way adapter. It preserves the raw source SHA-256 as `source_revision`, maps MediaPipe joints by index, leaves occluded frames without semantic joints, and initializes contact candidates to false. It does not infer root motion, ground contact, or 3D depth. The importer remains strict.
+
+The media fixture conversion produced 120 frames, 79 tracked frames with semantic joints, and 79 frames with left ankle data. This verifies structural conversion, not retarget quality.
