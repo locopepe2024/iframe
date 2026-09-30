@@ -798,7 +798,11 @@ class DirectorStoryPhase(_DirectorStoryMapModel):
 
 class DirectorRelationshipState(_DirectorStoryMapModel):
     phase_id: str = Field(..., min_length=1, max_length=120)
-    state: str = Field(..., min_length=1, max_length=1200)
+    # The relationship state description is optional model prose.  A model
+    # may return the phase and trigger evidence without a narrative label;
+    # preserve that valid structural state for later Director editing instead
+    # of rejecting the complete profile.
+    state: str = Field("", max_length=1200)
     trigger_event_ids: List[str] = Field(default_factory=list, max_length=40)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
     evidence_status: DirectorEvidenceStatus = "interpretation"

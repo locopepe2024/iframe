@@ -739,6 +739,21 @@ def test_director_profile_accepts_relationship_arc_evidence_status():
     assert profile.story_map.relationship_arcs[0].evidence_status == "interpretation"
 
 
+def test_director_profile_keeps_relationship_state_without_model_description():
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["people"].append({
+        "person_id": "zhou", "display_name": "周涵", "variant_character_ids": ["zhou"],
+    })
+    payload["story_map"]["relationship_arcs"] = [{
+        "relationship_id": "arc-incomplete",
+        "person_ids": ["shen", "zhou"],
+        "states": [{"phase_id": "phase-campus", "trigger_event_ids": ["event-meet"]}],
+    }]
+    profile = DirectorProfile(**normalize_director_profile_draft(payload))
+    assert profile.story_map.relationship_arcs[0].states[0].state == ""
+
+
 def test_normalize_director_profile_maps_summary_supported_to_interpretation():
     payload = profile_payload()
     story_map = valid_story_map()

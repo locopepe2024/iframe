@@ -1018,12 +1018,12 @@ class ScriptProcessor:
 {chunk['text']}
 </source_chunk>"""
             try:
-                content = self.llm.chat(
+                content = (self.llm.chat(
                     messages=[{"role": "user", "content": note_prompt}],
                     response_format={"type": "json_object"},
                     timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
                     max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-                ).strip()
+                ) or "").strip()
             except Exception as exc:
                 raise RuntimeError(
                     f"长文本 Director 分块 {chunk['source_ref']} 请求失败：{exc}"
@@ -1779,13 +1779,13 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 <previous_scene_handoff>{_prompt_json(previous_scene or {})}</previous_scene_handoff>
 上一段 handoff 仅用于连续性：如果当前片段开头确实承接上一场，复用其中的时空、人物/道具状态和 continuity_out；如果没有明确承接证据，必须开始新场景。不要因为地点名称相同而续接，也不要把 handoff 中的 unresolved refs 当作已登记实体。
 {retry_note}"""
-            content = self.llm.chat(
+            content = (self.llm.chat(
                 messages=[{"role": "system", "content": prompt},
                           {"role": "user", "content": "按完整视觉拍摄计划契约返回 JSON。"}],
                 response_format={"type": "json_object"},
                 timeout_seconds=DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
                 max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-            ).strip()
+            ) or "").strip()
             try:
                 result = json.loads(_strip_markdown_json(content))
             except json.JSONDecodeError as exc:
