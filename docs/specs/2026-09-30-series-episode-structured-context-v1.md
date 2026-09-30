@@ -175,6 +175,70 @@ Series Context 只注入与当前集人物、阶段、地点或悬念相关的 b
 
 ## 与外部项目的比较
 
+### 四层剧本分析架构的映射
+
+用户提供的参考架构可以抽象为：
+
+```text
+原始剧本
+  → 结构化解析
+  → 分层记忆与图谱
+  → 多维分析与评估
+  → 报告 / 可视化
+```
+
+它与 iframe 的对应关系如下：
+
+| 参考层 | iframe 当前对应物 | 当前状态 | 边界 |
+|---|---|---|---|
+| Format Parser | `parse_novel()`、Script source revisions、角色/场景/道具提炼 | 已有 | 解析结果是候选结构，不能替代原文；原文保持只读和可回溯 |
+| Layered Memory & Graph | Script Fact Ledger、Series Context、Episode Context、Director `story_map`、关系弧、scene summaries | 部分已有 | 必须区分原文事实、导演解释、用户决定和未决问题 |
+| Scene-by-Scene Pipeline | source chunk、叙事场景、拍摄场次、beat、shot、continuity handoff | 已有基础 | chunk 边界不是场景边界；拍摄场次不是原作场景；shot 是下游规划产物 |
+| Multi-Agent Analysis | Director 理解、导演意图、连续性审阅、拍摄计划生成 | 部分已有 | 当前是多个独立阶段请求，不是持久化的多 Agent 会话 |
+| Emotional / Beat / Consistency checks | emotional arc、pacing、story map、continuity constraints、unresolved questions | 已有基础 | 评估结果应是可解释建议，默认不能成为未经用户同意的硬 gate |
+| Report / Dashboard | Director 图谱、时间线、人物关系、剧情线、拍摄计划图 | 已有基础 | 可视化是结构化 artifact 的视图，不创建第二份事实或版本 |
+
+### 必须补充的 iframe 约束
+
+参考架构强调“图谱”和“分析报告”，但没有说明事实来源、版本采用和用户修改边界。iframe 需要额外保留：
+
+1. **来源链**：每个事实、事件、关系状态和场景候选都可回指 `source_revision_id` 与 source range。
+2. **分层状态**：`source_fact`、`director_interpretation`、`user_decision`、`hypothesis`、`uncertain` 不能混为一个节点类型。
+3. **版本采用**：模型返回先进入 draft；保存和采用是不同动作；下游只读取 adopted revision。
+4. **局部修订**：用户修改 Director 理解时，优先生成 patch 或局部 revision，不自动重新改写剧本原文。
+5. **可恢复任务**：报告生成、长文 map/reduce 和拍摄计划分片都要保存 attempt、batch、lineage 和更新时间。
+6. **用户决定权**：一致性检查可以提示人物、时间、地点、道具或场景冲突，但不能为了追求报告完整度而替用户新增剧情。
+
+### 推荐的 iframe 落地流水线
+
+```text
+Script Source Revision
+  ↓
+Format / Entity Parse
+  ↓
+Script Fact Ledger + Episode Context
+  ↓
+Series Context + Story Map / Relationship Graph
+  ↓
+Director Interpretation
+  ↓ adopted revision
+Director Intent + Continuity Review
+  ↓ adopted revision
+Shooting Plan: narrative scene → production scene → beat → shot
+  ↓
+Storyboard / Assets / Motion adapters
+```
+
+其中“分析报告”不应是独立权威对象，而应是以下结构化产物的只读投影：
+
+- 事实来源审阅：来自 Script Fact Ledger；
+- 故事结构视图：来自 Story Map；
+- 人物关系视图：来自 relationship arcs；
+- 场景/连续性视图：来自 scene summaries、shooting plan handoff；
+- 质量检查视图：来自带证据的 review findings。
+
+如果未来需要导出 PDF 或仪表盘，应记录导出所使用的 artifact revision 和 index revision；导出的报告不能反向成为新的事实来源。
+
 ### `ops120/ai-novel-screenplay-analyzer`
 
 公开 README 可确认：本地 SQLite、多项目、章节脉络、人物关系全景、关系演化、异名候选合并、长任务暂停/继续/分片恢复、G6 图展示。
