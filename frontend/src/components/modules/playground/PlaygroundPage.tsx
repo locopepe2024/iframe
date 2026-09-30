@@ -20,7 +20,7 @@ import {
   type QueuedRequest,
 } from './usePlaygroundStore';
 import { playgroundApi } from '@/lib/api';
-import { getDefaultModelForMode, getModelCapabilities, installUniArtCatalog } from './playgroundModels';
+import { getDefaultModelForMode, getModelCapabilities, getModelDuration, installUniArtCatalog } from './playgroundModels';
 import { referenceKey, referenceName } from './referenceMedia';
 import { normalizePlaygroundSubmission } from './playgroundSubmission';
 
@@ -212,6 +212,13 @@ function PlaygroundContent() {
   const handleGenerate = useCallback(() => {
     if (!prompt.trim() || !activeSessionId) return;
     const submission = normalizePlaygroundSubmission(mode, inputMedia);
+    const durationConfig = getModelDuration(modelId);
+    const selectedDuration = typeof parameters.duration === 'number'
+      ? parameters.duration
+      : durationConfig?.type === 'fixed' ? durationConfig.value : durationConfig?.default;
+    const submissionParameters = ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode) && selectedDuration != null
+      ? { ...parameters, duration: selectedDuration }
+      : parameters;
     enqueueRequest({
       mode: submission.mode,
       modelId,
@@ -219,7 +226,7 @@ function PlaygroundContent() {
       negativePrompt: negativePrompt || undefined,
       inputMedia: submission.inputMedia,
       mediaNames: Object.fromEntries(submission.inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),
-      parameters,
+      parameters: submissionParameters,
       batchSize,
       sessionId: activeSessionId,
       parentGenerationId: parentGenerationId || undefined,

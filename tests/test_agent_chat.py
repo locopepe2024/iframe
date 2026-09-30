@@ -207,11 +207,11 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     agent.send(sid, agent.MessageCreate(content='Use @face.png with @walk.mp4', input_media=files,
         asset_names=['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt']), setup)
     parts = call.call_args.args[2][-1]['content']
-    assert parts[0]['text'].startswith('Use @1 with @3')
+    assert parts[0]['text'].startswith('Use @face.png with @walk.mp4')
     assert [parts[i]['type'] for i in [2, 4, 6, 8, 10]] == ['image_url', 'image_url', 'video_url', 'input_audio', 'text']
     assert parts[2]['image_url']['url'] == 'https://cdn.example/face.png'
     assert parts[6]['video_url'] == 'https://cdn.example/walk.mp4'
-    assert '参考素材 @4：sound.wav' in parts[7]['text']
+    assert '参考素材 @sound.wav' in parts[7]['text']
     agent.send(sid, agent.MessageCreate(content='Continue'), setup)
     assert call.call_args.args[2][1]['content'] == parts
 
@@ -242,6 +242,20 @@ def test_h3_restore_uses_answer_marker_when_followup_does_not_repeat_model(setup
     agent.send(sid, agent.MessageCreate(content='继续', asset_names=[]), setup)
     assistant = agent.messages(sid, setup)['messages'][-1]
     assert '@lake.jpg' in assistant['content']
+
+
+def test_seedance_agent_keeps_filenames_in_model_context_and_answer(setup, monkeypatch):
+    call = Mock(return_value='Seedance 提示词：让 `@1` 与 @2 在湖边唱歌')
+    monkeypatch.setattr(agent, 'complete', call)
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(
+        content='优化 Seedance：@singer.jpg 与 @lake.png 在唱歌',
+        input_media=['/tmp/singer.jpg', '/tmp/lake.png'],
+        asset_names=['singer.jpg', 'lake.png'],
+    ), setup)
+    assert '@singer.jpg 与 @lake.png' in call.call_args.args[2][-1]['content'][0]['text']
+    assert agent.messages(sid, setup)['messages'][-1]['content'] == 'Seedance 提示词：让 `@singer.jpg` 与 @lake.png 在湖边唱歌'
 
 
 def test_chat_large_inline_history_is_rejected_before_network(setup, monkeypatch):

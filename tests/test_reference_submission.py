@@ -28,6 +28,7 @@ def test_mixed_video_references_follow_canonical_order_and_bind_names(monkeypatc
     PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
     body = post.call_args.args[2]
     assert body['content'][0] == {'type': 'text', 'text': '让 @1 穿 @2，参考 @3 和 @4'}
+    assert body['duration'] == 15
     assert [part['role'] for part in body['content'][1:]] == ['reference_image', 'reference_image', 'reference_video', 'reference_audio']
     assert [part[part['type']]['url'] for part in body['content'][1:]] == refs[2:] + refs[1:2] + refs[:1]
     assert body['ratio'] == '9:16' and body['generate_audio'] is True
@@ -78,8 +79,19 @@ def test_i2v_never_silently_drops_second_image(monkeypatch, tmp_path):
     post = capture(monkeypatch)
     gen = PlaygroundGeneration(id='images', model_id='uniart/minimax-h3-vip', mode='i2v',
         prompt='walk', input_media=['https://cdn.example/a.png', 'https://cdn.example/b.png'],
-        parameters={'resolution': '720p'}, created_at='today')
+        parameters={'resolution': '720p', 'duration': 15}, created_at='today')
     with pytest.raises(RuntimeError, match='exactly one image'):
+        PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    post.assert_not_called()
+
+
+def test_uniart_video_missing_duration_never_falls_back_to_five_seconds(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    gen = PlaygroundGeneration(id='missing-duration', model_id='uniart/minimax-h3-vip', mode='r2v',
+        prompt='约15秒，参考 @face.png', input_media=['https://cdn.example/face.png'],
+        media_names={'https://cdn.example/face.png': 'face.png'},
+        parameters={'resolution': '720p'}, created_at='today')
+    with pytest.raises(RuntimeError, match='Video duration is required'):
         PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()
 
@@ -92,7 +104,7 @@ def test_video_text_is_prompt_context_and_does_not_consume_media_indices(monkeyp
     gen = PlaygroundGeneration(id='text-media', model_id='uniart/minimax-h3-vip', mode='r2v',
         prompt='根据 @script.txt 将 @2 中商品替换为 @3，声音参考 @4', input_media=refs,
         media_names=dict(zip(refs, ['script.txt', 'original.mp4', 'product.png', 'voice.m4a'])),
-        parameters={'resolution': '720p'}, created_at='today')
+        parameters={'resolution': '720p', 'duration': 15}, created_at='today')
     PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
     content = post.call_args.args[2]['content']
     assert content[0]['text'].startswith('根据 [Text 1] 将 @2 中商品替换为 @1，声音参考 @3')
@@ -106,7 +118,7 @@ def test_video_reference_does_not_require_an_unrelated_image(monkeypatch, tmp_pa
     post = capture(monkeypatch)
     gen = PlaygroundGeneration(id='video-only', model_id='uniart/minimax-h3-vip', mode='r2v',
         prompt='参考运镜', input_media=['https://cdn.example/original.mp4'],
-        parameters={'resolution': '720p'}, created_at='today')
+        parameters={'resolution': '720p', 'duration': 15}, created_at='today')
     PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
     assert post.call_args.args[2]['content'][1]['type'] == 'video_url'
 

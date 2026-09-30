@@ -380,7 +380,7 @@ class PlaygroundService:
         img_path, img_url = self._resolve_first_input_media(gen)
 
         kwargs = {
-            "duration": params.get("duration", 5),
+            "duration": params.get("duration") if use_uniart else params.get("duration", 5),
             "resolution": params.get("resolution") if use_uniart else params.get("resolution", "1080p"),
             "aspect_ratio": params.get("aspect_ratio", "16:9"),
             "seed": params.get("seed"),
@@ -435,6 +435,9 @@ class PlaygroundService:
             kwargs["generation_mode"] = "first_last_frame"
             kwargs["first_frame"] = gen.input_media[0]
             kwargs["last_frame"] = gen.input_media[1]
+
+        if use_uniart and params.get("duration") is None:
+            raise ValueError("Video duration is required; refresh the model controls and select a duration before submitting")
 
         model.generate(
             prompt=kwargs.pop("reference_prompt", gen.prompt),

@@ -26,8 +26,8 @@ router.include_router(skills_router)
 logger = logging.getLogger(__name__)
 
 
-def _restore_h3_reference_names(answer: str, asset_names: list[str], request: str, history=()) -> str:
-    """Keep Agent-facing H3 drafts addressable by the original attachment names.
+def _restore_model_reference_names(answer: str, asset_names: list[str], request: str, history=()) -> str:
+    """Keep Agent-facing H3/Seedance drafts addressable by filenames.
 
     The Agent uses ``@filename`` as its stable, user-visible reference. Numeric
     labels are only an internal transport form used while attaching multimodal
@@ -46,11 +46,10 @@ def _restore_h3_reference_names(answer: str, asset_names: list[str], request: st
     if not effective_names:
         return answer
     target = request or ""
-    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I):
+    model_pattern = r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺|seedance"
+    if not re.search(model_pattern, target, re.I):
         target = "\n".join(str(item.get("content", "")) for item in history[-6:] if item.get("role") in {"user", "assistant"})
-    if not re.search(r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", target, re.I) and not re.search(
-        r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺", answer, re.I,
-    ):
+    if not re.search(model_pattern, target, re.I) and not re.search(model_pattern, answer, re.I):
         return answer
     names = {index: name for index, name in enumerate(effective_names, 1) if name}
     def restore(match):
@@ -343,21 +342,22 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             if message["role"] == "user":
                 content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
             if message["role"] == "user" and message.get("input_media"):
-                from ..models.reference_binding import bind_reference_names
                 refs = message["input_media"]
                 names = message.get("asset_names", [])
                 labels = [names[i] if i < len(names) else "" for i in range(len(refs))]
-                try:
-                    bound_content = bind_reference_names(content, labels)
-                except ValueError as exc:
-                    raise HTTPException(422, "参考素材名称重复，请使用 @1、@2 等编号明确指定素材") from exc
-                content = [{"type": "text", "text": bound_content}]
+                named = [label for label in labels if label]
+                if len(named) != len(set(named)):
+                    raise HTTPException(422, "参考素材名称重复，请为素材设置不同的原始文件名")
+                # Keep the stable user-facing filename in the Agent context.
+                # Numeric slots are an internal provider mapping only; exposing
+                # them here makes the model copy @1/@2 into the returned draft.
+                content = [{"type": "text", "text": content}]
                 for index, ref in enumerate(refs):
-                    content.append({"type": "text", "text": f"参考素材 @{index + 1}：{labels[index] or '未命名素材'}（紧随此说明的附件）"})
+                    content.append({"type": "text", "text": f"参考素材 @{labels[index] or '未命名素材'}（内部附件顺序 {index + 1}，紧随此说明的附件）"})
                     content.append(content_for(ref))
             history.append({"role": message["role"], "content": content})
         answer = complete(ctx, session["model"], history)
-        answer = _restore_h3_reference_names(
+        answer = _restore_model_reference_names(
             str(answer), body.asset_names, body.content, session["messages"],
         )
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
