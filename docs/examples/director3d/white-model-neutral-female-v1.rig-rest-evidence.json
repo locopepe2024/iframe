@@ -1,0 +1,1983 @@
+{
+  "schema": "director-rig-rest-evidence.v1",
+  "rig_asset": "white-model-neutral-female-v1.blend",
+  "rig_sha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "blender_version": "4.5.9 LTS",
+  "armature": "white-model-neutral-female-armature",
+  "coordinate_space": "armature_local_rest",
+  "quaternion_order": "xyzw",
+  "bone_count": 73,
+  "bones": [
+    {
+      "name": "root",
+      "parent": null,
+      "deform": true,
+      "head_armature": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tail_armature": [
+        0.0,
+        0.93291998,
+        0.0
+      ],
+      "direction_armature": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "length_m": 0.93291998
+    },
+    {
+      "name": "pelvis",
+      "parent": "root",
+      "deform": true,
+      "head_armature": [
+        0.0,
+        0.04569998,
+        0.93179989
+      ],
+      "tail_armature": [
+        0.0,
+        0.01856055,
+        1.04071224
+      ],
+      "direction_armature": [
+        0.0,
+        -0.24179223,
+        0.97032809
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.78796959,
+        7e-08,
+        9e-08,
+        0.61571413
+      ],
+      "length_m": 0.11224281
+    },
+    {
+      "name": "spine_lower",
+      "parent": "pelvis",
+      "deform": true,
+      "head_armature": [
+        -0.0,
+        0.01509997,
+        1.0546
+      ],
+      "tail_armature": [
+        -0.0,
+        0.00229995,
+        1.16419995
+      ],
+      "direction_armature": [
+        0.0,
+        -0.11600017,
+        0.99324924
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.74699402,
+        3.324e-05,
+        3.735e-05,
+        0.66483074
+      ],
+      "length_m": 0.11034487
+    },
+    {
+      "name": "spine_mid",
+      "parent": "spine_lower",
+      "deform": true,
+      "head_armature": [
+        -0.0,
+        0.00229994,
+        1.16419995
+      ],
+      "tail_armature": [
+        -0.0,
+        0.00169993,
+        1.29059994
+      ],
+      "direction_armature": [
+        -0.0,
+        -0.00474687,
+        0.99998868
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.70878309,
+        6e-08,
+        6e-08,
+        0.70542651
+      ],
+      "length_m": 0.12640142
+    },
+    {
+      "name": "spine_chest",
+      "parent": "spine_mid",
+      "deform": true,
+      "head_armature": [
+        -0.0,
+        0.00169994,
+        1.29059994
+      ],
+      "tail_armature": [
+        -0.0,
+        0.02997389,
+        1.43182445
+      ],
+      "direction_armature": [
+        -0.0,
+        0.1963101,
+        0.98054188
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.63391244,
+        4e-08,
+        3e-08,
+        0.77340484
+      ],
+      "length_m": 0.14402701
+    },
+    {
+      "name": "neck",
+      "parent": "spine_chest",
+      "deform": true,
+      "head_armature": [
+        -0.0,
+        0.04059995,
+        1.4849
+      ],
+      "tail_armature": [
+        -0.0,
+        0.01089997,
+        1.54960001
+      ],
+      "direction_armature": [
+        0.0,
+        -0.41718641,
+        0.90882093
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.84177983,
+        3e-08,
+        5e-08,
+        0.53982109
+      ],
+      "length_m": 0.07119115
+    },
+    {
+      "name": "head",
+      "parent": "neck",
+      "deform": true,
+      "head_armature": [
+        -0.0,
+        0.01089995,
+        1.54959989
+      ],
+      "tail_armature": [
+        -0.0,
+        0.00961253,
+        1.6207794
+      ],
+      "direction_armature": [
+        0.0,
+        -0.01808391,
+        0.99983644
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.71347171,
+        2e-08,
+        2e-08,
+        0.70068407
+      ],
+      "length_m": 0.07119116
+    },
+    {
+      "name": "clavicle_l",
+      "parent": "spine_chest",
+      "deform": true,
+      "head_armature": [
+        0.0293,
+        -0.01600011,
+        1.43049991
+      ],
+      "tail_armature": [
+        0.15286651,
+        0.05316967,
+        1.43038535
+      ],
+      "direction_armature": [
+        0.8725884,
+        0.4884555,
+        -0.00080899
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.00034248,
+        0.00021559,
+        -0.50573915,
+        0.86268634
+      ],
+      "length_m": 0.14160916
+    },
+    {
+      "name": "upper_arm_l",
+      "parent": "clavicle_l",
+      "deform": true,
+      "head_armature": [
+        0.15160002,
+        0.05429991,
+        1.41809976
+      ],
+      "tail_armature": [
+        0.3919,
+        0.05879993,
+        1.41809976
+      ],
+      "direction_armature": [
+        0.9998247,
+        0.01872336,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.49525723,
+        0.50461859,
+        -0.49533689,
+        0.50469971
+      ],
+      "length_m": 0.24034213
+    },
+    {
+      "name": "lower_arm_l",
+      "parent": "upper_arm_l",
+      "deform": true,
+      "head_armature": [
+        0.3919,
+        0.05879993,
+        1.41809964
+      ],
+      "tail_armature": [
+        0.64110011,
+        0.05159994,
+        1.41809964
+      ],
+      "direction_armature": [
+        0.99958289,
+        -0.02888033,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.50716954,
+        0.49272794,
+        -0.50716788,
+        0.49272624
+      ],
+      "length_m": 0.24930403
+    },
+    {
+      "name": "wrist_l",
+      "parent": "lower_arm_l",
+      "deform": false,
+      "head_armature": [
+        0.64110005,
+        0.05159994,
+        1.41809976
+      ],
+      "tail_armature": [
+        0.65124714,
+        0.05176101,
+        1.41809976
+      ],
+      "direction_armature": [
+        0.99987406,
+        0.01587081,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        2e-08,
+        1e-08,
+        -0.70147318,
+        0.7126959
+      ],
+      "length_m": 0.01014837
+    },
+    {
+      "name": "hand_l",
+      "parent": "wrist_l",
+      "deform": false,
+      "head_armature": [
+        0.65124714,
+        0.05176101,
+        1.41809976
+      ],
+      "tail_armature": [
+        0.67280978,
+        0.05210326,
+        1.41809976
+      ],
+      "direction_armature": [
+        0.99987406,
+        0.0158707,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.0,
+        -1e-08,
+        -0.70147324,
+        0.71269584
+      ],
+      "length_m": 0.02156535
+    },
+    {
+      "name": "DEF_hand_l",
+      "parent": "hand_l",
+      "deform": true,
+      "head_armature": [
+        0.64110005,
+        0.05159994,
+        1.41809976
+      ],
+      "tail_armature": [
+        0.67280978,
+        0.05210326,
+        1.41809976
+      ],
+      "direction_armature": [
+        0.99987406,
+        0.01587074,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.49601614,
+        0.50395173,
+        -0.49601674,
+        0.50395238
+      ],
+      "length_m": 0.03171372
+    },
+    {
+      "name": "index_01_l",
+      "parent": "DEF_hand_l",
+      "deform": true,
+      "head_armature": [
+        0.7299,
+        0.01679992,
+        1.41389978
+      ],
+      "tail_armature": [
+        0.76160002,
+        0.01759993,
+        1.41389978
+      ],
+      "direction_armature": [
+        0.99968171,
+        0.02522868,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69813007,
+        -0.71597099,
+        -2.32e-06,
+        2.36e-06
+      ],
+      "length_m": 0.03171011
+    },
+    {
+      "name": "index_02_l",
+      "parent": "index_01_l",
+      "deform": true,
+      "head_armature": [
+        0.76160002,
+        0.01759993,
+        1.41389978
+      ],
+      "tail_armature": [
+        0.78869998,
+        0.01839993,
+        1.41389978
+      ],
+      "direction_armature": [
+        0.99956459,
+        0.02950756,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69659626,
+        -0.71746343,
+        -2.38e-06,
+        2.43e-06
+      ],
+      "length_m": 0.02711177
+    },
+    {
+      "name": "index_03_l",
+      "parent": "index_02_l",
+      "deform": true,
+      "head_armature": [
+        0.78869998,
+        0.01839993,
+        1.41389978
+      ],
+      "tail_armature": [
+        0.81220007,
+        0.01909994,
+        1.41389978
+      ],
+      "direction_armature": [
+        0.99955666,
+        0.02977403,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69650054,
+        -0.7175563,
+        -2.38e-06,
+        2.43e-06
+      ],
+      "length_m": 0.02351051
+    },
+    {
+      "name": "index_04_leaf_l",
+      "parent": "index_03_l",
+      "deform": true,
+      "head_armature": [
+        0.81220007,
+        0.01909994,
+        1.41389954
+      ],
+      "tail_armature": [
+        0.83570015,
+        0.01979994,
+        1.41389954
+      ],
+      "direction_armature": [
+        0.99955666,
+        0.02977403,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        -1e-07,
+        -0.69650054,
+        0.7175563
+      ],
+      "length_m": 0.02351051
+    },
+    {
+      "name": "middle_01_l",
+      "parent": "DEF_hand_l",
+      "deform": true,
+      "head_armature": [
+        0.72759998,
+        0.04229992,
+        1.4161998
+      ],
+      "tail_armature": [
+        0.764,
+        0.04369992,
+        1.4161998
+      ],
+      "direction_armature": [
+        0.9992612,
+        0.03843304,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69338554,
+        -0.72056681,
+        -2.39e-06,
+        2.47e-06
+      ],
+      "length_m": 0.03642694
+    },
+    {
+      "name": "middle_02_l",
+      "parent": "middle_01_l",
+      "deform": true,
+      "head_armature": [
+        0.764,
+        0.04369992,
+        1.41619956
+      ],
+      "tail_armature": [
+        0.79329991,
+        0.04459992,
+        1.41619956
+      ],
+      "direction_armature": [
+        0.99952853,
+        0.03070234,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69616723,
+        -0.71787965,
+        -2.46e-06,
+        2.52e-06
+      ],
+      "length_m": 0.02931374
+    },
+    {
+      "name": "middle_03_l",
+      "parent": "middle_02_l",
+      "deform": true,
+      "head_armature": [
+        0.79329991,
+        0.04459992,
+        1.41619956
+      ],
+      "tail_armature": [
+        0.8229,
+        0.04569992,
+        1.41619956
+      ],
+      "direction_armature": [
+        0.9993102,
+        0.03713655,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69385278,
+        -0.72011685,
+        -2.45e-06,
+        2.53e-06
+      ],
+      "length_m": 0.02962052
+    },
+    {
+      "name": "middle_04_leaf_l",
+      "parent": "middle_03_l",
+      "deform": true,
+      "head_armature": [
+        0.8229,
+        0.04569992,
+        1.41619945
+      ],
+      "tail_armature": [
+        0.85250008,
+        0.04679993,
+        1.41619945
+      ],
+      "direction_armature": [
+        0.9993102,
+        0.03713655,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.0,
+        -2e-08,
+        -0.69385278,
+        0.72011685
+      ],
+      "length_m": 0.02962052
+    },
+    {
+      "name": "little_01_l",
+      "parent": "DEF_hand_l",
+      "deform": true,
+      "head_armature": [
+        0.71049994,
+        0.08669993,
+        1.41429961
+      ],
+      "tail_armature": [
+        0.74130005,
+        0.08809993,
+        1.41429961
+      ],
+      "direction_armature": [
+        0.99896854,
+        0.04540779,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69086623,
+        -0.72298265,
+        -2.38e-06,
+        2.47e-06
+      ],
+      "length_m": 0.03083191
+    },
+    {
+      "name": "little_02_l",
+      "parent": "little_01_l",
+      "deform": true,
+      "head_armature": [
+        0.74130005,
+        0.08809993,
+        1.41429961
+      ],
+      "tail_armature": [
+        0.76790011,
+        0.08939993,
+        1.41429961
+      ],
+      "direction_armature": [
+        0.99880791,
+        0.04881379,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.68963253,
+        -0.72415948,
+        -2.44e-06,
+        2.54e-06
+      ],
+      "length_m": 0.02663182
+    },
+    {
+      "name": "little_03_l",
+      "parent": "little_02_l",
+      "deform": true,
+      "head_armature": [
+        0.76790011,
+        0.08939993,
+        1.41429985
+      ],
+      "tail_armature": [
+        0.78880006,
+        0.09029993,
+        1.41429985
+      ],
+      "direction_armature": [
+        0.9990741,
+        0.04302245,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69172895,
+        -0.7221573,
+        -2.44e-06,
+        2.54e-06
+      ],
+      "length_m": 0.02091932
+    },
+    {
+      "name": "little_04_leaf_l",
+      "parent": "little_03_l",
+      "deform": true,
+      "head_armature": [
+        0.78880006,
+        0.09029993,
+        1.41429973
+      ],
+      "tail_armature": [
+        0.80970001,
+        0.09119993,
+        1.41429973
+      ],
+      "direction_armature": [
+        0.9990741,
+        0.04302245,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        -1e-07,
+        -0.69172895,
+        0.7221573
+      ],
+      "length_m": 0.02091933
+    },
+    {
+      "name": "ring_01_l",
+      "parent": "DEF_hand_l",
+      "deform": true,
+      "head_armature": [
+        0.72130013,
+        0.06669994,
+        1.41589975
+      ],
+      "tail_armature": [
+        0.75630015,
+        0.06699994,
+        1.41589975
+      ],
+      "direction_armature": [
+        0.99996328,
+        0.00857125,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70406985,
+        -0.71013069,
+        -2.42e-06,
+        2.43e-06
+      ],
+      "length_m": 0.03500131
+    },
+    {
+      "name": "ring_02_l",
+      "parent": "ring_01_l",
+      "deform": true,
+      "head_armature": [
+        0.75630015,
+        0.06699993,
+        1.41589963
+      ],
+      "tail_armature": [
+        0.78390014,
+        0.06709994,
+        1.41589963
+      ],
+      "direction_armature": [
+        0.99999344,
+        0.00362323,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70582455,
+        -0.70838666,
+        -2.49e-06,
+        2.49e-06
+      ],
+      "length_m": 0.02760017
+    },
+    {
+      "name": "ring_03_l",
+      "parent": "ring_02_l",
+      "deform": true,
+      "head_armature": [
+        0.78390014,
+        0.06709995,
+        1.41589987
+      ],
+      "tail_armature": [
+        0.81220007,
+        0.06739995,
+        1.41589987
+      ],
+      "direction_armature": [
+        0.99994379,
+        0.01060005,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70334911,
+        -0.71084458,
+        -2.48e-06,
+        2.5e-06
+      ],
+      "length_m": 0.02830151
+    },
+    {
+      "name": "ring_04_leaf_l",
+      "parent": "ring_03_l",
+      "deform": true,
+      "head_armature": [
+        0.81220007,
+        0.06739995,
+        1.41589987
+      ],
+      "tail_armature": [
+        0.8405,
+        0.06769995,
+        1.41589987
+      ],
+      "direction_armature": [
+        0.99994379,
+        0.01060005,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        -1e-07,
+        -0.70334911,
+        0.71084458
+      ],
+      "length_m": 0.02830151
+    },
+    {
+      "name": "thumb_01_l",
+      "parent": "DEF_hand_l",
+      "deform": true,
+      "head_armature": [
+        0.63870001,
+        0.02159994,
+        1.40809977
+      ],
+      "tail_armature": [
+        0.66719991,
+        0.00849999,
+        1.39079988
+      ],
+      "direction_armature": [
+        0.79562134,
+        -0.36570653,
+        -0.48295474
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.71775037,
+        -0.27333018,
+        -0.40949702,
+        0.49237916
+      ],
+      "length_m": 0.03582094
+    },
+    {
+      "name": "thumb_02_l",
+      "parent": "thumb_01_l",
+      "deform": true,
+      "head_armature": [
+        0.66719985,
+        0.00849995,
+        1.39079976
+      ],
+      "tail_armature": [
+        0.69559985,
+        -0.00440008,
+        1.37359977
+      ],
+      "direction_armature": [
+        0.7972967,
+        -0.36215311,
+        -0.48286957
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.71660578,
+        -0.27434021,
+        -0.40933207,
+        0.49362016
+      ],
+      "length_m": 0.03562037
+    },
+    {
+      "name": "thumb_03_l",
+      "parent": "thumb_02_l",
+      "deform": true,
+      "head_armature": [
+        0.69560003,
+        -0.00440009,
+        1.37360013
+      ],
+      "tail_armature": [
+        0.72050005,
+        -0.01580008,
+        1.35850012
+      ],
+      "direction_armature": [
+        0.79622257,
+        -0.36453524,
+        -0.48284954
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.71728384,
+        -0.27360421,
+        -0.4095993,
+        0.49282157
+      ],
+      "length_m": 0.03127269
+    },
+    {
+      "name": "thumb_04_leaf_l",
+      "parent": "thumb_03_l",
+      "deform": true,
+      "head_armature": [
+        0.72050005,
+        -0.01580004,
+        1.35850012
+      ],
+      "tail_armature": [
+        0.74540007,
+        -0.02720003,
+        1.34340012
+      ],
+      "direction_armature": [
+        0.79622257,
+        -0.36453509,
+        -0.48284954
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.42830333,
+        -2.1e-07,
+        -0.70627463,
+        0.56367761
+      ],
+      "length_m": 0.03127269
+    },
+    {
+      "name": "clavicle_r",
+      "parent": "spine_chest",
+      "deform": true,
+      "head_armature": [
+        -0.0293,
+        -0.01600009,
+        1.43049991
+      ],
+      "tail_armature": [
+        -0.15286651,
+        0.05316969,
+        1.43038535
+      ],
+      "direction_armature": [
+        -0.8725884,
+        0.4884555,
+        -0.00080899
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.00034243,
+        -0.00021563,
+        0.50573921,
+        0.8626864
+      ],
+      "length_m": 0.14160916
+    },
+    {
+      "name": "upper_arm_r",
+      "parent": "clavicle_r",
+      "deform": true,
+      "head_armature": [
+        -0.15160002,
+        0.05429993,
+        1.41809976
+      ],
+      "tail_armature": [
+        -0.3919,
+        0.05879994,
+        1.41809976
+      ],
+      "direction_armature": [
+        -0.9998247,
+        0.01872336,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.49525717,
+        -0.50461847,
+        0.49533686,
+        0.50469977
+      ],
+      "length_m": 0.24034213
+    },
+    {
+      "name": "lower_arm_r",
+      "parent": "upper_arm_r",
+      "deform": true,
+      "head_armature": [
+        -0.3919,
+        0.05879994,
+        1.41809964
+      ],
+      "tail_armature": [
+        -0.64110011,
+        0.05159996,
+        1.41809964
+      ],
+      "direction_armature": [
+        -0.99958289,
+        -0.02888034,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.50716954,
+        -0.49272794,
+        0.50716788,
+        0.49272624
+      ],
+      "length_m": 0.24930404
+    },
+    {
+      "name": "wrist_r",
+      "parent": "lower_arm_r",
+      "deform": false,
+      "head_armature": [
+        -0.64110005,
+        0.05159996,
+        1.41809976
+      ],
+      "tail_armature": [
+        -0.65124714,
+        0.05176102,
+        1.41809976
+      ],
+      "direction_armature": [
+        -0.99987406,
+        0.01587081,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        4e-08,
+        -2e-08,
+        0.70147318,
+        0.7126959
+      ],
+      "length_m": 0.01014837
+    },
+    {
+      "name": "hand_r",
+      "parent": "wrist_r",
+      "deform": false,
+      "head_armature": [
+        -0.65124714,
+        0.05176102,
+        1.41809976
+      ],
+      "tail_armature": [
+        -0.67280978,
+        0.05210328,
+        1.41809976
+      ],
+      "direction_armature": [
+        -0.99987406,
+        0.0158707,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.0,
+        2e-08,
+        0.70147324,
+        0.71269584
+      ],
+      "length_m": 0.02156535
+    },
+    {
+      "name": "DEF_hand_r",
+      "parent": "hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.64110005,
+        0.05159996,
+        1.41809976
+      ],
+      "tail_armature": [
+        -0.67280978,
+        0.05210328,
+        1.41809976
+      ],
+      "direction_armature": [
+        -0.99987406,
+        0.01587074,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.49601614,
+        -0.50395173,
+        0.49601674,
+        0.50395238
+      ],
+      "length_m": 0.03171372
+    },
+    {
+      "name": "index_01_r",
+      "parent": "DEF_hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.7299,
+        0.01679994,
+        1.41389978
+      ],
+      "tail_armature": [
+        -0.76160002,
+        0.01759995,
+        1.41389978
+      ],
+      "direction_armature": [
+        -0.99968171,
+        0.02522868,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69813013,
+        0.71597093,
+        2.32e-06,
+        2.36e-06
+      ],
+      "length_m": 0.03171011
+    },
+    {
+      "name": "index_02_r",
+      "parent": "index_01_r",
+      "deform": true,
+      "head_armature": [
+        -0.76160002,
+        0.01759995,
+        1.41389978
+      ],
+      "tail_armature": [
+        -0.78869998,
+        0.01839995,
+        1.41389978
+      ],
+      "direction_armature": [
+        -0.99956459,
+        0.02950756,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69659626,
+        0.71746343,
+        2.38e-06,
+        2.43e-06
+      ],
+      "length_m": 0.02711177
+    },
+    {
+      "name": "index_03_r",
+      "parent": "index_02_r",
+      "deform": true,
+      "head_armature": [
+        -0.78869998,
+        0.01839995,
+        1.41389978
+      ],
+      "tail_armature": [
+        -0.81220007,
+        0.01909995,
+        1.41389978
+      ],
+      "direction_armature": [
+        -0.99955666,
+        0.02977403,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69650054,
+        0.7175563,
+        2.38e-06,
+        2.43e-06
+      ],
+      "length_m": 0.02351051
+    },
+    {
+      "name": "index_04_leaf_r",
+      "parent": "index_03_r",
+      "deform": true,
+      "head_armature": [
+        -0.81220007,
+        0.01909996,
+        1.41389954
+      ],
+      "tail_armature": [
+        -0.83570015,
+        0.01979996,
+        1.41389954
+      ],
+      "direction_armature": [
+        -0.99955666,
+        0.02977403,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        1.1e-07,
+        0.69650054,
+        0.7175563
+      ],
+      "length_m": 0.02351051
+    },
+    {
+      "name": "middle_01_r",
+      "parent": "DEF_hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.72759998,
+        0.04229994,
+        1.4161998
+      ],
+      "tail_armature": [
+        -0.764,
+        0.04369994,
+        1.4161998
+      ],
+      "direction_armature": [
+        -0.9992612,
+        0.03843304,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.6933856,
+        0.72056681,
+        2.39e-06,
+        2.46e-06
+      ],
+      "length_m": 0.03642694
+    },
+    {
+      "name": "middle_02_r",
+      "parent": "middle_01_r",
+      "deform": true,
+      "head_armature": [
+        -0.764,
+        0.04369994,
+        1.41619956
+      ],
+      "tail_armature": [
+        -0.79329991,
+        0.04459994,
+        1.41619956
+      ],
+      "direction_armature": [
+        -0.99952853,
+        0.03070234,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69616729,
+        0.71787965,
+        2.46e-06,
+        2.51e-06
+      ],
+      "length_m": 0.02931373
+    },
+    {
+      "name": "middle_03_r",
+      "parent": "middle_02_r",
+      "deform": true,
+      "head_armature": [
+        -0.79329991,
+        0.04459994,
+        1.41619956
+      ],
+      "tail_armature": [
+        -0.8229,
+        0.04569994,
+        1.41619956
+      ],
+      "direction_armature": [
+        -0.9993102,
+        0.03713655,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69385284,
+        0.72011685,
+        2.45e-06,
+        2.52e-06
+      ],
+      "length_m": 0.02962052
+    },
+    {
+      "name": "middle_04_leaf_r",
+      "parent": "middle_03_r",
+      "deform": true,
+      "head_armature": [
+        -0.8229,
+        0.04569994,
+        1.41619945
+      ],
+      "tail_armature": [
+        -0.85250008,
+        0.04679995,
+        1.41619945
+      ],
+      "direction_armature": [
+        -0.9993102,
+        0.03713655,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.0,
+        2e-08,
+        0.69385284,
+        0.72011685
+      ],
+      "length_m": 0.02962052
+    },
+    {
+      "name": "little_01_r",
+      "parent": "DEF_hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.71049994,
+        0.08669994,
+        1.41429961
+      ],
+      "tail_armature": [
+        -0.74130005,
+        0.08809995,
+        1.41429961
+      ],
+      "direction_armature": [
+        -0.99896854,
+        0.04540779,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69086623,
+        0.72298265,
+        2.38e-06,
+        2.47e-06
+      ],
+      "length_m": 0.03083191
+    },
+    {
+      "name": "little_02_r",
+      "parent": "little_01_r",
+      "deform": true,
+      "head_armature": [
+        -0.74130005,
+        0.08809995,
+        1.41429961
+      ],
+      "tail_armature": [
+        -0.76790011,
+        0.08939995,
+        1.41429961
+      ],
+      "direction_armature": [
+        -0.99880791,
+        0.04881379,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.68963253,
+        0.72415948,
+        2.44e-06,
+        2.54e-06
+      ],
+      "length_m": 0.02663182
+    },
+    {
+      "name": "little_03_r",
+      "parent": "little_02_r",
+      "deform": true,
+      "head_armature": [
+        -0.76790011,
+        0.08939995,
+        1.41429985
+      ],
+      "tail_armature": [
+        -0.78880006,
+        0.09029995,
+        1.41429985
+      ],
+      "direction_armature": [
+        -0.9990741,
+        0.04302245,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.69172895,
+        0.7221573,
+        2.44e-06,
+        2.53e-06
+      ],
+      "length_m": 0.02091933
+    },
+    {
+      "name": "little_04_leaf_r",
+      "parent": "little_03_r",
+      "deform": true,
+      "head_armature": [
+        -0.78880006,
+        0.09029994,
+        1.41429973
+      ],
+      "tail_armature": [
+        -0.80970001,
+        0.09119994,
+        1.41429973
+      ],
+      "direction_armature": [
+        -0.9990741,
+        0.04302245,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        1.1e-07,
+        0.69172895,
+        0.7221573
+      ],
+      "length_m": 0.02091933
+    },
+    {
+      "name": "ring_01_r",
+      "parent": "DEF_hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.72130013,
+        0.06669996,
+        1.41589975
+      ],
+      "tail_armature": [
+        -0.75630015,
+        0.06699996,
+        1.41589975
+      ],
+      "direction_armature": [
+        -0.99996328,
+        0.00857125,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70406985,
+        0.71013069,
+        2.42e-06,
+        2.42e-06
+      ],
+      "length_m": 0.03500131
+    },
+    {
+      "name": "ring_02_r",
+      "parent": "ring_01_r",
+      "deform": true,
+      "head_armature": [
+        -0.75630015,
+        0.06699996,
+        1.41589963
+      ],
+      "tail_armature": [
+        -0.78390014,
+        0.06709996,
+        1.41589963
+      ],
+      "direction_armature": [
+        -0.99999344,
+        0.00362323,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70582455,
+        0.70838666,
+        2.49e-06,
+        2.48e-06
+      ],
+      "length_m": 0.02760017
+    },
+    {
+      "name": "ring_03_r",
+      "parent": "ring_02_r",
+      "deform": true,
+      "head_armature": [
+        -0.78390014,
+        0.06709997,
+        1.41589987
+      ],
+      "tail_armature": [
+        -0.81220007,
+        0.06739997,
+        1.41589987
+      ],
+      "direction_armature": [
+        -0.99994379,
+        0.01060005,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.70334911,
+        0.71084458,
+        2.48e-06,
+        2.49e-06
+      ],
+      "length_m": 0.02830151
+    },
+    {
+      "name": "ring_04_leaf_r",
+      "parent": "ring_03_r",
+      "deform": true,
+      "head_armature": [
+        -0.81220007,
+        0.06739997,
+        1.41589987
+      ],
+      "tail_armature": [
+        -0.8405,
+        0.06769997,
+        1.41589987
+      ],
+      "direction_armature": [
+        -0.99994379,
+        0.01060005,
+        0.0
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -8e-08,
+        1.1e-07,
+        0.70334911,
+        0.71084458
+      ],
+      "length_m": 0.02830151
+    },
+    {
+      "name": "thumb_01_r",
+      "parent": "DEF_hand_r",
+      "deform": true,
+      "head_armature": [
+        -0.63870001,
+        0.02159995,
+        1.40809977
+      ],
+      "tail_armature": [
+        -0.66719997,
+        0.00849998,
+        1.39079976
+      ],
+      "direction_armature": [
+        -0.79562056,
+        -0.365706,
+        -0.48295659
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.71775049,
+        0.27332962,
+        0.4094964,
+        0.49237975
+      ],
+      "length_m": 0.03582105
+    },
+    {
+      "name": "thumb_02_r",
+      "parent": "thumb_01_r",
+      "deform": true,
+      "head_armature": [
+        -0.66719991,
+        0.00849997,
+        1.39079976
+      ],
+      "tail_armature": [
+        -0.69559985,
+        -0.00440004,
+        1.37359977
+      ],
+      "direction_armature": [
+        -0.79729623,
+        -0.3621532,
+        -0.48287031
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.7166059,
+        0.27433985,
+        0.40933189,
+        0.49362034
+      ],
+      "length_m": 0.03562033
+    },
+    {
+      "name": "thumb_03_r",
+      "parent": "thumb_02_r",
+      "deform": true,
+      "head_armature": [
+        -0.69560003,
+        -0.00440006,
+        1.37360013
+      ],
+      "tail_armature": [
+        -0.72050005,
+        -0.01580008,
+        1.35850012
+      ],
+      "direction_armature": [
+        -0.79622239,
+        -0.36453572,
+        -0.48284942
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.71728396,
+        0.27360418,
+        0.40959933,
+        0.49282131
+      ],
+      "length_m": 0.0312727
+    },
+    {
+      "name": "thumb_04_leaf_r",
+      "parent": "thumb_03_r",
+      "deform": true,
+      "head_armature": [
+        -0.72050011,
+        -0.01579996,
+        1.35850012
+      ],
+      "tail_armature": [
+        -0.74540013,
+        -0.02719997,
+        1.34340012
+      ],
+      "direction_armature": [
+        -0.79622251,
+        -0.3645356,
+        -0.48284948
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.42830342,
+        2.8e-07,
+        0.70627475,
+        0.56367743
+      ],
+      "length_m": 0.0312727
+    },
+    {
+      "name": "upper_leg_l",
+      "parent": "pelvis",
+      "deform": true,
+      "head_armature": [
+        0.11139999,
+        0.05179997,
+        0.94409984
+      ],
+      "tail_armature": [
+        0.11139999,
+        0.03230014,
+        0.53469968
+      ],
+      "direction_armature": [
+        0.0,
+        -0.04757631,
+        -0.99886763
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.72373194,
+        5e-08,
+        -5e-08,
+        0.69008124
+      ],
+      "length_m": 0.40986431
+    },
+    {
+      "name": "lower_leg_l",
+      "parent": "upper_leg_l",
+      "deform": true,
+      "head_armature": [
+        0.11139998,
+        0.03230014,
+        0.53469968
+      ],
+      "tail_armature": [
+        0.11139998,
+        0.07650024,
+        0.07069984
+      ],
+      "direction_armature": [
+        0.0,
+        0.09482958,
+        -0.99549347
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.67274457,
+        3e-08,
+        -3e-08,
+        0.73987484
+      ],
+      "length_m": 0.46610031
+    },
+    {
+      "name": "ankle_l",
+      "parent": "lower_leg_l",
+      "deform": false,
+      "head_armature": [
+        0.11139997,
+        0.07650024,
+        0.07069978
+      ],
+      "tail_armature": [
+        0.11139997,
+        0.03224431,
+        0.0528118
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712986,
+        -0.37474033
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        0.0,
+        -0.0,
+        0.19088015
+      ],
+      "length_m": 0.04773421
+    },
+    {
+      "name": "foot_l",
+      "parent": "ankle_l",
+      "deform": false,
+      "head_armature": [
+        0.11139997,
+        0.03224431,
+        0.0528118
+      ],
+      "tail_armature": [
+        0.11139997,
+        -0.06179954,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712981,
+        -0.37474027
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        0.0,
+        0.0,
+        0.19088016
+      ],
+      "length_m": 0.10143519
+    },
+    {
+      "name": "DEF_foot_l",
+      "parent": "foot_l",
+      "deform": true,
+      "head_armature": [
+        0.11139997,
+        0.07650024,
+        0.07069978
+      ],
+      "tail_armature": [
+        0.11139997,
+        -0.06179954,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712986,
+        -0.3747403
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        4e-08,
+        -2.1e-07,
+        0.19088016
+      ],
+      "length_m": 0.14916942
+    },
+    {
+      "name": "toe_l",
+      "parent": "DEF_foot_l",
+      "deform": true,
+      "head_armature": [
+        0.11139997,
+        -0.06179954,
+        0.01479986
+      ],
+      "tail_armature": [
+        0.11139997,
+        -0.12989943,
+        0.01479985
+      ],
+      "direction_armature": [
+        0.0,
+        -1.0,
+        -1.2e-07
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.00017272,
+        1e-07,
+        1.0,
+        0.0
+      ],
+      "length_m": 0.06809969
+    },
+    {
+      "name": "toe_attachment_l",
+      "parent": "toe_l",
+      "deform": true,
+      "head_armature": [
+        0.11139997,
+        -0.12989943,
+        0.01479985
+      ],
+      "tail_armature": [
+        0.11139997,
+        -0.1979993,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -1.0,
+        -1.2e-07
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -6e-08,
+        9e-08,
+        1.0,
+        0.0
+      ],
+      "length_m": 0.0680997
+    },
+    {
+      "name": "upper_leg_r",
+      "parent": "pelvis",
+      "deform": true,
+      "head_armature": [
+        -0.11139999,
+        0.05179997,
+        0.94409984
+      ],
+      "tail_armature": [
+        -0.11139999,
+        0.03230014,
+        0.53469968
+      ],
+      "direction_armature": [
+        0.0,
+        -0.04757631,
+        -0.99886763
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.72373194,
+        5e-08,
+        -5e-08,
+        0.69008124
+      ],
+      "length_m": 0.40986431
+    },
+    {
+      "name": "lower_leg_r",
+      "parent": "upper_leg_r",
+      "deform": true,
+      "head_armature": [
+        -0.11139998,
+        0.03230014,
+        0.53469968
+      ],
+      "tail_armature": [
+        -0.11139998,
+        0.07650024,
+        0.07069984
+      ],
+      "direction_armature": [
+        0.0,
+        0.09482958,
+        -0.99549347
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.67274457,
+        3e-08,
+        -3e-08,
+        0.73987484
+      ],
+      "length_m": 0.46610031
+    },
+    {
+      "name": "ankle_r",
+      "parent": "lower_leg_r",
+      "deform": false,
+      "head_armature": [
+        -0.11139997,
+        0.07650024,
+        0.07069978
+      ],
+      "tail_armature": [
+        -0.11139997,
+        0.03224431,
+        0.0528118
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712986,
+        -0.37474033
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        0.0,
+        -0.0,
+        0.19088015
+      ],
+      "length_m": 0.04773421
+    },
+    {
+      "name": "foot_r",
+      "parent": "ankle_r",
+      "deform": false,
+      "head_armature": [
+        -0.11139997,
+        0.03224431,
+        0.0528118
+      ],
+      "tail_armature": [
+        -0.11139997,
+        -0.06179954,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712981,
+        -0.37474027
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        0.0,
+        0.0,
+        0.19088016
+      ],
+      "length_m": 0.10143519
+    },
+    {
+      "name": "DEF_foot_r",
+      "parent": "foot_r",
+      "deform": true,
+      "head_armature": [
+        -0.11139997,
+        0.07650024,
+        0.07069978
+      ],
+      "tail_armature": [
+        -0.11139997,
+        -0.06179954,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -0.92712986,
+        -0.3747403
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -0.98161334,
+        4e-08,
+        -2.1e-07,
+        0.19088016
+      ],
+      "length_m": 0.14916942
+    },
+    {
+      "name": "toe_r",
+      "parent": "DEF_foot_r",
+      "deform": true,
+      "head_armature": [
+        -0.11139997,
+        -0.06179954,
+        0.01479986
+      ],
+      "tail_armature": [
+        -0.11139997,
+        -0.12989943,
+        0.01479985
+      ],
+      "direction_armature": [
+        0.0,
+        -1.0,
+        -1.2e-07
+      ],
+      "rest_quaternion_armature_xyzw": [
+        0.00017272,
+        1e-07,
+        1.0,
+        0.0
+      ],
+      "length_m": 0.06809969
+    },
+    {
+      "name": "toe_attachment_r",
+      "parent": "toe_r",
+      "deform": true,
+      "head_armature": [
+        -0.11139997,
+        -0.12989943,
+        0.01479985
+      ],
+      "tail_armature": [
+        -0.11139997,
+        -0.1979993,
+        0.01479984
+      ],
+      "direction_armature": [
+        0.0,
+        -1.0,
+        -1.2e-07
+      ],
+      "rest_quaternion_armature_xyzw": [
+        -6e-08,
+        9e-08,
+        1.0,
+        0.0
+      ],
+      "length_m": 0.0680997
+    }
+  ]
+}
