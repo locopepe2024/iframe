@@ -1532,6 +1532,11 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 已确认实体（名称和关系不得擅自替换）：
 <entities>{_prompt_json(entities_json)}</entities>
 
+如果 entities 中包含 series_context 或 series_director_understanding，它们是系列级只读 handoff：
+用于约束全剧背景、人物关系和跨集连续性，不等于本集已经发生的事件。Episode 输出只能把本集原文
+明确出现的角色、地点、事件写入本集 timeline/story_map；系列级内容必须通过引用或 unresolved 状态使用，
+不得把全剧梗概或结局复制为本集事实。
+
 用户选择的视觉风格：
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>
