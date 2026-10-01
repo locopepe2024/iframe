@@ -38,7 +38,8 @@ def spine_target(name,torso_direction,rest_direction):
  return target.normalized() if target.length>1e-8 else torso_direction
 def wd(arm,p):return ((arm.matrix_world@p.tail)-(arm.matrix_world@p.head)).normalized()
 def qxyzw(q):return [q.x,q.y,q.z,q.w]
-raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');ap.add_argument('--enable-pelvis-orientation',action='store_true');args=ap.parse_args(raw)
+raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');ap.add_argument('--enable-pelvis-orientation',action='store_true');ap.add_argument('--facing-offset-deg',type=float,default=0);args=ap.parse_args(raw)
+FACING=Quaternion((0,0,1),math.radians(args.facing_offset_deg))
 t=json.loads(Path(args.track).read_text());proxy_by_frame={}
 if args.torso_proxy:
  proxy_data=json.loads(Path(args.torso_proxy).read_text())
@@ -54,6 +55,7 @@ for src in t['frames']:
  for name in ORDER:
   p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
   target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (clavicle(j,name[-1]) if name.startswith('clavicle_') and all(k in j for k in ('left_shoulder','right_shoulder')) else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)))
+  if target: target=FACING@target
   if not p or not target: warn.append('missing '+name);continue
   current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion()
   if name.startswith('upper_arm_') or name.startswith('upper_leg_'):basis=(arm.matrix_world@p.matrix).to_quaternion()
