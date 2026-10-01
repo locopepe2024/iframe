@@ -56,40 +56,24 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(
         (screen.getByLabelText("geography") as HTMLTextAreaElement).value,
     ).toContain("Chinese university and Beijing"));
     expect(apply).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm direction" }));
+    fireEvent.click(screen.getByRole("button", { name: /Apply Director understanding/ }));
     await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile, undefined, 1));
     expect(api.saveDirectorProfileDraft).toHaveBeenCalledWith("film", 1, 0, profile);
 });
 
-it("offers continue editing and keeps the AI candidate recoverable until a decision", async () => {
+it("loads an AI result directly into the editable draft", async () => {
     vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue({ ...profile, setting: { ...profile.setting, geography: "AI geography" } });
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    expect(await screen.findByRole("button", { name: "Continue editing candidate" })).toBeInTheDocument();
-    expect(window.localStorage.getItem("iframe.director-profile-candidate.v1:film:source-1")).toContain("AI geography");
-
-    fireEvent.click(screen.getByRole("button", { name: "Continue editing candidate" }));
-    await waitFor(() => expect(screen.getByLabelText("geography")).toHaveValue("AI geography"));
-    expect(window.localStorage.getItem("iframe.director-profile-candidate.v1:film:source-1")).toBeNull();
+    expect(await screen.findByLabelText("geography")).toHaveValue("AI geography");
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
-});
-
-it("restores an unhandled AI candidate after refresh without changing the confirmed profile", async () => {
-    window.localStorage.setItem("iframe.director-profile-candidate.v1:film:source-1", JSON.stringify({
-        schemaVersion: 1, projectId: "film", sourceRevision: 1, action: "refine",
-        text: JSON.stringify({ ...profile, setting: { ...profile.setting, geography: "Recovered candidate" } }), createdAt: Date.now(),
-    }));
-    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
-
-    expect(await screen.findByRole("button", { name: "Continue editing candidate" })).toBeInTheDocument();
-    expect(screen.getByText("Director analysis candidate")).toBeInTheDocument();
 });
 
 it("loads the story map's pinned fact revision and displays exact source evidence for review", async () => {
@@ -140,7 +124,7 @@ it("loads the story map's pinned fact revision and displays exact source evidenc
         </NextIntlClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     fireEvent.click(await screen.findByRole("button", { name: /First/ }));
     fireEvent.click(await screen.findByText(/Script evidence/));
@@ -160,7 +144,7 @@ it("saves an editable Director draft without making it active", async () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("Format and genre")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Format and genre"), { target: { value: "Romantic drama" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
@@ -252,7 +236,7 @@ it("requires a fresh analysis after the source changes, then allows saving it ag
     expect(await screen.findByText(/script changed after this draft was saved/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Regenerate Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Director analysis complete"));
 
     expect(screen.queryByText(/script changed after this draft was saved/i)).not.toBeInTheDocument();
@@ -276,7 +260,7 @@ it("surfaces the server detail when director revision fails", async () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
@@ -304,7 +288,7 @@ it("shows a visible status while director revision is running and after it compl
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",
@@ -331,7 +315,7 @@ it("sends only the current revision instruction after prior changes are merged",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Accept candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     const input = screen.getByPlaceholderText(
         "Request a change, for example: keep the story in China; use Japanese style only as film language; emphasize the missed calls.",

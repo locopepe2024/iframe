@@ -42,18 +42,6 @@ const jobStateKey = (status: string) => {
 
 const directorLocalDraftKey = (projectId: string, sourceRevision: number) =>
     `iframe.director-profile-draft.v1:${projectId}:source-${sourceRevision}`;
-const directorLocalCandidateKey = (projectId: string, sourceRevision: number) =>
-    `iframe.director-profile-candidate.v1:${projectId}:source-${sourceRevision}`;
-
-type LocalDirectorCandidate = {
-    schemaVersion: 1;
-    projectId: string;
-    sourceRevision: number;
-    action: "analyze" | "refine";
-    text: string;
-    createdAt: number;
-};
-
 type LocalDirectorDraft = {
     schemaVersion: 1;
     projectId: string;
@@ -80,9 +68,6 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
     const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
     const [draftContextSourceRevision, setDraftContextSourceRevision] = useState<number | null>(null);
     const [savedDraftText, setSavedDraftText] = useState(() => editableProfile(confirmed));
-    const [candidateText, setCandidateText] = useState<string | null>(null);
-    const [candidateAction, setCandidateAction] = useState<"analyze" | "refine" | null>(null);
-    const [candidateNoChange, setCandidateNoChange] = useState(false);
     const [factEvidence, setFactEvidence] = useState<ScriptFactLedgerQueryResult | null>(null);
     const [factsLoading, setFactsLoading] = useState(false);
     const [factsError, setFactsError] = useState("");
@@ -162,22 +147,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         setInstruction("");
         setHistory([]);
         setStatus({ kind: "idle" });
-        setCandidateText(null);
-        setCandidateAction(null);
-        setCandidateNoChange(false);
         if (!currentProject) return;
-        try {
-            const rawCandidate = window.localStorage.getItem(directorLocalCandidateKey(currentProject.id, sourceRevision));
-            const candidate = rawCandidate ? JSON.parse(rawCandidate) as Partial<LocalDirectorCandidate> : null;
-            if (candidate?.schemaVersion === 1 && candidate.projectId === currentProject.id
-                && candidate.sourceRevision === sourceRevision && typeof candidate.text === "string") {
-                setCandidateText(candidate.text);
-                setCandidateAction(candidate.action === "analyze" ? "analyze" : "refine");
-                setCandidateNoChange(false);
-            }
-        } catch {
-            // Candidate recovery is best effort; the confirmed profile remains authoritative.
-        }
         let active = true;
         api.getDirectorProfileDraft(currentProject.id)
             .then(saved => {
@@ -288,62 +258,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         }
     };
 
-    const clearCandidate = () => {
-        if (typeof window === "undefined" || !currentProject) return;
-        try { window.localStorage.removeItem(directorLocalCandidateKey(currentProject.id, sourceRevision)); } catch { /* storage unavailable */ }
-    };
-
-    const queueCandidate = (profile: Record<string, unknown>, action: "analyze" | "refine") => {
-        const next = JSON.stringify(profile, null, 2);
-        let unchanged = false;
-        try {
-            unchanged = draftContextSourceRevision === sourceRevision
-                && JSON.stringify(JSON.parse(next)) === JSON.stringify(JSON.parse(draftText));
-        } catch {
-            unchanged = false;
-        }
-        setCandidateText(next);
-        setCandidateAction(action);
-        setCandidateNoChange(unchanged);
-        try {
-            window.localStorage.setItem(directorLocalCandidateKey(currentProject!.id, sourceRevision), JSON.stringify({
-                schemaVersion: 1, projectId: currentProject!.id, sourceRevision, action, text: next, createdAt: Date.now(),
-            } satisfies LocalDirectorCandidate));
-        } catch {
-            // The candidate still remains visible in memory when storage is unavailable.
-        }
-    };
-
-    const acceptCandidate = () => {
-        if (!candidateText || candidateNoChange) return;
-        const acceptedAction = candidateAction;
-        setDraftText(candidateText);
+    const applyAiResultToDraft = (profile: Record<string, unknown>) => {
+        // AI output is immediately an editable local draft. It never changes the
+        // confirmed Director revision until the user explicitly saves/confirms.
+        setDraftText(JSON.stringify(profile, null, 2));
         setDraftContextSourceRevision(sourceRevision);
-        clearCandidate();
-        setCandidateText(null);
-        setCandidateAction(null);
-        setCandidateNoChange(false);
-        setStatus({ kind: "success", action: acceptedAction ?? "refine", jobStatus: "candidate_accepted" });
-    };
-
-    const continueEditingCandidate = () => {
-        if (!candidateText || candidateNoChange) return;
-        const editedAction = candidateAction;
-        setDraftText(candidateText);
-        setDraftContextSourceRevision(sourceRevision);
-        clearCandidate();
-        setCandidateText(null);
-        setCandidateAction(null);
-        setCandidateNoChange(false);
-        setStatus({ kind: "success", action: editedAction ?? "refine", jobStatus: "candidate_editing" });
-    };
-
-    const discardCandidate = () => {
-        clearCandidate();
-        setCandidateText(null);
-        setCandidateAction(null);
-        setCandidateNoChange(false);
-        setStatus({ kind: "success", action: "refine", jobStatus: "candidate_discarded" });
     };
 
     const analyze = async () => {
@@ -354,7 +273,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
             const profile = await api.analyzeDirectorProfile(currentProject.id, jobStatus => {
                 setStatus({ kind: "running", action: "analyze", jobStatus });
             });
-            queueCandidate(profile, "analyze");
+            applyAiResultToDraft(profile);
             setStatus({ kind: "success", action: "analyze", jobStatus: "completed" });
         } catch (error) {
             const message = extractErrorDetail(error, t("directorAnalyzeFailed"));
@@ -384,7 +303,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 [scopedInstruction],
                 jobStatus => setStatus({ kind: "running", action: "refine", jobStatus }),
             );
-            queueCandidate(profile, "refine");
+            applyAiResultToDraft(profile);
             setHistory(nextHistory);
             setInstruction("");
             setStatus({ kind: "success", action: "refine", jobStatus: "completed" });
@@ -582,28 +501,6 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
 
             {draftText ? (
                 <div className="space-y-3">
-                    {candidateText && (
-                        <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label={t("directorCandidateTitle")}>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <h3 className="text-sm font-semibold text-foreground">{t("directorCandidateTitle")}</h3>
-                                    <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                        {candidateNoChange ? t("directorCandidateNoChange") : t("directorCandidateHint")}
-                                    </p>
-                                </div>
-                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-                                    {candidateAction === "analyze" ? t("directorCandidateFromAnalysis") : t("directorCandidateFromRefine")}
-                                </span>
-                            </div>
-                            {!candidateNoChange && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
-                                    <WorkflowActionButton variant="secondary" leftIcon={<Pencil />} onClick={continueEditingCandidate} disabled={busy !== null}>{t("directorContinueEditingCandidate")}</WorkflowActionButton>
-                                    <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
-                                </div>
-                            )}
-                        </section>
-                    )}
                     {revisions.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorVersionManagement")}>
                             <label htmlFor="director-version-management">{t("directorVersionManagement")}</label>
@@ -740,32 +637,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {candidateText ? (
-                        <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label={t("directorCandidateTitle")}>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <h3 className="text-sm font-semibold text-foreground">{t("directorCandidateTitle")}</h3>
-                                    <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                        {candidateNoChange ? t("directorCandidateNoChange") : t("directorCandidateHint")}
-                                    </p>
-                                </div>
-                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-                                    {candidateAction === "analyze" ? t("directorCandidateFromAnalysis") : t("directorCandidateFromRefine")}
-                                </span>
-                            </div>
-                            {!candidateNoChange && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
-                                    <WorkflowActionButton variant="secondary" leftIcon={<Pencil />} onClick={continueEditingCandidate} disabled={busy !== null}>{t("directorContinueEditingCandidate")}</WorkflowActionButton>
-                                    <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
-                                </div>
-                            )}
-                        </section>
-                    ) : (
                         <div className="flex min-h-32 items-center justify-center border border-dashed border-border text-sm text-text-muted">
                             {t("directorEmpty")}
                         </div>
-                    )}
                 </div>
             )}
         </section>
