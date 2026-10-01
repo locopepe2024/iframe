@@ -9,7 +9,7 @@ const SEMANTIC_JOINTS = new Set([
   "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle",
   "left_heel", "right_heel", "left_foot_index", "right_foot_index",
 ]);
-const SELECTION_STATUSES = new Set<MotionTrackSelectionStatus>(["tracked", "interpolated", "occluded", "rejected", "unknown"]);
+const SELECTION_STATUSES = new Set<MotionTrackSelectionStatus>(["tracked", "interpolated", "manual_recovered", "detector_missed", "real_occlusion", "out_of_frame", "occluded", "rejected", "unknown"]);
 
 export function createIdleMotionTrackImportState(): MotionTrackImportState {
   return { status: "idle", fileName: null, manifest: null, errors: [], warnings: [], importedAt: null };
@@ -86,6 +86,8 @@ function parseFrame(value: unknown, index: number): MotionTrackFrame {
     sourceFrame: source.source_frame === undefined ? (source.sourceFrame === undefined ? null : finite(source.sourceFrame, `frames[${index}].sourceFrame`, 0, Number.MAX_SAFE_INTEGER)) : finite(source.source_frame, `frames[${index}].source_frame`, 0, Number.MAX_SAFE_INTEGER),
     sourceTimestampSeconds: optionalFinite(source.source_timestamp_seconds ?? source.sourceTimestampSeconds, `frames[${index}].source_timestamp_seconds`, 0, 86400),
     selectionStatus: status as MotionTrackSelectionStatus,
+    selectionReason: typeof source.selection_reason === "string" ? source.selection_reason : null,
+    occlusionEvidence: source.occlusion_evidence === true,
     rootPosition: vector3(source.root_position ?? source.rootPosition, `frames[${index}].root_position`, true),
     semanticJoints,
     jointConfidence,

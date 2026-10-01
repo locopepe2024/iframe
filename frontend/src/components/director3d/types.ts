@@ -555,6 +555,8 @@ export interface MotionTrackFrame {
   sourceFrame: number | null;
   sourceTimestampSeconds: number | null;
   selectionStatus: MotionTrackSelectionStatus;
+  selectionReason?: string | null;
+  occlusionEvidence?: boolean;
   rootPosition: MotionTrackVector3 | null;
   semanticJoints: Record<string, MotionTrackVector3>;
   jointConfidence: Record<string, number>;
@@ -588,6 +590,8 @@ export interface MotionTrackFrameReview {
   frame: number;
   timestampSeconds: number | null;
   currentStatus: MotionTrackSelectionStatus;
+  selectionReason: string | null;
+  occlusionEvidence: boolean;
   suggestedStatus: "manual_review_required" | null;
   targetTrackId: string | null;
   candidates: MotionTrackReviewCandidate[];

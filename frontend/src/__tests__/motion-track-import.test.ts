@@ -27,4 +27,9 @@ describe("motion-track.v1 import", () => {
     expect(result.ok).toBe(false);
     expect(result.state.errors[0]).toContain("coordinate_system");
   });
+  it("preserves target misses without claiming occlusion", () => {
+    const result = parseMotionTrackManifest({ schema: "motion-track.v1", coordinate_system: { image_x: "blender_x", image_y: "blender_z", depth_z: "blender_y" }, frames: [{ ...frame, selection_status: "detector_missed", selection_reason: "identity_unresolved", occlusion_evidence: false }, { ...frame, frame: 2, selection_status: "out_of_frame", selection_reason: "no_candidate_pose", occlusion_evidence: false }] });
+    expect(result.ok).toBe(true);
+    expect(result.state.manifest?.frames.map((item) => [item.selectionStatus, item.selectionReason, item.occlusionEvidence])).toEqual([["detector_missed", "identity_unresolved", false], ["out_of_frame", "no_candidate_pose", false]]);
+  });
 });
