@@ -43,7 +43,14 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     setBusy("save"); setError("");
     try {
       let value: Record<string, unknown>;
-      try { value = JSON.parse(draftText); } catch { throw new Error("全局 Director 草稿是结构化结果；投稿资料、梗概和人物小传请填写到“全剧导入资料”区域。"); }
+      try { value = JSON.parse(draftText); } catch {
+        await api.saveSeriesSourceContext(seriesId, draftText);
+        setContextText(draftText); setSavedContextText(draftText);
+        setDraftText(""); setSavedText("");
+        setError("已将自然语言内容保存为全剧资料；Director 理解仍需点击“生成全剧理解”。");
+        onSaved();
+        return;
+      }
       const result = await api.saveSeriesDirectorDraft(seriesId, value); const text = JSON.stringify(result.draft ?? value, null, 2); setDraftText(text); setSavedText(text); setDraftRevision(result.draft_revision); onSaved();
     }
     catch (e) { setError(String((e as any)?.message || e)); } finally { setBusy(null); }
