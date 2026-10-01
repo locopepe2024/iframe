@@ -23,6 +23,8 @@ interface PreviewResult {
     episodes: EpisodePreview[];
     import_id: string;
     text_length?: number;
+    screenplay_text_length?: number;
+    series_context?: { preamble?: string; synopsis?: string; first_scene_char_offset?: number };
 }
 
 type Step = 1 | 2 | 3;
@@ -344,6 +346,19 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     <p className="text-text-secondary text-sm">
                                         {t("previewHint", { count: previewResult.episodes.length })}
                                     </p>
+
+                                    {previewResult.series_context?.preamble && (
+                                        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-foreground font-medium">{t("seriesContextTitle")}</h4>
+                                                <span className="text-text-secondary text-xs">{t("seriesContextNotEpisode")}</span>
+                                            </div>
+                                            <p className="text-text-secondary text-sm line-clamp-4 whitespace-pre-wrap">
+                                                {previewResult.series_context.preamble}
+                                            </p>
+                                            <p className="text-primary text-xs">{t("seriesContextHint")}</p>
+                                        </div>
+                                    )}
 
                                     {/* Episodes List */}
                                     <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">

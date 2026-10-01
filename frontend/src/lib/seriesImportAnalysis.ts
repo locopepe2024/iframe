@@ -20,6 +20,14 @@ export interface SeriesImportPreview {
         end_marker?: string;
     }>;
     import_id: string;
+    screenplay_text_length?: number;
+    series_context?: {
+        kind?: string;
+        preamble?: string;
+        synopsis?: string;
+        first_scene_char_offset?: number;
+        body_char_count?: number;
+    };
 }
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

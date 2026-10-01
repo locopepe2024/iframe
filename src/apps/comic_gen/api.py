@@ -1630,11 +1630,14 @@ def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
 def _run_import_preview(owner_profile_id: str, filename: str, text: str,
                         suggested_episodes: int) -> Dict[str, Any]:
     episodes = pipeline.import_file_and_split(text, suggested_episodes)
+    series_context, screenplay_text = ComicGenPipeline._split_import_series_context(text)
     import_id = uuid.uuid4().hex
     _store_import_text(owner_profile_id, import_id, text)
     return {
         "filename": os.path.basename(filename or "import.txt"),
         "text_length": len(text),
+        "screenplay_text_length": len(screenplay_text),
+        "series_context": series_context,
         "suggested_episodes": suggested_episodes,
         "episodes": episodes,
         "import_id": import_id,

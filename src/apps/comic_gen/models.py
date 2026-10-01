@@ -2522,6 +2522,9 @@ class Series(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Authenticated UniArt profile owner")
     title: str = Field(..., description="Title of the series")
     description: str = Field("", description="Series description/synopsis")
+    # Whole-work submission material and Director understanding live at Series
+    # scope; episode source revisions must contain screenplay scenes only.
+    source_context: Dict[str, Any] = Field(default_factory=dict, description="Series-level submission and story context")
 
     # Shared asset library
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")

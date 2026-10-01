@@ -307,6 +307,41 @@ class TestGetEffectivePrompt:
 # ===================================================================
 
 class TestSplitTextByMarkers:
+    def test_import_separates_submission_preamble_from_screenplay(self, pipeline):
+        text = (
+            "剧本名字：《示例》\n剧本梗概：全剧从校园走向异地。\n人物小传：甲乙。\n"
+            "1、校园教室 日 内\n" + "人物发生冲突。" * 80
+        )
+        context, screenplay = pipeline._split_import_series_context(text)
+        assert context["kind"] == "series_submission_context"
+        assert "剧本梗概" in context["preamble"]
+        assert screenplay.startswith("1、校园教室 日 内")
+        assert "剧本梗概" not in screenplay
+
+    def test_import_without_scene_heading_preserves_full_source(self, pipeline):
+        text = "这是一段没有明确场景标记的剧本。" * 30
+        context, screenplay = pipeline._split_import_series_context(text)
+        assert context == {}
+        assert screenplay == text
+
+    def test_create_series_from_import_keeps_preamble_at_series_scope(self, pipeline):
+        text = (
+            "剧本名字：《示例》\n剧本梗概：全剧摘要。\n人物小传：甲乙。\n"
+            "1、校园教室 日 内\n" + "人物发生冲突。" * 80
+        )
+        pipeline.script_processor.create_draft_script.side_effect = (
+            lambda title, source: _make_script(title=title, text=source)
+        )
+        result = pipeline.create_series_from_import(
+            "示例", text,
+            [{"episode_number": 1, "title": "第一集", "start_marker": "1、校园教室 日 内", "end_marker": ""}],
+        )
+        series = pipeline.get_series(result["series"]["id"])
+        episode = pipeline.get_script(result["episodes"][0]["id"])
+        assert series.source_context["kind"] == "series_submission_context"
+        assert "人物发生冲突" in episode.original_text
+        assert "剧本梗概" not in episode.original_text
+
     def test_normal_marker_split(self, pipeline):
         text = "AAAA第一章开始BBBB内容CCCC第二章开始DDDD内容EEEE"
         episodes_data = [

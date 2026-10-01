@@ -7760,7 +7760,42 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def import_file_and_split(self, text: str, suggested_episodes: int = 3) -> List[Dict]:
         """Split text into episodes using LLM. Returns episode preview data."""
-        return self.script_processor.split_into_episodes(text, suggested_episodes)
+        _, screenplay_text = self._split_import_series_context(text)
+        return self.script_processor.split_into_episodes(screenplay_text, suggested_episodes)
+
+    @staticmethod
+    def _split_import_series_context(text: str) -> Tuple[Dict[str, Any], str]:
+        """Separate whole-work submission material from screenplay scenes.
+
+        The detector is conservative: when no numbered screenplay heading is
+        found, the complete input remains episode source and no content is
+        silently discarded.
+        """
+        import re
+
+        heading = re.compile(
+            r"(?m)^\s*\d+\s*[、.]\s*[^\n]{1,120}?\s+(?:日|夜|晨|晚)\s+(?:内|外)(?:\s|$)"
+        )
+        match = heading.search(text or "")
+        if not match or match.start() <= 0:
+            return {}, text
+        preamble = text[:match.start()].strip()
+        screenplay = text[match.start():].lstrip()
+        if not preamble or len(screenplay) < 200:
+            return {}, text
+        synopsis_match = re.search(
+            r"剧本梗概\s*[：:]\s*(.*?)(?=人物小传\s*[：:]|五、|$)",
+            preamble,
+            re.S,
+        )
+        return {
+            "schema_version": 1,
+            "kind": "series_submission_context",
+            "preamble": preamble,
+            "synopsis": synopsis_match.group(1).strip() if synopsis_match else "",
+            "first_scene_char_offset": match.start(),
+            "body_char_count": len(screenplay),
+        }, screenplay
 
     def create_series_from_import(
         self,
@@ -7781,8 +7816,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             owner_profile_id=owner_profile_id,
         )
 
-        # Split text into episode chunks based on markers
-        episode_texts = self._split_text_by_markers(text, episodes_data)
+        series_context, screenplay_text = self._split_import_series_context(text)
+        series.source_context = series_context
+        # Split text into episode chunks based on markers. Markers are applied
+        # only to screenplay text, never to the submission preamble.
+        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
 
         with self._save_lock:
             # Create Episode (Script) for each chunk
