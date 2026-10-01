@@ -25,8 +25,17 @@
     "clip_is_derived_from_original": true,
     "declared_trim_start_seconds": null,
     "declared_trim_end_seconds": null,
-    "trim_range_status": "not_recorded",
-    "note": "The exact source trim command was not retained. Do not infer the clip start time from filenames."
+    "trim_range_status": "content_aligned_command_not_recorded",
+    "note": "Frame matching confirms the derivative begins at original frame 0 and covers approximately the first 7.896835 seconds. The original trim command itself was not retained.",
+    "content_match": {
+      "method": "normalized grayscale frame comparison after scale=64:36",
+      "first_clip_frame_matches_original_frame": 0,
+      "middle_clip_frame_matches_original_frame": 132,
+      "last_clip_frame_matches_original_frame": 262,
+      "estimated_start_seconds": 0.0,
+      "estimated_end_seconds": 7.896835,
+      "confidence": "high_for_content_alignment"
+    }
   },
   "motion_track": {
     "path": "recreation2-final120-patched-canonical.json",
@@ -47,10 +56,11 @@
   "evidence_boundary": {
     "observed": [
       "The original source file and the tracking derivative are both retained locally.",
-      "The patched track contains 120 processed frames and zero review-required frames according to the generator."
+      "The patched track contains 120 processed frames and zero review-required frames according to the generator.",
+      "Frame-level content matching aligns clip frames 0, 131, and 261 with original frames 0, 132, and 262 within the encoded timebase."
     ],
     "not_proven": [
-      "The exact clip trim start/end time.",
+      "The exact historical ffmpeg trim command and whether any re-encoding filter was applied.",
       "Semantic correctness of every selected pose without visual frame review.",
       "That H3 or Seedance will consume the white-model video as explicit pose control."
     ]
