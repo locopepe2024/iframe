@@ -308,7 +308,7 @@ The Director workbench exposes three distinct surfaces:
 
 1. **导演分析（只读）**：the latest confirmed Director interpretation. It is a review surface for the script-grounded understanding, including setting, timeline, people, relationships, plot threads and scene analysis. It does not expose direct mutation controls.
 2. **导演修订（可写草稿）**：the editable draft for answers, additions and corrections. This includes setting additions such as `学校所在地=西安`, `2016–2024`, and regional visual constraints for Xi'an and Beijing. Editing this surface changes only the draft.
-3. **重新分析候选（待采用）**：a model result produced by local or full revision. It is never applied automatically. The user accepts or discards it, then saves the draft and confirms a new Director revision.
+3. **重新分析结果（可编辑草稿）**：a model result produced by local or full revision. It is written directly into the editable draft; the user may edit, save, or discard the unsaved draft before confirming a new Director revision.
 
 The workbench must always show these actions separately:
 
@@ -353,7 +353,7 @@ The model is called only when the user clicks **重新分析** or **继续修订
 | Story and Director overview | Yes, Director draft | No for manual edit | After Director confirmation |
 | Timeline, relationships, plot threads, scene analysis | Yes, Director draft | No for manual edit | After Director confirmation |
 | Director questions / open decisions | Yes: answer, add, or leave open | No for manual answer; yes only if user requests model revision | After Director confirmation |
-| Re-analysis candidate | Accept or discard | Yes | Only after accepted and confirmed |
+| Re-analysis result | Directly editable draft | Yes | After saved and confirmed |
 | Shooting plan | Yes, in its own draft | No | Downstream artifact |
 
 The single downstream gate is **确认 Director 理解**. “保存草稿” protects work and increments draft state; it does not require a new full screenplay analysis. “重新分析” is optional and user initiated. “确认 Director 理解” makes the current draft available to shooting-plan generation.
