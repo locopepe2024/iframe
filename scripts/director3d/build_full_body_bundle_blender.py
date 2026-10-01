@@ -50,7 +50,7 @@ for src in t['frames']:
  bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')));pelvis_q=None
  pelvis=arm.pose.bones.get('pelvis');target_pelvis=pelvis_target(j) if args.enable_pelvis_orientation else None
  if pelvis and target_pelvis:
-  parent=pelvis.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();pelvis.rotation_quaternion=basis.inverted()@target_pelvis@basis;bpy.context.view_layer.update();pelvis_q=qxyzw(pelvis.rotation_quaternion)
+  current_pelvis=(arm.matrix_world@pelvis.matrix).to_quaternion();world_delta=current_pelvis.rotation_difference(target_pelvis);parent=pelvis.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();pelvis.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();pelvis_q=qxyzw(pelvis.rotation_quaternion)
  for name in ORDER:
   p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
   target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (clavicle(j,name[-1]) if name.startswith('clavicle_') and all(k in j for k in ('left_shoulder','right_shoulder')) else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)))
