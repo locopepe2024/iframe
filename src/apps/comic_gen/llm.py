@@ -122,6 +122,7 @@ DIRECTOR_SOURCE_CONTINUITY_MAX_CHARS = 64
 DIRECTOR_SOURCE_NOTE_MAX_ITEMS = 2
 DIRECTOR_SOURCE_DIGEST_MAX_CHARS = 3000
 DIRECTOR_SOURCE_CACHE_MAX_ENTRIES = 4
+DIRECTOR_RAW_RESPONSE_MAX_CHARS = 300000
 
 
 _DIRECTOR_PRESET_FALLBACKS = {
@@ -997,6 +998,24 @@ class ScriptProcessor:
         cache_key = self._director_source_cache_key(text)
         cached = cache.get(cache_key)
         if isinstance(cached, str) and cached:
+            try:
+                rendered_cached = cached[len("<source_digest>"):-len("</source_digest>")]
+                payload_cached = json.loads(rendered_cached)
+                chunks_cached = payload_cached.get("chunk_summaries", [])
+                self._last_director_source_audit = {
+                    "source_mode": "map_reduce",
+                    "source_char_count": len(text),
+                    "chunk_count": len(chunks_cached),
+                    "chunk_ranges": [
+                        {"source_ref": item.get("source_ref"), "char_start": item.get("char_start"), "char_end": item.get("char_end")}
+                        for item in chunks_cached
+                    ],
+                    "mapped_notes": chunks_cached,
+                    "digest": rendered_cached,
+                    "digest_sha256": hashlib.sha256(rendered_cached.encode("utf-8")).hexdigest(),
+                }
+            except (ValueError, TypeError, json.JSONDecodeError):
+                pass
             return cached
 
         chunks = split_director_source(text)
@@ -1102,6 +1121,18 @@ class ScriptProcessor:
         while len(cache) >= DIRECTOR_SOURCE_CACHE_MAX_ENTRIES:
             cache.pop(next(iter(cache)))
         cache[cache_key] = result
+        self._last_director_source_audit = {
+            "source_mode": "map_reduce",
+            "source_char_count": len(text),
+            "chunk_count": len(chunks),
+            "chunk_ranges": [
+                {"source_ref": item["source_ref"], "char_start": item["char_start"], "char_end": item["char_end"]}
+                for item in chunks
+            ],
+            "mapped_notes": digest_payload["chunk_summaries"],
+            "digest": rendered,
+            "digest_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+        }
         return result
 
     def _director_source_context(self, text: str) -> tuple[str, bool]:
@@ -1109,6 +1140,19 @@ class ScriptProcessor:
         if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
             return text, False
         return self._director_source_digest(text), True
+
+    def director_source_audit(self, text: str) -> Dict[str, Any]:
+        """Return bounded provenance for the exact source sent to synthesis."""
+        if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
+            return {
+                "source_mode": "direct",
+                "source_char_count": len(text),
+                "chunk_count": 0,
+                "source_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            }
+        self._director_source_digest(text)
+        audit = getattr(self, "_last_director_source_audit", {})
+        return dict(audit)
 
     def split_into_episodes(self, text: str, suggested_episodes: int = 3) -> List[Dict[str, Any]]:
         """
@@ -1534,12 +1578,37 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
         ) or "").strip()
+        self._last_director_raw_response = str(content or "")[:DIRECTOR_RAW_RESPONSE_MAX_CHARS]
         if not content:
             raise RuntimeError("导演设定模型未返回内容，请重试。")
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
         return result
+
+    def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
+                                            style_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the profile plus bounded source and raw-response evidence."""
+        source_audit = self.director_source_audit(text)
+        try:
+            profile = self.analyze_director_profile(text, entities_json, style_config)
+        except Exception as exc:
+            audit = getattr(exc, "director_audit", None)
+            if isinstance(audit, dict):
+                raise
+            raise
+        # The legacy method parses internally, so capture raw JSON by issuing
+        # no second request is not possible. The profile remains auditable;
+        # callers using the adapter can attach raw content through the helper
+        # below when available.
+        source_audit["raw_response"] = getattr(self, "_last_director_raw_response", "")
+        source_audit["raw_response_received"] = bool(source_audit["raw_response"])
+        source_audit["parse_status"] = "parsed"
+        source_audit["normalization_status"] = "pending"
+        source_audit["raw_response_sha256"] = hashlib.sha256(
+            source_audit["raw_response"].encode("utf-8")
+        ).hexdigest()
+        return {"profile": profile, "source_audit": source_audit}
 
     def refine_director_profile(self, text: str, entities_json: Dict[str, Any],
                                 style_config: Dict[str, Any], draft: Dict[str, Any],

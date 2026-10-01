@@ -4785,7 +4785,10 @@ def start_director_profile_analysis(
     fingerprint = _director_profile_fingerprint(script_id)
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
-        lambda: {"profile": pipeline.preview_director_profile(script_id)},
+        lambda: {
+            "profile": pipeline.preview_director_profile(script_id),
+            "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
+        },
         queue_group="director",
     )
 

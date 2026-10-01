@@ -58,6 +58,19 @@ Director analysis 使用三层结果状态：
 - `failure_stage`（仅失败时）；
 - `upstream_request_id`（若 adapter 可取得）。
 
+### Source audit artifact
+
+初次 Director 分析还要按 owner/project 保存 `source_audit`：
+
+- `source_mode`、`source_char_count`、`chunk_count`、`chunk_ranges`；
+- map 阶段的 `mapped_notes`；
+- 最终送入 synthesis 的 `digest` 和 SHA-256（仅 `map_reduce`）；
+- 模型返回的 bounded `raw_response` 和 SHA-256；
+- 失败时仍保存 `failure_stage` 和 `failure_detail`。
+
+原始剧本、API key、Authorization header 和完整 prompt 不写普通日志。该 artifact
+只通过 owner-scoped extraction job 查询，并按现有 job retention 清理。
+
 前端应把 `received/needs_review` 显示为“已收到，需处理”，而不是“分析失败”。
 只有 `failed` 才显示失败并提供重试。
 
@@ -113,6 +126,8 @@ character or plot event.
    digest synthesis under the same model and prompt contract. Measure event
    coverage and unsupported claims before changing the 4,000 character
    threshold or digest budget.
+4. Treat the 4,000-character boundary as an experiment variable, not a
+   correctness rule. A threshold change requires the A/B evidence above.
 
 ## Verification
 

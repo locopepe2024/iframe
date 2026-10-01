@@ -274,7 +274,18 @@ class ExtractionJobs:
                     message = '导演分析请求超时；请稍后重试，已保留当前 Director 草稿。'
                 elif detail:
                     message = f'导演分析失败：{detail[:300]}'
-            self._finish(job_id, error=message)
+            # Preserve bounded Director evidence even when admission/validation
+            # rejects the structured profile. This is deliberately stored in
+            # the owner-scoped job row, never emitted to ordinary logs.
+            audit = getattr(exc, "director_audit", None)
+            failure_result = None
+            if isinstance(audit, dict):
+                failure_result = {
+                    "source_audit": audit,
+                    "failure_stage": "admission",
+                    "failure_detail": str(exc)[:1000],
+                }
+            self._finish(job_id, result=failure_result, error=message)
 
     def get(self, owner, project, job_id):
         with closing(self.connect()) as db, db:

@@ -1356,6 +1356,46 @@ def test_short_director_source_stays_on_single_call_path():
     assert "原文事实、导演解释、用户要求和未决问题必须分开" in prompt
 
 
+def test_director_analysis_with_audit_preserves_raw_response_and_direct_source_metadata():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    raw = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = raw
+
+    result = processor.analyze_director_profile_with_audit(
+        "短剧本。", {"characters": []}, {}
+    )
+
+    assert result["profile"]["setting"]
+    assert result["source_audit"]["source_mode"] == "direct"
+    assert result["source_audit"]["source_char_count"] == 4
+    assert result["source_audit"]["raw_response"] == raw
+    assert result["source_audit"]["raw_response_sha256"]
+
+
+def test_director_analysis_with_audit_records_digest_and_map_notes():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+    source = "第1场：人物进入教室。" * 900
+
+    def chat_side_effect(**kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_chunk" in prompt:
+            return json.dumps({"summary": "场景摘要", "facts": ["人物进入"], "open_threads": []}, ensure_ascii=False)
+        return json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    result = processor.analyze_director_profile_with_audit(source, {"characters": []}, {})
+
+    audit = result["source_audit"]
+    assert audit["source_mode"] == "map_reduce"
+    assert audit["chunk_count"] >= 1
+    assert audit["mapped_notes"]
+    assert audit["digest_sha256"]
+    assert audit["raw_response"]
+
+
 def test_director_analysis_reports_empty_model_response_instead_of_attribute_error():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)

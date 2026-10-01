@@ -2439,13 +2439,50 @@ class ComicGenPipeline(StudioOwnerMixin):
         return script, entities, style
 
     def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
+        analyzed = self.preview_director_profile_with_audit(script_id)
+        self._last_director_analysis_audit = analyzed.get("source_audit", {})
+        return analyzed["profile"]
+
+    def preview_director_profile_with_audit(self, script_id: str) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
-        draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
-        normalized = normalize_director_profile_draft(draft)
-        self._bind_director_story_map(script, entities, normalized)
-        DirectorProfile(**normalized)
-        self._validate_director_story_map(script, normalized.get("story_map"))
-        return normalized
+        source_audit = {}
+        analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
+        try:
+            if callable(analyzer):
+                analyzed = analyzer(script.original_text, entities, style)
+                if isinstance(analyzed, dict) and isinstance(analyzed.get("profile"), dict):
+                    draft = analyzed["profile"]
+                    source_audit = analyzed.get("source_audit", {})
+                else:
+                    # Test doubles and older processors may expose a dynamic
+                    # attribute here; only the explicit envelope is the new
+                    # contract. Fall back to the stable legacy method.
+                    draft = self.script_processor.analyze_director_profile(
+                        script.original_text, entities, style
+                    )
+                    source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            else:
+                draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
+                source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            normalized = normalize_director_profile_draft(draft)
+            self._bind_director_story_map(script, entities, normalized)
+            DirectorProfile(**normalized)
+            self._validate_director_story_map(script, normalized.get("story_map"))
+            self._last_director_analysis_audit = source_audit
+            return {"profile": normalized, "source_audit": source_audit}
+        except Exception as exc:
+            if not source_audit:
+                source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            if isinstance(source_audit, dict):
+                source_audit = dict(source_audit)
+                if raw:
+                    source_audit["raw_response"] = raw
+            try:
+                setattr(exc, "director_audit", source_audit)
+            except Exception:
+                pass
+            raise
 
     def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
                                 instructions: List[str]) -> Dict[str, Any]:
