@@ -2468,6 +2468,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._bind_director_story_map(script, entities, normalized)
             DirectorProfile(**normalized)
             self._validate_director_story_map(script, normalized.get("story_map"))
+            if isinstance(source_audit, dict):
+                source_audit["normalization_status"] = "normalized"
+                source_audit["admission_status"] = "confirmable"
             self._last_director_analysis_audit = source_audit
             return {"profile": normalized, "source_audit": source_audit}
         except Exception as exc:
@@ -2478,6 +2481,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 source_audit = dict(source_audit)
                 if raw:
                     source_audit["raw_response"] = raw
+                source_audit["normalization_status"] = "needs_review"
+                source_audit["admission_status"] = "blocked"
             try:
                 setattr(exc, "director_audit", source_audit)
             except Exception:

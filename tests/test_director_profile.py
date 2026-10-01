@@ -1371,6 +1371,7 @@ def test_director_analysis_with_audit_preserves_raw_response_and_direct_source_m
     assert result["source_audit"]["source_char_count"] == 4
     assert result["source_audit"]["raw_response"] == raw
     assert result["source_audit"]["raw_response_sha256"]
+    assert result["source_audit"]["normalization_status"] == "pending"
 
 
 def test_director_analysis_with_audit_records_digest_and_map_notes():
