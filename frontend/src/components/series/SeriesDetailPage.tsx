@@ -13,6 +13,7 @@ import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
 const ImportAssetsDialog = dynamic(() => import("./ImportAssetsDialog"), { ssr: false });
+const ImportLibraryAssetDialog = dynamic(() => import("./ImportLibraryAssetDialog"), { ssr: false });
 const SeriesArtDirectionPanel = dynamic(() => import("./SeriesArtDirectionPanel"), { ssr: false });
 
 interface SeriesDetailPageProps {
@@ -34,6 +35,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [showImportAssets, setShowImportAssets] = useState(false);
+  const [showImportLibrary, setShowImportLibrary] = useState(false);
 
   const t = useTranslations("series");
   const tc = useTranslations("common");
@@ -186,6 +188,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         onOpenModelSettings={() => setShowModelSettings(true)}
         onOpenPromptConfig={() => setShowPromptConfig(true)}
         onOpenImportAssets={() => setShowImportAssets(true)}
+        onOpenImportLibrary={() => setShowImportLibrary(true)}
       />
 
       {/* ── Content Area ── */}
@@ -231,6 +234,12 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       <ImportAssetsDialog
         isOpen={showImportAssets}
         onClose={() => setShowImportAssets(false)}
+        seriesId={seriesId}
+        onImported={refreshSeriesData}
+      />
+      <ImportLibraryAssetDialog
+        isOpen={showImportLibrary}
+        onClose={() => setShowImportLibrary(false)}
         seriesId={seriesId}
         onImported={refreshSeriesData}
       />

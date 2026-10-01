@@ -1,6 +1,12 @@
 import axios from "axios";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
-import { analyzeStoryboardPreview, refineStoryboardPreview, type StoryboardDraftFrame } from "./storyboardAnalysis";
+import {
+    analyzeAndApplyStoryboard,
+    analyzeStoryboardPreview,
+    applyStoryboardDraft as applyStoryboardDraftRequest,
+    refineStoryboardPreview,
+    type StoryboardDraftFrame,
+} from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
 import {
     analyzeDirectorProfile,
@@ -76,6 +82,24 @@ export interface AssetLibraryReference {
     asset_type: "character" | "scene" | "prop";
     asset_id: string;
     variant_id: string;
+}
+
+export interface DigitalAvatarProfile {
+    id: string;
+    name: string;
+    description: string;
+    status: "draft" | "uploaded" | "processing" | "ready" | "failed";
+    source_media: Array<{ id: string; media_url: string; media_type: "image" | "video"; duration_seconds?: number }>;
+    voice_id?: string | null;
+    appearance: {
+        face: Record<string, unknown>;
+        body: Record<string, unknown>;
+        extraction_source: "manual" | "inferred" | "imported";
+        confidence?: number | null;
+        notes?: string | null;
+    };
+    quality_report: Record<string, unknown>;
+    preview_tasks: Array<{ id: string; avatar_id: string; script: string; status: "queued" | "running" | "succeeded" | "failed"; error?: string | null }>;
 }
 
 export interface AssetReferenceIndexVariant {
@@ -1045,10 +1069,7 @@ export const api = {
      * Replaces existing frames with newly generated ones.
      */
     analyzeToStoryboard: async (scriptId: string, text: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
-            text: text
-        });
-        return res.data;
+        return analyzeAndApplyStoryboard(API_URL, scriptId, text);
     },
 
     analyzeStoryboardPreview: async (scriptId: string, text: string) =>
@@ -1062,8 +1083,7 @@ export const api = {
     ) => refineStoryboardPreview(API_URL, scriptId, text, draft, instructions),
 
     applyStoryboardDraft: async (scriptId: string, text: string, draft: StoryboardDraftFrame[]) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard-analysis/apply`, { text, draft });
-        return res.data;
+        return applyStoryboardDraftRequest(API_URL, scriptId, text, draft);
     },
 
     /**
@@ -1469,6 +1489,40 @@ export const api = {
         const res = await axios.get(`${API_URL}/library/assets`);
         return res.data;
     },
+    listLibraryAvatars: async (): Promise<{ avatars: DigitalAvatarProfile[] }> => {
+        const res = await axios.get(`${API_URL}/library/avatars`);
+        return res.data;
+    },
+    createLibraryAvatar: async (data: { name: string; description?: string; voice_id?: string }) => {
+        const res = await axios.post<DigitalAvatarProfile>(`${API_URL}/library/avatars`, data);
+        return res.data;
+    },
+    getLibraryAvatar: async (avatarId: string) => {
+        const res = await axios.get<DigitalAvatarProfile>(`${API_URL}/library/avatars/${avatarId}`);
+        return res.data;
+    },
+    addLibraryAvatarSource: async (avatarId: string, data: { media_url: string; media_type?: "image" | "video"; duration_seconds?: number }) => {
+        const res = await axios.post<DigitalAvatarProfile>(`${API_URL}/library/avatars/${avatarId}/sources`, data);
+        return res.data;
+    },
+    processLibraryAvatar: async (avatarId: string) => {
+        const res = await axios.post<DigitalAvatarProfile>(`${API_URL}/library/avatars/${avatarId}/process`);
+        return res.data;
+    },
+    updateLibraryAvatarAppearance: async (avatarId: string, patch: {
+        face?: Record<string, unknown>;
+        body?: Record<string, unknown>;
+        extraction_source?: "manual" | "inferred" | "imported";
+        confidence?: number;
+        notes?: string;
+    }) => {
+        const res = await axios.patch<DigitalAvatarProfile>(`${API_URL}/library/avatars/${avatarId}/appearance`, patch);
+        return res.data;
+    },
+    createLibraryAvatarPreview: async (avatarId: string, script: string) => {
+        const res = await axios.post(`${API_URL}/library/avatars/${avatarId}/preview`, { script });
+        return res.data;
+    },
     /** 新建一条全局/共享资产。后端：POST /library/assets。
      *  assetType 为单数（"character"|"scene"|"prop"）。data 可含 name/description/persona/image_url/voice_id。 */
     createLibraryAsset: async (
@@ -1678,6 +1732,13 @@ export const api = {
     },
     importSeriesAssets: async (seriesId: string, sourceSeriesId: string, assetIds: string[]) => {
         const response = await axios.post(`${API_URL}/series/${seriesId}/assets/import`, { source_series_id: sourceSeriesId, asset_ids: assetIds });
+        return response.data;
+    },
+    importLibraryAssetToSeries: async (seriesId: string, assetType: "character" | "scene" | "prop", libraryAssetId: string) => {
+        const response = await axios.post(`${API_URL}/series/${seriesId}/assets/import-from-library`, {
+            asset_type: assetType,
+            library_asset_id: libraryAssetId,
+        });
         return response.data;
     },
 

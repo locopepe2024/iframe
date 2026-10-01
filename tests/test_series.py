@@ -395,3 +395,18 @@ class TestImportAssetsFromSeries:
         assert len(result.scenes) == 1
         assert len(result.props) == 1
         assert len(imported_ids) == 3
+
+
+class TestImportAssetsFromLibrary:
+    def test_fork_into_series_with_new_id_and_unchanged_source(self, pipeline):
+        source = _make_character(name="Library Hero", id="library-char-1")
+        pipeline.library_store.characters = [source]
+        target = pipeline.create_series("Target")
+
+        imported = pipeline.fork_library_asset_to_series(target.id, "character", source.id)
+
+        assert imported.id != source.id
+        assert imported.name == source.name
+        assert target.characters[0].id == imported.id
+        assert source.id == "library-char-1"
+        assert pipeline.library_store.characters[0].id == "library-char-1"
