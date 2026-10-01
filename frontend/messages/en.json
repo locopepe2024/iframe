@@ -1238,6 +1238,7 @@
     "directorCandidateFromRefine": "requested correction",
     "directorAcceptCandidate": "Accept candidate",
     "directorDiscardCandidate": "Discard candidate",
+    "directorContinueEditingCandidate": "Continue editing candidate",
     "directorEditor": {
       "overviewTitle": "Story and directing overview",
       "overviewHint": "Edit the Director's reading of the story. Interpretation and assumptions stay separate from script facts and evidence.",

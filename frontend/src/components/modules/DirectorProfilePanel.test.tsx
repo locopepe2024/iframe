@@ -67,6 +67,31 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     expect(api.saveDirectorProfileDraft).toHaveBeenCalledWith("film", 1, 0, profile);
 });
 
+it("offers continue editing and keeps the AI candidate recoverable until a decision", async () => {
+    vi.spyOn(api, "analyzeDirectorProfile").mockResolvedValue({ ...profile, setting: { ...profile.setting, geography: "AI geography" } });
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    expect(await screen.findByRole("button", { name: "Continue editing candidate" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("iframe.director-profile-candidate.v1:film:source-1")).toContain("AI geography");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue editing candidate" }));
+    await waitFor(() => expect(screen.getByLabelText("geography")).toHaveValue("AI geography"));
+    expect(window.localStorage.getItem("iframe.director-profile-candidate.v1:film:source-1")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
+});
+
+it("restores an unhandled AI candidate after refresh without changing the confirmed profile", async () => {
+    window.localStorage.setItem("iframe.director-profile-candidate.v1:film:source-1", JSON.stringify({
+        schemaVersion: 1, projectId: "film", sourceRevision: 1, action: "refine",
+        text: JSON.stringify({ ...profile, setting: { ...profile.setting, geography: "Recovered candidate" } }), createdAt: Date.now(),
+    }));
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+
+    expect(await screen.findByRole("button", { name: "Continue editing candidate" })).toBeInTheDocument();
+    expect(screen.getByText("Director analysis candidate")).toBeInTheDocument();
+});
+
 it("loads the story map's pinned fact revision and displays exact source evidence for review", async () => {
     const analyzed = {
         ...profile,

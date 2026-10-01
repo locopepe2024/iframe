@@ -1239,6 +1239,7 @@
     "directorCandidateFromRefine": "修正请求",
     "directorAcceptCandidate": "接受候选结果",
     "directorDiscardCandidate": "放弃候选结果",
+    "directorContinueEditingCandidate": "继续编辑候选结果",
     "directorEditor": {
       "overviewTitle": "故事与导演总览",
       "overviewHint": "编辑导演对故事的理解。导演解释和假设与剧本事实、证据分开展示。",

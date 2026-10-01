@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, RotateCcw, Save, Send, X } from "lucide-react";
+import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, Pencil, RotateCcw, Save, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import {
@@ -42,6 +42,17 @@ const jobStateKey = (status: string) => {
 
 const directorLocalDraftKey = (projectId: string, sourceRevision: number) =>
     `iframe.director-profile-draft.v1:${projectId}:source-${sourceRevision}`;
+const directorLocalCandidateKey = (projectId: string, sourceRevision: number) =>
+    `iframe.director-profile-candidate.v1:${projectId}:source-${sourceRevision}`;
+
+type LocalDirectorCandidate = {
+    schemaVersion: 1;
+    projectId: string;
+    sourceRevision: number;
+    action: "analyze" | "refine";
+    text: string;
+    createdAt: number;
+};
 
 type LocalDirectorDraft = {
     schemaVersion: 1;
@@ -155,6 +166,18 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         setCandidateAction(null);
         setCandidateNoChange(false);
         if (!currentProject) return;
+        try {
+            const rawCandidate = window.localStorage.getItem(directorLocalCandidateKey(currentProject.id, sourceRevision));
+            const candidate = rawCandidate ? JSON.parse(rawCandidate) as Partial<LocalDirectorCandidate> : null;
+            if (candidate?.schemaVersion === 1 && candidate.projectId === currentProject.id
+                && candidate.sourceRevision === sourceRevision && typeof candidate.text === "string") {
+                setCandidateText(candidate.text);
+                setCandidateAction(candidate.action === "analyze" ? "analyze" : "refine");
+                setCandidateNoChange(false);
+            }
+        } catch {
+            // Candidate recovery is best effort; the confirmed profile remains authoritative.
+        }
         let active = true;
         api.getDirectorProfileDraft(currentProject.id)
             .then(saved => {
@@ -265,6 +288,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         }
     };
 
+    const clearCandidate = () => {
+        if (typeof window === "undefined" || !currentProject) return;
+        try { window.localStorage.removeItem(directorLocalCandidateKey(currentProject.id, sourceRevision)); } catch { /* storage unavailable */ }
+    };
+
     const queueCandidate = (profile: Record<string, unknown>, action: "analyze" | "refine") => {
         const next = JSON.stringify(profile, null, 2);
         let unchanged = false;
@@ -277,6 +305,13 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         setCandidateText(next);
         setCandidateAction(action);
         setCandidateNoChange(unchanged);
+        try {
+            window.localStorage.setItem(directorLocalCandidateKey(currentProject!.id, sourceRevision), JSON.stringify({
+                schemaVersion: 1, projectId: currentProject!.id, sourceRevision, action, text: next, createdAt: Date.now(),
+            } satisfies LocalDirectorCandidate));
+        } catch {
+            // The candidate still remains visible in memory when storage is unavailable.
+        }
     };
 
     const acceptCandidate = () => {
@@ -284,13 +319,27 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         const acceptedAction = candidateAction;
         setDraftText(candidateText);
         setDraftContextSourceRevision(sourceRevision);
+        clearCandidate();
         setCandidateText(null);
         setCandidateAction(null);
         setCandidateNoChange(false);
-        setStatus({ kind: "success", action: acceptedAction ?? "refine", jobStatus: "completed" });
+        setStatus({ kind: "success", action: acceptedAction ?? "refine", jobStatus: "candidate_accepted" });
+    };
+
+    const continueEditingCandidate = () => {
+        if (!candidateText || candidateNoChange) return;
+        const editedAction = candidateAction;
+        setDraftText(candidateText);
+        setDraftContextSourceRevision(sourceRevision);
+        clearCandidate();
+        setCandidateText(null);
+        setCandidateAction(null);
+        setCandidateNoChange(false);
+        setStatus({ kind: "success", action: editedAction ?? "refine", jobStatus: "candidate_editing" });
     };
 
     const discardCandidate = () => {
+        clearCandidate();
         setCandidateText(null);
         setCandidateAction(null);
         setCandidateNoChange(false);
@@ -549,6 +598,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                             {!candidateNoChange && (
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                     <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
+                                    <WorkflowActionButton variant="secondary" leftIcon={<Pencil />} onClick={continueEditingCandidate} disabled={busy !== null}>{t("directorContinueEditingCandidate")}</WorkflowActionButton>
                                     <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
                                 </div>
                             )}
@@ -706,6 +756,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                             {!candidateNoChange && (
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                     <WorkflowActionButton variant="secondary" leftIcon={<X />} onClick={discardCandidate} disabled={busy !== null}>{t("directorDiscardCandidate")}</WorkflowActionButton>
+                                    <WorkflowActionButton variant="secondary" leftIcon={<Pencil />} onClick={continueEditingCandidate} disabled={busy !== null}>{t("directorContinueEditingCandidate")}</WorkflowActionButton>
                                     <WorkflowActionButton leftIcon={<Check />} onClick={acceptCandidate} disabled={busy !== null}>{t("directorAcceptCandidate")}</WorkflowActionButton>
                                 </div>
                             )}
