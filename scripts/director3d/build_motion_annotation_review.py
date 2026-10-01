@@ -14,7 +14,8 @@ def main():
         # unresolved.
         canonical_joints=item.get('semantic_joints') or item.get('semanticJoints')
         if (landmarks is not None and bbox is not None) or (status == 'tracked' and canonical_joints):
-            previous={'bbox':bbox,'center':[(bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2]}
+            if bbox is not None:
+                previous={'bbox':bbox,'center':[(bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2]}
             continue
         candidates=[]
         for pose in item.get('poses',[]):
