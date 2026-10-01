@@ -17,6 +17,12 @@ def unit(a):
     n = norm(a)
     return [x / n for x in a] if n > 1e-8 else None
 
+def project_perpendicular(vector, axis):
+    direction = unit(axis)
+    if direction is None: return vector
+    scale = sum(vector[i] * direction[i] for i in range(3))
+    return [vector[i] - direction[i] * scale for i in range(3)]
+
 def center(j, left, right):
     if left not in j or right not in j: return None
     return mul(add(j[left], j[right]), 0.5)
@@ -42,12 +48,20 @@ def main():
             frames.append({'frame': frame.get('frame'), 'status': 'insufficient_joints', 'confidence': 0.0})
             continue
         torso = sub(shoulder, hip)
+        pelvis_axis = sub(joints['right_hip'], joints['left_hip'])
+        shoulder_axis = sub(joints['right_shoulder'], joints['left_shoulder'])
+        # The difference between the shoulder and pelvis axes is the only
+        # available CPU-only cue for a non-linear torso curve. It is a
+        # constrained proxy, not a measured lumbar displacement.
+        axis_delta = project_perpendicular(sub(shoulder_axis, pelvis_axis), torso)
+        scale = min(0.18, 0.35 * norm(axis_delta) / max(norm(torso), 1e-8))
+        bend = mul(unit(axis_delta) or [0.0, 0.0, 0.0], scale * max(norm(torso), 1e-8))
         # Proxy points are explicitly geometric fractions, not detected lumbar landmarks.
         raw = {
             'pelvis': hip,
-            'spine_lower': lerp(hip, shoulder, 0.30),
-            'spine_mid': lerp(hip, shoulder, 0.60),
-            'spine_chest': lerp(hip, shoulder, 0.90),
+            'spine_lower': add(lerp(hip, shoulder, 0.30), mul(bend, 0.35)),
+            'spine_mid': add(lerp(hip, shoulder, 0.60), bend),
+            'spine_chest': add(lerp(hip, shoulder, 0.90), mul(bend, 0.35)),
             'shoulder_center': shoulder,
         }
         smoothed = {name: ema(previous.get(name) if previous else None, point, args.alpha) for name, point in raw.items()}
@@ -62,6 +76,7 @@ def main():
             'torso_vector': unit(torso),
             'torso_length': norm(torso),
             'source': 'hip_shoulder_geometric_proxy',
+            'curve_source': 'pelvis_shoulder_axis_delta_hypothesis',
             'is_lumbar_measurement': False,
         })
     result = {
