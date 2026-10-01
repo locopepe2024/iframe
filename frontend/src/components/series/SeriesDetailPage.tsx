@@ -18,6 +18,7 @@ const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModa
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
 const ImportAssetsDialog = dynamic(() => import("./ImportAssetsDialog"), { ssr: false });
 const SeriesArtDirectionPanel = dynamic(() => import("./SeriesArtDirectionPanel"), { ssr: false });
+const SeriesDirectorProfilePanel = dynamic(() => import("./SeriesDirectorProfilePanel"), { ssr: false });
 
 interface SeriesDetailPageProps {
   seriesId: string;
@@ -198,7 +199,9 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       {/* ── Content Area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <AnimatePresence mode="wait">
-          {activeItem.kind === "art_direction" ? (
+          {activeItem.kind === "series_director" ? (
+            <SeriesDirectorProfilePanel key="series-director" seriesId={seriesId} onSaved={refreshSeriesData} />
+          ) : activeItem.kind === "art_direction" ? (
             <SeriesArtDirectionPanel
               key="art-direction"
               seriesId={seriesId}

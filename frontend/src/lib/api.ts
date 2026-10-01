@@ -9,6 +9,7 @@ import {
     type StoryboardAnalysisLineage,
 } from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
+import { analyzeSeriesDirectorProfile, confirmSeriesDirectorProfile, getSeriesDirectorProfile, saveSeriesDirectorDraft } from "./seriesDirectorProfile";
 import {
     analyzeDirectorProfile,
     refineDirectorProfile,
@@ -1129,6 +1130,11 @@ export const api = {
         instructions: string[],
         onStatus?: DirectorProfileJobStatusListener,
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
+
+    getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
+    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus),
+    saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
+    confirmSeriesDirectorProfile: (seriesId: string) => confirmSeriesDirectorProfile(API_URL, seriesId),
 
     getDirectorProfileDraft: async (scriptId: string): Promise<DirectorProfileDraftState> => {
         const res = await axios.get<DirectorProfileDraftState>(`${API_URL}/projects/${scriptId}/director-profile/draft`);

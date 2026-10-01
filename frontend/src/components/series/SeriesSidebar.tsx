@@ -13,6 +13,7 @@ import {
   Download,
   Palette,
   Clapperboard,
+  BrainCircuit,
 } from "lucide-react";
 import clsx from "clsx";
 import type { Series, Project } from "@/store/projectStore";
@@ -21,6 +22,7 @@ import { useTranslations } from "next-intl";
 // ── Types ──
 
 export type SidebarItem =
+  | { kind: "series_director" }
   | { kind: "art_direction" }   // R2V v2 — series-level style baseline
   | { kind: "assembly" }        // Series-level editorial swimlane
   | { kind: "asset"; tab: "characters" | "scenes" | "props" }
@@ -257,6 +259,13 @@ export default function SeriesSidebar({
             </button>
           );
         })}
+      </div>
+
+      <div className="px-3 pb-2">
+        <button onClick={() => onItemChange({ kind: "series_director" })} aria-label={t("seriesDirectorNav")} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg", activeItem.kind === "series_director" ? "bg-primary/10 text-foreground" : "text-text-secondary hover:text-foreground hover:bg-hover-bg")}>
+          <BrainCircuit size={18} className={activeItem.kind === "series_director" ? "text-primary" : ""} />
+          <span className="text-sm font-medium flex-1 text-left truncate">{t("seriesDirectorNav")}</span>
+        </button>
       </div>
 
       {/* ── Episode list ── */}
