@@ -7,10 +7,14 @@ from mathutils import Quaternion,Vector
 BASIS=Quaternion((math.sqrt(.5),-math.sqrt(.5),0,0))
 PAIRS={'upper_leg_l':('left_hip','left_knee'),'lower_leg_l':('left_knee','left_ankle'),'upper_leg_r':('right_hip','right_knee'),'lower_leg_r':('right_knee','right_ankle'),'foot_l':('left_heel','left_foot_index'),'foot_r':('right_heel','right_foot_index'),'upper_arm_l':('left_shoulder','left_elbow'),'lower_arm_l':('left_elbow','left_wrist'),'wrist_l':('left_elbow','left_wrist'),'upper_arm_r':('right_shoulder','right_elbow'),'lower_arm_r':('right_elbow','right_wrist'),'wrist_r':('right_elbow','right_wrist')}
 ORDER=['spine_lower','spine_mid','spine_chest','upper_arm_l','lower_arm_l','wrist_l','upper_arm_r','lower_arm_r','wrist_r','upper_leg_l','lower_leg_l','foot_l','upper_leg_r','lower_leg_r','foot_r']
+SPINE_WEIGHTS={'spine_lower':0.35,'spine_mid':0.65,'spine_chest':1.0}
 def vec(j,a,b):
  v=BASIS@Vector([j[b][i]-j[a][i] for i in range(3)]);return v.normalized() if v.length>1e-8 else None
 def torso(j):
  h=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)]);s=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)]);v=BASIS@(s-h);return v.normalized() if v.length>1e-8 else None
+def spine_target(name,torso_direction,rest_direction):
+ weight=SPINE_WEIGHTS[name];target=rest_direction.lerp(torso_direction,weight)
+ return target.normalized() if target.length>1e-8 else torso_direction
 def wd(arm,p):return ((arm.matrix_world@p.tail)-(arm.matrix_world@p.head)).normalized()
 def qxyzw(q):return [q.x,q.y,q.z,q.w]
 raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);args=ap.parse_args(raw)
@@ -20,7 +24,8 @@ for src in t['frames']:
  for p in arm.pose.bones:p.rotation_mode='QUATERNION';p.rotation_quaternion=Quaternion((1,0,0,0))
  bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None
  for name in ORDER:
-  p=arm.pose.bones.get(name);target=up if name.startswith('spine_') else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
+  p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
+  target=spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
   if not p or not target: warn.append('missing '+name);continue
   current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion()
   if name.startswith('upper_arm_'):basis=(arm.matrix_world@p.matrix).to_quaternion()
