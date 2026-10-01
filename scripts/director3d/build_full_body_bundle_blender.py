@@ -22,7 +22,7 @@ for src in t['frames']:
  for name in ORDER:
   p=arm.pose.bones.get(name);target=up if name.startswith('spine_') else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
   if not p or not target: warn.append('missing '+name);continue
-  basis=(arm.matrix_world@p.matrix).to_quaternion();p.rotation_quaternion=basis.inverted()@(wd(arm,p).rotation_difference(target))@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
+  world_delta=wd(arm,p).rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();p.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
  root=None
  if 'left_hip' in j and 'right_hip' in j:
   h=[(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)];root=[(h[0]-.5)*2.4,max(-.35,min(.35,-h[2]*1.5)),(1-h[1])*1.8-.9]
