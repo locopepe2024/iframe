@@ -91,6 +91,9 @@ def apply_bundle(bundle, armature):
     for frame_data in bundle["frames"]:
         frame = int(frame_data["frame"])
         root = armature.parent
+        if root and "rootYaw" in frame_data:
+            root.rotation_euler[2] = math.radians(float(bundle.get("facing_offset_deg", 0.0))) + float(frame_data["rootYaw"])
+            root.keyframe_insert(data_path="rotation_euler", frame=frame)
         if root and frame_data.get("rootPosition") is not None:
             root.location = Vector(frame_data["rootPosition"])
             root.keyframe_insert(data_path="location", frame=frame)

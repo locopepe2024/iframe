@@ -38,14 +38,22 @@ def spine_target(name,torso_direction,rest_direction):
  return target.normalized() if target.length>1e-8 else torso_direction
 def wd(arm,p):return ((arm.matrix_world@p.tail)-(arm.matrix_world@p.head)).normalized()
 def qxyzw(q):return [q.x,q.y,q.z,q.w]
+def root_yaw(j, previous):
+ if not all(k in j for k in ('left_hip','right_hip')): return previous or 0.0
+ v=[j['right_hip'][i]-j['left_hip'][i] for i in range(3)]
+ angle=math.atan2(v[2],v[0])
+ if previous is None: return angle
+ while angle-previous > math.pi: angle-=2*math.pi
+ while angle-previous < -math.pi: angle+=2*math.pi
+ return angle
 raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');ap.add_argument('--enable-pelvis-orientation',action='store_true');ap.add_argument('--facing-offset-deg',type=float,default=0);args=ap.parse_args(raw)
 t=json.loads(Path(args.track).read_text());proxy_by_frame={}
 if args.torso_proxy:
  proxy_data=json.loads(Path(args.torso_proxy).read_text())
  proxy_by_frame={item.get('frame'):item for item in proxy_data.get('frames',[])}
-bpy.ops.wm.open_mainfile(filepath=args.source_blend);arm=[o for o in bpy.data.objects if o.type=='ARMATURE'][0];frames=[]
+bpy.ops.wm.open_mainfile(filepath=args.source_blend);arm=[o for o in bpy.data.objects if o.type=='ARMATURE'][0];frames=[];previous_yaw=None;first_yaw=None
 for src in t['frames']:
- f=max(1,round(float(src.get('source_timestamp_seconds',0))*args.fps)+1);j=src.get('semantic_joints',{});bpy.context.scene.frame_set(f)
+ f=max(1,round(float(src.get('source_timestamp_seconds',0))*args.fps)+1);j=src.get('semantic_joints',{});bpy.context.scene.frame_set(f);current_yaw=root_yaw(j,previous_yaw);previous_yaw=current_yaw;first_yaw=current_yaw if first_yaw is None else first_yaw;root_yaw_delta=current_yaw-first_yaw
  for p in arm.pose.bones:p.rotation_mode='QUATERNION';p.rotation_quaternion=Quaternion((1,0,0,0))
  bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')));pelvis_q=None
  pelvis=arm.pose.bones.get('pelvis');target_pelvis=pelvis_target(j) if args.enable_pelvis_orientation else None
@@ -62,6 +70,6 @@ for src in t['frames']:
  root=None
  if 'left_hip' in j and 'right_hip' in j:
   h=[(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)];root=[(h[0]-.5)*2.4,max(-.35,min(.35,-h[2]*1.5)),(1-h[1])*1.8-.9]
- frames.append({'frame':f,'rootPosition':root,'pelvisQuaternion':pelvis_q,'localQuaternions':qs,'footContacts':[],'ik':{'left':None,'right':None},'warnings':warn})
+ frames.append({'frame':f,'rootPosition':root,'rootYaw':root_yaw_delta,'pelvisQuaternion':pelvis_q,'localQuaternions':qs,'footContacts':[],'ik':{'left':None,'right':None},'warnings':warn})
 d={x['frame']:x for x in frames};out={'schema':'director-full-motion-bundle.v1','source_track_revision':t.get('source_revision'),'retarget_mode':'evaluated_full_body_direction_v1','facing_offset_deg':args.facing_offset_deg,'ik_enabled':False,'cleanup_processors':[],'frame_range':[1,max(d) if d else 1],'fps':args.fps,'coordinate_system':t['coordinate_system'],'warnings':['source depth is MediaPipe proxy; IK disabled','neck and head channels require source landmarks'],'review_status':'needs_director_review','frames':[d[k] for k in sorted(d)],'ik_statuses':[],'request_id':'recreation2-full-body'}
 Path(args.out).write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'frames':len(out['frames']),'frame_range':out['frame_range']}))
