@@ -396,6 +396,16 @@ optional_director_addition / 用户可选视觉锚点
 - 用户接受的建议进入明确的 Director draft 或 Shooting Plan draft，并记录来源和 revision；
 - 被忽略的建议不应在下一次分析中反复强制出现，除非用户主动重新打开知识库提示。
 
+### AI 修改的三种用户动作
+
+故事、视觉和镜头的 AI 修改都先进入候选 revision。用户可以：
+
+1. **接受 AI 修改**：采用候选 revision，并保留原版本与 diff；
+2. **继续修改**：以候选 revision 为起点继续编辑，形成新的用户 revision；
+3. **删除 / 拒绝**：删除候选 revision，继续使用此前采用的版本。
+
+接受不是永久锁定，删除也不影响剧本原文和历史版本。每次动作记录来源 revision、AI candidate revision、用户动作、结果 revision、diff 摘要和时间。
+
 ### 产品定位文案
 
 > iframe 帮你整理剧本、追踪上下文、生成结构化草稿、保存版本并提示可能需要检查的位置。它不会替你决定故事，也不会把经验规则当成唯一答案。最终的剧情、视觉和镜头选择由你确认。

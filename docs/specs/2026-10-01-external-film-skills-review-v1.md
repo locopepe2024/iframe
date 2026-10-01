@@ -161,6 +161,27 @@ iframe 可以提示：
 - 外部能力按普通、实验、未验证分级；
 - 经验提示使用 suggestion / accepted / edited / dismissed 状态。
 
+### 用户对 AI 修改的决定
+
+AI 生成的故事、视觉或镜头修改必须先作为候选 revision 展示，并提供三种明确动作：
+
+1. **接受 AI 修改**：将候选内容保存为新的用户采用 revision，保留原版本和 diff；
+2. **继续修改**：以 AI 候选为起点进入用户草稿，用户可以增删改，保存后形成新的 revision；
+3. **删除 / 拒绝**：移除该候选修改，恢复继续使用此前采用的版本，原文和历史 revision 不受影响。
+
+这三种动作都要记录：
+
+```text
+source_revision
+ai_candidate_revision
+user_action: accepted / edited / deleted
+result_revision
+diff_summary
+timestamp
+```
+
+“接受”不是不可逆锁定；用户之后仍可继续修改或回退到历史版本。“删除”只删除候选修改，不删除剧本原文、Series 理解或已经确认的历史版本。
+
 ### 继续保持
 
 - API key 身份和 owner-scoped workspace；
