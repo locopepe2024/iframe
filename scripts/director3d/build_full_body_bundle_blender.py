@@ -2,7 +2,7 @@
 import argparse,json,math,sys
 from pathlib import Path
 import bpy
-from mathutils import Quaternion,Vector
+from mathutils import Matrix,Quaternion,Vector
 
 BASIS=Quaternion((math.sqrt(.5),-math.sqrt(.5),0,0))
 PAIRS={'upper_leg_l':('left_hip','left_knee'),'lower_leg_l':('left_knee','left_ankle'),'upper_leg_r':('right_hip','right_knee'),'lower_leg_r':('right_knee','right_ankle'),'foot_l':('left_heel','left_foot_index'),'foot_r':('right_heel','right_foot_index'),'upper_arm_l':('left_shoulder','left_elbow'),'lower_arm_l':('left_elbow','left_wrist'),'wrist_l':('left_elbow','left_wrist'),'upper_arm_r':('right_shoulder','right_elbow'),'lower_arm_r':('right_elbow','right_wrist'),'wrist_r':('right_elbow','right_wrist')}
@@ -18,6 +18,11 @@ def clavicle(j,side):
  return v.normalized() if v.length>1e-8 else None
 def torso(j):
  h=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)]);s=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)]);v=BASIS@(s-h);return v.normalized() if v.length>1e-8 else None
+def pelvis_target(j):
+ if not all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')): return None
+ h=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)]);s=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)])
+ up=(BASIS@(s-h)).normalized();right=(BASIS@Vector([j['right_hip'][i]-j['left_hip'][i] for i in range(3)])).normalized();forward=right.cross(up).normalized();right=up.cross(forward).normalized()
+ return Matrix(((right.x,forward.x,up.x),(right.y,forward.y,up.y),(right.z,forward.z,up.z))).to_quaternion()
 def proxy_spine_targets(proxy):
  if not proxy or not proxy.get('points'): return {}
  points=proxy['points']
@@ -42,7 +47,10 @@ bpy.ops.wm.open_mainfile(filepath=args.source_blend);arm=[o for o in bpy.data.ob
 for src in t['frames']:
  f=max(1,round(float(src.get('source_timestamp_seconds',0))*args.fps)+1);j=src.get('semantic_joints',{});bpy.context.scene.frame_set(f)
  for p in arm.pose.bones:p.rotation_mode='QUATERNION';p.rotation_quaternion=Quaternion((1,0,0,0))
- bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')))
+ bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')));pelvis_q=None
+ pelvis=arm.pose.bones.get('pelvis');target_pelvis=pelvis_target(j)
+ if pelvis and target_pelvis:
+  parent=pelvis.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();pelvis.rotation_quaternion=basis.inverted()@target_pelvis@basis;bpy.context.view_layer.update();pelvis_q=qxyzw(pelvis.rotation_quaternion)
  for name in ORDER:
   p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
   target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (clavicle(j,name[-1]) if name.startswith('clavicle_') and all(k in j for k in ('left_shoulder','right_shoulder')) else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)))
@@ -54,6 +62,6 @@ for src in t['frames']:
  root=None
  if 'left_hip' in j and 'right_hip' in j:
   h=[(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)];root=[(h[0]-.5)*2.4,max(-.35,min(.35,-h[2]*1.5)),(1-h[1])*1.8-.9]
- frames.append({'frame':f,'rootPosition':root,'pelvisQuaternion':None,'localQuaternions':qs,'footContacts':[],'ik':{'left':None,'right':None},'warnings':warn})
+ frames.append({'frame':f,'rootPosition':root,'pelvisQuaternion':pelvis_q,'localQuaternions':qs,'footContacts':[],'ik':{'left':None,'right':None},'warnings':warn})
 d={x['frame']:x for x in frames};out={'schema':'director-full-motion-bundle.v1','source_track_revision':t.get('source_revision'),'retarget_mode':'evaluated_full_body_direction_v1','ik_enabled':False,'cleanup_processors':[],'frame_range':[1,max(d) if d else 1],'fps':args.fps,'coordinate_system':t['coordinate_system'],'warnings':['source depth is MediaPipe proxy; IK disabled','neck and head channels require source landmarks'],'review_status':'needs_director_review','frames':[d[k] for k in sorted(d)],'ik_statuses':[],'request_id':'recreation2-full-body'}
 Path(args.out).write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'frames':len(out['frames']),'frame_range':out['frame_range']}))
