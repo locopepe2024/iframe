@@ -44,8 +44,12 @@ function eventTitleFromDescription(description: string): string {
 function isDirectorStoryMap(value: unknown): value is DirectorStoryMap {
     if (!isRecord(value) || value.schema_version !== 1
         || !Number.isInteger(value.source_revision)
-        || typeof value.source_revision_id !== "string"
-        || (value.fact_ledger_revision !== null && !Number.isInteger(value.fact_ledger_revision))
+        // A newly created local map can be bound to the stable source identity
+        // only when it is saved. The backend also supplies optional fields with
+        // schema defaults, so the client must not reject a valid model result
+        // merely because those default-valued keys were omitted from JSON.
+        || (value.source_revision_id !== undefined && typeof value.source_revision_id !== "string")
+        || (value.fact_ledger_revision !== undefined && value.fact_ledger_revision !== null && !Number.isInteger(value.fact_ledger_revision))
         || !Array.isArray(value.people)
         || !Array.isArray(value.phases)
         || !Array.isArray(value.relationship_arcs)
@@ -76,10 +80,10 @@ function isDirectorStoryMap(value: unknown): value is DirectorStoryMap {
     const validArcs = arcs.every(arc => isRecord(arc)
         && typeof arc.relationship_id === "string"
         && Array.isArray(arc.person_ids)
-        && arc.person_ids.length === 2
+        && arc.person_ids.length <= 2
         && arc.person_ids.every(id => typeof id === "string")
-        && typeof arc.label === "string"
-        && typeof arc.legacy_summary === "string"
+        && (arc.label === undefined || typeof arc.label === "string")
+        && (arc.legacy_summary === undefined || typeof arc.legacy_summary === "string")
         && rows(arc.states).every(state => isRecord(state)
             && typeof state.phase_id === "string"
             && typeof state.state === "string"
