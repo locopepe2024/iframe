@@ -12,20 +12,34 @@ def vec(j,a,b):
  v=BASIS@Vector([j[b][i]-j[a][i] for i in range(3)]);return v.normalized() if v.length>1e-8 else None
 def torso(j):
  h=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)]);s=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)]);v=BASIS@(s-h);return v.normalized() if v.length>1e-8 else None
+def proxy_spine_targets(proxy):
+ if not proxy or not proxy.get('points'): return {}
+ points=proxy['points']
+ pairs={'spine_lower':('pelvis','spine_lower'),'spine_mid':('spine_lower','spine_mid'),'spine_chest':('spine_mid','spine_chest')}
+ result={}
+ for name,(a,b) in pairs.items():
+  if a not in points or b not in points: continue
+  v=BASIS@Vector([points[b][i]-points[a][i] for i in range(3)])
+  if v.length>1e-8: result[name]=v.normalized()
+ return result
 def spine_target(name,torso_direction,rest_direction):
  weight=SPINE_WEIGHTS[name];target=rest_direction.lerp(torso_direction,weight)
  return target.normalized() if target.length>1e-8 else torso_direction
 def wd(arm,p):return ((arm.matrix_world@p.tail)-(arm.matrix_world@p.head)).normalized()
 def qxyzw(q):return [q.x,q.y,q.z,q.w]
-raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);args=ap.parse_args(raw)
-t=json.loads(Path(args.track).read_text());bpy.ops.wm.open_mainfile(filepath=args.source_blend);arm=[o for o in bpy.data.objects if o.type=='ARMATURE'][0];frames=[]
+raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');args=ap.parse_args(raw)
+t=json.loads(Path(args.track).read_text());proxy_by_frame={}
+if args.torso_proxy:
+ proxy_data=json.loads(Path(args.torso_proxy).read_text())
+ proxy_by_frame={item.get('frame'):item for item in proxy_data.get('frames',[])}
+bpy.ops.wm.open_mainfile(filepath=args.source_blend);arm=[o for o in bpy.data.objects if o.type=='ARMATURE'][0];frames=[]
 for src in t['frames']:
  f=max(1,round(float(src.get('source_timestamp_seconds',0))*args.fps)+1);j=src.get('semantic_joints',{});bpy.context.scene.frame_set(f)
  for p in arm.pose.bones:p.rotation_mode='QUATERNION';p.rotation_quaternion=Quaternion((1,0,0,0))
- bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None
+ bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')))
  for name in ORDER:
   p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
-  target=spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
+  target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None))
   if not p or not target: warn.append('missing '+name);continue
   current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion()
   if name.startswith('upper_arm_'):basis=(arm.matrix_world@p.matrix).to_quaternion()
