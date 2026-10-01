@@ -4960,6 +4960,24 @@ class SeriesDirectorProfileSaveRequest(BaseModel):
     draft_name: Optional[str] = None
 
 
+class SeriesSourceContextSaveRequest(BaseModel):
+    text: str = ""
+
+
+@app.put("/series/{series_id}/source-context")
+def save_series_source_context(
+    series_id: str,
+    request: SeriesSourceContextSaveRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        series = pipeline.save_series_source_context(series_id, request.text)
+        return {"series_id": series_id, "source_context": series.source_context}
+    except ValueError as exc:
+        raise HTTPException(404 if str(exc) == "Series not found" else 422, str(exc)) from exc
+
+
 @app.put("/series/{series_id}/director-profile/draft")
 def save_series_director_profile_draft(
     series_id: str,

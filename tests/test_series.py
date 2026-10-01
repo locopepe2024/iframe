@@ -336,6 +336,21 @@ class TestSplitTextByMarkers:
         assert context == {}
         assert screenplay == text
 
+    def test_submission_form_without_scene_heading_becomes_series_context(self, pipeline):
+        text = "一、剧本类型：电影\n剧本名字：《隔岸不观火》\n剧本梗概：异地恋故事。\n人物小传：甲乙。"
+        context, screenplay = pipeline._split_import_series_context(text)
+        assert context["kind"] == "series_submission_context"
+        assert context["preamble"] == text
+        assert context["synopsis"] == "异地恋故事。"
+        assert screenplay == ""
+
+    def test_save_series_source_context_preserves_plain_text(self, pipeline):
+        series = pipeline.create_series("S")
+        value = "剧本类型：电影\n全剧发生在西安。"
+        saved = pipeline.save_series_source_context(series.id, value)
+        assert saved.source_context["text"] == value
+        assert saved.source_context["preamble"] == value
+
     def test_create_series_from_import_keeps_preamble_at_series_scope(self, pipeline):
         text = (
             "剧本名字：《示例》\n剧本梗概：全剧摘要。\n人物小传：甲乙。\n"

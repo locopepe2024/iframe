@@ -9,7 +9,7 @@ import {
     type StoryboardAnalysisLineage,
 } from "./storyboardAnalysis";
 import { runImportPreview, type SeriesImportPreview } from "./seriesImportAnalysis";
-import { analyzeSeriesDirectorProfile, confirmSeriesDirectorProfile, getSeriesDirectorProfile, saveSeriesDirectorDraft } from "./seriesDirectorProfile";
+import { analyzeSeriesDirectorProfile, confirmSeriesDirectorProfile, getSeriesDirectorProfile, saveSeriesDirectorDraft, saveSeriesSourceContext } from "./seriesDirectorProfile";
 import {
     analyzeDirectorProfile,
     refineDirectorProfile,
@@ -1134,6 +1134,7 @@ export const api = {
     getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
     analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus),
     saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
+    saveSeriesSourceContext: (seriesId: string, text: string) => saveSeriesSourceContext(API_URL, seriesId, text),
     confirmSeriesDirectorProfile: (seriesId: string) => confirmSeriesDirectorProfile(API_URL, seriesId),
 
     getDirectorProfileDraft: async (scriptId: string): Promise<DirectorProfileDraftState> => {

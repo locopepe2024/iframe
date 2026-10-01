@@ -2304,6 +2304,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_series_data_unlocked()
         return series
 
+    def save_series_source_context(self, series_id: str, text: str) -> Series:
+        """Persist user supplied whole-work material separately from Director JSON."""
+        series = self.series_store.get(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        value = (text or "").strip()
+        series.source_context = ({
+            "schema_version": 1,
+            "kind": "series_submission_context",
+            "preamble": value,
+            "text": value,
+            "body_char_count": 0,
+        } if value else {})
+        series.updated_at = time.time()
+        self._save_series_data_unlocked()
+        return series
+
     def confirm_series_director_profile(self, series_id: str) -> Series:
         series = self.series_store.get(series_id)
         if not series or not series.director_profile_draft:
@@ -7891,6 +7908,24 @@ class ComicGenPipeline(StudioOwnerMixin):
         )
         match = heading.search(text or "")
         if not match or match.start() <= 0:
+            # A submission form, synopsis, or character sheet without scene
+            # headings is still series-level material. Keep it out of episode
+            # source while preserving the complete user input for Director.
+            submission_markers = ("剧本类型", "剧本名字", "剧本看点", "剧本梗概", "人物小传")
+            if any(marker in (text or "") for marker in submission_markers):
+                value = (text or "").strip()
+                synopsis_match = re.search(
+                    r"剧本梗概\s*[：:]\s*(.*?)(?=人物小传\s*[：:]|五、|$)",
+                    value,
+                    re.S,
+                )
+                return {
+                    "schema_version": 1,
+                    "kind": "series_submission_context",
+                    "preamble": value,
+                    "synopsis": synopsis_match.group(1).strip() if synopsis_match else "",
+                    "body_char_count": 0,
+                }, ""
             return {}, text
         preamble = text[:match.start()].strip()
         screenplay = text[match.start():].lstrip()

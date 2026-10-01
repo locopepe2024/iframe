@@ -30,6 +30,9 @@ export async function getSeriesDirectorProfile(baseUrl: string, seriesId: string
 export async function saveSeriesDirectorDraft(baseUrl: string, seriesId: string, draft: SeriesDirectorDraft, draftName?: string) {
   return (await axios.put(`${baseUrl}/series/${seriesId}/director-profile/draft`, { draft, draft_name: draftName })).data;
 }
+export async function saveSeriesSourceContext(baseUrl: string, seriesId: string, text: string) {
+  return (await axios.put(`${baseUrl}/series/${seriesId}/source-context`, { text })).data;
+}
 export async function confirmSeriesDirectorProfile(baseUrl: string, seriesId: string) {
   return (await axios.post(`${baseUrl}/series/${seriesId}/director-profile/confirm`)).data;
 }
