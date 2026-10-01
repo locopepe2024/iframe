@@ -76,3 +76,20 @@ The media fixture conversion produced 120 frames, 79 tracked frames with semanti
 - `retarget_manifest.json` with `director-media-render-result.v1` status `completed`.
 
 This verifies the Blender artifact path and codec settings. It does not yet verify calibrated dance motion because the fixture used identity pose quaternions.
+## 2026-10-01 direction validation evidence
+
+The diagnostic `scripts/director3d/validate_bundle_directions.py` was run on
+the media rig at frames 1 and 95. The current `restQuaternion * delta` bundle
+had errors of 52–167 degrees on the measured limb channels. This proves the
+rendered pose is not a faithful direction retarget.
+
+Candidate comparison on the same rig and source frames:
+
+- `restQuaternion * delta`: pelvis 166.7°, upper leg 51.8°, lower leg 103.7° at frame 1.
+- `delta` alone: lower legs improved to 28.8°/31.4° at frame 95, but frame 1 remained above 90° on most channels.
+- `delta * restQuaternion`: pelvis improved to 15.0° at frame 95, while lower leg and foot errors remained above 57°.
+
+These results are diagnostic evidence only. They do not establish a final
+rotation composition because the comparison still lacks parent-space rest
+rotation compensation and a reliable 3D source depth. The next implementation
+slice must evaluate rotations in each bone's parent rest space before adding IK.
