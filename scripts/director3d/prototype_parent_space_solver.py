@@ -2,11 +2,11 @@
 import argparse, json, math, sys
 from pathlib import Path
 import bpy
-from mathutils import Quaternion, Vector
+from mathutils import Quaternion, Vector, Matrix
 
 PAIRS={"upper_leg_l":("left_hip","left_knee"),"lower_leg_l":("left_knee","left_ankle"),"upper_leg_r":("right_hip","right_knee"),"lower_leg_r":("right_knee","right_ankle"),"foot_l":("left_heel","left_foot_index"),"foot_r":("right_heel","right_foot_index")}
 ORDER=["upper_leg_l","lower_leg_l","foot_l","upper_leg_r","lower_leg_r","foot_r"]
-BASIS=Quaternion((-math.sqrt(.5),0,0,math.sqrt(.5)))
+BASIS=Quaternion((math.sqrt(.5),0,0,math.sqrt(.5)))
 def n(v): return v.normalized() if v.length>1e-8 else None
 def source_dir(j,a,b): return n(BASIS @ Vector([j[b][i]-j[a][i] for i in range(3)]))
 def angle(a,b): return math.degrees(a.angle(b)) if a and b else None
@@ -29,17 +29,19 @@ for frame in [int(x) for x in args.frames.split(',')]:
         pb=arm.pose.bones.get('pelvis')
         hc=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)])
         sc=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)])
-        target=n(BASIS @ (sc-hc)); current=bone_dir(arm,pb)
-        pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=current.rotation_difference(target)
+        target_up=n(BASIS @ (sc-hc)); target_right=n(BASIS @ Vector([j['right_hip'][i]-j['left_hip'][i] for i in range(3)])); target_forward=n(target_right.cross(target_up)); target_right=n(target_up.cross(target_forward))
+        target_rot=Matrix(((target_right.x,target_forward.x,target_up.x),(target_right.y,target_forward.y,target_up.y),(target_right.z,target_forward.z,target_up.z))).to_quaternion()
+        bone_basis=(arm.matrix_world @ pb.matrix).to_quaternion()
+        world_delta=target_rot @ bone_basis.inverted()
+        pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=bone_basis.inverted() @ world_delta @ bone_basis
         bpy.context.view_layer.update()
     for name in ORDER:
         pb=arm.pose.bones.get(name); target=source_dir(j,*PAIRS[name])
         if not pb or not target: continue
         bpy.context.view_layer.update(); current=bone_dir(arm,pb)
         world_delta=current.rotation_difference(target)
-        parent=pb.parent
-        parent_rot=(arm.matrix_world.to_quaternion() @ parent.matrix.to_quaternion()) if parent else arm.matrix_world.to_quaternion()
-        local_delta=parent_rot.inverted() @ world_delta @ parent_rot
+        bone_basis=(arm.matrix_world @ pb.matrix).to_quaternion()
+        local_delta=bone_basis.inverted() @ world_delta @ bone_basis
         pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=local_delta
     bpy.context.view_layer.update()
     out=[]
