@@ -38,7 +38,7 @@ def spine_target(name,torso_direction,rest_direction):
  return target.normalized() if target.length>1e-8 else torso_direction
 def wd(arm,p):return ((arm.matrix_world@p.tail)-(arm.matrix_world@p.head)).normalized()
 def qxyzw(q):return [q.x,q.y,q.z,q.w]
-raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');args=ap.parse_args(raw)
+raw=sys.argv[sys.argv.index('--')+1:];ap=argparse.ArgumentParser();ap.add_argument('--track',required=True);ap.add_argument('--source-blend',required=True);ap.add_argument('--out',required=True);ap.add_argument('--fps',type=float,default=24);ap.add_argument('--torso-proxy');ap.add_argument('--enable-pelvis-orientation',action='store_true');args=ap.parse_args(raw)
 t=json.loads(Path(args.track).read_text());proxy_by_frame={}
 if args.torso_proxy:
  proxy_data=json.loads(Path(args.torso_proxy).read_text())
@@ -48,7 +48,7 @@ for src in t['frames']:
  f=max(1,round(float(src.get('source_timestamp_seconds',0))*args.fps)+1);j=src.get('semantic_joints',{});bpy.context.scene.frame_set(f)
  for p in arm.pose.bones:p.rotation_mode='QUATERNION';p.rotation_quaternion=Quaternion((1,0,0,0))
  bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')));pelvis_q=None
- pelvis=arm.pose.bones.get('pelvis');target_pelvis=pelvis_target(j)
+ pelvis=arm.pose.bones.get('pelvis');target_pelvis=pelvis_target(j) if args.enable_pelvis_orientation else None
  if pelvis and target_pelvis:
   parent=pelvis.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();pelvis.rotation_quaternion=basis.inverted()@target_pelvis@basis;bpy.context.view_layer.update();pelvis_q=qxyzw(pelvis.rotation_quaternion)
  for name in ORDER:
