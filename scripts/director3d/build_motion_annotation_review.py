@@ -7,7 +7,13 @@ def main():
     data=json.loads(Path(args.track).read_text()); frames=data.get('frames',[]); items=[]; previous=None
     for item in frames:
         landmarks=item.get('target_landmarks'); bbox=item.get('target_bbox'); status=item.get('selection_status','unknown')
-        if landmarks is not None and bbox is not None:
+        # The extractor's raw output uses target_landmarks/target_bbox, while
+        # canonical motion-track.v1 stores semantic_joints and an explicit
+        # selection_status. Treat either representation as a tracked frame;
+        # otherwise a canonical track is incorrectly reported as fully
+        # unresolved.
+        canonical_joints=item.get('semantic_joints') or item.get('semanticJoints')
+        if (landmarks is not None and bbox is not None) or (status == 'tracked' and canonical_joints):
             previous={'bbox':bbox,'center':[(bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2]}
             continue
         candidates=[]
