@@ -79,6 +79,41 @@ canonical ID。绑定结果分为：
 ID 字段，除非它们已通过服务端实体索引验证。该规则适用于 Director
 事件、关系弧、剧情线和后续 shooting plan 的角色/道具/场景引用。
 
+## Compression and drift audit (2026-10-01)
+
+### Observed
+
+- The affected episode has 5,291 source characters and is split into one
+  Director source chunk. Its entity context contains 24 character variants,
+  20 scenes, and 16 props.
+- The final Director synthesis reads the mapped digest, not the 5,291 source
+  characters. The single chunk note keeps at most 360 summary characters,
+  two facts and two open threads; head and tail anchors each keep 240 source
+  characters. The whole digest has a 3,000 character cap.
+- Failed job rows retain only a truncated validation error. The raw model
+  response and mapped note are not persisted, so the failed runs cannot be
+  audited for semantic drift after the fact.
+
+### Direct implication
+
+This is a one-chunk compression risk, not evidence of cross-chunk ordering
+drift. A 5,291 character source may lose middle-scene distinctions before
+final synthesis. An unknown canonical ID separately indicates an entity
+binding problem; it does not by itself prove that the model misunderstood a
+character or plot event.
+
+### Next verification slice
+
+1. Persist the received response and mapped note as owner-scoped review
+   artifacts with bounded retention, without writing secrets to logs.
+2. Compare source events, entity names, mapped note and final story map for
+   the same job. Classify mismatches as source omission, entity alias mismatch,
+   model invention, or binding failure.
+3. For one-chunk sources near this size, compare direct-source synthesis with
+   digest synthesis under the same model and prompt contract. Measure event
+   coverage and unsupported claims before changing the 4,000 character
+   threshold or digest budget.
+
 ## Verification
 
 - 模拟含未知角色引用和非标准状态的完整返回，job 最终为 `needs_review` 或 `completed + warnings`，并可读取 profile；
