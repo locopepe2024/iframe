@@ -4,7 +4,7 @@ from pathlib import Path
 import bpy
 from mathutils import Quaternion,Vector
 
-BASIS=Quaternion((-math.sqrt(.5),0,0,math.sqrt(.5)))
+BASIS=Quaternion((math.sqrt(.5),-math.sqrt(.5),0,0))
 PAIRS={'upper_leg_l':('left_hip','left_knee'),'lower_leg_l':('left_knee','left_ankle'),'upper_leg_r':('right_hip','right_knee'),'lower_leg_r':('right_knee','right_ankle'),'foot_l':('left_heel','left_foot_index'),'foot_r':('right_heel','right_foot_index'),'upper_arm_l':('left_shoulder','left_elbow'),'lower_arm_l':('left_elbow','left_wrist'),'wrist_l':('left_elbow','left_wrist'),'upper_arm_r':('right_shoulder','right_elbow'),'lower_arm_r':('right_elbow','right_wrist'),'wrist_r':('right_elbow','right_wrist')}
 ORDER=['spine_lower','spine_mid','spine_chest','upper_arm_l','lower_arm_l','wrist_l','upper_arm_r','lower_arm_r','wrist_r','upper_leg_l','lower_leg_l','foot_l','upper_leg_r','lower_leg_r','foot_r']
 def vec(j,a,b):
@@ -22,7 +22,8 @@ for src in t['frames']:
  for name in ORDER:
   p=arm.pose.bones.get(name);target=up if name.startswith('spine_') else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
   if not p or not target: warn.append('missing '+name);continue
-  world_delta=wd(arm,p).rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();p.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
+  current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();p.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
+  if f==1 and name.startswith('spine_'):print(json.dumps({'debug':name,'current':list(current),'target':list(target),'delta_angle_deg':math.degrees(world_delta.angle),'local_angle_deg':math.degrees(p.rotation_quaternion.angle),'evaluated':list(wd(arm,p))}))
  root=None
  if 'left_hip' in j and 'right_hip' in j:
   h=[(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)];root=[(h[0]-.5)*2.4,max(-.35,min(.35,-h[2]*1.5)),(1-h[1])*1.8-.9]

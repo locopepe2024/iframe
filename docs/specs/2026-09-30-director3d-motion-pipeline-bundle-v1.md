@@ -124,3 +124,12 @@ an upright source-aligned character. This rejects a pure yaw calibration as
 the fix. The remaining mismatch is a basis or rig-axis convention issue (or
 an armature root orientation issue), and must be solved from the rig's full
 rest frame rather than by adding a fixed facing offset.
+
+The subsequent Blender inspection found a concrete implementation defect:
+`mathutils.Quaternion` takes `(w, x, y, z)`, while the image basis had been
+constructed as if it took `(x, y, z, w)`. The resulting basis rotated the
+source torso vector into an almost horizontal direction. After correcting the
+constructor order, the frame-1 spine target became near vertical (2.2° error
+from rest for `spine_lower`) and the rendered white model returned to an
+upright, visually plausible pose. This is a code fact for the Blender bridge;
+full-sequence quality still requires multi-frame validation.
