@@ -11,6 +11,7 @@ SPINE_WEIGHTS={'spine_lower':0.35,'spine_mid':0.65,'spine_chest':1.0}
 def vec(j,a,b):
  v=BASIS@Vector([j[b][i]-j[a][i] for i in range(3)]);return v.normalized() if v.length>1e-8 else None
 def clavicle(j,side):
+ side = {'l':'left','r':'right'}.get(side, side)
  shoulder_center=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)])
  shoulder=Vector(j[f'{side}_shoulder'])
  v=BASIS@(shoulder-shoulder_center)
