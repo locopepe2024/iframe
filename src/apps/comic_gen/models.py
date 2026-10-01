@@ -60,6 +60,113 @@ class GenerationStatus(str, Enum):
     FAILED = "failed"
 
 
+class AssetGenerationTaskState(BaseModel):
+    """Durable pointer to the latest async image-generation task for an asset."""
+
+    task_id: str
+    status: Literal["pending", "processing", "completed", "failed", "cleared"]
+    error: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+    script_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    asset_type: Optional[Literal["character", "scene", "prop"]] = None
+    asset_source: Optional[str] = None
+
+
+class AvatarSourceMedia(BaseModel):
+    """Input media attached to a development digital-avatar profile."""
+
+    id: str
+    media_url: str
+    media_type: Literal["image", "video"] = "image"
+    duration_seconds: Optional[float] = None
+    created_at: float = Field(default_factory=time.time)
+
+
+class AvatarPreviewTask(BaseModel):
+    """Durable local preview task; provider execution is added later."""
+
+    id: str
+    avatar_id: str
+    script: str
+    status: Literal["queued", "running", "succeeded", "failed"] = "queued"
+    result_media_ids: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+
+class AvatarFaceFeatures(BaseModel):
+    """Editable identity descriptors for face consistency workflows."""
+
+    age_range: Optional[str] = None
+    gender_presentation: Optional[str] = None
+    face_shape: Optional[str] = None
+    skin_tone: Optional[str] = None
+    eye_color: Optional[str] = None
+    eyebrow_shape: Optional[str] = None
+    nose_shape: Optional[str] = None
+    lip_shape: Optional[str] = None
+    hair_color: Optional[str] = None
+    hair_style: Optional[str] = None
+    hair_length: Optional[str] = None
+    facial_hair: Optional[str] = None
+    makeup_style: Optional[str] = None
+    distinctive_features: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+
+class AvatarBodyFeatures(BaseModel):
+    """Editable body, proportion and wardrobe descriptors."""
+
+    height_cm: Optional[float] = Field(None, ge=0)
+    body_type: Optional[str] = None
+    build: Optional[str] = None
+    shoulder_width: Optional[str] = None
+    torso_proportion: Optional[str] = None
+    limb_proportion: Optional[str] = None
+    posture: Optional[str] = None
+    skin_tone: Optional[str] = None
+    clothing_style: Optional[str] = None
+    wardrobe_notes: Optional[str] = None
+    distinctive_features: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+
+class AvatarAppearanceFeatures(BaseModel):
+    """Structured visual facts used by prompts and future local models.
+
+    Values are descriptive inputs, not verified biometric measurements.
+    """
+
+    face: AvatarFaceFeatures = Field(default_factory=AvatarFaceFeatures)
+    body: AvatarBodyFeatures = Field(default_factory=AvatarBodyFeatures)
+    extraction_source: Literal["manual", "inferred", "imported"] = "manual"
+    confidence: Optional[float] = Field(None, ge=0, le=1)
+    notes: Optional[str] = None
+
+
+class DigitalAvatarProfile(BaseModel):
+    """Development-only digital avatar record held in the shared library."""
+
+    id: str
+    owner_user_id: Optional[str] = None
+    owner_profile_id: Optional[str] = None
+    name: str
+    description: str = ""
+    status: Literal["draft", "uploaded", "processing", "ready", "failed"] = "draft"
+    source_media: List[AvatarSourceMedia] = Field(default_factory=list)
+    appearance_variant_ids: List[str] = Field(default_factory=list)
+    appearance: AvatarAppearanceFeatures = Field(default_factory=AvatarAppearanceFeatures)
+    voice_id: Optional[str] = None
+    quality_report: Dict[str, Any] = Field(default_factory=dict)
+    preview_tasks: List[AvatarPreviewTask] = Field(default_factory=list)
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+
+
 # === Storyboard Schema v2: Enums ===
 
 class ShotSizeEnum(str, Enum):
@@ -1807,3 +1914,4 @@ class GlobalAssetLibrary(BaseModel):
     characters: List[Character] = Field(default_factory=list, description="Shared global character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared global scene assets")
     props: List[Prop] = Field(default_factory=list, description="Shared global prop assets")
+    avatars: List[DigitalAvatarProfile] = Field(default_factory=list, description="Development digital-avatar profiles")
