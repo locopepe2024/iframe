@@ -93,3 +93,11 @@ These results are diagnostic evidence only. They do not establish a final
 rotation composition because the comparison still lacks parent-space rest
 rotation compensation and a reliable 3D source depth. The next implementation
 slice must evaluate rotations in each bone's parent rest space before adding IK.
+
+A first parent-space prototype was evaluated on frames 1 and 95. It reduced
+some lower-leg errors to 24–49 degrees, but increased upper-leg and foot
+errors to 99–142 degrees on other channels. This rejects the prototype as a
+production solver. The remaining issue is likely the distinction between
+Blender edit-bone rest matrices and pose-bone local rotation basis; the
+prototype must not be promoted without a rest-pose unit test that applies a
+known rotation and recovers the expected world direction.
