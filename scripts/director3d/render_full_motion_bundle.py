@@ -123,6 +123,7 @@ def main():
     root = bpy.data.objects.new("director-motion-root", None)
     bpy.context.collection.objects.link(root)
     armature.parent = root
+    root.rotation_euler[2] = math.radians(float(bundle.get("facing_offset_deg", 0.0)))
     apply_bundle(bundle, armature)
     bpy.context.scene.render.filepath = str(output / "white_model_video.mp4")
     bpy.ops.render.render(animation=True)
