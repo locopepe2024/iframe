@@ -35,6 +35,7 @@ def main():
     ap.add_argument('--input', required=True)
     ap.add_argument('--output', required=True)
     ap.add_argument('--alpha', type=float, default=0.35)
+    ap.add_argument('--max-bend-ratio', type=float, default=0.08)
     args = ap.parse_args()
     if not 0 < args.alpha <= 1: raise SystemExit('--alpha must be in (0, 1]')
     data = json.loads(Path(args.input).read_text())
@@ -54,7 +55,10 @@ def main():
         # available CPU-only cue for a non-linear torso curve. It is a
         # constrained proxy, not a measured lumbar displacement.
         axis_delta = project_perpendicular(sub(shoulder_axis, pelvis_axis), torso)
-        scale = min(0.18, 0.35 * norm(axis_delta) / max(norm(torso), 1e-8))
+        # Limit the lateral curve to avoid turning shoulder-axis jitter into
+        # an implausible lumbar kink. This is a validation bound, not a claim
+        # about human anatomical limits.
+        scale = min(args.max_bend_ratio, 0.35 * norm(axis_delta) / max(norm(torso), 1e-8))
         bend = mul(unit(axis_delta) or [0.0, 0.0, 0.0], scale * max(norm(torso), 1e-8))
         # Proxy points are explicitly geometric fractions, not detected lumbar landmarks.
         raw = {
