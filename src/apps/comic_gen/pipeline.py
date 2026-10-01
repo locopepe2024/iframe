@@ -666,6 +666,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                 owner_profile_id=owner_profile_id,
             )
         return script
+
+    def copy_project(self, script_id: str) -> Script:
+        """Create a standalone editable copy of a project for workspace use."""
+        import copy
+        with self._save_lock:
+            source = self.get_script(script_id)
+            if not source:
+                raise ValueError("Project not found")
+            duplicate = copy.deepcopy(source)
+            duplicate.id = str(uuid.uuid4())
+            duplicate.title = f"{source.title}（副本）"
+            duplicate.series_id = None
+            duplicate.episode_number = None
+            duplicate.created_at = time.time()
+            duplicate.updated_at = duplicate.created_at
+            self.stamp_owned_children(duplicate)
+            self.scripts[duplicate.id] = duplicate
+            self._save_data()
+            return duplicate
     
     def extract_preview(self, script_id: str, text: str) -> Script:
         """Run entity extraction without saving. Cache result for subsequent apply."""

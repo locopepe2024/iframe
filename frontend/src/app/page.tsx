@@ -340,8 +340,17 @@ const WS_VIEW_KEY = "lumenx_workspace_view";
 // deriveCover is imported from ProjectCard (single source of truth).
 
 // ── Project Row (Line B list-view item) ──
-function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
+function ProjectRow({ project, crumb, onDelete, onCopy }: { project: Project; crumb: string; onDelete: (id: string) => void; onCopy: (id: string) => void }) {
   const t = useTranslations("project");
+  const tc = useTranslations("common");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
   const cover = deriveCover(project);
   const status = deriveStatus(project);
   const frameCount = project.frames?.length || 0;
@@ -368,7 +377,7 @@ function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
           open();
         }
       }}
-      className="group glass-panel flex items-center gap-4 rounded-xl border border-glass-border px-3 py-2.5 cursor-pointer hover:bg-hover-bg transition-colors"
+      className="group glass-panel relative flex items-center gap-4 rounded-xl border border-glass-border px-3 py-2.5 cursor-pointer hover:bg-hover-bg transition-colors"
     >
       {/* Thumbnail */}
       <div className="relative w-[68px] aspect-[16/10] flex-shrink-0 rounded-lg overflow-hidden bg-surface-inset">
@@ -413,12 +422,18 @@ function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
 
       {/* More */}
       <button
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setMenuOpen((open) => !open); }}
         className="w-8 h-8 rounded-lg grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors flex-shrink-0"
         aria-label={t("moreActions")}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
       >
         <MoreVertical size={15} />
       </button>
+      {menuOpen && <div ref={menuRef} role="menu" className="absolute right-3 top-full z-20 mt-1 w-36 overflow-hidden rounded-md border border-glass-border bg-surface/96 shadow-xl">
+        <button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onCopy(project.id); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-hover-bg">{tc("copy")}</button>
+        <button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (confirm(t("confirmDelete", { title: project.title }))) onDelete(project.id); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-red-500/10 hover:text-red-400">{tc("delete")}</button>
+      </div>}
     </div>
   );
 }
@@ -482,6 +497,7 @@ export default function Home() {
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
+  const copyProject = useProjectStore((state) => state.copyProject);
   const setProjects = useProjectStore((state) => state.setProjects);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
@@ -563,6 +579,23 @@ export default function Home() {
 
   const syncAll = async () => {
     await Promise.all([syncProjects(), fetchSeriesList()]);
+  };
+
+  const handleCopyProject = async (id: string) => {
+    try {
+      await copyProject(id);
+      await syncProjects();
+    } catch (error) {
+      console.error("Failed to copy project:", error);
+      toast.error(t("toastProjectCopyFailed"), { body: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    await deleteProject(id);
+    setSeriesEpisodes((current) => Object.fromEntries(
+      Object.entries(current).map(([seriesKey, episodes]) => [seriesKey, episodes.filter((episode) => episode.id !== id)])
+    ));
   };
 
   // Close dropdown when clicking outside
@@ -999,6 +1032,8 @@ export default function Home() {
                             <ProjectRow
                               project={ep}
                               crumb={`${s.title}${ep.episode_number ? ` · EP.${String(ep.episode_number).padStart(2, "0")}` : ""}`}
+                              onDelete={handleDeleteProject}
+                              onCopy={handleCopyProject}
                             />
                           </div>
                         ))}
@@ -1022,7 +1057,7 @@ export default function Home() {
                             className="atelier-reveal"
                             style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                           >
-                            <ProjectCard project={ep} onDelete={deleteProject} />
+                            <ProjectCard project={ep} onDelete={handleDeleteProject} onCopy={handleCopyProject} />
                           </div>
                         ))}
                         {!wsFiltering && <NewProjectTile episode onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }} />}
@@ -1056,7 +1091,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectRow project={p} crumb="" />
+                          <ProjectRow project={p} crumb="" onDelete={handleDeleteProject} onCopy={handleCopyProject} />
                         </div>
                       ))}
                       {!wsFiltering && (
@@ -1079,7 +1114,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectCard project={p} onDelete={deleteProject} />
+                          <ProjectCard project={p} onDelete={handleDeleteProject} onCopy={handleCopyProject} />
                         </div>
                       ))}
                       {!wsFiltering && <NewProjectTile onClick={() => setIsDialogOpen(true)} />}

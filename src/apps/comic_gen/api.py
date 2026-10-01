@@ -1922,6 +1922,17 @@ def delete_project(script_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/copy")
+def copy_project(script_id: str):
+    """Create a standalone editable copy of a workspace project."""
+    try:
+        return signed_response(pipeline.copy_project(script_id).model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─────────────────────────────────────────────────────────────────────
 # R2V v2 Phase 4 — Cross-episode asset reconcile
 # ─────────────────────────────────────────────────────────────────────

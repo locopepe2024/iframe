@@ -154,6 +154,16 @@ class TestSeriesCRUD:
         with pytest.raises(ValueError, match="Series not found"):
             pipeline.delete_series("missing")
 
+    def test_copy_project_creates_standalone_duplicate(self, pipeline):
+        source = _make_script(title="Original", text="script text")
+        pipeline.scripts[source.id] = source
+        duplicate = pipeline.copy_project(source.id)
+        assert duplicate.id != source.id
+        assert duplicate.title == "Original（副本）"
+        assert duplicate.original_text == source.original_text
+        assert duplicate.series_id is None
+        assert duplicate.id in pipeline.scripts
+
 
 # ===================================================================
 # 3. Episode association tests
