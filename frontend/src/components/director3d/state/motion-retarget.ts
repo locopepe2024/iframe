@@ -72,6 +72,9 @@ export function createRigMappingManifest(
 ): MotionRetargetMappingManifest {
   const defaults: Array<[string, string, string, MotionTrackVector3]> = [
     ["pelvis", "left_hip", "right_hip", [1, 0, 0]],
+    ["spine_lower", "hips", "shoulders", [0, 1, 0]],
+    ["spine_mid", "hips", "shoulders", [0, 1, 0]],
+    ["spine_chest", "hips", "shoulders", [0, 1, 0]],
     ["upper_leg_l", "left_hip", "left_knee", [0, -1, 0]],
     ["lower_leg_l", "left_knee", "left_ankle", [0, -1, 0]],
     ["upper_leg_r", "right_hip", "right_knee", [0, -1, 0]],
@@ -164,6 +167,10 @@ function normalizeQuaternion(value: MotionTrackQuaternion): MotionTrackQuaternio
   if (size <= EPSILON) return [0, 0, 0, 1];
   return value.map((item) => item / size) as MotionTrackQuaternion;
 }
+function distributeQuaternion(value: MotionTrackQuaternion, fraction: number): MotionTrackQuaternion {
+  const t = Math.max(0, Math.min(1, fraction));
+  return normalizeQuaternion([value[0] * t, value[1] * t, value[2] * t, 1 + (value[3] - 1) * t]);
+}
 
 function quaternionFromDirection(from: MotionTrackVector3, to: MotionTrackVector3): MotionTrackQuaternion {
   const source = normalize(from) ?? [0, 0, 1];
@@ -180,6 +187,12 @@ function quaternionFromDirection(from: MotionTrackVector3, to: MotionTrackVector
 }
 
 function currentDirection(frame: MotionTrackFrame, startJoint: string, endJoint: string): MotionTrackVector3 | null {
+  if (startJoint === "hips" && endJoint === "shoulders") {
+    if (frame.bodyCenters?.torsoDirection) return frame.bodyCenters.torsoDirection;
+    const hips = frame.bodyCenters?.hips; const shoulders = frame.bodyCenters?.shoulders;
+    if (hips && shoulders) return [shoulders[0] - hips[0], shoulders[1] - hips[1], shoulders[2] - hips[2]];
+    return null;
+  }
   const start = frame.semanticJoints[startJoint];
   const end = frame.semanticJoints[endJoint];
   if (!start || !end) return null;
@@ -227,7 +240,8 @@ export function retargetMotionTrack(
       const sourceDirection = mapping.sourceBasisQuaternion
         ? rotateVector(mapping.sourceBasisQuaternion, direction)
         : direction;
-      const delta = quaternionFromDirection(entry.restDirection, sourceDirection);
+      const rawDelta = quaternionFromDirection(entry.restDirection, sourceDirection);
+      const delta = entry.targetJointId.startsWith("spine_") ? distributeQuaternion(rawDelta, 1 / 3) : rawDelta;
       const rawQuaternion = normalizeQuaternion(multiplyQuaternion(entry.restQuaternion, delta));
       if (entry.targetJointId === "pelvis") {
         result.pelvisQuaternion = keepQuaternionSign(rawQuaternion, previous?.pelvisQuaternion ?? undefined);

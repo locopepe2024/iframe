@@ -562,6 +562,14 @@ export interface MotionTrackFrame {
   jointConfidence: Record<string, number>;
   footTargets: { left: MotionTrackFootTarget; right: MotionTrackFootTarget };
   footContactCandidates: { left: MotionTrackFootContactCandidate; right: MotionTrackFootContactCandidate };
+  bodyCenters?: {
+    hips: MotionTrackVector3 | null;
+    shoulders: MotionTrackVector3 | null;
+    pelvisAxis: MotionTrackVector3 | null;
+    shoulderAxis: MotionTrackVector3 | null;
+    torsoDirection: MotionTrackVector3 | null;
+    torsoLength: number | null;
+  };
 }
 export interface MotionTrackManifest {
   schema: "motion-track.v1";

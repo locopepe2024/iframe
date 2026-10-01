@@ -60,6 +60,9 @@ function footCandidate(value: unknown, field: string): MotionTrackFootContactCan
   if (typeof source.candidate !== "boolean") throw new Error(`${field}.candidate 必须是布尔值。`);
   return { candidate: source.candidate, confidence: confidence(source.confidence ?? 0, `${field}.confidence`) };
 }
+function optionalBodyVector(value: unknown, field: string): MotionTrackVector3 | null {
+  return value === undefined || value === null ? null : vector3(value, field, true);
+}
 
 function parseFrame(value: unknown, index: number): MotionTrackFrame {
   const source = record(value, `frames[${index}]`);
@@ -81,6 +84,8 @@ function parseFrame(value: unknown, index: number): MotionTrackFrame {
   }
   const targets = record(source.foot_targets ?? source.footTargets ?? {}, `frames[${index}].foot_targets`);
   const contacts = record(source.foot_contact_candidates ?? source.footContactCandidates ?? {}, `frames[${index}].foot_contact_candidates`);
+  const centers = record(source.body_centers ?? source.bodyCenters ?? {}, `frames[${index}].body_centers`);
+  const torsoLength = centers.torso_length ?? centers.torsoLength;
   return {
     frame,
     sourceFrame: source.source_frame === undefined ? (source.sourceFrame === undefined ? null : finite(source.sourceFrame, `frames[${index}].sourceFrame`, 0, Number.MAX_SAFE_INTEGER)) : finite(source.source_frame, `frames[${index}].source_frame`, 0, Number.MAX_SAFE_INTEGER),
@@ -93,6 +98,14 @@ function parseFrame(value: unknown, index: number): MotionTrackFrame {
     jointConfidence,
     footTargets: { left: footTarget(targets.left, `frames[${index}].foot_targets.left`), right: footTarget(targets.right, `frames[${index}].foot_targets.right`) },
     footContactCandidates: { left: footCandidate(contacts.left, `frames[${index}].foot_contact_candidates.left`), right: footCandidate(contacts.right, `frames[${index}].foot_contact_candidates.right`) },
+    bodyCenters: {
+      hips: optionalBodyVector(centers.hips, `frames[${index}].body_centers.hips`),
+      shoulders: optionalBodyVector(centers.shoulders, `frames[${index}].body_centers.shoulders`),
+      pelvisAxis: optionalBodyVector(centers.pelvis_axis ?? centers.pelvisAxis, `frames[${index}].body_centers.pelvis_axis`),
+      shoulderAxis: optionalBodyVector(centers.shoulder_axis ?? centers.shoulderAxis, `frames[${index}].body_centers.shoulder_axis`),
+      torsoDirection: optionalBodyVector(centers.torso_direction ?? centers.torsoDirection, `frames[${index}].body_centers.torso_direction`),
+      torsoLength: torsoLength === undefined || torsoLength === null ? null : finite(torsoLength, `frames[${index}].body_centers.torso_length`, 0, 1000),
+    },
   };
 }
 

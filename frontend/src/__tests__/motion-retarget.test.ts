@@ -84,7 +84,7 @@ describe("motion-track local quaternion retarget", () => {
   it("creates the default hip-knee-ankle and foot mappings", () => {
     const manifest = createRigMappingManifest("humanoid-v1", track().coordinateSystem);
     expect(manifest.entries.map((entry) => entry.targetJointId)).toEqual([
-      "pelvis", "upper_leg_l", "lower_leg_l", "upper_leg_r", "lower_leg_r", "foot_l", "toe_l", "foot_r", "toe_r",
+      "pelvis", "spine_lower", "spine_mid", "spine_chest", "upper_leg_l", "lower_leg_l", "upper_leg_r", "lower_leg_r", "foot_l", "toe_l", "foot_r", "toe_r",
     ]);
     const result = retargetMotionTrack({
       ...track(),
@@ -115,5 +115,12 @@ describe("motion-track local quaternion retarget", () => {
     expect(result.frames[0].localQuaternions.upper_arm_l).toHaveLength(4);
     expect(result.frames[0].pelvisQuaternion).toBeNull();
     expect(result.frames[0].warnings.some((warning) => warning.includes("pelvis"))).toBe(true);
+  });
+  it("derives the three spine controls from torso direction when lumbar landmarks are absent", () => {
+    const manifest = createRigMappingManifest("humanoid-v1", track().coordinateSystem);
+    const result = retargetMotionTrack({ ...track(), frames: [{ ...track().frames[0], bodyCenters: { hips: [0, 0, 0], shoulders: [0, 1, 0], pelvisAxis: [1, 0, 0], shoulderAxis: [1, 0, 0], torsoDirection: [0, 1, 0], torsoLength: 1 } }] }, manifest);
+    expect(result.frames[0].localQuaternions.spine_lower).toHaveLength(4);
+    expect(result.frames[0].localQuaternions.spine_mid).toHaveLength(4);
+    expect(result.frames[0].localQuaternions.spine_chest).toHaveLength(4);
   });
 });
