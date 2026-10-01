@@ -22,6 +22,8 @@ def main():
    occluded+=1
    if f.get('target_landmarks') is not None: warnings.append(f'landmarks_present_for_occluded:{n}')
    if start is None: start=n
+  elif st in {'detector_missed','out_of_frame','identity_unresolved','pending'}:
+   if f.get('target_landmarks') is not None: warnings.append(f'landmarks_present_for_unresolved:{n}')
   else: errors.append(f'unknown_selection_status:{n}')
   if st!='occluded' and start is not None: ranges.append([start,frame_numbers[-2] if len(frame_numbers)>1 else start]); start=None
  if start is not None: ranges.append([start,frame_numbers[-1]])

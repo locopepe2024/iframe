@@ -26,7 +26,7 @@ def main():
         min_tracking_confidence=0.35,
         output_segmentation_masks=False,
     )
-    tracks=[]; frame_no=0; processed=0; previous_bbox=None
+    tracks=[]; frame_no=0; processed=0; previous_bbox=None; previous_center=None; previous_previous_center=None
     with mp.tasks.vision.PoseLandmarker.create_from_options(options) as landmarker:
       while processed < args.max_frames:
         ok, frame=cap.read()
@@ -52,22 +52,30 @@ def main():
           inter=iw*ih; area_a=max(0.0,ax1-ax0)*max(0.0,ay1-ay0); area_b=max(0.0,bx1-bx0)*max(0.0,by1-by0)
           return inter / max(1e-9, area_a+area_b-inter)
         target=None
-        selection_status='occluded'
+        selection_status='detector_missed' if candidates else 'out_of_frame'
+        selection_reason='no_candidate_pose' if not candidates else 'identity_unresolved'
         if candidates:
           center_candidates=[c for c in candidates if abs(c['center'][0]-0.5) <= 0.20]
           if previous_bbox is None:
             pool=center_candidates or candidates
             target=min(pool,key=lambda c: abs(c['center'][0]-0.5)+0.25*abs(c['center'][1]-0.5))
-          elif center_candidates:
+          else:
+            pool=center_candidates or candidates
+            predicted=previous_center
+            if previous_center is not None and previous_previous_center is not None:
+              predicted=(previous_center[0]+(previous_center[0]-previous_previous_center[0]), previous_center[1]+(previous_center[1]-previous_previous_center[1]))
             def score(c):
-              center_distance=abs(c['center'][0]-0.5)+0.25*abs(c['center'][1]-0.5)
+              prediction_distance=abs(c['center'][0]-predicted[0])+0.25*abs(c['center'][1]-predicted[1]) if predicted else abs(c['center'][0]-0.5)+0.25*abs(c['center'][1]-0.5)
               continuity=1.0-iou(previous_bbox,c['bbox'])
-              return 0.75*center_distance+0.25*continuity
-            target=min(center_candidates,key=score)
+              return 0.75*prediction_distance+0.25*continuity
+            ranked=sorted(pool,key=score)
+            if ranked and (len(ranked)==1 or score(ranked[0]) <= score(ranked[1]) * 0.82): target=ranked[0]
           if target is not None:
+            previous_previous_center=previous_center; previous_center=target['center']
             previous_bbox=target['bbox']
             selection_status='tracked'
-        tracks.append({'frame':frame_no,'timestamp_seconds':(frame_no-1)/fps,'subject_count':len(candidates),'target_pose_index':target['pose_index'] if target else None,'target_bbox':target['bbox'] if target else None,'target_landmarks':target['landmarks'] if target else None,'target_track_id':'person-center','selection_status':selection_status,'poses':[{'pose_index':c['pose_index'],'bbox':c['bbox'],'center':c['center']} for c in candidates]})
+            selection_reason='predicted_center_continuity' if previous_previous_center else 'center_prior'
+        tracks.append({'frame':frame_no,'timestamp_seconds':(frame_no-1)/fps,'subject_count':len(candidates),'target_pose_index':target['pose_index'] if target else None,'target_bbox':target['bbox'] if target else None,'target_landmarks':target['landmarks'] if target else None,'target_track_id':'person-center','selection_status':selection_status,'selection_reason':selection_reason,'occlusion_evidence':False,'poses':[{'pose_index':c['pose_index'],'bbox':c['bbox'],'center':c['center']} for c in candidates]})
         for c in candidates:
           color=(0,180,255) if target is c else (130,130,130)
           for x,y,_,_ in c['landmarks']:
@@ -76,7 +84,7 @@ def main():
         cv2.putText(frame,f'frame {frame_no} poses {len(candidates)} target {target["pose_index"] if target else "none"}',(20,40),cv2.FONT_HERSHEY_SIMPLEX,0.8,(0,220,255),2)
         writer.write(frame); processed += 1
     cap.release(); writer.release()
-    payload={'schema':'motion-track.v1','source':{'path':args.video,'fps':fps,'width':width,'height':height,'sample_every':args.sample_every,'frames_processed':processed},'target_selection':{'policy':'center_prior_with_continuity_and_occlusion','target_subject_id':'person-center'},'frames':tracks}
+    payload={'schema':'motion-track.v1','source':{'path':args.video,'fps':fps,'width':width,'height':height,'sample_every':args.sample_every,'frames_processed':processed},'target_selection':{'policy':'center_prior_with_predicted_center_continuity','target_subject_id':'person-center','occlusion_is_not_inferred':True},'frames':tracks}
     json_path.write_text(json.dumps(payload,ensure_ascii=False,indent=2))
     print(json.dumps({'json':str(json_path),'overlay':str(overlay_path),'frames':processed,'fps':fps,'width':width,'height':height},ensure_ascii=False))
 if __name__=='__main__': main()
