@@ -322,6 +322,7 @@ export interface Project {
     updatedAt: string;
     aspectRatio?: string;
     style_preset?: string;
+    style_prompt?: string;
     art_direction?: ArtDirection;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
@@ -367,6 +368,7 @@ interface ProjectStore {
     selectProject: (id: string) => Promise<void>;
     updateProject: (id: string, data: Partial<Project>) => void;
     deleteProject: (id: string) => Promise<void>;
+    copyProject: (id: string) => Promise<Project>;
     clearCurrentProject: () => void;
 
 
@@ -669,6 +671,12 @@ export const useProjectStore = create<ProjectStore>()(
                         currentProject: state.currentProject?.id === id ? null : state.currentProject
                     }));
                 }
+            },
+
+            copyProject: async (id: string) => {
+                const project = await api.copyProject(id);
+                set((state) => ({ projects: [...state.projects, project] }));
+                return project;
             },
 
             isAnalyzingArtStyle: false,

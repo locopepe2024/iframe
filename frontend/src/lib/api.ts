@@ -450,6 +450,10 @@ export const api = {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;
     },
+    copyProject: async (scriptId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/copy`);
+        return { ...res.data, originalText: res.data.original_text };
+    },
 
     /** Toggle the user-starred (featured) flag on a project. Returns the
      *  updated Script. No request body — the backend flips the current flag. */

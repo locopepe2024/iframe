@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star } from "lucide-react";
+import { Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star, Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Project } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 interface ProjectCardProps {
     project: Project;
     onDelete: (id: string) => void;
+    onCopy?: (id: string) => void;
 }
 
 export type DerivedStatus = "completed" | "processing" | "pending";
@@ -52,7 +53,7 @@ export function deriveStatus(project: Project): DerivedStatus {
     return "pending";
 }
 
-export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
+export default function ProjectCard({ project, onDelete, onCopy }: ProjectCardProps) {
     const t = useTranslations("project");
     const tCommon = useTranslations("common");
     const locale = useSettingsStore((s) => s.locale);
@@ -296,6 +297,19 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 <Trash2 size={14} aria-hidden="true" />
                                 {tCommon("delete")}
                             </button>
+                            {onCopy && <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(false);
+                                    void onCopy(project.id);
+                                }}
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-primary/12 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/12"
+                            >
+                                <Copy size={14} aria-hidden="true" />
+                                {tCommon("copy")}
+                            </button>}
                         </div>
                     ) : null}
                 </div>

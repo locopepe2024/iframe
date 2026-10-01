@@ -684,6 +684,7 @@
     "fromScript": "从脚本开始",
     "toastEpisodesLoadFailed": "剧集加载失败",
     "toastProjectsSyncFailed": "项目同步失败",
+    "toastProjectCopyFailed": "复制项目失败",
     "filterAll": "全部",
     "filterCompleted": "已完成",
     "filterProcessing": "进行中",

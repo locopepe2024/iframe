@@ -684,6 +684,7 @@
     "fromScript": "Start from a script",
     "toastEpisodesLoadFailed": "Failed to load episodes",
     "toastProjectsSyncFailed": "Failed to sync projects",
+    "toastProjectCopyFailed": "Failed to copy project",
     "filterAll": "All",
     "filterCompleted": "Completed",
     "filterProcessing": "In progress",
