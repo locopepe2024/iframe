@@ -820,7 +820,8 @@ class DirectorRelationshipState(_DirectorStoryMapModel):
 
 class DirectorRelationshipArc(_DirectorStoryMapModel):
     relationship_id: str = Field(..., min_length=1, max_length=120)
-    person_ids: List[str] = Field(..., min_length=2, max_length=2)
+    person_ids: List[str] = Field(default_factory=list, max_length=2)
+    unresolved_person_refs: List[str] = Field(default_factory=list, max_length=20)
     label: str = Field("", max_length=180)
     legacy_summary: str = Field("", max_length=1200)
     evidence_status: DirectorEvidenceStatus = "interpretation"
@@ -850,7 +851,7 @@ class DirectorRelationshipArc(_DirectorStoryMapModel):
 
     @model_validator(mode="after")
     def validate_pair(self):
-        if self.person_ids[0] == self.person_ids[1]:
+        if len(self.person_ids) == 2 and self.person_ids[0] == self.person_ids[1]:
             raise ValueError("relationship arc must connect two different people")
         return self
 
@@ -865,6 +866,7 @@ class DirectorStoryThread(_DirectorStoryMapModel):
     thread_id: str = Field(..., min_length=1, max_length=120)
     label: str = Field("", max_length=180)
     person_ids: List[str] = Field(default_factory=list, max_length=20)
+    unresolved_person_refs: List[str] = Field(default_factory=list, max_length=20)
     milestones: List[DirectorStorylineMilestone] = Field(default_factory=list, max_length=100)
     evidence_status: DirectorEvidenceStatus = "interpretation"
     evidence_status_raw: Optional[str] = None
@@ -913,8 +915,6 @@ class DirectorStoryMap(_DirectorStoryMapModel):
         if len(relationship_ids) != len(set(relationship_ids)):
             raise ValueError("story map relationship IDs must be unique")
         for arc in self.relationship_arcs:
-            if not set(arc.person_ids).issubset(people_by_id):
-                raise ValueError(f"relationship {arc.relationship_id} references an unknown person")
             state_phases = [state.phase_id for state in arc.states]
             if len(state_phases) != len(set(state_phases)):
                 raise ValueError(f"relationship {arc.relationship_id} has duplicate states for a phase")
@@ -930,8 +930,6 @@ class DirectorStoryMap(_DirectorStoryMapModel):
         if len(thread_ids) != len(set(thread_ids)):
             raise ValueError("story map thread IDs must be unique")
         for thread in self.story_threads:
-            if not set(thread.person_ids).issubset(people_by_id):
-                raise ValueError(f"story thread {thread.thread_id} references an unknown person")
             if any(milestone.event_id not in event_ids for milestone in thread.milestones):
                 raise ValueError(f"story thread {thread.thread_id} references an unknown event")
 
@@ -1788,6 +1786,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
         projected_arcs.append({
             "relationship_id": arc.get("relationship_id", ""),
             "person_ids": arc.get("person_ids", [])[:2],
+            "unresolved_person_refs": arc.get("unresolved_person_refs", [])[:20],
             "label": _bounded_director_text(arc.get("label", ""), 100),
             "legacy_summary": _bounded_director_text(arc.get("legacy_summary", ""), 180),
             "states": [
@@ -1959,7 +1958,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                 if not isinstance(arc, dict):
                     normalized_arcs.append(arc)
                     continue
-                item = {key: arc[key] for key in ("relationship_id", "arc_id", "person_ids", "label", "legacy_summary", "evidence_status", "evidence_status_raw", "states") if key in arc}
+                item = {key: arc[key] for key in ("relationship_id", "arc_id", "person_ids", "unresolved_person_refs", "label", "legacy_summary", "evidence_status", "evidence_status_raw", "states") if key in arc}
                 if item.get("relationship_id") and item.get("arc_id") and item["relationship_id"] != item["arc_id"]:
                     raise ValueError("relationship_id and arc_id must match when both are provided")
                 if not item.get("relationship_id") and item.get("arc_id"):
@@ -1993,7 +1992,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(thread, dict):
                 normalized_threads.append(thread)
                 continue
-            item = {key: thread[key] for key in ("thread_id", "label", "person_ids", "milestones", "evidence_status", "evidence_status_raw") if key in thread}
+            item = {key: thread[key] for key in ("thread_id", "label", "person_ids", "unresolved_person_refs", "milestones", "evidence_status", "evidence_status_raw") if key in thread}
             raw_status = thread.get("evidence_status", thread.get("status"))
             if "evidence_status" in thread or "status" in thread:
                 status, original = _normalize_director_evidence_status(raw_status)

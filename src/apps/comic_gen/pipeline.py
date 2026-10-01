@@ -2538,6 +2538,35 @@ class ComicGenPipeline(StudioOwnerMixin):
                     existing_unknown = []
                 event["character_ids"] = list(dict.fromkeys(valid_ids))
                 event["unresolved_character_refs"] = list(dict.fromkeys(existing_unknown + unknown_ids))[:20]
+        known_person_ids = {person.get("person_id") for person in story_map["people"]}
+        for arc in story_map.get("relationship_arcs", []):
+            if not isinstance(arc, dict):
+                continue
+            raw_ids = arc.get("person_ids", [])
+            if not isinstance(raw_ids, list):
+                raw_ids = []
+            arc["person_ids"] = list(dict.fromkeys(item for item in raw_ids if item in known_person_ids))[:2]
+            unknown_ids = [item for item in raw_ids if item not in known_person_ids]
+            existing_unknown = arc.get("unresolved_person_refs", [])
+            if not isinstance(existing_unknown, list):
+                existing_unknown = []
+            arc["unresolved_person_refs"] = list(dict.fromkeys(existing_unknown + unknown_ids))[:20]
+            # Relationship arcs require a pair for the strict model. An
+            # unresolved or one-sided model arc is retained as a review item,
+            # but is omitted from the canonical arc list until the user binds
+            # the missing person.
+        for thread in story_map.get("story_threads", []):
+            if not isinstance(thread, dict):
+                continue
+            raw_ids = thread.get("person_ids", [])
+            if not isinstance(raw_ids, list):
+                raw_ids = []
+            thread["person_ids"] = list(dict.fromkeys(item for item in raw_ids if item in known_person_ids))
+            unknown_ids = [item for item in raw_ids if item not in known_person_ids]
+            existing_unknown = thread.get("unresolved_person_refs", [])
+            if not isinstance(existing_unknown, list):
+                existing_unknown = []
+            thread["unresolved_person_refs"] = list(dict.fromkeys(existing_unknown + unknown_ids))[:20]
         profile["story_map"] = story_map
 
     def _effective_shooting_story_map(self, script: Script, profile: DirectorProfile) -> Optional[Dict[str, Any]]:
