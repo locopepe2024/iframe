@@ -6,10 +6,15 @@ from mathutils import Quaternion,Vector
 
 BASIS=Quaternion((math.sqrt(.5),-math.sqrt(.5),0,0))
 PAIRS={'upper_leg_l':('left_hip','left_knee'),'lower_leg_l':('left_knee','left_ankle'),'upper_leg_r':('right_hip','right_knee'),'lower_leg_r':('right_knee','right_ankle'),'foot_l':('left_heel','left_foot_index'),'foot_r':('right_heel','right_foot_index'),'upper_arm_l':('left_shoulder','left_elbow'),'lower_arm_l':('left_elbow','left_wrist'),'wrist_l':('left_elbow','left_wrist'),'upper_arm_r':('right_shoulder','right_elbow'),'lower_arm_r':('right_elbow','right_wrist'),'wrist_r':('right_elbow','right_wrist')}
-ORDER=['spine_lower','spine_mid','spine_chest','upper_arm_l','lower_arm_l','wrist_l','upper_arm_r','lower_arm_r','wrist_r','upper_leg_l','lower_leg_l','foot_l','upper_leg_r','lower_leg_r','foot_r']
+ORDER=['spine_lower','spine_mid','spine_chest','clavicle_l','clavicle_r','upper_arm_l','lower_arm_l','wrist_l','upper_arm_r','lower_arm_r','wrist_r','upper_leg_l','lower_leg_l','foot_l','upper_leg_r','lower_leg_r','foot_r']
 SPINE_WEIGHTS={'spine_lower':0.35,'spine_mid':0.65,'spine_chest':1.0}
 def vec(j,a,b):
  v=BASIS@Vector([j[b][i]-j[a][i] for i in range(3)]);return v.normalized() if v.length>1e-8 else None
+def clavicle(j,side):
+ shoulder_center=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)])
+ shoulder=Vector(j[f'{side}_shoulder'])
+ v=BASIS@(shoulder-shoulder_center)
+ return v.normalized() if v.length>1e-8 else None
 def torso(j):
  h=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)]);s=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)]);v=BASIS@(s-h);return v.normalized() if v.length>1e-8 else None
 def proxy_spine_targets(proxy):
@@ -39,7 +44,7 @@ for src in t['frames']:
  bpy.context.view_layer.update();qs={};warn=[];up=torso(j) if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')) else None;segmented=proxy_spine_targets(proxy_by_frame.get(src.get('frame')))
  for name in ORDER:
   p=arm.pose.bones.get(name);rest=wd(arm,p) if p else None
-  target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None))
+  target=segmented.get(name) or (spine_target(name,up,rest) if name.startswith('spine_') and up and rest else (clavicle(j,name[-1]) if name.startswith('clavicle_') and all(k in j for k in ('left_shoulder','right_shoulder')) else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)))
   if not p or not target: warn.append('missing '+name);continue
   current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion()
   if name.startswith('upper_arm_'):basis=(arm.matrix_world@p.matrix).to_quaternion()

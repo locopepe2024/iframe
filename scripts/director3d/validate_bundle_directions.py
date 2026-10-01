@@ -12,6 +12,8 @@ PAIRS = {
     "upper_leg_l": ("left_hip", "left_knee"), "lower_leg_l": ("left_knee", "left_ankle"),
     "upper_leg_r": ("right_hip", "right_knee"), "lower_leg_r": ("right_knee", "right_ankle"),
     "foot_l": ("left_heel", "left_foot_index"), "foot_r": ("right_heel", "right_foot_index"),
+    "upper_arm_l": ("left_shoulder", "left_elbow"), "lower_arm_l": ("left_elbow", "left_wrist"),
+    "upper_arm_r": ("right_shoulder", "right_elbow"), "lower_arm_r": ("right_elbow", "right_wrist"),
 }
 
 def dot(a,b): return sum(x*y for x,y in zip(a,b))
