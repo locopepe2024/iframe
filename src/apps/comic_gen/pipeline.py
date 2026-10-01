@@ -2443,13 +2443,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str) -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto") -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
             if callable(analyzer):
-                analyzed = analyzer(script.original_text, entities, style)
+                analyzed = analyzer(script.original_text, entities, style, source_mode)
                 if isinstance(analyzed, dict) and isinstance(analyzed.get("profile"), dict):
                     draft = analyzed["profile"]
                     source_audit = analyzed.get("source_audit", {})

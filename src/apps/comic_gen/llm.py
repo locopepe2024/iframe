@@ -1135,22 +1135,23 @@ class ScriptProcessor:
         }
         return result
 
-    def _director_source_context(self, text: str) -> tuple[str, bool]:
+    def _director_source_context(self, text: str, source_mode: str = "auto") -> tuple[str, bool]:
         """Return the source prompt and whether it is a map/reduce digest."""
-        if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
-            return text, False
-        return self._director_source_digest(text), True
-
-    def director_source_audit(self, text: str) -> Dict[str, Any]:
-        """Return bounded provenance for the exact source sent to synthesis."""
-        if len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS:
-            return {
+        if source_mode not in ("auto", "direct", "map_reduce"):
+            raise ValueError("source_mode must be auto, direct, or map_reduce")
+        if source_mode == "direct" or (source_mode == "auto" and len(text) <= DIRECTOR_SOURCE_DIRECT_MAX_CHARS):
+            self._last_director_source_audit = {
                 "source_mode": "direct",
                 "source_char_count": len(text),
                 "chunk_count": 0,
                 "source_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             }
-        self._director_source_digest(text)
+            return text, False
+        return self._director_source_digest(text), True
+
+    def director_source_audit(self, text: str, source_mode: str = "auto") -> Dict[str, Any]:
+        """Return bounded provenance for the exact source sent to synthesis."""
+        self._director_source_context(text, source_mode)
         audit = getattr(self, "_last_director_source_audit", {})
         return dict(audit)
 
@@ -1503,11 +1504,11 @@ class ScriptProcessor:
         ]
     
     def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
-                                 style_config: Dict[str, Any]) -> Dict[str, Any]:
+                                 style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Create a reviewable director draft without mutating project data."""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-        source_context, is_source_digest = self._director_source_context(text)
+        source_context, is_source_digest = self._director_source_context(text, source_mode)
         source_label = (
             "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
             if is_source_digest
@@ -1587,11 +1588,11 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         return result
 
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
-                                            style_config: Dict[str, Any]) -> Dict[str, Any]:
+                                            style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Return the profile plus bounded source and raw-response evidence."""
-        source_audit = self.director_source_audit(text)
+        source_audit = self.director_source_audit(text, source_mode)
         try:
-            profile = self.analyze_director_profile(text, entities_json, style_config)
+            profile = self.analyze_director_profile(text, entities_json, style_config, source_mode)
         except Exception as exc:
             audit = getattr(exc, "director_audit", None)
             if isinstance(audit, dict):

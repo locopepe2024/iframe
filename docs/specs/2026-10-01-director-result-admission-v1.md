@@ -129,6 +129,11 @@ character or plot event.
 4. Treat the 4,000-character boundary as an experiment variable, not a
    correctness rule. A threshold change requires the A/B evidence above.
 
+The analysis implementation supports an internal `source_mode` experiment
+switch (`auto`, `direct`, `map_reduce`). Production requests continue to use
+`auto`; the other two modes are for controlled same-model comparison and are
+not a user-facing correctness decision.
+
 ## Verification
 
 - 模拟含未知角色引用和非标准状态的完整返回，job 最终为 `needs_review` 或 `completed + warnings`，并可读取 profile；

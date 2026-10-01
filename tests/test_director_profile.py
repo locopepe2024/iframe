@@ -1397,6 +1397,43 @@ def test_director_analysis_with_audit_records_digest_and_map_notes():
     assert audit["raw_response"]
 
 
+def test_director_source_mode_can_force_direct_for_ab_comparison():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    source = "长文本。" * 2000
+
+    result = processor.analyze_director_profile_with_audit(
+        source, {"characters": []}, {}, source_mode="direct"
+    )
+
+    assert result["source_audit"]["source_mode"] == "direct"
+    assert result["source_audit"]["source_char_count"] == len(source)
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert source in prompt
+    assert "source_digest" not in prompt
+
+
+def test_director_source_mode_can_force_map_reduce_for_ab_comparison():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+
+    def chat_side_effect(**kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_chunk" in prompt:
+            return json.dumps({"summary": "强制摘要", "facts": [], "open_threads": []}, ensure_ascii=False)
+        return json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    result = processor.analyze_director_profile_with_audit(
+        "短文本。", {"characters": []}, {}, source_mode="map_reduce"
+    )
+
+    assert result["source_audit"]["source_mode"] == "map_reduce"
+    assert result["source_audit"]["chunk_count"] == 1
+
+
 def test_director_analysis_reports_empty_model_response_instead_of_attribute_error():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
