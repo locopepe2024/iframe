@@ -2222,8 +2222,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         return ArtDirection(**resolved) if isinstance(resolved, dict) else resolved
 
     def effective_director_profile(self, script: Script) -> Optional[DirectorProfile]:
+        """Resolve episode profile first, then adopted Series profile.
+
+        The returned Series profile is a read-only global handoff here; an
+        Episode Director draft may still add local events and continuity.
+        """
         art_direction = self.effective_art_direction(script)
-        return art_direction.director_profile if art_direction else None
+        if art_direction and art_direction.director_profile:
+            return art_direction.director_profile
+        if script.series_id:
+            series = self.series_store.get(script.series_id)
+            if series:
+                if series.director_profile_revisions:
+                    return series.director_profile_revisions[-1].profile
+        return None
+
+    def effective_series_director_profile(self, series_id: str) -> Optional[DirectorProfile]:
+        series = self.series_store.get(series_id)
+        if not series:
+            return None
+        if series.director_profile_revisions:
+            return series.director_profile_revisions[-1].profile
+        return series.art_direction.director_profile if series.art_direction else None
 
     def storyboard_visual_style(self, script: Script) -> Dict[str, Any]:
         """Return the stable project-level style contract used across storyboard frames."""
@@ -2434,6 +2454,17 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
         script, entities, _ = self.storyboard_analysis_context(script_id)
+        if script.series_id:
+            series = self.series_store.get(script.series_id)
+            if series:
+                # Series context is a read-only handoff. It is kept separate
+                # from episode entities so the model cannot mistake global
+                # characters/events for events already occurring in this episode.
+                entities = dict(entities)
+                entities["series_context"] = series.source_context
+                series_profile = self.effective_series_director_profile(series.id)
+                if series_profile:
+                    entities["series_director_understanding"] = series_profile.model_dump()
         art_direction = self.effective_art_direction(script)
         style = art_direction.style_config if art_direction else {}
         return script, entities, style

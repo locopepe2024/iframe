@@ -2525,6 +2525,10 @@ class Series(BaseModel):
     # Whole-work submission material and Director understanding live at Series
     # scope; episode source revisions must contain screenplay scenes only.
     source_context: Dict[str, Any] = Field(default_factory=dict, description="Series-level submission and story context")
+    director_profile_revisions: List[DirectorProfileRevision] = Field(default_factory=list)
+    director_profile_draft: Optional[DirectorProfile] = None
+    director_profile_draft_revision: int = Field(0, ge=0)
+    director_profile_draft_name: Optional[str] = Field(None, max_length=160)
 
     # Shared asset library
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")

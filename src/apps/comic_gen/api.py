@@ -4904,6 +4904,28 @@ def get_director_profile_draft(
     }
 
 
+@app.get("/series/{series_id}/director-profile")
+def get_series_director_profile(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the Series-level Director understanding handoff."""
+    del user
+    series = pipeline.get_series(series_id)
+    if not series:
+        raise HTTPException(404, "Series not found")
+    profile = pipeline.effective_series_director_profile(series_id)
+    return {
+        "series_id": series_id,
+        "source_context": series.source_context,
+        "profile": profile.model_dump() if profile else None,
+        "confirmed_revisions": [item.model_dump() for item in series.director_profile_revisions],
+        "draft": series.director_profile_draft.model_dump() if series.director_profile_draft else None,
+        "draft_revision": series.director_profile_draft_revision,
+        "draft_name": series.director_profile_draft_name,
+    }
+
+
 @app.put("/projects/{script_id}/director-profile/draft")
 def save_director_profile_draft(
     script_id: str,

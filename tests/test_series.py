@@ -60,6 +60,18 @@ def _make_scene(name="Forest", **kw) -> Scene:
                  description=kw.pop("description", "A dark forest"), **kw)
 
 
+def test_series_source_context_is_exposed_to_episode_analysis(pipeline):
+    series = pipeline.create_series("S")
+    series.source_context = {"kind": "series_submission_context", "synopsis": "全剧摘要"}
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    pipeline.series_store[series.id] = series
+    pipeline.storyboard_analysis_context = lambda _id: (episode, {"characters": []}, None)
+    script, entities, _ = pipeline.director_analysis_context(episode.id)
+    assert script.id == episode.id
+    assert entities["series_context"]["synopsis"] == "全剧摘要"
+
+
 def _make_prop(name="Sword", **kw) -> Prop:
     return Prop(id=kw.pop("id", str(uuid.uuid4())), name=name,
                 description=kw.pop("description", "A magic sword"), **kw)
