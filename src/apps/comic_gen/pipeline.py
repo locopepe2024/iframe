@@ -23,6 +23,9 @@ from .models import (
     AssemblyEditPlan,
     director_execution_payload,
     GlobalAssetLibrary,
+    DigitalAvatarProfile,
+    AvatarSourceMedia,
+    AvatarPreviewTask,
     AssetLibraryReference,
     AssetReferenceIndex,
     AssetReferenceIndexEntry,
@@ -2069,6 +2072,19 @@ class ComicGenPipeline(StudioOwnerMixin):
         art_direction = self.effective_art_direction(script)
         return art_direction.director_profile if art_direction else None
 
+    def storyboard_visual_style(self, script: Script) -> Dict[str, Any]:
+        """Return the stable project-level style contract used across storyboard frames."""
+        art_direction = self.effective_art_direction(script)
+        if art_direction:
+            return {
+                "selected_style_id": art_direction.selected_style_id,
+                "style_config": art_direction.style_config,
+            }
+        return {
+            "style_preset": script.style_preset,
+            "style_prompt": script.style_prompt,
+        }
+
     def director_prompt_context(self, script: Script) -> str:
         profile = self.effective_director_profile(script)
         if not profile:
@@ -2176,7 +2192,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         director_profile = self.director_execution_context(script)
         frames = self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=prompt,
-            director_profile=director_profile,
+            director_profile=director_profile.model_dump() if director_profile else None,
+            visual_style=self.storyboard_visual_style(script),
         )
         if not frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
@@ -2190,7 +2207,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         director_profile = self.director_execution_context(script)
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
-            director_profile=director_profile,
+            director_profile=director_profile.model_dump() if director_profile else None,
+            visual_style=self.storyboard_visual_style(script),
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -2217,7 +2235,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         director_profile = self.director_execution_context(script)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
-            director_profile=director_profile,
+            director_profile=director_profile.model_dump() if director_profile else None,
+            visual_style=self.storyboard_visual_style(script),
         )
 
         if not raw_frames:
@@ -2354,14 +2373,30 @@ class ComicGenPipeline(StudioOwnerMixin):
         prev_ctx = None
         if frame_idx > 0:
             pf = script.frames[frame_idx - 1]
-            prev_ctx = f"Action: {pf.action_description}. Shot: {pf.shot_size}, {pf.camera_angle}."
+            prev_scene = next((s.name for s in all_scenes if s.id == pf.scene_id), None)
+            prev_characters = [c.name for c in all_characters if c.id in pf.character_ids]
+            prev_ctx = (
+                f"Scene: {prev_scene}. Characters: {', '.join(prev_characters)}. "
+                f"Action: {pf.action_description}. Dialogue: {pf.dialogue or 'None'}. "
+                f"Visual atmosphere: {pf.visual_atmosphere or 'unspecified'}. "
+                f"Shot: {pf.shot_size}, {pf.camera_angle}."
+            )
         next_ctx = None
         if frame_idx < len(script.frames) - 1:
             nf = script.frames[frame_idx + 1]
-            next_ctx = f"Action: {nf.action_description}. Shot: {nf.shot_size}, {nf.camera_angle}."
+            next_scene = next((s.name for s in all_scenes if s.id == nf.scene_id), None)
+            next_characters = [c.name for c in all_characters if c.id in nf.character_ids]
+            next_ctx = (
+                f"Scene: {next_scene}. Characters: {', '.join(next_characters)}. "
+                f"Action: {nf.action_description}. Dialogue: {nf.dialogue or 'None'}. "
+                f"Visual atmosphere: {nf.visual_atmosphere or 'unspecified'}. "
+                f"Shot: {nf.shot_size}, {nf.camera_angle}."
+            )
 
         result = self.script_processor.refine_frame_to_rich(
-            coarse, char_assets, scene_assets, prev_ctx, next_ctx
+            coarse, char_assets, scene_assets, prev_ctx, next_ctx,
+            visual_style=self.storyboard_visual_style(script),
+            director_context=self.director_prompt_context(script),
         )
         if not result:
             return frame
@@ -5579,7 +5614,98 @@ class ComicGenPipeline(StudioOwnerMixin):
             characters=self._library_list_for_type("character", owner_profile_id),
             scenes=self._library_list_for_type("scene", owner_profile_id),
             props=self._library_list_for_type("prop", owner_profile_id),
+            avatars=[a for a in self.library_store.avatars if not owner_profile_id or owned_by(a, owner_profile_id)],
         )
+
+    def list_library_avatars(self) -> List[DigitalAvatarProfile]:
+        owner_profile_id = self._requested_owner_profile_id()
+        return [a for a in self.library_store.avatars if not owner_profile_id or owned_by(a, owner_profile_id)]
+
+    def create_library_avatar(self, payload: Dict[str, Any]) -> DigitalAvatarProfile:
+        with self._save_lock:
+            avatar = DigitalAvatarProfile(
+                id=f"avatar_{uuid.uuid4().hex[:12]}",
+                owner_user_id=self._requested_owner_user_id(),
+                owner_profile_id=self._requested_owner_profile_id(),
+                name=payload.get("name") or "未命名数字角色",
+                description=payload.get("description") or "",
+                voice_id=payload.get("voice_id"),
+            )
+            self.library_store.avatars.append(avatar)
+            self._save_library_data_unlocked()
+            return avatar
+
+    def get_library_avatar(self, avatar_id: str) -> DigitalAvatarProfile:
+        avatar = next((a for a in self.list_library_avatars() if a.id == avatar_id), None)
+        if avatar is None:
+            raise ValueError(f"Avatar {avatar_id} not found")
+        return avatar
+
+    def add_avatar_source(self, avatar_id: str, payload: Dict[str, Any]) -> DigitalAvatarProfile:
+        with self._save_lock:
+            avatar = self.get_library_avatar(avatar_id)
+            source = AvatarSourceMedia(
+                id=f"avatar_media_{uuid.uuid4().hex[:12]}",
+                media_url=payload["media_url"],
+                media_type=payload.get("media_type", "image"),
+                duration_seconds=payload.get("duration_seconds"),
+            )
+            avatar.source_media.append(source)
+            avatar.status = "uploaded"
+            avatar.updated_at = time.time()
+            self._save_library_data_unlocked()
+            return avatar
+
+    def process_library_avatar(self, avatar_id: str) -> DigitalAvatarProfile:
+        """Run the development-only local acceptance step.
+
+        This does not claim provider training or identity scoring. It records
+        non-blocking diagnostics and makes the profile available for preview.
+        """
+        with self._save_lock:
+            avatar = self.get_library_avatar(avatar_id)
+            if not avatar.source_media:
+                raise ValueError("Avatar requires source media before processing")
+            avatar.status = "processing"
+            avatar.quality_report = {
+                "source_count": len(avatar.source_media),
+                "diagnostics": "local_acceptance_only",
+            }
+            avatar.status = "ready"
+            avatar.updated_at = time.time()
+            self._save_library_data_unlocked()
+            return avatar
+
+    def update_avatar_appearance(self, avatar_id: str, patch: Dict[str, Any]) -> DigitalAvatarProfile:
+        """Patch manual face/body descriptors without claiming biometric extraction."""
+        with self._save_lock:
+            avatar = self.get_library_avatar(avatar_id)
+            current = avatar.appearance.model_dump()
+            for section in ("face", "body"):
+                values = patch.get(section)
+                if isinstance(values, dict):
+                    current[section].update(values)
+            for key in ("extraction_source", "confidence", "notes"):
+                if key in patch:
+                    current[key] = patch[key]
+            from .models import AvatarAppearanceFeatures
+            avatar.appearance = AvatarAppearanceFeatures(**current)
+            avatar.updated_at = time.time()
+            self._save_library_data_unlocked()
+            return avatar
+
+    def create_avatar_preview_task(self, avatar_id: str, script: str) -> AvatarPreviewTask:
+        with self._save_lock:
+            avatar = self.get_library_avatar(avatar_id)
+            if not avatar.source_media:
+                raise ValueError("Avatar requires source media before preview")
+            task = AvatarPreviewTask(
+                id=f"avatar_task_{uuid.uuid4().hex[:12]}", avatar_id=avatar_id, script=script,
+            )
+            avatar.preview_tasks.append(task)
+            avatar.updated_at = time.time()
+            self._save_library_data_unlocked()
+            return task
 
     def create_library_asset(self, asset_type: str, payload: Dict[str, Any]):
         """Create a new global library asset of `asset_type`
@@ -5833,6 +5959,34 @@ class ComicGenPipeline(StudioOwnerMixin):
                 script.props.append(new_asset)
             script.updated_at = time.time()
             self._save_data()
+            return new_asset
+
+    def fork_library_asset_to_series(self, series_id: str, asset_type: str, library_asset_id: str):
+        """Copy one global library asset into a series shared-asset scope.
+
+        The library object remains unchanged and the series receives a fresh
+        id, so later edits in the series cannot mutate the global source.
+        """
+        import copy
+        if asset_type not in ("character", "scene", "prop"):
+            raise ValueError(f"Invalid asset type: {asset_type}")
+        with self._save_lock:
+            series = self.get_series(series_id)
+            if not series:
+                raise ValueError(f"Series not found: {series_id}")
+            source_asset = self._find_library_asset(asset_type, library_asset_id)
+            new_asset = copy.deepcopy(source_asset)
+            prefix = {"character": "char", "scene": "scene", "prop": "prop"}[asset_type]
+            new_asset.id = f"{prefix}_{uuid.uuid4().hex[:12]}"
+            if asset_type == "character":
+                series.characters.append(new_asset)
+            elif asset_type == "scene":
+                series.scenes.append(new_asset)
+            else:
+                series.props.append(new_asset)
+            series.updated_at = time.time()
+            self.series_store[series_id] = series
+            self._save_series_data_unlocked()
             return new_asset
 
     def create_series(
