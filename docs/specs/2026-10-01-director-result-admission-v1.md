@@ -65,6 +65,20 @@ Director analysis 使用三层结果状态：
 
 接收和归一化不会自动确认 Director revision，也不会让未确认结果进入拍摄计划。用户仍需在编辑视图处理 warnings 并保存/确认。该边界保留用户决定权，同时避免因可修复模型差异丢失长时间分析结果。
 
+## Semantic reference binding
+
+模型不得被视为项目实体 ID 的权威来源。模型负责返回人物、道具和场景的
+名称、别名、时期描述或其他语义引用；服务端根据当前项目/系列实体库绑定
+canonical ID。绑定结果分为：
+
+- `resolved_*_ids`：服务端确认存在的实体 ID，进入 canonical story map；
+- `unresolved_*_refs`：无法唯一匹配的模型引用，保留原文并显示给用户；
+- `ambiguous_*_refs`：多个实体候选，保留候选列表，等待用户选择。
+
+模型返回的 UUID、`person_01`、`arc_01` 等字符串不得直接写入 canonical
+ID 字段，除非它们已通过服务端实体索引验证。该规则适用于 Director
+事件、关系弧、剧情线和后续 shooting plan 的角色/道具/场景引用。
+
 ## Verification
 
 - 模拟含未知角色引用和非标准状态的完整返回，job 最终为 `needs_review` 或 `completed + warnings`，并可读取 profile；

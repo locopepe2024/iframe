@@ -1503,10 +1503,10 @@ execution_summary, scene_summaries, canon_state。
 setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
 phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
-event 使用 event_id/order/title/description/character_ids/unresolved_character_refs/dramatic_function/source_fact_ids/evidence_status。
-character_ids 必须精确使用已确认实体中对应时期的角色变体 id；不能填角色姓名代替 id。
-无法匹配的角色引用放入 unresolved_character_refs，不要伪造 ID，也不要因此拒绝整份结果。
-relationship_arcs 的 person_ids 必须是两个不同的、来自实体上下文的 person_id；states 必须用 phase_id
+event 使用 event_id/order/title/description/character_refs/character_ids/unresolved_character_refs/dramatic_function/source_fact_ids/evidence_status。
+优先使用 character_refs 返回人物名称、别名或时期描述；character_ids 由服务端绑定，不要自行生成 UUID 或 person_01 等内部 ID。
+无法唯一匹配的引用由服务端放入 unresolved_character_refs，不要伪造 ID，也不要因此拒绝整份结果。
+relationship_arcs 优先使用 person_refs 返回人物名称、别名或时期描述；person_ids 由服务端绑定。states 必须用 phase_id
 表达关系在对应故事阶段的状态，并通过 trigger_event_ids 指向真实 event_id。
 story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/reveal/payoff/open/close。
 只要 phases 中存在 event，就至少生成 1 条 story_thread；如果无法判断多个独立剧情线，生成一条“主线”并用 milestones 按事件顺序引用，标记为 interpretation，不能返回空数组。

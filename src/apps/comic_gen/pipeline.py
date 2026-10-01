@@ -2522,6 +2522,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             for person in story_map["people"]
             for character_id in person.get("variant_character_ids", [])
         }
+        character_lookup: Dict[str, List[str]] = {}
+        for character in entities.get("characters", []):
+            character_id = str(getattr(character, "id", "") or "")
+            labels = [character_id, getattr(character, "name", ""), getattr(character, "persona", "")]
+            for label in labels:
+                key = str(label or "").strip().casefold()
+                if key:
+                    character_lookup.setdefault(key, []).append(character_id)
         for phase in story_map.get("phases", []):
             if not isinstance(phase, dict):
                 continue
@@ -2531,22 +2539,50 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raw_ids = event.get("character_ids", [])
                 if not isinstance(raw_ids, list):
                     raw_ids = []
-                valid_ids = [item for item in raw_ids if item in known_character_ids]
-                unknown_ids = [item for item in raw_ids if item not in known_character_ids]
+                raw_refs = event.get("character_refs", [])
+                if not isinstance(raw_refs, list):
+                    raw_refs = []
+                resolved_refs = []
+                unresolved_refs = []
+                for ref in raw_refs:
+                    matches = character_lookup.get(str(ref or "").strip().casefold(), [])
+                    if len(matches) == 1:
+                        resolved_refs.append(matches[0])
+                    else:
+                        unresolved_refs.append(str(ref))
+                valid_ids = [item for item in raw_ids if item in known_character_ids] + resolved_refs
+                unknown_ids = [item for item in raw_ids if item not in known_character_ids] + unresolved_refs
                 existing_unknown = event.get("unresolved_character_refs", [])
                 if not isinstance(existing_unknown, list):
                     existing_unknown = []
                 event["character_ids"] = list(dict.fromkeys(valid_ids))
                 event["unresolved_character_refs"] = list(dict.fromkeys(existing_unknown + unknown_ids))[:20]
         known_person_ids = {person.get("person_id") for person in story_map["people"]}
+        person_lookup: Dict[str, List[str]] = {}
+        for person in story_map["people"]:
+            for label in (person.get("person_id"), person.get("display_name")):
+                key = str(label or "").strip().casefold()
+                if key:
+                    person_lookup.setdefault(key, []).append(person.get("person_id"))
         for arc in story_map.get("relationship_arcs", []):
             if not isinstance(arc, dict):
                 continue
             raw_ids = arc.get("person_ids", [])
             if not isinstance(raw_ids, list):
                 raw_ids = []
-            arc["person_ids"] = list(dict.fromkeys(item for item in raw_ids if item in known_person_ids))[:2]
-            unknown_ids = [item for item in raw_ids if item not in known_person_ids]
+            raw_refs = arc.get("person_refs", [])
+            if not isinstance(raw_refs, list):
+                raw_refs = []
+            resolved_refs = []
+            unresolved_refs = []
+            for ref in raw_refs:
+                matches = person_lookup.get(str(ref or "").strip().casefold(), [])
+                if len(matches) == 1:
+                    resolved_refs.append(matches[0])
+                else:
+                    unresolved_refs.append(str(ref))
+            arc["person_ids"] = list(dict.fromkeys([item for item in raw_ids if item in known_person_ids] + resolved_refs))[:2]
+            unknown_ids = [item for item in raw_ids if item not in known_person_ids] + unresolved_refs
             existing_unknown = arc.get("unresolved_person_refs", [])
             if not isinstance(existing_unknown, list):
                 existing_unknown = []

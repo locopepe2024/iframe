@@ -774,6 +774,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
     title: str = Field("", max_length=180)
     description: str = Field("", max_length=3000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
+    character_refs: List[str] = Field(default_factory=list, max_length=20)
     unresolved_character_refs: List[str] = Field(default_factory=list, max_length=20)
     dramatic_function: str = Field("", max_length=1200)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
@@ -821,6 +822,7 @@ class DirectorRelationshipState(_DirectorStoryMapModel):
 class DirectorRelationshipArc(_DirectorStoryMapModel):
     relationship_id: str = Field(..., min_length=1, max_length=120)
     person_ids: List[str] = Field(default_factory=list, max_length=2)
+    person_refs: List[str] = Field(default_factory=list, max_length=4)
     unresolved_person_refs: List[str] = Field(default_factory=list, max_length=20)
     label: str = Field("", max_length=180)
     legacy_summary: str = Field("", max_length=1200)
@@ -1761,6 +1763,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
                 "title": _bounded_director_text(event.get("title", ""), 100),
                 "description": _bounded_director_text(event.get("description", ""), 360),
                 "character_ids": event.get("character_ids", [])[:20],
+                "character_refs": event.get("character_refs", [])[:20],
                 "unresolved_character_refs": event.get("unresolved_character_refs", [])[:20],
                 "dramatic_function": _bounded_director_text(event.get("dramatic_function", ""), 180),
                 "source_fact_ids": event.get("source_fact_ids", [])[:20],
@@ -1786,6 +1789,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
         projected_arcs.append({
             "relationship_id": arc.get("relationship_id", ""),
             "person_ids": arc.get("person_ids", [])[:2],
+            "person_refs": arc.get("person_refs", [])[:4],
             "unresolved_person_refs": arc.get("unresolved_person_refs", [])[:20],
             "label": _bounded_director_text(arc.get("label", ""), 100),
             "legacy_summary": _bounded_director_text(arc.get("legacy_summary", ""), 180),
@@ -1936,7 +1940,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                     if not isinstance(event, dict):
                         projected_events.append(event)
                         continue
-                    item = {key: event[key] for key in ("event_id", "order", "title", "description", "character_ids", "unresolved_character_refs", "dramatic_function", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in event}
+                    item = {key: event[key] for key in ("event_id", "order", "title", "description", "character_ids", "character_refs", "unresolved_character_refs", "dramatic_function", "source_fact_ids", "evidence_status", "evidence_status_raw") if key in event}
                     if "evidence_status" in item:
                         status, raw_status = _normalize_director_evidence_status(item["evidence_status"])
                         item["evidence_status"] = status
@@ -1958,7 +1962,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                 if not isinstance(arc, dict):
                     normalized_arcs.append(arc)
                     continue
-                item = {key: arc[key] for key in ("relationship_id", "arc_id", "person_ids", "unresolved_person_refs", "label", "legacy_summary", "evidence_status", "evidence_status_raw", "states") if key in arc}
+                item = {key: arc[key] for key in ("relationship_id", "arc_id", "person_ids", "person_refs", "unresolved_person_refs", "label", "legacy_summary", "evidence_status", "evidence_status_raw", "states") if key in arc}
                 if item.get("relationship_id") and item.get("arc_id") and item["relationship_id"] != item["arc_id"]:
                     raise ValueError("relationship_id and arc_id must match when both are provided")
                 if not item.get("relationship_id") and item.get("arc_id"):

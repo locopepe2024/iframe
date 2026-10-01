@@ -273,6 +273,28 @@ def test_director_binding_moves_unknown_relationship_person_to_unresolved_list()
     DirectorProfile(**normalize_director_profile_draft(payload))
 
 
+def test_director_binding_resolves_semantic_character_and_person_refs():
+    pipeline, _ = make_pipeline()
+    script = pipeline.scripts["film"]
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["source_revision_id"] = ""
+    payload["story_map"]["people"] = []
+    payload["story_map"]["phases"][0]["events"][0]["character_ids"] = []
+    payload["story_map"]["phases"][0]["events"][0]["character_refs"] = ["沈夏"]
+    payload["story_map"]["relationship_arcs"] = [{
+        "relationship_id": "arc-1",
+        "person_refs": ["沈夏", "未知人物"],
+        "states": [],
+    }]
+    pipeline._bind_director_story_map(script, {"characters": script.characters}, payload)
+    event = payload["story_map"]["phases"][0]["events"][0]
+    assert event["character_ids"] == ["shen"]
+    arc = payload["story_map"]["relationship_arcs"][0]
+    assert arc["person_ids"] == ["shen"]
+    assert arc["unresolved_person_refs"] == ["未知人物"]
+
+
 def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
     pipeline, _ = make_pipeline()
     pipeline.script_processor.refine_director_profile.return_value = structured_profile_payload()
