@@ -72,11 +72,11 @@ def setup_scene(bundle, output):
         camera = bpy.data.objects.new("director-camera", camera_data)
         bpy.context.collection.objects.link(camera)
         scene.camera = camera
-        camera.location = (0, -4.2, 2.4)
-        camera_data.lens = 58
+        camera.location = (0, -5.2, 2.6)
+        camera_data.lens = 55
         target = bpy.data.objects.new("director-camera-target", None)
         bpy.context.collection.objects.link(target)
-        target.location = (0, 0, 1.15)
+        target.location = (0, 0, 1.0)
         for light_name in ("director-key", "director-fill", "director-rim"):
             light = bpy.data.objects.get(light_name)
             if light is not None:
