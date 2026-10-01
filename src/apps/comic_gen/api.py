@@ -4926,6 +4926,70 @@ def get_series_director_profile(
     }
 
 
+@app.post("/series/{series_id}/director-profile-jobs", status_code=202)
+def start_series_director_profile_analysis(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    series = pipeline.get_series(series_id)
+    if not series:
+        raise HTTPException(404, "Series not found")
+    fingerprint = hashlib.sha256(json.dumps([
+        series.source_context,
+        [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
+        series.characters, series.scenes, series.props,
+    ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
+    return extraction_jobs.start(
+        user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
+        lambda: pipeline.preview_series_director_profile(series_id),
+        queue_group="series-director",
+    )
+
+
+@app.get("/series/{series_id}/director-profile-jobs/{job_id}")
+def series_director_profile_status(
+    series_id: str,
+    job_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return extraction_jobs.get(user.owner_profile_id, "series:" + series_id, job_id)
+
+
+class SeriesDirectorProfileSaveRequest(BaseModel):
+    draft: Dict[str, Any]
+    draft_name: Optional[str] = None
+
+
+@app.put("/series/{series_id}/director-profile/draft")
+def save_series_director_profile_draft(
+    series_id: str,
+    request: SeriesDirectorProfileSaveRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        series = pipeline.save_series_director_profile_draft(series_id, request.draft, request.draft_name)
+        return {"series_id": series_id, "draft_revision": series.director_profile_draft_revision,
+                "draft": series.director_profile_draft.model_dump() if series.director_profile_draft else None,
+                "draft_name": series.director_profile_draft_name}
+    except ValueError as exc:
+        raise HTTPException(404 if str(exc) == "Series not found" else 422, str(exc)) from exc
+
+
+@app.post("/series/{series_id}/director-profile/confirm")
+def confirm_series_director_profile(
+    series_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        series = pipeline.confirm_series_director_profile(series_id)
+        return {"series_id": series_id, "profile": pipeline.effective_series_director_profile(series_id).model_dump(),
+                "revision": series.director_profile_revisions[-1].revision}
+    except ValueError as exc:
+        raise HTTPException(404 if str(exc) == "Series not found" else 409, str(exc)) from exc
+
+
 @app.put("/projects/{script_id}/director-profile/draft")
 def save_director_profile_draft(
     script_id: str,

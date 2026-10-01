@@ -2245,6 +2245,73 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
+    def preview_series_director_profile(self, series_id: str) -> Dict[str, Any]:
+        series = self.series_store.get(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        episodes = self.get_series_episodes(series_id)
+        context = series.source_context.get("preamble", "") if series.source_context else ""
+        source = "\n\n".join(
+            part for part in [context, *[episode.original_text for episode in episodes]] if part
+        )
+        entities = {
+            "characters": [item.model_dump() for item in series.characters],
+            "scenes": [item.model_dump() for item in series.scenes],
+            "props": [item.model_dump() for item in series.props],
+            "scope": "series",
+        }
+        style = series.art_direction.style_config if series.art_direction else {}
+        analyzed = self.script_processor.analyze_director_profile_with_audit(
+            source, entities, style, "auto"
+        )
+        normalized = normalize_director_profile_draft(analyzed["profile"])
+        # A Series profile is global context, not an Episode source ledger.
+        normalized["story_map"] = None
+        normalized["source_revision"] = None
+        normalized["source_revision_id"] = ""
+        return {
+            "profile": normalized,
+            "source_audit": analyzed.get("source_audit", {}),
+            "scope": "series",
+            "episode_count": len(episodes),
+        }
+
+    def save_series_director_profile_draft(self, series_id: str, draft: Dict[str, Any], draft_name: Optional[str] = None) -> Series:
+        series = self.series_store.get(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        normalized = normalize_director_profile_draft(draft)
+        normalized["story_map"] = None
+        series.director_profile_draft = DirectorProfile(**normalized)
+        series.director_profile_draft_revision += 1
+        series.director_profile_draft_name = draft_name or series.director_profile_draft_name
+        series.updated_at = time.time()
+        self._save_series_data_unlocked()
+        return series
+
+    def confirm_series_director_profile(self, series_id: str) -> Series:
+        series = self.series_store.get(series_id)
+        if not series or not series.director_profile_draft:
+            raise ValueError("Series Director draft not found")
+        draft = series.director_profile_draft
+        content_hash = hashlib.sha256(json.dumps(
+            _director_profile_content(draft), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        revision = (series.director_profile_revisions[-1].revision + 1) if series.director_profile_revisions else 1
+        confirmed = draft.model_copy(update={"revision": revision, "content_hash": content_hash, "confirmed_at": time.time()})
+        series.director_profile_revisions.append(DirectorProfileRevision(
+            revision=revision, content_hash=content_hash, profile=confirmed,
+            confirmed_at=confirmed.confirmed_at,
+        ))
+        series.director_profile_draft = confirmed.model_copy(deep=True)
+        if series.art_direction:
+            series.art_direction.director_profile = confirmed
+        else:
+            series.art_direction = ArtDirection(selected_style_id="series-director", style_config={}, director_profile=confirmed)
+        series.updated_at = time.time()
+        self._save_series_data_unlocked()
+        return series
+
     def storyboard_visual_style(self, script: Script) -> Dict[str, Any]:
         """Return the stable project-level style contract used across storyboard frames."""
         art_direction = self.effective_art_direction(script)
