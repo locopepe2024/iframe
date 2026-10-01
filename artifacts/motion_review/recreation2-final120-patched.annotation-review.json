@@ -1,0 +1,13 @@
+{
+  "schema": "motion-track-annotation-review.v1",
+  "source_track_revision": "5397808c15882e49f5295be99d995bd3f123f39a9b834696b43abb497f79acb2",
+  "target_subject_id": "person-center",
+  "total_frames": 120,
+  "review_required_frames": 0,
+  "frames": [],
+  "instructions": [
+    "Choose a candidate pose or mark out_of_frame/real_occlusion.",
+    "Only enter joint_overrides when the source frame visibly contains the target joint.",
+    "Do not fabricate poses for out_of_frame frames."
+  ]
+}

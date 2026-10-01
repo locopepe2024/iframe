@@ -1,0 +1,58 @@
+{
+  "schema": "recreation-source-evidence.v1",
+  "sample_id": "recreation2",
+  "source_media": {
+    "original": {
+      "path": "source/recreation2-original.mov",
+      "sha256": "d5a12e1d3aa2e5565177ef8cb3dd533aae0bfc4468a83f1557c8104539dfdbcb",
+      "width": 1394,
+      "height": 792,
+      "duration_seconds": 19.628333,
+      "frame_rate": "600/1",
+      "frame_count": 652
+    },
+    "tracking_clip": {
+      "path": "source/recreation2-clip.mp4",
+      "sha256": "5e0ecf1f0842fb80b7c0e3a11572e94e19e3fd01deb00f6729669b6db01c6c6f",
+      "width": 1394,
+      "height": 792,
+      "duration_seconds": 7.896835,
+      "frame_rate": "391200/11791",
+      "frame_count": 262
+    }
+  },
+  "derivation": {
+    "clip_is_derived_from_original": true,
+    "declared_trim_start_seconds": null,
+    "declared_trim_end_seconds": null,
+    "trim_range_status": "not_recorded",
+    "note": "The exact source trim command was not retained. Do not infer the clip start time from filenames."
+  },
+  "motion_track": {
+    "path": "recreation2-final120-patched-canonical.json",
+    "source_path": "/home/ubuntu/motion-track/input-recreation2-clip.mp4",
+    "frames_processed": 120,
+    "sample_every": 2,
+    "source_frames_consumed_upper_bound": 240,
+    "source_revision": "5397808c15882e49f5295be99d995bd3f123f39a9b834696b43abb497f79acb2",
+    "selection_policy": "center_prior_with_predicted_center_continuity",
+    "occlusion_evidence_policy": "never_inferred"
+  },
+  "artifacts": {
+    "overlay_video": "recreation2-final120-patched.overlay.mp4",
+    "white_model_video": "recreation2-patched-fullbody-white-model.mp4",
+    "white_model_bundle": "recreation2-patched-fullbody.json",
+    "annotation_review": "recreation2-final120-patched.annotation-review.json"
+  },
+  "evidence_boundary": {
+    "observed": [
+      "The original source file and the tracking derivative are both retained locally.",
+      "The patched track contains 120 processed frames and zero review-required frames according to the generator."
+    ],
+    "not_proven": [
+      "The exact clip trim start/end time.",
+      "Semantic correctness of every selected pose without visual frame review.",
+      "That H3 or Seedance will consume the white-model video as explicit pose control."
+    ]
+  }
+}
