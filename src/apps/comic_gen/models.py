@@ -774,7 +774,7 @@ class DirectorStoryEvent(_DirectorStoryMapModel):
     title: str = Field("", max_length=180)
     description: str = Field("", max_length=3000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
-    character_refs: List[str] = Field(default_factory=list, max_length=20)
+    character_refs: List[str] = Field(default_factory=list, max_length=40)
     unresolved_character_refs: List[str] = Field(default_factory=list, max_length=20)
     dramatic_function: str = Field("", max_length=1200)
     source_fact_ids: List[str] = Field(default_factory=list, max_length=20)
@@ -822,7 +822,7 @@ class DirectorRelationshipState(_DirectorStoryMapModel):
 class DirectorRelationshipArc(_DirectorStoryMapModel):
     relationship_id: str = Field(..., min_length=1, max_length=120)
     person_ids: List[str] = Field(default_factory=list, max_length=2)
-    person_refs: List[str] = Field(default_factory=list, max_length=4)
+    person_refs: List[str] = Field(default_factory=list, max_length=20)
     unresolved_person_refs: List[str] = Field(default_factory=list, max_length=20)
     label: str = Field("", max_length=180)
     legacy_summary: str = Field("", max_length=1200)
@@ -1763,7 +1763,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
                 "title": _bounded_director_text(event.get("title", ""), 100),
                 "description": _bounded_director_text(event.get("description", ""), 360),
                 "character_ids": event.get("character_ids", [])[:20],
-                "character_refs": event.get("character_refs", [])[:20],
+            "character_refs": event.get("character_refs", [])[:40],
                 "unresolved_character_refs": event.get("unresolved_character_refs", [])[:20],
                 "dramatic_function": _bounded_director_text(event.get("dramatic_function", ""), 180),
                 "source_fact_ids": event.get("source_fact_ids", [])[:20],
@@ -1789,7 +1789,7 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
         projected_arcs.append({
             "relationship_id": arc.get("relationship_id", ""),
             "person_ids": arc.get("person_ids", [])[:2],
-            "person_refs": arc.get("person_refs", [])[:4],
+            "person_refs": arc.get("person_refs", [])[:20],
             "unresolved_person_refs": arc.get("unresolved_person_refs", [])[:20],
             "label": _bounded_director_text(arc.get("label", ""), 100),
             "legacy_summary": _bounded_director_text(arc.get("legacy_summary", ""), 180),

@@ -2581,8 +2581,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     resolved_refs.append(matches[0])
                 else:
                     unresolved_refs.append(str(ref))
-            arc["person_ids"] = list(dict.fromkeys([item for item in raw_ids if item in known_person_ids] + resolved_refs))[:2]
-            unknown_ids = [item for item in raw_ids if item not in known_person_ids] + unresolved_refs
+            candidate_ids = list(dict.fromkeys([item for item in raw_ids if item in known_person_ids] + resolved_refs))
+            arc["person_ids"] = candidate_ids[:2]
+            overflow_ids = candidate_ids[2:]
+            unknown_ids = [item for item in raw_ids if item not in known_person_ids] + unresolved_refs + overflow_ids
             existing_unknown = arc.get("unresolved_person_refs", [])
             if not isinstance(existing_unknown, list):
                 existing_unknown = []

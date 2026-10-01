@@ -295,6 +295,23 @@ def test_director_binding_resolves_semantic_character_and_person_refs():
     assert arc["unresolved_person_refs"] == ["未知人物"]
 
 
+def test_director_binding_keeps_extra_relationship_refs_for_review():
+    pipeline, _ = make_pipeline()
+    script = pipeline.scripts["film"]
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["source_revision_id"] = ""
+    payload["story_map"]["relationship_arcs"] = [{
+        "relationship_id": "arc-1",
+        "person_refs": ["沈夏", "周涵", "张姐", "孙毅", "公司老板"],
+        "states": [],
+    }]
+    pipeline._bind_director_story_map(script, {"characters": script.characters}, payload)
+    arc = payload["story_map"]["relationship_arcs"][0]
+    assert arc["person_ids"] == ["shen"]
+    assert arc["unresolved_person_refs"] == ["周涵", "张姐", "孙毅", "公司老板"]
+
+
 def test_director_refine_normalizes_model_output_and_draft_before_calling_llm():
     pipeline, _ = make_pipeline()
     pipeline.script_processor.refine_director_profile.return_value = structured_profile_payload()
