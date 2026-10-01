@@ -206,6 +206,66 @@ adopted Director profile
 - 不能用“模型返回成功”替代事件覆盖和连续性验证；
 - 不能因为一致性检查发现问题就自动修改剧本原文。
 
+## 六、Series / Episode 输入边界（投稿表格场景）
+
+一份上传文件可能同时包含：
+
+```text
+投稿表格 / 类型 / 片名 / 看点
+全剧梗概
+人物小传
+全剧场景数量要求
+        ↓ Series source context
+第一集、第二集……的场景正文
+        ↓ Episode source revisions
+```
+
+### Series 级内容
+
+以下内容只属于 Series 级上下文和 Director Understanding：
+
+- 作品类型、题材、片名、编剧署名；
+- 剧本看点和全剧梗概；
+- 全剧人物小传和角色别名；
+- 全剧时间跨度、地点范围、叙事重点；
+- 全剧主线/支线、关系弧、伏笔和结局方向；
+- 用户补充的全局视觉锚点，例如“大学阶段发生在西安”。
+
+它们不能因为上传文件中出现在第一集场景之前，就被当成第一集原文事实重复送入 Episode Director。
+
+### Episode 级内容
+
+每一集只保存和分析：
+
+- 本集场景正文；
+- 本集实际出场人物和角色状态；
+- 本集出场地点、时间和场景变化；
+- 本集事件、戏剧节拍和局部剧情线；
+- 本集 continuity in/out；
+- 引用 Series Director Understanding 的相关片段和跨集 handoff。
+
+Episode Director 不应重新生成全剧关系图，也不应把全剧终局、人物小传中的结局描述当成本集已发生事实。
+
+### 工作区展示边界
+
+工作区应明确分成两个入口：
+
+1. **Series Director Understanding**：全剧纲要、人物关系、全剧时间线、主线/支线、全局视觉锚点和跨集问题；
+2. **Episode Director Understanding**：当前集的事件、出场人物、出场场景、局部关系变化、连续性和本集待决问题。
+
+用户在 Episode 页面看到的是本集投影，不是把 Series 内容复制一遍。Series 修改确认后，受影响的 Episode 显示 stale 并允许局部重算；没有受影响的 Episode 不自动全文重算。
+
+### 导入拆分规则
+
+导入阶段必须先识别 screenplay scene heading，再进行 Episode marker 切分：
+
+- 识别成功：前置投稿材料进入 Series source context，首个场景 heading 起作为 Episode source candidate；
+- 识别失败：保留全文并提示用户选择“前言范围”和“第一集起始范围”；不能静默删除；
+- 用户确认拆分后才创建 Episode source revision；
+- Series source context 与 Episode source revision 分别保存 hash、字符范围和 revision。
+
+本规则解决的是输入边界问题，不能替代 Series Director Understanding 的生成和用户确认。
+
 ## 验证命令
 
 ```bash
