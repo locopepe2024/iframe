@@ -110,3 +110,11 @@ probe error). The same shortcut failed for `lower_leg_l` because its parent
 chain contributes an additional evaluated transform. Therefore the solver
 must use evaluated parent pose matrices per bone; multiplying a static rest
 quaternion by a source delta is not equivalent.
+
+An updated prototype resets each frame, orients the pelvis parent from the
+source hip-center to shoulder-center vector, and solves child channels using
+the evaluated parent pose matrix. On frames 1 and 95 this reduced upper-leg
+errors to 13–30 degrees, lower-leg errors to below 4 degrees, and foot errors
+to 0 degrees. This is an algorithm implication, not a production quality
+claim: the torso frame still uses proxy depth, and spine and arm channels are
+not included.

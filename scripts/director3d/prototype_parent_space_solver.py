@@ -20,16 +20,27 @@ for frame in [int(x) for x in args.frames.split(',')]:
     src=by_frame.get(frame); 
     if not src: continue
     j=src['semantic_joints']; bpy.context.scene.frame_set(frame)
+    for reset in arm.pose.bones:
+        reset.rotation_mode='QUATERNION'; reset.rotation_quaternion=Quaternion((1,0,0,0))
+    bpy.context.view_layer.update()
+    # First orient the pelvis from the torso-up vector. Hip-to-shoulder is a
+    # better parent frame for leg channels than the pelvis bone's single axis.
+    if all(k in j for k in ('left_hip','right_hip','left_shoulder','right_shoulder')):
+        pb=arm.pose.bones.get('pelvis')
+        hc=Vector([(j['left_hip'][i]+j['right_hip'][i])/2 for i in range(3)])
+        sc=Vector([(j['left_shoulder'][i]+j['right_shoulder'][i])/2 for i in range(3)])
+        target=n(BASIS @ (sc-hc)); current=bone_dir(arm,pb)
+        pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=current.rotation_difference(target)
+        bpy.context.view_layer.update()
     for name in ORDER:
         pb=arm.pose.bones.get(name); target=source_dir(j,*PAIRS[name])
         if not pb or not target: continue
         bpy.context.view_layer.update(); current=bone_dir(arm,pb)
         world_delta=current.rotation_difference(target)
         parent=pb.parent
-        parent_data=arm.data.bones.get(parent.name) if parent else None
-        parent_rot=(arm.matrix_world.to_quaternion() @ parent_data.matrix_local.to_quaternion()) if parent_data else arm.matrix_world.to_quaternion()
+        parent_rot=(arm.matrix_world.to_quaternion() @ parent.matrix.to_quaternion()) if parent else arm.matrix_world.to_quaternion()
         local_delta=parent_rot.inverted() @ world_delta @ parent_rot
-        pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=local_delta @ pb.rotation_quaternion
+        pb.rotation_mode='QUATERNION'; pb.rotation_quaternion=local_delta
     bpy.context.view_layer.update()
     out=[]
     for name,(a,b) in PAIRS.items():
