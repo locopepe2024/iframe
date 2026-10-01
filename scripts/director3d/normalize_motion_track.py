@@ -7,6 +7,7 @@ to semantic joints and leaves occluded frames without fabricated joints.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 
@@ -25,6 +26,30 @@ def point(landmarks, index):
     if not isinstance(value, list) or len(value) < 4 or float(value[3]) < 0.2:
         return None
     return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def derived_body(joints):
+    required = ("left_hip", "right_hip", "left_shoulder", "right_shoulder")
+    if not all(name in joints for name in required):
+        return None
+    lh, rh = joints["left_hip"], joints["right_hip"]
+    ls, rs = joints["left_shoulder"], joints["right_shoulder"]
+    hip = [(lh[i] + rh[i]) / 2 for i in range(3)]
+    shoulder = [(ls[i] + rs[i]) / 2 for i in range(3)]
+    pelvis_axis = [rh[i] - lh[i] for i in range(3)]
+    shoulder_axis = [rs[i] - ls[i] for i in range(3)]
+    torso_vector = [shoulder[i] - hip[i] for i in range(3)]
+    torso_length = math.sqrt(sum(value * value for value in torso_vector))
+    return {
+        "hip_center": hip,
+        "shoulder_center": shoulder,
+        "pelvis_axis": pelvis_axis,
+        "shoulder_axis": shoulder_axis,
+        "torso_vector": torso_vector,
+        "torso_length": torso_length,
+        "source": "derived_from_semantic_joints",
+        "is_lumbar_measurement": False,
+    }
 
 
 def convert(source, source_bytes):
@@ -53,6 +78,7 @@ def convert(source, source_bytes):
             "selection_status": item.get("selection_status", "unknown"),
             "root_position": None,
             "semantic_joints": joints,
+            "derived_body": derived_body(joints),
             "joint_confidence": confidence,
             "foot_targets": feet,
             "foot_contact_candidates": {
