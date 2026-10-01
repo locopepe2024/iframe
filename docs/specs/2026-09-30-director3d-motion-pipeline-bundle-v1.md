@@ -101,3 +101,12 @@ production solver. The remaining issue is likely the distinction between
 Blender edit-bone rest matrices and pose-bone local rotation basis; the
 prototype must not be promoted without a rest-pose unit test that applies a
 known rotation and recovers the expected world direction.
+
+The Blender rest-pose probe confirms that pose quaternion semantics are
+hierarchy-dependent. Applying a known 15-degree local rotation to
+`upper_leg_l` matched the evaluated world direction when the armature-space
+rest matrix and local quaternion were composed in the evaluated order (0°
+probe error). The same shortcut failed for `lower_leg_l` because its parent
+chain contributes an additional evaluated transform. Therefore the solver
+must use evaluated parent pose matrices per bone; multiplying a static rest
+quaternion by a source delta is not equivalent.
