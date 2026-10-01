@@ -10,6 +10,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   const [draftText, setDraftText] = useState("");
   const [savedText, setSavedText] = useState("");
   const [contextText, setContextText] = useState("");
+  const [sourceAudit, setSourceAudit] = useState<Record<string, unknown> | null>(null);
   const [draftRevision, setDraftRevision] = useState(0);
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
   const [busy, setBusy] = useState<"analyze" | "save" | "confirm" | null>(null);
@@ -28,7 +29,11 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
 
   const analyze = async () => {
     setBusy("analyze"); setError("");
-    try { const profile = await api.analyzeSeriesDirectorProfile(seriesId); const text = JSON.stringify(profile, null, 2); setDraftText(text); setSavedText(""); }
+    try {
+      const result = await api.analyzeSeriesDirectorProfile(seriesId);
+      const text = JSON.stringify(result.profile, null, 2);
+      setDraftText(text); setSavedText(""); setSourceAudit(result.sourceAudit ?? null);
+    }
     catch (e) { setError(String((e as any)?.message || e)); } finally { setBusy(null); }
   };
   const save = async () => {
@@ -52,7 +57,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
     <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
       <div className="flex min-h-0 flex-col gap-3"><label className="text-xs font-medium text-text-secondary">{t("seriesDirectorDraftLabel")}</label><textarea aria-label={t("seriesDirectorDraftLabel")} value={draftText} onChange={e => setDraftText(e.target.value)} className="min-h-[30rem] flex-1 resize-y rounded-lg border border-glass-border bg-background p-4 font-mono text-xs leading-5 text-foreground" spellCheck={false} /><div className="flex items-center justify-between"><span className="text-xs text-text-muted">{dirty ? t("seriesDirectorUnsaved") : t("seriesDirectorSaved", { revision: draftRevision })}</span><div className="flex gap-2"><WorkflowActionButton variant="secondary" leftIcon={<Save />} disabled={!dirty || busy !== null} loading={busy === "save"} onClick={save}>{t("seriesDirectorSave")}</WorkflowActionButton><WorkflowActionButton leftIcon={<Check />} disabled={!draftText || dirty || busy !== null} loading={busy === "confirm"} onClick={confirm}>{t("seriesDirectorConfirm")}</WorkflowActionButton></div></div></div>
-      <aside className="rounded-lg border border-glass-border bg-background/30 p-4"><h3 className="text-sm font-semibold text-foreground">{t("seriesDirectorContext")}</h3><p className="mt-1 text-xs leading-5 text-text-secondary">{t("seriesDirectorContextHint")}</p><pre className="mt-3 max-h-[30rem] overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-text-muted">{contextText || "{}"}</pre></aside>
+      <aside className="rounded-lg border border-glass-border bg-background/30 p-4"><h3 className="text-sm font-semibold text-foreground">{t("seriesDirectorContext")}</h3><p className="mt-1 text-xs leading-5 text-text-secondary">{t("seriesDirectorContextHint")}</p><pre className="mt-3 max-h-[24rem] overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-text-muted">{contextText || "{}"}</pre>{sourceAudit && <><h3 className="mt-4 text-sm font-semibold text-foreground">分析来源</h3><p className="mt-1 text-xs leading-5 text-text-secondary">本次结果来自可追溯的原文范围和分块摘要；它们只用于审阅来源，不是新的剧本事实。</p><pre className="mt-3 max-h-[12rem] overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-text-muted">{JSON.stringify({ source_mode: sourceAudit.source_mode, source_char_count: sourceAudit.source_char_count, chunk_count: sourceAudit.chunk_count, chunk_ranges: sourceAudit.chunk_ranges, raw_response_received: sourceAudit.raw_response_received }, null, 2)}</pre></>}</aside>
     </div>
   </section>;
 }

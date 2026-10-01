@@ -11,6 +11,18 @@ export interface SeriesDirectorState {
   confirmed_revisions: Array<{ revision: number; profile: SeriesDirectorDraft }>;
 }
 
+export interface SeriesDirectorAnalysisResult {
+  profile: SeriesDirectorDraft;
+  sourceAudit?: {
+    source_mode?: string;
+    source_char_count?: number;
+    chunk_count?: number;
+    chunk_ranges?: Array<{ source_ref?: string; char_start?: number; char_end?: number }>;
+    raw_response_received?: boolean;
+    admission_status?: string;
+  };
+}
+
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export async function getSeriesDirectorProfile(baseUrl: string, seriesId: string) {
   return (await axios.get<SeriesDirectorState>(`${baseUrl}/series/${seriesId}/director-profile`)).data;
@@ -26,11 +38,24 @@ export async function analyzeSeriesDirectorProfile(baseUrl: string, seriesId: st
   if (!job?.id) throw new Error("Invalid Series Director task response");
   onStatus?.(job.status);
   let current = job;
-  while (!["completed", "failed", "error"].includes(String(current.status).toLowerCase())) {
+  let pollFailures = 0;
+  while (!current.result?.profile && !["completed", "failed", "error"].includes(String(current.status).toLowerCase())) {
     await pause(2000);
-    current = (await axios.get(`${baseUrl}/series/${seriesId}/director-profile-jobs/${job.id}`, { timeout: 15000 })).data;
-    onStatus?.(current.status);
+    try {
+      current = (await axios.get(`${baseUrl}/series/${seriesId}/director-profile-jobs/${job.id}`, { timeout: 15000 })).data;
+      onStatus?.(current.status);
+      pollFailures = 0;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const transient = !status || [408, 429, 502, 503, 504].includes(status);
+      if (!transient || ++pollFailures >= 5) throw error;
+    }
   }
-  if (current.result?.profile) return current.result.profile as SeriesDirectorDraft;
+  // The durable result is authoritative even if an older worker writes it one
+  // poll before updating the visible status.
+  if (current.result?.profile) return {
+    profile: current.result.profile as SeriesDirectorDraft,
+    sourceAudit: current.result.source_audit,
+  } satisfies SeriesDirectorAnalysisResult;
   throw new Error(current.error || "Series Director analysis failed");
 }

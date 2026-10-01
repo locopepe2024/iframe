@@ -2261,9 +2261,24 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scope": "series",
         }
         style = series.art_direction.style_config if series.art_direction else {}
-        analyzed = self.script_processor.analyze_director_profile_with_audit(
-            source, entities, style, "auto"
-        )
+        try:
+            analyzed = self.script_processor.analyze_director_profile_with_audit(
+                source, entities, style, "auto"
+            )
+        except Exception as exc:
+            audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            if isinstance(audit, dict):
+                audit = dict(audit)
+                if raw:
+                    audit["raw_response"] = raw
+                audit["normalization_status"] = "needs_review"
+                audit["admission_status"] = "blocked"
+                try:
+                    setattr(exc, "director_audit", audit)
+                except Exception:
+                    pass
+            raise
         normalized = normalize_director_profile_draft(analyzed["profile"])
         # A Series profile is global context, not an Episode source ledger.
         normalized["story_map"] = None

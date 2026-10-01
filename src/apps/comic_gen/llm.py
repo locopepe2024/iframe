@@ -1514,10 +1514,21 @@ class ScriptProcessor:
             if is_source_digest
             else "原始剧本"
         )
+        analysis_scope = str(entities_json.get("scope", "episode") or "episode")
+        scope_guidance = (
+            "本次是 Series 全剧导演理解。投稿资料与全部分集是不同来源：投稿梗概描述全剧走向，"
+            "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
+            "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 可留空，"
+            "因为分集事件地图由 Episode Director 分别建立。"
+            if analysis_scope == "series" else
+            "本次是 Episode 分集导演理解。只记录当前分集实际发生的事件、出场人物和场景；"
+            "系列级梗概与已确认的 Series Director 仅用于背景和连续性约束。"
+        )
         style_summary = build_visual_style_summary(style_config)
         preset = _load_director_preset("director-interpretation")
         intent_preset = _load_director_preset("director-intent")
         prompt = f"""你是电影导演和剧本统筹。请分析原始剧本，输出可供资产设计和分镜共同使用的导演设定。
+分析范围：{scope_guidance}
 
 <stage_preset name="director-interpretation">{preset}</stage_preset>
 <stage_preset name="director-intent">{intent_preset}</stage_preset>

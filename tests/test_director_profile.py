@@ -65,6 +65,48 @@ def test_visual_style_summary_distinguishes_animation_and_live_action_without_ch
     assert "cel shading" in anime
 
 
+def test_director_prompt_marks_series_scope_separately_from_episode_scope():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+
+    processor.analyze_director_profile(
+        "全剧资料。", {"characters": [], "scope": "series"}, {}
+    )
+    series_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "Series 全剧导演理解" in series_prompt
+    assert "不要把梗概中的结局当作第一集事实" in series_prompt
+
+    processor.llm.chat.reset_mock()
+    processor.analyze_director_profile(
+        "本集剧本。", {"characters": [], "scope": "episode"}, {}
+    )
+    episode_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "Episode 分集导演理解" in episode_prompt
+
+
+def test_series_director_failure_retains_model_response_evidence():
+    pipeline, _ = make_pipeline()
+    series = Series(
+        id="series", title="隔岸不观火", created_at=1, updated_at=1,
+        source_context={"preamble": "全剧梗概"},
+    )
+    pipeline.series_store = {"series": series}
+    pipeline.get_series_episodes = Mock(return_value=[])
+    failure = ValueError("model response could not be admitted")
+    pipeline.script_processor.analyze_director_profile_with_audit.side_effect = failure
+    pipeline.script_processor._last_director_source_audit = {
+        "source_mode": "direct", "source_char_count": 4,
+    }
+    pipeline.script_processor._last_director_raw_response = '{"setting":{}}'
+
+    with pytest.raises(ValueError, match="could not be admitted") as raised:
+        pipeline.preview_series_director_profile("series")
+
+    assert raised.value.director_audit["raw_response"] == '{"setting":{}}'
+    assert raised.value.director_audit["admission_status"] == "blocked"
+
+
 def profile_payload():
     return {
         "setting": {
