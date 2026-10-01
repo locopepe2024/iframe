@@ -43,7 +43,7 @@ def root_yaw(j, previous, previous_axis):
  v=[j['right_hip'][i]-j['left_hip'][i] for i in range(3)]
  if previous_axis and sum(v[i]*previous_axis[i] for i in range(3)) < 0: v=[-x for x in v]
  angle=math.atan2(v[2],v[0])
- if previous is None: return angle
+ if previous is None: return angle, v
  while angle-previous > math.pi: angle-=2*math.pi
  while angle-previous < -math.pi: angle+=2*math.pi
  return angle, v
