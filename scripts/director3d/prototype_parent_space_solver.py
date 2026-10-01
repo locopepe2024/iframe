@@ -6,7 +6,7 @@ from mathutils import Quaternion, Vector, Matrix
 
 PAIRS={"upper_leg_l":("left_hip","left_knee"),"lower_leg_l":("left_knee","left_ankle"),"upper_leg_r":("right_hip","right_knee"),"lower_leg_r":("right_knee","right_ankle"),"foot_l":("left_heel","left_foot_index"),"foot_r":("right_heel","right_foot_index")}
 ORDER=["upper_leg_l","lower_leg_l","foot_l","upper_leg_r","lower_leg_r","foot_r"]
-BASIS=Quaternion((math.sqrt(.5),0,0,math.sqrt(.5)))
+BASIS=Quaternion((-math.sqrt(.5),0,0,math.sqrt(.5)))
 def n(v): return v.normalized() if v.length>1e-8 else None
 def source_dir(j,a,b): return n(BASIS @ Vector([j[b][i]-j[a][i] for i in range(3)]))
 def angle(a,b): return math.degrees(a.angle(b)) if a and b else None

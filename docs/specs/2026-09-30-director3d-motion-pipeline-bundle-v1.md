@@ -118,3 +118,9 @@ errors to 13–30 degrees, lower-leg errors to below 4 degrees, and foot errors
 to 0 degrees. This is an algorithm implication, not a production quality
 claim: the torso frame still uses proxy depth, and spine and arm channels are
 not included.
+
+A facing sweep over 0°, 90°, 180°, and 270° pelvis yaw offsets did not produce
+an upright source-aligned character. This rejects a pure yaw calibration as
+the fix. The remaining mismatch is a basis or rig-axis convention issue (or
+an armature root orientation issue), and must be solved from the rig's full
+rest frame rather than by adding a fixed facing offset.
