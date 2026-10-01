@@ -7,10 +7,11 @@ import { downsampleToBezierPoints, parseExternalCameraMotionManifest } from "../
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID, CHARACTER_LABELS, rigProfile } from "../data/humanoid";
 import { mirrorRotation, posePresetById, type PosePresetId } from "../pose/pose-presets";
 import type { RigAdmissionIssue } from "../pose/rig-admission";
-import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, FrameManifestImportState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, MotionTrackImportState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
+import type { ActorMappingState, ActorPathControlPointState, ActorPathEasing, ActorPathState, AdmittedObjectAsset, Axis, CalibratedPlacementState, CalibrationSupportLayerState, CameraAspectRatio, CameraCompositionPresetId, CameraCompositionState, CameraNoiseTrackState, CameraPathApplyMode, CameraPathPresetId, CameraPathState, CameraSnapshotState, CameraTargetState, DialogueBeatState, DialogueReferenceInputState, DialogueTimelineState, DirectorValidationPresetId, EnvironmentInputCatalogState, EnvironmentInputEntry, EquirectangularPanoramaCalibrationState, ExternalCameraMotionProposalState, FocusTargetState, FocusTrackState, FrameManifestImportState, InteractionAnchorState, JointDefinition, LocalAnimationImportState, MotionTrackFrameReview, MotionTrackImportState, MotionTrackReviewState, ObjectAssetCatalogState, ObjectTransform, OrientationGizmoState, PathEventState, PathEventType, PerspectiveScenePlateCalibrationState, PrimitiveKind, RenderSceneState, Rotation, SceneObjectAuthoringState, ScenePlateCompositingState, SpeakerTrackState, SubjectProxyAssetState, SubjectReferenceSetState, TimelineInterpolation, TimelineKeyframeState, TimelineTargetType, TimelineTrackKind, TimelineTrackState, TransformMode, ViewMode, ViewportNavigation, ViewportNavigationByView } from "../types";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
 import { createIdleFrameManifestImportState } from "./frame-manifest-import";
 import { createIdleMotionTrackImportState } from "./motion-track-import";
+import { compileReviewedMotionTrack as compileReviewedMotionTrackPure, createIdleMotionTrackReviewState } from "./motion-track-review";
 import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
 
@@ -716,6 +717,8 @@ export interface WorkbenchState {
   localAnimationImport: LocalAnimationImportState;
   frameManifestImport: FrameManifestImportState;
   motionTrackImport: MotionTrackImportState;
+  motionTrackReview: MotionTrackReviewState;
+  motionTrackReviewUndo: MotionTrackReviewState[];
   dialogueReferenceInputs: DialogueReferenceInputState[];
   cameras: Record<string, CameraCompositionState>;
   selectedCameraId: string;
@@ -830,6 +833,17 @@ export interface WorkbenchState {
   clearFrameManifestImport: () => void;
   setMotionTrackImportState: (state: MotionTrackImportState) => void;
   clearMotionTrackImport: () => void;
+  loadMotionTrackReviewManifest: (manifest: MotionTrackReviewState["manifest"]) => void;
+  selectMotionTrackReviewFrame: (frame: number | null) => void;
+  setMotionTrackReviewStatus: (frame: number, status: MotionTrackFrameReview["status"]) => void;
+  setMotionTrackReviewCandidate: (frame: number, poseIndex: number | null) => void;
+  setMotionTrackJointOverride: (frame: number, jointId: string, value: [number, number, number]) => void;
+  setMotionTrackReviewerNote: (frame: number, note: string) => void;
+  clearMotionTrackFrameReview: (frame: number) => void;
+  resetMotionTrackReview: () => void;
+  undoMotionTrackReview: () => void;
+  approveMotionTrackReview: () => void;
+  compileReviewedMotionTrack: () => { manifest: MotionTrackImportState["manifest"]; report: import("../types").MotionTrackReviewReport } | null;
   applyActionStructure: (request: { actionId: string; characterId: string; opponentId: string | null; startSeconds: number; durationSeconds: number; includeContact: boolean }) => void;
   addTimelineTrack: (track: { trackKind: TimelineTrackKind; targetType: TimelineTargetType; targetId: string; propertyKey: string }) => void;
   removeTimelineTrack: (trackId: string) => void;
@@ -1109,6 +1123,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   localAnimationImport: createIdleLocalAnimationImportState(),
   frameManifestImport: createIdleFrameManifestImportState(),
   motionTrackImport: createIdleMotionTrackImportState(),
+  motionTrackReview: createIdleMotionTrackReviewState(),
+  motionTrackReviewUndo: [],
   dialogueReferenceInputs: [],
   cameras: createInitialCameras(),
   selectedCameraId: "camera-main",
@@ -1663,6 +1679,44 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   })),
   setMotionTrackImportState: (motionTrackImport) => set({ motionTrackImport: structuredClone(motionTrackImport) }),
   clearMotionTrackImport: () => set({ motionTrackImport: createIdleMotionTrackImportState() }),
+  loadMotionTrackReviewManifest: (manifest) => set((state) => ({ motionTrackReview: { ...createIdleMotionTrackReviewState(), status: manifest ? "ready" : "idle", manifest: structuredClone(manifest) }, motionTrackReviewUndo: [], unsavedChanges: Boolean(manifest) || state.unsavedChanges })),
+  selectMotionTrackReviewFrame: (frame) => set((state) => ({ motionTrackReview: { ...state.motionTrackReview, status: frame === null ? state.motionTrackReview.status : "reviewing", selectedFrame: frame } })),
+  setMotionTrackReviewStatus: (frame, status) => set((state) => {
+    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), status } };
+    return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
+  }),
+  setMotionTrackReviewCandidate: (frame, poseIndex) => set((state) => {
+    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), selectedPoseIndex: poseIndex, status: poseIndex === null ? current.status : "manual_recovered" } };
+    return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
+  }),
+  setMotionTrackJointOverride: (frame, jointId, value) => set((state) => {
+    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current || !jointId.trim()) return state;
+    const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), jointOverrides: { ...current.jointOverrides, [jointId.trim()]: value }, status: current.status === "pending" ? "detector_missed" : current.status } };
+    return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
+  }),
+  setMotionTrackReviewerNote: (frame, note) => set((state) => {
+    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), reviewerNote: note.slice(0, 1000) } };
+    return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
+  }),
+  clearMotionTrackFrameReview: (frame) => set((state) => {
+    if (!state.motionTrackReview.editedFrames[frame]) return state; const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames }; delete editedFrames[frame];
+    return { motionTrackReview: { ...state.motionTrackReview, editedFrames, dirty: Object.keys(editedFrames).length > 0 }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
+  }),
+  resetMotionTrackReview: () => set((state) => ({ motionTrackReview: createIdleMotionTrackReviewState(), motionTrackReviewUndo: [], unsavedChanges: state.unsavedChanges })),
+  undoMotionTrackReview: () => set((state) => { const previous = state.motionTrackReviewUndo.at(-1); if (!previous) return state; return { motionTrackReview: previous, motionTrackReviewUndo: state.motionTrackReviewUndo.slice(0, -1), unsavedChanges: true }; }),
+  approveMotionTrackReview: () => set((state) => {
+    if (!state.motionTrackReview.manifest) return state;
+    const unresolved = state.motionTrackReview.manifest.frames.some((frame) => (state.motionTrackReview.editedFrames[frame.frame] ?? frame).status === "pending");
+    return unresolved ? state : { motionTrackReview: { ...state.motionTrackReview, status: "approved", dirty: true }, unsavedChanges: true };
+  }),
+  compileReviewedMotionTrack: () => {
+    const state = get();
+    if (!state.motionTrackImport.manifest) return null;
+    return compileReviewedMotionTrackPure(state.motionTrackImport.manifest, state.motionTrackReview);
+  },
   applyActionStructure: (request) => set((state) => {
     const action = ACTION_STRUCTURES.find((entry) => entry.actionId === request.actionId);
     const character = state.characters[request.characterId];

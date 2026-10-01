@@ -882,6 +882,11 @@
 .director3d-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .director3d-root select, .director3d-root textarea { min-height: 44px; touch-action: manipulation; }
 .director3d-root :is(summary, button, input, select, textarea, a):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent); }
 .director3d-root button:not(:disabled):active { transform: translateY(1px) scale(.98); }
+.director3d-root .motion-review-markers { display: flex; flex-wrap: wrap; gap: 5px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.025); }
+.director3d-root .motion-review-markers button { min-width: 42px; min-height: 32px; padding: 3px 7px; border: 1px solid; border-radius: 999px; background: transparent; font: 11px var(--font-jetbrains-mono, monospace); }
+.director3d-root .motion-review-markers button.active { color: var(--text) !important; background: var(--panel-raised); box-shadow: 0 0 0 2px currentColor; }
+.director3d-root .motion-review-form { display: grid; gap: 9px; }
+.director3d-root .motion-review-form label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
 .director3d-root .header-actions .primary,
 .director3d-root .subject-import-actions .primary { color: var(--color-on-accent, #fff); background: var(--primary); }
 .director3d-root .header-actions .primary:hover:not(:disabled),

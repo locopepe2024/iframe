@@ -534,7 +534,7 @@ export interface FrameManifestImportState {
 }
 
 export type MotionTrackImportStatus = "idle" | "ready" | "error";
-export type MotionTrackSelectionStatus = "tracked" | "interpolated" | "occluded" | "rejected" | "unknown";
+export type MotionTrackSelectionStatus = "tracked" | "interpolated" | "manual_recovered" | "detector_missed" | "real_occlusion" | "out_of_frame" | "occluded" | "rejected" | "unknown";
 export type MotionTrackVector3 = [number, number, number];
 export interface MotionTrackCoordinateSystem {
   image_x: "blender_x";
@@ -575,6 +575,50 @@ export interface MotionTrackImportState {
   errors: string[];
   warnings: string[];
   importedAt: string | null;
+}
+export type MotionTrackReviewStatus = "tracked" | "manual_recovered" | "detector_missed" | "real_occlusion" | "out_of_frame" | "pending";
+export interface MotionTrackReviewCandidate {
+  poseIndex: number;
+  bbox: [number, number, number, number];
+  center: [number, number];
+  distanceToPreviousCenter: number | null;
+  semanticJoints?: Record<string, MotionTrackVector3>;
+}
+export interface MotionTrackFrameReview {
+  frame: number;
+  timestampSeconds: number | null;
+  currentStatus: MotionTrackSelectionStatus;
+  suggestedStatus: "manual_review_required" | null;
+  targetTrackId: string | null;
+  candidates: MotionTrackReviewCandidate[];
+  selectedPoseIndex: number | null;
+  status: MotionTrackReviewStatus;
+  jointOverrides: Record<string, MotionTrackVector3>;
+  reviewerNote: string;
+}
+export interface MotionTrackAnnotationReview {
+  schema: "motion-track-annotation-review.v1";
+  sourceTrackRevision: string | null;
+  targetSubjectId: string | null;
+  totalFrames: number;
+  reviewRequiredFrames: number;
+  frames: MotionTrackFrameReview[];
+}
+export interface MotionTrackReviewState {
+  status: "idle" | "ready" | "reviewing" | "approved";
+  manifest: MotionTrackAnnotationReview | null;
+  selectedFrame: number | null;
+  editedFrames: Record<number, MotionTrackFrameReview>;
+  dirty: boolean;
+  errors: string[];
+}
+export interface MotionTrackReviewReport {
+  sourceRevision: string | null;
+  outputRevision: string;
+  totalFrames: number;
+  counts: Record<MotionTrackReviewStatus, number>;
+  missingFrames: Array<{ frame: number; missingJoints: string[]; status: MotionTrackReviewStatus; reason: string }>;
+  errors: string[];
 }
 export interface MotionRetargetMappingEntry {
   targetJointId: string;

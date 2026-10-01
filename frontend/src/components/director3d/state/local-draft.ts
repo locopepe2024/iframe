@@ -1,6 +1,7 @@
 import { useWorkbenchStore, type WorkbenchState } from "./workbench-store";
 import { createIdleFrameManifestImportState } from "./frame-manifest-import";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
+import { createIdleMotionTrackReviewState } from "./motion-track-review";
 
 export const DIRECTOR_DRAFT_STORAGE_KEY = "iframe.director3d.browser-draft.v1";
 
@@ -25,6 +26,8 @@ function projectSerializableState(state: WorkbenchState): Partial<WorkbenchState
       dialogueBeats: state.dialogueTimeline.dialogueBeats.map((beat) => ({ ...beat, audioInputId: null })),
     },
     frameManifestImport: state.frameManifestImport.status === "ready" ? state.frameManifestImport : createIdleFrameManifestImportState(),
+    motionTrackImport: state.motionTrackImport.status === "ready" ? state.motionTrackImport : state.motionTrackImport,
+    motionTrackReview: state.motionTrackReview,
     dialogueReferenceInputs: [],
     cameras: state.cameras,
     selectedCameraId: state.selectedCameraId,
@@ -79,6 +82,8 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
     useWorkbenchStore.setState({
       ...envelope.state,
       frameManifestImport: envelope.state.frameManifestImport ?? createIdleFrameManifestImportState(),
+      motionTrackReview: envelope.state.motionTrackReview ?? createIdleMotionTrackReviewState(),
+      motionTrackReviewUndo: [],
       localAnimationImport: createIdleLocalAnimationImportState(),
       fullscreenActive: false,
       subjectImportOpen: false,
