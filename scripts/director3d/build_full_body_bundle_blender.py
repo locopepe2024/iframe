@@ -22,7 +22,9 @@ for src in t['frames']:
  for name in ORDER:
   p=arm.pose.bones.get(name);target=up if name.startswith('spine_') else (vec(j,*PAIRS[name]) if name in PAIRS and PAIRS[name][0] in j and PAIRS[name][1] in j else None)
   if not p or not target: warn.append('missing '+name);continue
-  current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion();p.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
+  current=wd(arm,p);world_delta=current.rotation_difference(target);parent=p.parent;basis=(arm.matrix_world@parent.matrix).to_quaternion() if parent else arm.matrix_world.to_quaternion()
+  if name.startswith('upper_arm_'):basis=(arm.matrix_world@p.matrix).to_quaternion()
+  p.rotation_quaternion=basis.inverted()@world_delta@basis;bpy.context.view_layer.update();qs[name]=qxyzw(p.rotation_quaternion)
   if f==1 and name.startswith('spine_'):print(json.dumps({'debug':name,'current':list(current),'target':list(target),'delta_angle_deg':math.degrees(world_delta.angle),'local_angle_deg':math.degrees(p.rotation_quaternion.angle),'evaluated':list(wd(arm,p))}))
  root=None
  if 'left_hip' in j and 'right_hip' in j:
