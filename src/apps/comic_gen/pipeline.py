@@ -2250,7 +2250,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not series:
             raise ValueError("Series not found")
         episodes = self.get_series_episodes(series_id)
-        context = series.source_context.get("preamble", "") if series.source_context else ""
+        context_parts = []
+        if series.source_context:
+            context_parts.extend([
+                series.source_context.get("preamble", ""),
+                series.source_context.get("user_additions", ""),
+            ])
+        context = "\n\n".join(part for part in context_parts if part)
         source = "\n\n".join(
             part for part in [context, *[episode.original_text for episode in episodes]] if part
         )

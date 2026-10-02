@@ -1913,7 +1913,7 @@ export const api = {
     },
     updateSeries: async (
         seriesId: string,
-        data: { title?: string; description?: string; art_direction?: any },
+        data: { title?: string; description?: string; art_direction?: any; source_context?: Record<string, unknown> },
     ) => {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;

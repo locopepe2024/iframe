@@ -917,6 +917,10 @@ class UpdateSeriesRequest(BaseModel):
     # R2V v2: series-level art_direction baseline (Phase 2). Inherits +
     # override flows at the episode level read this as the source of truth.
     art_direction: Optional[ArtDirection] = None
+    # User-supplied whole-work material for Series Director understanding.
+    # Kept separate from imported preamble so the original import remains
+    # auditable and the user can revise only the supplemental context.
+    source_context: Optional[Dict[str, Any]] = None
 
 
 class AssemblyPlanEnvelope(BaseModel):

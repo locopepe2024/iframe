@@ -10,6 +10,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   const [draftText, setDraftText] = useState("");
   const [savedText, setSavedText] = useState("");
   const [contextText, setContextText] = useState("");
+  const [savedContextText, setSavedContextText] = useState("");
   const [draftRevision, setDraftRevision] = useState(0);
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
   const [busy, setBusy] = useState<"analyze" | "save" | "confirm" | null>(null);
@@ -22,9 +23,22 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     const text = value ? JSON.stringify(value, null, 2) : "";
     setDraftText(text); setSavedText(text); setDraftRevision(state.draft_revision ?? 0);
     setConfirmedRevision(state.confirmed_revisions?.at(-1)?.revision ?? null);
-    setContextText(JSON.stringify(state.source_context ?? {}, null, 2));
+    const additions = String(state.source_context?.user_additions ?? "");
+    setContextText(additions);
+    setSavedContextText(additions);
   };
   useEffect(() => { void load().catch(e => setError(String(e?.message || e))); }, [seriesId]);
+
+  const saveContext = async () => {
+    setBusy("save"); setError("");
+    try {
+      await api.updateSeries(seriesId, {
+        source_context: { user_additions: contextText },
+      });
+      setSavedContextText(contextText);
+      onSaved();
+    } catch (e) { setError(String((e as any)?.message || e)); } finally { setBusy(null); }
+  };
 
   const analyze = async () => {
     setBusy("analyze"); setError("");
@@ -52,7 +66,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
     <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
       <div className="flex min-h-0 flex-col gap-3"><label className="text-xs font-medium text-text-secondary">{t("seriesDirectorDraftLabel")}</label><textarea aria-label={t("seriesDirectorDraftLabel")} value={draftText} onChange={e => setDraftText(e.target.value)} className="min-h-[30rem] flex-1 resize-y rounded-lg border border-glass-border bg-background p-4 font-mono text-xs leading-5 text-foreground" spellCheck={false} /><div className="flex items-center justify-between"><span className="text-xs text-text-muted">{dirty ? t("seriesDirectorUnsaved") : t("seriesDirectorSaved", { revision: draftRevision })}</span><div className="flex gap-2"><WorkflowActionButton variant="secondary" leftIcon={<Save />} disabled={!dirty || busy !== null} loading={busy === "save"} onClick={save}>{t("seriesDirectorSave")}</WorkflowActionButton><WorkflowActionButton leftIcon={<Check />} disabled={!draftText || dirty || busy !== null} loading={busy === "confirm"} onClick={confirm}>{t("seriesDirectorConfirm")}</WorkflowActionButton></div></div></div>
-      <aside className="rounded-lg border border-glass-border bg-background/30 p-4"><h3 className="text-sm font-semibold text-foreground">{t("seriesDirectorContext")}</h3><p className="mt-1 text-xs leading-5 text-text-secondary">{t("seriesDirectorContextHint")}</p><pre className="mt-3 max-h-[30rem] overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-text-muted">{contextText || "{}"}</pre></aside>
+      <aside className="rounded-lg border border-glass-border bg-background/30 p-4"><h3 className="text-sm font-semibold text-foreground">{t("seriesDirectorContext")}</h3><p className="mt-1 text-xs leading-5 text-text-secondary">{t("seriesDirectorContextHint")}</p><label className="mt-4 block text-xs font-medium text-text-secondary">全剧资料补充</label><textarea aria-label="全剧资料补充" value={contextText} onChange={e => setContextText(e.target.value)} placeholder="补充时代、地点、背景、人物关系或视觉基调……" className="mt-2 min-h-[14rem] w-full resize-y rounded-lg border border-glass-border bg-background p-3 text-sm leading-6 text-foreground" /><div className="mt-3 flex items-center justify-between"><span className="text-xs text-text-muted">{contextText !== savedContextText ? "有未保存的资料补充" : "资料补充已保存"}</span><WorkflowActionButton variant="secondary" leftIcon={<Save />} disabled={contextText === savedContextText || busy !== null} loading={busy === "save"} onClick={saveContext}>保存资料补充</WorkflowActionButton></div></aside>
     </div>
   </section>;
 }
