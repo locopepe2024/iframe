@@ -36,6 +36,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [showImportAssets, setShowImportAssets] = useState(false);
   const [showImportLibrary, setShowImportLibrary] = useState(false);
+  const [replacementSeries, setReplacementSeries] = useState<Series | null>(null);
 
   const t = useTranslations("series");
   const tc = useTranslations("common");
@@ -57,6 +58,23 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         setSeries(seriesData);
         setEpisodes(episodesData);
         setEditTitle(seriesData.title);
+        // A re-import creates a new series record. If an old same-title record
+        // is opened from a stale URL and has no episodes, point the user to the
+        // newer record instead of making its Director/plan look deleted.
+        if (episodesData.length === 0) {
+          const candidates = await api.listSeries();
+          const newer = (candidates as Series[])
+            .filter((candidate) =>
+              candidate.id !== seriesData.id &&
+              candidate.title === seriesData.title &&
+              (candidate.episode_ids?.length ?? 0) > 0 &&
+              (candidate.updated_at ?? 0) > (seriesData.updated_at ?? 0)
+            )
+            .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0))[0];
+          setReplacementSeries(newer ?? null);
+        } else {
+          setReplacementSeries(null);
+        }
       } catch (error) {
         console.error("Failed to fetch series data:", error);
       } finally {
@@ -165,6 +183,17 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
 
   return (
     <main className="flex h-screen w-screen bg-background overflow-hidden">
+      {replacementSeries && (
+        <div className="fixed top-3 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber-400/30 bg-amber-950/90 px-4 py-3 text-sm text-amber-100 shadow-xl">
+          <span>当前是历史系列版本，最新同名系列已有 {replacementSeries.episode_ids?.length ?? 0} 集。</span>
+          <button
+            className="ml-3 font-semibold underline underline-offset-2"
+            onClick={() => { window.location.hash = `#/series/${replacementSeries.id}`; }}
+          >
+            打开最新版本
+          </button>
+        </div>
+      )}
       {/* ── Sidebar ── */}
       <SeriesSidebar
         series={series}
