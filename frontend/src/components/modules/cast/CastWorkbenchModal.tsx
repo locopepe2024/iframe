@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
+import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import {
     createSingleFlightTaskStatusPoller,
@@ -183,6 +183,14 @@ interface ImageVariant {
 type ReferenceLibraryAsset = AssetReferenceIndexEntry;
 
 type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
+
+interface CharacterIdentityFacet {
+    id: string;
+    label_zh: string;
+    label_en: string;
+    prompt_zh: string;
+    prompt_en: string;
+}
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
@@ -368,6 +376,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const selectedModelId = resolveAssetGenerationModel(requestedModelId);
     const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
+    const [characterIdentityFacets, setCharacterIdentityFacets] = useState<CharacterIdentityFacet[]>([]);
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
@@ -463,6 +472,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setMention(null);
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
+
+    useEffect(() => {
+        let active = true;
+        if (!isOpen || kind !== "character") {
+            setCharacterIdentityFacets([]);
+            return () => { active = false; };
+        }
+        void agentRequest<{ installed?: Array<{ id: string; enabled?: boolean; workbench_facets?: CharacterIdentityFacet[] }> }>("/skills")
+            .then((inventory) => {
+                if (!active) return;
+                const skill = (inventory.installed ?? []).find(item => item.id === "character-identity-design" && item.enabled !== false);
+                setCharacterIdentityFacets(Array.isArray(skill?.workbench_facets) ? skill.workbench_facets : []);
+            })
+            .catch(() => { if (active) setCharacterIdentityFacets([]); });
+        return () => { active = false; };
+    }, [isOpen, kind]);
 
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
@@ -1374,6 +1399,35 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </button>
                                 ))}
                             </div>
+
+                            {kind === "character" && characterIdentityFacets.length > 0 && (
+                                <section className="mt-4 rounded-md border border-primary/20 bg-primary/5 px-3.5 py-3" aria-label={t("characterSkillTitle")}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-medium text-primary">{t("characterSkillTitle")}</p>
+                                            <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">{t("characterSkillHint")}</p>
+                                        </div>
+                                        <span className="shrink-0 rounded-full border border-primary/20 px-2 py-0.5 text-[0.625rem] text-primary/80">Skill</span>
+                                    </div>
+                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                        {characterIdentityFacets.map((facet) => (
+                                            <button
+                                                key={facet.id}
+                                                type="button"
+                                                disabled={generationBusy}
+                                                onClick={() => setPrompt((current) => {
+                                                    const value = locale.startsWith("zh") ? facet.prompt_zh : facet.prompt_en;
+                                                    if (current.includes(value)) return current;
+                                                    return `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`;
+                                                })}
+                                                className="rounded border border-primary/20 bg-background/40 px-2.5 py-1.5 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary disabled:opacity-40"
+                                            >
+                                                + {locale.startsWith("zh") ? facet.label_zh : facet.label_en}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
 
                             {/* Customer-facing summary: keep it short and readable. The full
                                 provider prompt remains in the editable field above and the

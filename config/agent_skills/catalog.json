@@ -1,6 +1,21 @@
 {
   "skills": [
     {
+      "id": "character-identity-design",
+      "name": "角色身份与外观设计",
+      "category": "角色资产",
+      "targets": ["Character workbench"],
+      "version": "1.0.0",
+      "description": "为角色提供可编辑的真人感、表情、眼神、发型、肤质、身材和识别锚点建议。",
+      "source": "https://github.com/locopepe2024/iframe/tree/60589adfd53eeb7edb16c6008b760e70d1f614f4/config/agent_skills/character-identity-design.md",
+      "source_revision": "60589adfd53eeb7edb16c6008b760e70d1f614f4",
+      "license": "MIT（LumenX 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "LumenX 原创角色资产 Skill；建议项由用户接受后才进入图片提示词。",
+      "instructions_file": "character-identity-design.md",
+      "workbench_facets_file": "character-identity-design.facets.json"
+    },
+    {
       "id": "director-style",
       "name": "导演风格与视觉叙事",
       "category": "导演风格",

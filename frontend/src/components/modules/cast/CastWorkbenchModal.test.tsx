@@ -7,10 +7,10 @@ import messages from '../../../../messages/en.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
 import { useProjectStore } from '@/store/projectStore';
 import { useToastStore } from '@/store/toastStore';
-import { api } from '@/lib/api';
+import { agentRequest, api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
-vi.mock('@/lib/api', () => ({ API_URL: '', api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
@@ -119,6 +119,14 @@ it('submits only once when generate is clicked twice during project validation',
  await act(async () => finishValidation(project));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalledTimes(1));
  expect(vi.mocked(api.generateAsset).mock.calls[0][9]).toBe(1);
+});
+
+it('offers enabled character identity Skill facets as editable prompt suggestions', async () => {
+ vi.mocked(agentRequest).mockResolvedValueOnce({ installed: [{ id: 'character-identity-design', enabled: true, workbench_facets: [{ id: 'eyes-gaze', label_zh: '眼神', label_en: 'Eyes and gaze', prompt_zh: '眼神清晰自然', prompt_en: 'clear natural eyes' }] }] } as any);
+ show();
+ const facet = await screen.findByRole('button', { name: /Eyes and gaze/ });
+ fireEvent.click(facet);
+ expect(promptEditor().editor.getText()).toContain('clear natural eyes');
 });
 
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {

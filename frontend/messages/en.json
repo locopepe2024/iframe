@@ -274,6 +274,8 @@
     "resetTemplate": "Reset template",
     "resetTemplateHint": "Repopulate from name + description + composition template",
     "promptHintCharacter": "Goal: one image fusing a head close-up with front/side/back views — a character reference sheet for downstream use.",
+    "characterSkillTitle": "Character identity suggestions",
+    "characterSkillHint": "Optional suggestions from the enabled character-design Skill. Click to add, then edit or remove them in the prompt.",
     "promptHintScene": "Goal: wide environment establishing shot with no foreground subject.",
     "promptHintProp": "Goal: prop product shot on a clean background, multi-angle when possible.",
     "batchLabel": "Batch size",

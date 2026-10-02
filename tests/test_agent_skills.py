@@ -16,7 +16,7 @@ def ctx(tmp_path, monkeypatch):
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 6
+    assert len(packages) == len({p['id'] for p in packages}) == 7
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
