@@ -16,16 +16,38 @@ import {
 } from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
+const API_KEY_IDENTITY_KEY = "lumenx-api-key-identity";
+const API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity";
+
+export const getApiKeyIdentity = (): string | null => {
+    if (typeof window === "undefined") return null;
+    const value = window.localStorage.getItem(API_KEY_IDENTITY_KEY);
+    return value && /^[0-9a-f]{64}$/.test(value) ? value : null;
+};
+
+export const setApiKeyIdentity = async (apiKey: string): Promise<string | null> => {
+    if (typeof window === "undefined" || !apiKey.trim()) return null;
+    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(apiKey.trim()));
+    const identity = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    window.localStorage.setItem(API_KEY_IDENTITY_KEY, identity);
+    return identity;
+};
+
 // API methods in this module use axios directly. Read the persisted identity
 // token at request time so the first workspace sync after a hard refresh does
 // not race AuthProvider's asynchronous initialization and fall back to a new
 // anonymous browser profile.
 axios.interceptors.request.use((config) => {
-    if (typeof window !== "undefined" && !config.headers?.Authorization) {
+    if (typeof window !== "undefined") {
         const token = window.localStorage.getItem("lumenx-access-token");
         if (token) {
             config.headers = config.headers ?? {};
-            config.headers.Authorization = `Bearer ${token}`;
+            if (!config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
+        }
+        const identity = getApiKeyIdentity();
+        if (identity) {
+            config.headers = config.headers ?? {};
+            if (!config.headers[API_KEY_IDENTITY_HEADER]) config.headers[API_KEY_IDENTITY_HEADER] = identity;
         }
     }
     return config;
@@ -86,6 +108,10 @@ export const authenticatedFetch = (
         const token = window.localStorage.getItem("lumenx-access-token");
         if (token && !headers.has("Authorization")) {
             headers.set("Authorization", `Bearer ${token}`);
+        }
+        const identity = getApiKeyIdentity();
+        if (identity && !headers.has(API_KEY_IDENTITY_HEADER)) {
+            headers.set(API_KEY_IDENTITY_HEADER, identity);
         }
     }
     return fetch(input, { ...init, headers });
