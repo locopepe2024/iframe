@@ -506,7 +506,11 @@ export default function DirectorShootingPlanPanel() {
             )}
             {stale && !serverState?.readiness_error && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
-                    <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{t(draftStale ? "stale" : "confirmedStale")}
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                        <span>{t(draftStale ? "stale" : "confirmedStale")}</span>
+                        {plan && <button type="button" onClick={() => setViewMode("editor")} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>}
+                    </span>
                 </div>
             )}
             {action === "generate" && (

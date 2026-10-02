@@ -1519,6 +1519,7 @@
       "notReady": "The plan is not ready to generate: {reason}. Save and adopt the current Director interpretation first. If the interpretation changes, regenerate the shooting plan.",
       "stale": "The source script or Director interpretation changed. Regenerate or revise the plan before confirming it.",
       "confirmedStale": "The confirmed revision uses an older script or Director interpretation. A fresh draft can still be confirmed against the current inputs.",
+      "revisePlan": "Edit this plan",
       "summaryTitle": "Shooting-plan summary",
       "sceneCount": "Scenes",
       "beatCount": "Dramatic beats",
