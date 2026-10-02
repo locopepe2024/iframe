@@ -186,15 +186,25 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     await waitFor(() => expect(confirm).toHaveBeenCalledWith(
         "film", 0, 1,
         expect.objectContaining({ scenes: expect.any(Array) }),
+        "", "",
     ));
     expect(await screen.findByText(/Shooting plan v1 confirmed/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Create video task/ })).not.toBeInTheDocument();
 });
 
-it("blocks confirmation while the saved draft is stale", async () => {
+it("lets the user choose editing or continue with a stale saved plan", async () => {
     vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
         ...state(plan, 1),
         draft_stale: true,
+    });
+    const confirm = vi.spyOn(api, "confirmDirectorShootingPlan").mockResolvedValue({
+        project_id: "film", current_revision: 1, current: {
+            revision: 1, content_hash: "hash", confirmed_at: 30,
+            source_revision: 1, source_revision_id: "source-r1:script-hash",
+            director_profile_revision: 2, director_profile_hash: "director-hash",
+            effective_style_hash: "style-hash", scene_count: 1, beat_count: 1,
+            shot_count: 1, duration_seconds: 4,
+        }, draft_revision: 1,
     });
 
     render(
@@ -204,7 +214,13 @@ it("blocks confirmation while the saved draft is stale", async () => {
     );
 
     expect(await screen.findByText(/source script or Director interpretation changed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit this plan" })).toBeInTheDocument();
+    const continueButton = screen.getByRole("button", { name: "Continue with current plan" });
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(
+        "film", 0, 1, expect.objectContaining({ scenes: expect.any(Array) }), "", "", true,
+    ));
 });
 
 it("does not stale a plan when only the visual style changes", async () => {
