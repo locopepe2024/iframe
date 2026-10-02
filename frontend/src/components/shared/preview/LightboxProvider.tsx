@@ -308,8 +308,15 @@ function LightboxPortal({
                             controls
                             autoPlay
                             loop
+                            preload="metadata"
+                            playsInline
                             onClick={(e) => e.stopPropagation()}
-                            className="max-h-[90vh] max-w-[92vw] rounded-md shadow-[0_24px_64px_-20px_rgba(0,0,0,0.85)] object-contain bg-black"
+                            onError={(e) => {
+                                const target = e.currentTarget;
+                                target.controls = false;
+                                target.setAttribute('aria-label', t('mediaUnavailable'));
+                            }}
+                            className="max-h-[90vh] max-w-[92vw] rounded-md bg-black shadow-[0_24px_64px_-20px_rgba(0,0,0,0.85)] object-contain"
                         />
                     )}
                 </div>

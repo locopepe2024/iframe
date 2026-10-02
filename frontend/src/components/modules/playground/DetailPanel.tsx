@@ -21,6 +21,7 @@ import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { downloadOutput } from './downloadOutput';
 import NewLibraryAssetDialog from '@/components/library/NewLibraryAssetDialog';
+import { getOutputAspectRatio } from './mediaDisplay';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -102,6 +103,12 @@ export default function DetailPanel({
     output?.media_type === 'video' ||
     ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(generation.mode);
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+  const aspectRatio = getOutputAspectRatio(generation.parameters);
+  const [mediaError, setMediaError] = useState(false);
+
+  useEffect(() => {
+    setMediaError(false);
+  }, [output?.id, mediaUrl]);
 
   // Navigation
   const currentIndex = allGenerations.findIndex((g) => g.id === generation.id);
@@ -219,14 +226,28 @@ export default function DetailPanel({
       {/* Container */}
       <div className="fixed inset-4 md:inset-8 z-50 bg-surface border border-glass-border rounded-[20px] shadow-2xl flex overflow-hidden">
         {/* ─── LEFT SIDE (Media) ─────────────────────────────────────────── */}
-        <div className="relative w-[60%] h-full bg-surface-inset flex items-center justify-center">
+        <div className="relative flex h-full min-w-0 w-[68%] items-center justify-center bg-surface-inset p-4 md:p-8">
           {mediaUrl ? (
             isVideo ? (
-              <video
-                src={mediaUrl}
-                controls
-                className="max-w-full max-h-full object-contain rounded"
-              />
+              mediaError ? (
+                <div role="alert" className="flex max-w-sm flex-col items-center gap-2 text-center text-text-muted">
+                  <Video className="h-10 w-10 opacity-60" />
+                  <span className="text-xs">视频暂时无法播放，请重新打开或下载检查。</span>
+                </div>
+              ) : (
+                <div className="flex max-h-full w-full items-center justify-center">
+                  <video
+                    key={mediaUrl}
+                    src={mediaUrl}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    onError={() => setMediaError(true)}
+                    style={{ aspectRatio }}
+                    className="max-h-full w-auto max-w-full rounded bg-black object-contain shadow-2xl"
+                  />
+                </div>
+              )
             ) : (
               <img
                 src={mediaUrl}
@@ -266,7 +287,7 @@ export default function DetailPanel({
         </div>
 
         {/* ─── RIGHT SIDE (Details) — 3 zones: header / scroll body / pinned footer ─── */}
-        <div className="relative w-[40%] h-full overflow-y-auto border-l border-border-subtle">
+        <div className="relative h-full min-w-0 w-[32%] overflow-y-auto border-l border-border-subtle">
           {/* Close button */}
           <button
             onClick={onClose}
