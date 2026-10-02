@@ -186,6 +186,7 @@ type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
 
 interface CharacterIdentityFacet {
     id: string;
+    section?: "identity" | "look" | "continuity";
     label_zh: string;
     label_en: string;
     prompt_zh: string;
@@ -1409,22 +1410,34 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </div>
                                         <span className="shrink-0 rounded-full border border-primary/20 px-2 py-0.5 text-[0.625rem] text-primary/80">Skill</span>
                                     </div>
-                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                        {characterIdentityFacets.map((facet) => (
-                                            <button
-                                                key={facet.id}
-                                                type="button"
-                                                disabled={generationBusy}
-                                                onClick={() => setPrompt((current) => {
-                                                    const value = locale.startsWith("zh") ? facet.prompt_zh : facet.prompt_en;
-                                                    if (current.includes(value)) return current;
-                                                    return `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`;
-                                                })}
-                                                className="rounded border border-primary/20 bg-background/40 px-2.5 py-1.5 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary disabled:opacity-40"
-                                            >
-                                                + {locale.startsWith("zh") ? facet.label_zh : facet.label_en}
-                                            </button>
-                                        ))}
+                                    <div className="mt-3 space-y-3">
+                                        {(["identity", "look", "continuity"] as const).map((section) => {
+                                            const facets = characterIdentityFacets.filter(facet => (facet.section || "identity") === section);
+                                            if (!facets.length) return null;
+                                            const sectionTitle = section === "identity" ? t("characterSkillIdentity") : section === "look" ? t("characterSkillLook") : t("characterSkillContinuity");
+                                            return (
+                                                <div key={section}>
+                                                    <p className="mb-1.5 text-[0.6875rem] font-medium text-text-secondary">{sectionTitle}</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {facets.map((facet) => (
+                                                            <button
+                                                                key={facet.id}
+                                                                type="button"
+                                                                disabled={generationBusy}
+                                                                onClick={() => setPrompt((current) => {
+                                                                    const value = locale.startsWith("zh") ? facet.prompt_zh : facet.prompt_en;
+                                                                    if (current.includes(value)) return current;
+                                                                    return `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`;
+                                                                })}
+                                                                className="rounded border border-primary/20 bg-background/40 px-2.5 py-1.5 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary disabled:opacity-40"
+                                                            >
+                                                                + {locale.startsWith("zh") ? facet.label_zh : facet.label_en}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </section>
                             )}
