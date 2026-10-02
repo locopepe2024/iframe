@@ -1963,6 +1963,10 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
                 result = self._coerce_director_shooting_chunk(result, source_ref)
+                # Keep the exact provider body beside the editable projection
+                # in the durable chunk cache. It is evidence for review, not
+                # domain truth and is never used as an entity or revision id.
+                result["_raw_model_response"] = content
                 logger.info(
                     "Director shooting-plan chunk normalized for editing: source_ref=%s attempt=%s scenes=%s",
                     source_ref or "<unspecified>", attempt + 1, len(result.get("scenes", [])),
@@ -1976,7 +1980,9 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         # JSON could not be decoded after the bounded retry. Preserve task
         # progress with an editable placeholder instead of rejecting the model
         # analysis at the admission boundary.
-        return self._coerce_director_shooting_chunk({}, source_ref)
+        result = self._coerce_director_shooting_chunk({}, source_ref)
+        result["_raw_model_response"] = content if 'content' in locals() else ""
+        return result
 
     @staticmethod
     def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:

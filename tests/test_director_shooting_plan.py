@@ -142,12 +142,7 @@ def valid_chunk(scene=None):
 
 def make_plan(pipeline):
     lineage = pipeline.director_shooting_plan_lineage("film")
-    chunk = split_director_source(
-        pipeline.scripts["film"].original_text,
-        direct_max_chars=4500,
-        target_chars=4000,
-        max_chars=4500,
-    )[0]
+    chunk = split_director_source(pipeline.scripts["film"].original_text)[0]
     scene = raw_scene()
     scene.update({
         "scene_id": "scene-cinema",
@@ -336,6 +331,21 @@ def test_long_plan_batch_cache_shape_resumes_completed_chunks(monkeypatch):
     assert len(plan.scenes) == 1
     assert plan.scenes[0].source_chunk_refs == chunk_refs
     assert len(plan.scenes[0].beats) == 2
+
+
+def test_model_return_without_scenes_becomes_editable_placeholder():
+    pipeline, _ = make_pipeline()
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = {
+        "scenes": [],
+        "unresolved_questions": [],
+    }
+
+    plan = pipeline.preview_director_shooting_plan("film")
+
+    assert len(plan.scenes) == 1
+    assert plan.scenes[0].heading == "待用户补充场景"
+    assert plan.scenes[0].source_chunk_refs == [split_director_source(SOURCE_TEXT)[0]["source_ref"]]
+    assert any("未返回可直接解析" in item for item in plan.scenes[0].unresolved_questions)
 
 
 def test_job_batch_reload_preserves_result_wrapper_consistently(tmp_path):

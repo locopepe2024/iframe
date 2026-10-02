@@ -5086,9 +5086,12 @@ def get_director_shooting_plan(
         lineage = None
         lineage_error = str(exc)
     from .llm import split_director_source
-    source_chunks = split_director_source(
-        script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
-    )
+    # Keep shooting-plan provenance aligned with the canonical Director
+    # source splitter.  The same 4,000 direct-submit threshold, 5,200 target
+    # chunk size, and 6,500 hard maximum are used by Director analysis and
+    # plan generation; otherwise a cached source_ref could become invalid
+    # merely by moving between stages.
+    source_chunks = split_director_source(script.original_text)
     revisions = script.director_shooting_plan_revisions
     confirmed = revisions[-1] if revisions else None
     return {
@@ -5267,9 +5270,7 @@ def start_director_shooting_plan(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     from .llm import split_director_source
-    chunks = split_director_source(
-        script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
-    )
+    chunks = split_director_source(script.original_text)
     fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage)
     return extraction_jobs.start(
         user.owner_profile_id,

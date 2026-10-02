@@ -2983,16 +2983,23 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         from .llm import split_director_source
         allowed_source_refs = {
-            item["source_ref"] for item in split_director_source(
-                script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
-            )
+            item["source_ref"] for item in split_director_source(script.original_text)
         }
         requested_source_refs = {
             source_ref for scene in plan.scenes for source_ref in scene.source_chunk_refs
         }
         unknown_source_refs = requested_source_refs - allowed_source_refs
         if unknown_source_refs:
-            raise ValueError("Shooting plan references unknown script source chunks: " + ", ".join(sorted(unknown_source_refs)))
+            logger.warning(
+                "Shooting plan contains unknown script source chunks: %s",
+                sorted(unknown_source_refs),
+            )
+            value_questions = list(getattr(plan, "unresolved_questions", []) or [])
+            value_questions.append(
+                "模型返回了未登记原文分块引用，已保留供用户修订："
+                + ", ".join(sorted(unknown_source_refs)[:20])
+            )
+            plan.unresolved_questions = list(dict.fromkeys(value_questions))[:80]
         return plan
 
     def preview_director_shooting_plan(
@@ -3030,9 +3037,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "props": [{"id": item.id, "name": item.name, "description": item.description} for item in resolved["props"]],
         }
         from .llm import split_director_source
-        chunks = split_director_source(
-            script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
-        )
+        chunks = split_director_source(script.original_text)
         cached = load_batches() if load_batches else {}
         scenes: List[Dict[str, Any]] = []
         unresolved_questions: List[str] = []
@@ -3095,9 +3100,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             if isinstance(chunk_questions, list):
                 unresolved_questions.extend(str(item)[:500] for item in chunk_questions[:20] if str(item).strip())
             raw_scenes = chunk_result.get("scenes", [])
+            if not isinstance(raw_scenes, list):
+                unresolved_questions.append(
+                    f"模型返回的场景结构无法直接解析（{chunk['source_ref']}），已建立待补充段落。"
+                )
+                raw_scenes = []
             for scene_index, raw_scene in enumerate(raw_scenes):
                 if not isinstance(raw_scene, dict):
-                    raise RuntimeError("拍摄计划场景必须是对象。")
+                    unresolved_questions.append(
+                        f"模型返回了非对象场景（{chunk['source_ref']}），已跳过并保留待补充。"
+                    )
+                    continue
                 continuation = raw_scene.get("continues_previous_scene") is True and scene_index == 0 and bool(scenes)
                 if continuation:
                     target = scenes[-1]
@@ -3143,18 +3156,31 @@ class ComicGenPipeline(StudioOwnerMixin):
                     target["unresolved_questions"].extend(str(item)[:500] for item in questions[:20] if str(item).strip())
                 scene_prop_ids = raw_scene.get("prop_ids", [])
                 if isinstance(scene_prop_ids, list):
-                    valid_scene_props = [item for item in scene_prop_ids if item in available_prop_ids]
-                    unbound_entity_refs.update(str(item) for item in scene_prop_ids if item not in available_prop_ids)
-                    target["prop_ids"] = list(dict.fromkeys(target["prop_ids"] + valid_scene_props))
+                    scene_props = list(dict.fromkeys(
+                        str(item) for item in scene_prop_ids[:40] if str(item).strip()
+                    ))
+                    unbound_entity_refs.update(
+                        f"prop:{item}" for item in scene_props if item not in available_prop_ids
+                    )
+                    target["prop_ids"] = list(dict.fromkeys(target["prop_ids"] + scene_props))
                 raw_beats = raw_scene.get("beats", [])
                 if not isinstance(raw_beats, list):
-                    raise RuntimeError("拍摄计划的 beats 必须是数组。")
+                    unresolved_questions.append(
+                        f"场景 {target['scene_ref'] or target['heading'] or target['scene_id']} 的节拍结构无法解析，已留空供编辑。"
+                    )
+                    raw_beats = []
                 for beat_index, raw_beat in enumerate(raw_beats):
                     if not isinstance(raw_beat, dict):
-                        raise RuntimeError("拍摄计划 beat 必须是对象。")
+                        unresolved_questions.append(
+                            f"场景 {target['scene_ref'] or target['heading'] or target['scene_id']} 含有非对象节拍，已跳过并保留待补充。"
+                        )
+                        continue
                     raw_shots = raw_beat.get("shots", [])
                     if not isinstance(raw_shots, list):
-                        raise RuntimeError("拍摄计划的 shots 必须是数组。")
+                        unresolved_questions.append(
+                            f"节拍 {raw_beat.get('title', '') or '未命名'} 的镜头结构无法解析，已留空供编辑。"
+                        )
+                        raw_shots = []
                     beat = {
                         "beat_id": f"plan-beat-{uuid.uuid4().hex}",
                         "order": beat_offset + beat_index,
@@ -3169,14 +3195,34 @@ class ComicGenPipeline(StudioOwnerMixin):
                     }
                     for shot_index, raw_shot in enumerate(raw_shots):
                         if not isinstance(raw_shot, dict):
-                            raise RuntimeError("拍摄计划 shot 必须是对象。")
+                            unresolved_questions.append(
+                                f"节拍 {raw_beat.get('title', '') or '未命名'} 含有非对象镜头，已跳过并保留待补充。"
+                            )
+                            continue
                         dialogue = raw_shot.get("dialogue", [])
                         if not isinstance(dialogue, list):
-                            raise RuntimeError("shot dialogue 必须是数组。")
+                            unresolved_questions.append(
+                                f"镜头 {raw_shot.get('title', '') or '未命名'} 的对白结构无法解析，已按空对白保存。"
+                            )
+                            dialogue = []
+                        dialogue = [
+                            {
+                                "speaker": str(line.get("speaker", ""))[:120],
+                                "line": str(line.get("line", ""))[:1200],
+                            }
+                            for line in dialogue[:20]
+                            if isinstance(line, dict)
+                        ]
                         raw_character_ids = raw_shot.get("character_ids", [])
                         raw_prop_ids = raw_shot.get("prop_ids", [])
-                        character_ids = [item for item in raw_character_ids if item in available_character_ids] if isinstance(raw_character_ids, list) else []
-                        prop_ids = [item for item in raw_prop_ids if item in available_prop_ids] if isinstance(raw_prop_ids, list) else []
+                        character_ids = list(dict.fromkeys(
+                            str(item) for item in raw_character_ids[:20]
+                            if str(item).strip()
+                        )) if isinstance(raw_character_ids, list) else []
+                        prop_ids = list(dict.fromkeys(
+                            str(item) for item in raw_prop_ids[:20]
+                            if str(item).strip()
+                        )) if isinstance(raw_prop_ids, list) else []
                         unresolved_entity_refs = []
                         if isinstance(raw_character_ids, list):
                             unresolved_entity_refs.extend(f"character:{item}" for item in raw_character_ids if item not in available_character_ids)
@@ -3195,8 +3241,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "camera_angle": str(raw_shot.get("camera_angle", ""))[:120],
                             "composition": str(raw_shot.get("composition", ""))[:1200],
                             "camera_movement": str(raw_shot.get("camera_movement", ""))[:500],
-                            "lighting": raw_shot.get("lighting", {}),
-                            "duration_seconds": raw_shot.get("duration_seconds"),
+                            "lighting": raw_shot.get("lighting") if isinstance(raw_shot.get("lighting"), dict) else {},
+                            "duration_seconds": raw_shot.get("duration_seconds") if isinstance(raw_shot.get("duration_seconds"), int) and 1 <= raw_shot.get("duration_seconds") <= 30 else None,
                             "dialogue": dialogue,
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
                             "character_ids": character_ids,
@@ -3205,7 +3251,26 @@ class ComicGenPipeline(StudioOwnerMixin):
                         })
                     target["beats"].append(beat)
         if not scenes:
-            raise RuntimeError("Director shooting-plan analysis returned no scenes")
+            # A successful model response with no directly usable scene is
+            # still an editable result.  Do not turn a creative omission into
+            # a job failure; leave an explicit placeholder for the user.
+            scenes.append({
+                "scene_id": f"plan-scene-{uuid.uuid4().hex}",
+                "order": 0,
+                "scene_ref": "",
+                "heading": "待用户补充场景",
+                "location": "",
+                "time_anchor": "",
+                "continues_previous_scene": False,
+                "continuity_in": "",
+                "continuity_out": "",
+                "duration_seconds": None,
+                "environment_atmosphere": "",
+                "unresolved_questions": ["模型未返回可直接解析的场景，请用户补充或继续编辑。"],
+                "source_chunk_refs": [chunk["source_ref"] for chunk in chunks],
+                "prop_ids": [],
+                "beats": [],
+            })
         if unbound_entity_refs:
             unresolved_questions.append("模型返回了未登记实体引用，已忽略：" + ", ".join(sorted(unbound_entity_refs)[:20]))
         plan = DirectorShootingPlan(
