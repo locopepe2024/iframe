@@ -157,15 +157,15 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
     expect(screen.getByRole("checkbox", { name: /Input chunk 1/ })).toBeChecked();
-    const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
-    expect(confirmButton).toBeDisabled();
+    const confirmButton = screen.getByRole("button", { name: /Confirm plan and continue to Cast/i });
+    expect(confirmButton).toBeEnabled();
 
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
     const performance = await screen.findByLabelText("Character performance (gaze, expression, posture, pace)");
     fireEvent.change(performance, { target: { value: "They trade a brief smile while keeping the same pace." } });
     const effect = screen.getAllByLabelText("Director effect (audience / editorial effect)").at(-1)!;
     fireEvent.change(effect, { target: { value: "Make the bright entrance feel emotionally unstable." } });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save shooting plan" }));
 
     await waitFor(() => expect(save).toHaveBeenCalledWith(
         "film", 1, 0,
@@ -180,8 +180,8 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
             })],
         }),
     ));
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm shooting plan" }));
+    expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith(
         "film", 0, 1,
@@ -204,7 +204,7 @@ it("blocks confirmation while the saved draft is stale", async () => {
     );
 
     expect(await screen.findByText(/source script, Director interpretation, or visual style changed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeDisabled();
 });
 
 it("lets the user discard a generated but unsaved proposal", async () => {
@@ -218,6 +218,36 @@ it("lets the user discard a generated but unsaved proposal", async () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard shooting-plan changes" }));
     expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
+});
+
+it("renders without a canonical story map and leaves the profile for re-analysis", async () => {
+    useProjectStore.setState({
+        currentProject: {
+            ...useProjectStore.getState().currentProject!,
+            art_direction: {
+                selected_style_id: "hong_kong_cinema",
+                style_config: {
+                    id: "hong_kong_cinema",
+                    name: "Hong Kong Cinema",
+                    positive_prompt: "",
+                    negative_prompt: "",
+                    is_custom: false,
+                },
+                custom_styles: [],
+                ai_recommendations: [],
+                director_profile: undefined,
+            },
+        },
+    });
+
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorShootingPlanPanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
+    expect(screen.queryByText(/Application error/i)).not.toBeInTheDocument();
 });

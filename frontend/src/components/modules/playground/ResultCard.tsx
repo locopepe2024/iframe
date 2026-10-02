@@ -346,7 +346,6 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
         {downloading && <p role="status" className="mb-1 text-xs text-text-muted">正在准备下载…</p>}
         {saving && <p role="status" className="mb-1 text-xs text-text-muted">正在保存到资产库…</p>}
         {actionError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{actionError}</p>}
-        <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
             {displayModelId(model_id, mode)}

@@ -6,7 +6,7 @@ import { expect, it, vi } from "vitest";
 import messages from "../../../messages/en.json";
 import type { DirectorProfile, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
-import { createDirectorStoryMapFromLegacy, inferEventCharacterIds } from "./DirectorStoryMapSection";
+import { inferEventCharacterIds } from "./DirectorStoryMapSection";
 
 it("selects one known character variant from an event description without binding ambiguous eras", () => {
     const variants = [
@@ -154,18 +154,6 @@ it("requires an explicit user action to build a map from legacy phases and keeps
                 })],
             })],
         }),
-    }));
-});
-
-it("builds an explicit story map from a legacy timeline without inventing phase relationship states", () => {
-    const result = createDirectorStoryMapFromLegacy(profile, 4, characters);
-    expect(result.source_revision).toBe(4);
-    expect(result.people).toEqual(people);
-    expect(result.phases[0].events[0].evidence_status).toBe("interpretation");
-    expect(result.relationship_arcs).toEqual([]);
-    expect(result.story_threads[0]).toEqual(expect.objectContaining({
-        label: "待整理主线",
-        milestones: [expect.objectContaining({ event_id: result.phases[0].events[0].event_id, role: "setup" })],
     }));
 });
 

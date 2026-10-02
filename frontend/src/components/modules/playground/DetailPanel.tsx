@@ -240,7 +240,7 @@ export default function DetailPanel({
                     key={mediaUrl}
                     src={mediaUrl}
                     controls
-                    preload="metadata"
+                    preload="auto"
                     playsInline
                     onError={() => setMediaError(true)}
                     style={{ aspectRatio }}

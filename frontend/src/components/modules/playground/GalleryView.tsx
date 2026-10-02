@@ -119,7 +119,7 @@ export default function GalleryView({
               key={current.id}
               src={mediaUrl}
               controls
-              preload="metadata"
+              preload="auto"
               playsInline
               style={{ aspectRatio }}
               className="h-auto w-full max-h-full max-w-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
