@@ -216,9 +216,10 @@ def apply_sample(root, arm, case):
             warnings.append("degenerate segment " + name)
             continue
         target.normalize()
-        # Target and evaluated rest orientation are both armature-space here.
-        # Convert the direction to the bone's current local basis, then swing
-        # its local +Y (head -> tail). Parent state already includes pelvis.
+        # Convert the target into the current pose-bone basis, then apply only
+        # the local swing. This preserves the rig's parent chain; a direct
+        # world matrix replacement can double-apply parent rotations on child
+        # bones and produce crossed forearms/legs.
         local = bone.matrix.to_3x3().inverted() @ target
         bone.rotation_quaternion = bone.rotation_quaternion @ Vector((0, 1, 0)).rotation_difference(local.normalized())
         bpy.context.view_layer.update()

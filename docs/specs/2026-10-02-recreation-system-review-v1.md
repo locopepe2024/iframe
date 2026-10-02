@@ -228,6 +228,8 @@
 
 **Not yet proven**：该 RMSE 尚未设定最终产品阈值，也未覆盖快速旋转的连续时序和脚部接触。
 
+**Retargeting boundary**：一次 world-space 直接覆盖 pose bone matrix 的实验导致子骨骼重复继承父级旋转，出现前臂和小腿交叉。该路径已撤回；当前继续使用父子链中的 local swing，并把 `clavicle → upper_arm → lower_arm` 作为下一轮校准顺序。
+
 ### 逐段方向诊断
 
 独立投影报告增加了相似变换后的逐段角度误差。当前 raw/estimated-depth 代表帧平均绝对角度误差约为：
