@@ -417,5 +417,11 @@ class StudioOwnerMixin:
     def list_series(self, owner_profile_id: Optional[str] = None) -> List[Any]:
         requested_owner = self._requested_owner_profile_id(owner_profile_id)
         if not requested_owner:
-            return list(self.series_store.values())
-        return [series for series in self.series_store.values() if owned_by(series, requested_owner)]
+            series = list(self.series_store.values())
+        else:
+            series = [s for s in self.series_store.values() if owned_by(s, requested_owner)]
+        # JSON object insertion order is historical, not a useful workspace
+        # ordering.  After an import/re-import, that made an older empty series
+        # appear before the current series with the same title.  Keep the
+        # records intact but make the newest saved version the primary entry.
+        return sorted(series, key=lambda s: (getattr(s, "updated_at", 0) or 0), reverse=True)
