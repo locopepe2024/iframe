@@ -136,7 +136,7 @@ def _infer_foot_contact_candidates(samples):
             heel = sample.get('semantic_joints', {}).get(f'{side}_heel')
             if not p or not ankle or not heel:
                 continue
-            prev_p = values[i - 1] if i > 0 else p
+            prev_p = values[i - 1] if i > 0 and values[i - 1] else p
             next_p = values[i + 1] if i + 1 < len(values) and values[i + 1] else p
             velocity = math.sqrt(sum((float(next_p[j]) - float(prev_p[j])) ** 2 for j in (0, 1)))
             confidence = min(
@@ -156,7 +156,29 @@ def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--track',required=True); ap.add_argument('--out',required=True); ap.add_argument('--fps',type=float,default=24.0)
     args=ap.parse_args(); src=json.loads(Path(args.track).read_text()); source_fps=float(src['source']['fps']); fps=float(args.fps); frames=[]
     for f in src['frames']:
-        l=f.get('target_landmarks');
+        l=f.get('target_landmarks')
+        if not l:
+            # Accept canonical motion-track.v1 frames as input as well as the
+            # extractor's raw MediaPipe landmark array. This keeps the Blender
+            # adapter usable after review/smoothing, where semantic_joints is
+            # the authoritative pose surface.
+            names_to_index = {
+                'left_shoulder': L_SHOULDER, 'right_shoulder': R_SHOULDER,
+                'left_elbow': L_ELBOW, 'right_elbow': R_ELBOW,
+                'left_wrist': L_WRIST, 'right_wrist': R_WRIST,
+                'left_hip': L_HIP, 'right_hip': R_HIP,
+                'left_knee': L_KNEE, 'right_knee': R_KNEE,
+                'left_ankle': L_ANKLE, 'right_ankle': R_ANKLE,
+                'left_heel': L_HEEL, 'right_heel': R_HEEL,
+                'left_foot_index': L_FOOT_INDEX, 'right_foot_index': R_FOOT_INDEX,
+            }
+            l=[[0.0, 0.0, 0.0, 0.0] for _ in range(33)]
+            points=f.get('semantic_joints') or {}
+            confidence=f.get('joint_confidence') or {}
+            for name,index in names_to_index.items():
+                value=points.get(name)
+                if value is not None:
+                    l[index]=[float(value[0]), float(value[1]), float(value[2]) if len(value)>2 else 0.0, float(confidence.get(name, 1.0))]
         if f.get('selection_status')!='tracked' or not l: continue
         ls,rs,le,re,lh,rh,lk,rk=[point(lms:=l,i) for i in (L_SHOULDER,R_SHOULDER,L_ELBOW,R_ELBOW,L_HIP,R_HIP,L_KNEE,R_KNEE)]
         center=lambda a,b: ((a[0]+b[0])/2,(a[1]+b[1])/2) if a and b else None
@@ -245,12 +267,15 @@ def main():
             target = {name: value for name, value in target.items() if value is not None}
             if target:
                 foot_targets[side] = target
-        frames.append({'frame':max(1,round(float(f['timestamp_seconds'])*fps)+1),'source_frame':int(f['frame']),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'foot_targets':foot_targets,'source_timestamp_seconds':f['timestamp_seconds'],'selection_status':f['selection_status']})
-    total_frames=max((int(round(float(f.get('timestamp_seconds',0.0))*fps))+1 for f in src['frames']),default=1)
+        timestamp = f.get('timestamp_seconds', f.get('source_timestamp_seconds', 0.0))
+        frames.append({'frame':max(1,round(float(timestamp)*fps)+1),'source_frame':int(f.get('source_frame', f.get('frame', 1))),'root_position':root,'joint_rotations_deg':rotations,'joint_vectors':vectors,'body_centers':body_centers,'semantic_joints':semantic_points,'joint_confidence':confidence,'foot_targets':foot_targets,'source_timestamp_seconds':timestamp,'selection_status':f['selection_status']})
+    total_frames=max((int(round(float(f.get('timestamp_seconds', f.get('source_timestamp_seconds', 0.0)))*fps))+1 for f in src['frames']),default=1)
     frames=_interpolate_samples(frames,total_frames)
     frames=_infer_foot_contact_candidates(frames)
-    source_duration=max((float(f.get('timestamp_seconds',0.0)) for f in src['frames']),default=0.0)
-    state={'state_id':'motion-track-blender-adapter-v1','schema_version':'director_reference_state.v1','revision':3,'retarget_mode':'planar_euler_legacy_with_source_vectors','title':'Center subject motion-track white model','duration_seconds':max(1.0, source_duration + 1.0/source_fps),'fps':round(fps,6),'reference_frame':max(1,frames[len(frames)//2]['frame'] if frames else 1),'outputs':['director_reference_image','camera_motion_reference_video'],'actors':[{'actor_id':'preserve-left','color':'#3B82F6','pose':'neutral','placement':{'position':[-1.7,0,0]},'trajectory':{'end_position':[-1.7,0,0]}},{'actor_id':'target-center','color':'#F59E0B','pose':'neutral','placement':{'position':[0,0,0]},'trajectory':{'end_position':[0,0,0]},'motion_track':frames},{'actor_id':'preserve-right','color':'#22C55E','pose':'neutral','placement':{'position':[1.7,0,0]},'trajectory':{'end_position':[1.7,0,0]}}],'camera':{'camera_id':'camera-main','preset':'push_in','position':[0,-9.5,4.8],'end_position':[0,-9.5,4.8],'look_at':[0,0,1.25],'fov':50},'motion_track_source':{'schema':src['schema'],'target_subject_id':src['target_selection']['target_subject_id'],'source_fps':source_fps,'output_fps':fps,'source_duration_seconds':source_duration,'tracked_samples':sum(f.get('selection_status')=='tracked' for f in frames),'interpolated_samples':sum(f.get('selection_status')=='interpolated' for f in frames),'outlier_corrected_samples':sum(f.get('selection_status')=='outlier_corrected' for f in frames),'occluded_samples':sum(f.get('selection_status')!='tracked' for f in src['frames']),'mapping':'2d_landmarks_to_blender_xz_rest_pose_v4_interpolated'
+    source_duration=max((float(f.get('timestamp_seconds', f.get('source_timestamp_seconds', 0.0))) for f in src['frames']),default=0.0)
+    target_selection = src.get('target_selection') or {}
+    target_subject_id = target_selection.get('target_subject_id', 'center')
+    state={'state_id':'motion-track-blender-adapter-v1','schema_version':'director_reference_state.v1','revision':3,'retarget_mode':'planar_euler_legacy_with_source_vectors','title':'Center subject motion-track white model','duration_seconds':max(1.0, source_duration + 1.0/source_fps),'fps':round(fps,6),'reference_frame':max(1,frames[len(frames)//2]['frame'] if frames else 1),'outputs':['director_reference_image','camera_motion_reference_video'],'actors':[{'actor_id':'preserve-left','color':'#3B82F6','pose':'neutral','placement':{'position':[-1.7,0,0]},'trajectory':{'end_position':[-1.7,0,0]}},{'actor_id':'target-center','color':'#F59E0B','pose':'neutral','placement':{'position':[0,0,0]},'trajectory':{'end_position':[0,0,0]},'motion_track':frames},{'actor_id':'preserve-right','color':'#22C55E','pose':'neutral','placement':{'position':[1.7,0,0]},'trajectory':{'end_position':[1.7,0,0]}}],'camera':{'camera_id':'camera-main','preset':'push_in','position':[0,-9.5,4.8],'end_position':[0,-9.5,4.8],'look_at':[0,0,1.25],'fov':50},'motion_track_source':{'schema':src['schema'],'target_subject_id':target_subject_id,'source_fps':source_fps,'output_fps':fps,'source_duration_seconds':source_duration,'tracked_samples':sum(f.get('selection_status')=='tracked' for f in frames),'interpolated_samples':sum(f.get('selection_status')=='interpolated' for f in frames),'outlier_corrected_samples':sum(f.get('selection_status')=='outlier_corrected' for f in frames),'occluded_samples':sum(f.get('selection_status')!='tracked' for f in src['frames']),'mapping':'2d_landmarks_to_blender_xz_rest_pose_v4_interpolated'
             ,'coordinate_system':{'image_x':'blender_x','image_y':'blender_z','depth_z':'blender_y','joint_rotation_axis':'blender_y'}}}
     Path(args.out).write_text(json.dumps(state,ensure_ascii=False,indent=2)); print(json.dumps({'out':args.out,'samples':len(frames),'occluded':state['motion_track_source']['occluded_samples']}))
 if __name__=='__main__':main()

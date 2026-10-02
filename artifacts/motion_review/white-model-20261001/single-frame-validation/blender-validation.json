@@ -1,0 +1,1225 @@
+{
+  "schema": "single-frame-blender-validation.v1",
+  "source_blend": "white-model-neutral-female-v1.blend",
+  "source_manifest": "single-frame-manifest.json",
+  "evidence_boundary": {
+    "observed": [
+      "single-frame rig pose and bone direction measurements"
+    ],
+    "not_proven": [
+      "temporal continuity",
+      "dynamic root yaw",
+      "true 3d depth",
+      "lumbar landmark accuracy"
+    ]
+  },
+  "cases": [
+    {
+      "source_frame": 1,
+      "adapter_frame": 1,
+      "matched_source_frame": 1,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            -0.7254536658681202,
+            0.0,
+            -0.6882710067106604
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 136.49601667553057
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            0.5685521653962122,
+            0.0,
+            -0.8226472118856771
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 124.64237363513517
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            -0.6752675261346671,
+            0.0,
+            -0.7375728900576314
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 132.45305012088158
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            0.20114735769548855,
+            0.0,
+            -0.979560993757981
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 101.59915269639887
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            -0.10412699167607035,
+            0.0,
+            -0.9945640098075597
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 6.567517596893809
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            0.041619523767384904,
+            0.0,
+            -0.9991335322374963
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 3.622392960750378
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            -0.04855365368870335,
+            0.0,
+            -0.9988205758360594
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 6.110001644208736
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.11945555460852306,
+            0.0,
+            -0.9928395492088187
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 8.748575010684123
+        },
+        "pelvis": {
+          "expected_vector": [
+            0.9966970152708652,
+            0.0,
+            -0.08120997321849618
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 94.51961381035647
+        },
+        "spine_lower": {
+          "expected_vector": [
+            0.07416904807234846,
+            0.0,
+            0.997245683023016
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 7.898340256196242
+        }
+      }
+    },
+    {
+      "source_frame": 60,
+      "adapter_frame": 48,
+      "matched_source_frame": 60,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.9455674296022949,
+            0.0,
+            -0.32542623753365263
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 19.020563951584354
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            -0.9884654552865306,
+            0.0,
+            -0.1514465044337164
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 8.776082743792704
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.9443360747530115,
+            0.0,
+            -0.32898233679040373
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 19.27550076235508
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            -0.986966604879738,
+            0.0,
+            0.16092520266311042
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 9.406046458868612
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.9865286903811574,
+            0.0,
+            -0.1635883341037445
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 80.59552186647679
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.9814947153756355,
+            0.0,
+            -0.19148922604078808
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 78.97295578762689
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            -0.3910290561762406,
+            0.0,
+            -0.9203783337442916
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 23.61890001783623
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.8846632694726994,
+            0.0,
+            -0.46623052200158865
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 62.34610334765979
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9994255687938395,
+            0.0,
+            0.033890005032607515
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 88.1155191615258
+        },
+        "spine_lower": {
+          "expected_vector": [
+            -0.09993972541992875,
+            0.0,
+            0.9949934930857535
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 8.78196695176267
+        }
+      }
+    },
+    {
+      "source_frame": 120,
+      "adapter_frame": 96,
+      "matched_source_frame": 120,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            -0.8323632749748735,
+            0.0,
+            -0.5542304380608333
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 146.3271860611718
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            0.6928528414993735,
+            0.0,
+            -0.7210790109455718
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 133.84670923988767
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.9903244621663542,
+            0.0,
+            0.1387712493095073
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 8.145529924900881
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            0.9950676839112285,
+            0.0,
+            0.09919830863247371
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 174.0720974886806
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.44809153799885365,
+            0.0,
+            -0.8939876808848216
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 26.750459790017032
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.6569146458914559,
+            0.0,
+            -0.7539649514488741
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 41.13939733333487
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            -0.33713248250341626,
+            0.0,
+            -0.9414572158314384
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 20.41108118357223
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.6895956282385659,
+            0.0,
+            -0.7241946351045814
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 43.8685974916994
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9892072752602763,
+            0.0,
+            0.14652292166122022
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 81.82626048321055
+        },
+        "spine_lower": {
+          "expected_vector": [
+            0.5038100188129868,
+            0.0,
+            0.8638144852592238
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 30.909129749206016
+        }
+      }
+    },
+    {
+      "source_frame": 150,
+      "adapter_frame": 120,
+      "matched_source_frame": 150,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.13382686094950827,
+            0.0,
+            -0.9910047281867029
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 82.31056870668864
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            0.0641759877540627,
+            0.0,
+            -0.9979385966059187
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 93.67889948579794
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            -0.7895298226100502,
+            0.0,
+            -0.6137121957476017
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 142.1108556450096
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            -0.8889632818091955,
+            0.0,
+            -0.45797847503460765
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 27.303092103310057
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.9548411900893311,
+            0.0,
+            -0.29711664663695575
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 72.7356816790846
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            0.08090837848484472,
+            0.0,
+            -0.9967215430053437
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 5.381173929104655
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            0.7453150236805394,
+            0.0,
+            -0.6667124683670443
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 48.41672483736251
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            0.03407000581932928,
+            0.0,
+            -0.999419448831906
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 5.780215351644779
+        },
+        "pelvis": {
+          "expected_vector": [
+            0.29886791723527395,
+            0.0,
+            0.9542944870675139
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 22.183586990176824
+        },
+        "spine_lower": {
+          "expected_vector": [
+            -0.19073740578949833,
+            0.0,
+            0.9816410963446326
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 12.834903875052563
+        }
+      }
+    },
+    {
+      "source_frame": 180,
+      "adapter_frame": 144,
+      "matched_source_frame": 180,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.8967838974989563,
+            0.0,
+            -0.442468802500901
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 26.2818541714408
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            0.9112427850971664,
+            0.0,
+            -0.4118696233134455
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 155.65544861822502
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.5855557297494053,
+            0.0,
+            -0.8106321529261231
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 54.17500119450638
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            0.08714085822017971,
+            0.0,
+            -0.9961960002071132
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 94.99705086352954
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            -0.6069811069588787,
+            0.0,
+            -0.7947162611869559
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 37.456402238513085
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.6407200615665422,
+            0.0,
+            -0.7677745780541096
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 39.92322067991157
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            -0.4764114086209664,
+            0.0,
+            -0.8792224802265844
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 28.924211889603196
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.4161079985250215,
+            0.0,
+            -0.9093152003367704
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 25.14742805219338
+        },
+        "pelvis": {
+          "expected_vector": [
+            0.37549078569787814,
+            0.0,
+            0.9268261270896447
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 25.930461429211153
+        },
+        "spine_lower": {
+          "expected_vector": [
+            -0.17475670071301902,
+            0.0,
+            0.9846116470750792
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 12.050299554525688
+        }
+      }
+    },
+    {
+      "source_frame": 240,
+      "adapter_frame": 192,
+      "matched_source_frame": 240,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.7579188780070958,
+            0.0,
+            -0.6523488134123223
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 40.730593436036685
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            -0.9999980162499804,
+            0.0,
+            -0.0019918574506388163
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 1.0788339289322146
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.8414058292845517,
+            0.0,
+            -0.5404037661286013
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 32.74832210777203
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            -0.049044519843666874,
+            0.0,
+            -0.9987965934429813
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 87.19000120823239
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.40938127271306474,
+            0.0,
+            -0.9123633999409617
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 24.310169803354878
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.18954280461419493,
+            0.0,
+            -0.9818724587333048
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 11.257253973958324
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            0.22906997618491537,
+            0.0,
+            -0.9734099578341298
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 14.298247145292054
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            0.06947647267230288,
+            0.0,
+            -0.9975835903547204
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 6.740463109320409
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9820255922839265,
+            0.0,
+            0.18874781084665224
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 79.44686163299906
+        },
+        "spine_lower": {
+          "expected_vector": [
+            0.3088402423241196,
+            0.0,
+            0.9511139283604141
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 19.1447333756006
+        }
+      }
+    },
+    {
+      "source_frame": 360,
+      "adapter_frame": 288,
+      "matched_source_frame": 360,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.5659594952886245,
+            0.0,
+            -0.8244330474287438
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 55.53794495281492
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            -0.1978433859070492,
+            0.0,
+            -0.9802336428897115
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 78.59115504321235
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.8795840197780017,
+            0.0,
+            -0.47574357815021734
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 28.45193504434808
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            0.14728920839558965,
+            0.0,
+            -0.9890934683285502
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 98.46630201846494
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.7901365395275822,
+            0.0,
+            -0.6129308679642245
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 52.2485873202393
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.24925118557913645,
+            0.0,
+            -0.9684388708056874
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 14.683182092761987
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            0.12704609696559035,
+            0.0,
+            -0.9918968138096874
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 9.095285658237726
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.0894259168564718,
+            0.0,
+            -0.995993476582241
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 7.47354347095647
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9897787309884836,
+            0.0,
+            -0.14261158327017903
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 97.95411296279485
+        },
+        "spine_lower": {
+          "expected_vector": [
+            -0.14650029288837138,
+            0.0,
+            0.9892106268048385
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 10.724695586635967
+        }
+      }
+    },
+    {
+      "source_frame": 480,
+      "adapter_frame": 384,
+      "matched_source_frame": 480,
+      "bone_direction_errors": {
+        "upper_arm_l": {
+          "expected_vector": [
+            0.9866782286667068,
+            0.0,
+            -0.16268396686560635
+          ],
+          "actual_vector": [
+            0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 9.42343697426911
+        },
+        "upper_arm_r": {
+          "expected_vector": [
+            -0.9824285910097789,
+            0.0,
+            -0.18663885867241212
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 10.80944372008384
+        },
+        "lower_arm_l": {
+          "expected_vector": [
+            0.9899277267420294,
+            0.0,
+            -0.14157364100480704
+          ],
+          "actual_vector": [
+            0.9995828866958618,
+            -0.028880394995212555,
+            0.0
+          ],
+          "direction_error_degrees": 8.30434975235025
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            0.4374796363257804,
+            0.0,
+            -0.8992283179483745
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 115.9315601790511
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.8200973029105577,
+            0.0,
+            -0.572224094004114
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 55.139792735527365
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.7214862168142275,
+            0.0,
+            -0.6924287970232704
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 46.23956105828592
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            -0.06244859750619589,
+            0.0,
+            -0.9980481815370985
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 6.510810378196601
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.8998435654403631,
+            0.0,
+            -0.4362127436648027
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 64.26261344763034
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9860102987922303,
+            0.0,
+            0.16668440441642002
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 80.69217587342163
+        },
+        "spine_lower": {
+          "expected_vector": [
+            0.4060230001732012,
+            0.0,
+            0.9138628580538508
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 24.811459584656916
+        }
+      }
+    },
+    {
+      "source_frame": 556,
+      "adapter_frame": 445,
+      "matched_source_frame": 556,
+      "bone_direction_errors": {
+        "upper_arm_r": {
+          "expected_vector": [
+            -0.6404359519193712,
+            0.0,
+            -0.7680115829133887
+          ],
+          "actual_vector": [
+            -0.9998247623443604,
+            0.01872336119413376,
+            0.0
+          ],
+          "direction_error_degrees": 50.18403970019789
+        },
+        "lower_arm_r": {
+          "expected_vector": [
+            -0.06921990099408994,
+            0.0,
+            -0.9976014260747467
+          ],
+          "actual_vector": [
+            -0.9995828866958618,
+            -0.028880372643470764,
+            0.0
+          ],
+          "direction_error_degrees": 86.032475389212
+        },
+        "upper_leg_l": {
+          "expected_vector": [
+            0.2054001779542683,
+            0.0,
+            -0.9786780711226521
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 12.158196906618027
+        },
+        "upper_leg_r": {
+          "expected_vector": [
+            -0.2893655566383922,
+            0.0,
+            -0.9572186660483348
+          ],
+          "actual_vector": [
+            0.0,
+            -0.04757630079984665,
+            -0.9988675713539124
+          ],
+          "direction_error_degrees": 17.033286261623292
+        },
+        "lower_leg_l": {
+          "expected_vector": [
+            0.27049535007366865,
+            0.0,
+            -0.9627212813626399
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 16.58792036169803
+        },
+        "lower_leg_r": {
+          "expected_vector": [
+            -0.3934416883694981,
+            0.0,
+            -0.9193495732597905
+          ],
+          "actual_vector": [
+            0.0,
+            0.09482978284358978,
+            -0.9954935312271118
+          ],
+          "direction_error_degrees": 23.764922632101932
+        },
+        "pelvis": {
+          "expected_vector": [
+            -0.9959166134089125,
+            0.0,
+            0.09027789948887248
+          ],
+          "actual_vector": [
+            0.0,
+            -0.2417919933795929,
+            0.9703280925750732
+          ],
+          "direction_error_degrees": 84.97449274715535
+        },
+        "spine_lower": {
+          "expected_vector": [
+            0.010183237389497807,
+            0.0,
+            0.9999481494938971
+          ],
+          "actual_vector": [
+            -2.7355895326763857e-13,
+            -0.11600019037723541,
+            0.993249237537384
+          ],
+          "direction_error_degrees": 6.686712935646994
+        }
+      }
+    }
+  ]
+}
