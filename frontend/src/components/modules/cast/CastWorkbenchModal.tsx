@@ -20,8 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library, Pencil } from "lucide-react";
-import dynamic from "next/dynamic";
+import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
@@ -39,8 +38,7 @@ import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
 } from "@/components/modules/playground/ReferencePromptEditor";
-
-const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
+import { CHARACTER_IDENTITY_FACETS_FALLBACK, type CharacterIdentityFacet } from "./characterIdentityFacets";
 
 export type CastKind = "character" | "scene" | "prop";
 
@@ -183,15 +181,6 @@ interface ImageVariant {
 type ReferenceLibraryAsset = AssetReferenceIndexEntry;
 
 type CharacterTemplate = "simple" | "detailed" | "face_focus" | "design_sheet";
-
-interface CharacterIdentityFacet {
-    id: string;
-    section?: "identity" | "look" | "continuity";
-    label_zh: string;
-    label_en: string;
-    prompt_zh: string;
-    prompt_en: string;
-}
 
 const CHARACTER_TEMPLATES: Record<CharacterTemplate, {
     labelKey: string;
@@ -357,7 +346,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
     const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
-    const [editingVariant, setEditingVariant] = useState<ImageVariant | null>(null);
     // A selected/uploaded image is only an available candidate. It becomes a
     // provider input after the user inserts its explicit @ token below.
     const [availableReferences, setAvailableReferences] = useState<AssetLibraryReference[]>([]);
@@ -491,9 +479,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 const facets = Array.isArray(skill?.workbench_facets)
                     ? skill.workbench_facets
                     : Array.isArray(catalogSkill?.workbench_facets) ? catalogSkill.workbench_facets : [];
-                setCharacterIdentityFacets(facets);
+                setCharacterIdentityFacets(facets.length ? facets : CHARACTER_IDENTITY_FACETS_FALLBACK);
             })
-            .catch(() => { if (active) setCharacterIdentityFacets([]); });
+            .catch(() => { if (active) setCharacterIdentityFacets(CHARACTER_IDENTITY_FACETS_FALLBACK); });
         return () => { active = false; };
     }, [isOpen, kind]);
 
@@ -790,48 +778,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             toast.success(t("uploadSuccess"));
         } catch (err: any) {
             toast.error(t("uploadFailed"), { body: String(err?.message || t("toastGenErrUnknown")) });
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleSaveEditedVariant = async (file: File) => {
-        if (!currentProject || !editingVariant || kind !== "character") return;
-        setUploading(true);
-        try {
-            const updated = await api.uploadAsset(
-                currentProject.id,
-                "character",
-                entity!.id,
-                file,
-                "reference_sheet",
-            );
-            updateProject(currentProject.id, updated);
-            const updatedEntity = updated.characters?.find((item: any) => item.id === entity.id);
-            const editedVariantId = readSelectedId(updatedEntity, "character");
-            const editedVariant = readLibraryVariants(updatedEntity, "character").find((item) => item.id === editedVariantId);
-            if (editedVariant) {
-                const indexedAsset: ReferenceLibraryAsset = {
-                    asset_type: "character",
-                    asset_id: entity.id,
-                    name: entity.name,
-                    source_scope: "episode",
-                    source_container_id: currentProject.id,
-                    selected_variant_id: editedVariant.id,
-                    variants: [editedVariant],
-                };
-                retainUploadedVariantInIndex(indexedAsset, editedVariant);
-                addAvailableReference(
-                    indexedAsset,
-                    editedVariant,
-                );
-            }
-            setEditingVariant(null);
-            toast.success(t("uploadSuccess"));
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
-            toast.error(t("uploadFailed"), { body: String(detail) });
-            throw err;
         } finally {
             setUploading(false);
         }
@@ -1708,18 +1654,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 >
                                                     {deletingVariantId === v.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                 </button>
-                                                {kind === "character" && (
-                                                    <button
-                                                        type="button"
-                                                        disabled={uploading}
-                                                        onClick={(e) => { e.stopPropagation(); setEditingVariant(v); }}
-                                                        aria-label={t("editVariant")}
-                                                        title={t("editVariant")}
-                                                        className="absolute bottom-[68px] right-12 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/80 transition-colors hover:bg-primary/80 hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                                                    >
-                                                        <Pencil size={14} />
-                                                    </button>
-                                                )}
                                                 {/* Selected badge */}
                                                 {isSelected && (
                                                     <div className={`absolute top-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground shadow-md ${accent.selectBadge}`}>
@@ -1787,14 +1721,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     </footer>
                 </motion.div>
             </motion.div>
-            {editingVariant && kind === "character" && (
-                <ImageEditor
-                    source={api.assetVariantContentUrl(currentProject.id, "character", entity!.id, editingVariant.id)}
-                    title={`${entity?.name ?? "Character"} · ${t("editVariant")}`}
-                    onClose={() => setEditingVariant(null)}
-                    onSave={handleSaveEditedVariant}
-                />
-            )}
         </AnimatePresence>
     ), document.body);
 }
