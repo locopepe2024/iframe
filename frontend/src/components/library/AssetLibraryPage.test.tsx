@@ -26,6 +26,7 @@ vi.mock('./AssetInspector', () => ({ default: ({ asset, onAssetUpdated }: any) =
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('confirm', vi.fn(() => true));
   mocked.getProject.mockResolvedValue({ characters: [], scenes: [], props: [] });
   mocked.getAssetLibraryIndex.mockResolvedValue({
     schema_version: 1,
@@ -36,19 +37,21 @@ beforeEach(() => {
 it('deletes a library character without selecting its card', async () => {
   mocked.deleteLibraryAsset.mockResolvedValue({ status: 'deleted' });
   mocked.getAssetLibraryIndex
-    .mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', variants: [] }] });
+    .mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', variants: [] }] })
+    .mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [] });
   render(<AssetLibraryPage />);
-  const button = await screen.findByRole('button', { name: 'deleteNamed Test character' });
-  fireEvent.click(button);
+  fireEvent.click(await screen.findByRole('button', { name: 'moreActions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'delete' }));
   await waitFor(() => expect(mocked.deleteLibraryAsset).toHaveBeenCalledWith('character', 'character-1'));
   await waitFor(() => expect(screen.queryByText('Test character')).not.toBeInTheDocument());
   expect(screen.queryByText('inspector')).not.toBeInTheDocument();
-  expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(1);
+  expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(2);
 });
 it('retains referenced assets and explains the deletion conflict', async () => {
   mocked.deleteLibraryAsset.mockRejectedValue({ response: { status: 409 } });
   render(<AssetLibraryPage />);
-  fireEvent.click(await screen.findByRole('button', { name: 'deleteNamed Test character' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'moreActions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'delete' }));
   await waitFor(() => expect(mocked.error).toHaveBeenCalledWith('deleteInUse'));
   expect(screen.getByText('Test character')).toBeInTheDocument();
 });

@@ -382,6 +382,10 @@ export const api = {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;
     },
+    updateProjectTitle: async (scriptId: string, title: string) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/title`, { title });
+        return { ...res.data, originalText: res.data.original_text };
+    },
     copyProject: async (scriptId: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/copy`);
         return { ...res.data, originalText: res.data.original_text };
@@ -789,6 +793,16 @@ export const api = {
             asset_id: assetId,
             asset_type: assetType
         });
+        return res.data;
+    },
+    updateSeriesAssetAttributes: async (seriesId: string, assetId: string, assetType: string, attributes: any) => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/update_attributes`, {
+            asset_id: assetId, asset_type: assetType, attributes,
+        });
+        return res.data;
+    },
+    deleteSeriesAsset: async (seriesId: string, assetId: string, assetType: string) => {
+        const res = await axios.delete(`${API_URL}/series/${seriesId}/assets/${assetType}/${assetId}`);
         return res.data;
     },
 

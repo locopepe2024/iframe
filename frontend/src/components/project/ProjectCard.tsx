@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star, Copy } from "lucide-react";
+import { Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star, Copy, Pencil } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Project } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -14,6 +14,7 @@ interface ProjectCardProps {
     project: Project;
     onDelete: (id: string) => void;
     onCopy?: (id: string) => void;
+    onRename?: (id: string, title: string) => void;
 }
 
 export type DerivedStatus = "completed" | "processing" | "pending";
@@ -53,7 +54,7 @@ export function deriveStatus(project: Project): DerivedStatus {
     return "pending";
 }
 
-export default function ProjectCard({ project, onDelete, onCopy }: ProjectCardProps) {
+export default function ProjectCard({ project, onDelete, onCopy, onRename }: ProjectCardProps) {
     const t = useTranslations("project");
     const tCommon = useTranslations("common");
     const locale = useSettingsStore((s) => s.locale);
@@ -284,6 +285,20 @@ export default function ProjectCard({ project, onDelete, onCopy }: ProjectCardPr
                                 <ExternalLink size={14} aria-hidden="true" />
                                 {tCommon("open")}
                             </button>
+                            {onRename && <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(false);
+                                    const next = window.prompt(t("renamePrompt"), project.title);
+                                    if (next?.trim() && next.trim() !== project.title) onRename(project.id, next.trim());
+                                }}
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-primary/12 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/12"
+                            >
+                                <Pencil size={14} aria-hidden="true" />
+                                {tCommon("rename")}
+                            </button>}
                             <button
                                 type="button"
                                 role="menuitem"

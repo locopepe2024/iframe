@@ -49,6 +49,29 @@ export function analyzeStoryboardPreview(baseUrl: string, projectId: string, tex
     return runStoryboardJob(base, base, { text });
 }
 
+export async function applyStoryboardDraft(
+    baseUrl: string,
+    projectId: string,
+    text: string,
+    draft: StoryboardDraftFrame[],
+) {
+    const response = await axios.post(
+        `${baseUrl}/projects/${projectId}/storyboard-analysis/apply`,
+        { text, draft },
+    );
+    return response.data;
+}
+
+/** Compatibility flow for callers that still expect generation + apply in one call. */
+export async function analyzeAndApplyStoryboard(
+    baseUrl: string,
+    projectId: string,
+    text: string,
+) {
+    const draft = await analyzeStoryboardPreview(baseUrl, projectId, text);
+    return applyStoryboardDraft(baseUrl, projectId, text, draft);
+}
+
 export function refineStoryboardPreview(
     baseUrl: string,
     projectId: string,

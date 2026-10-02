@@ -45,6 +45,10 @@ function formatTime(dateStr: string): string {
   return `${hh}:${mm}`;
 }
 
+function displayModelId(value: string | undefined, fallback: string): string {
+  return (value || fallback).replace(/^uniart\//, '');
+}
+
 function getElapsedProgress(createdAt: string): number {
   const elapsed = Date.now() - new Date(createdAt).getTime();
   // Estimate ~60s for generation, cap at 90%
@@ -123,7 +127,7 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
         <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
-            {model_id || mode}
+            {displayModelId(model_id, mode)}
           </span>
           <CardTimeActions generation={generation} onDelete={onDelete} />
         </div>
@@ -345,7 +349,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
         <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
-            {model_id || mode}
+            {displayModelId(model_id, mode)}
           </span>
           {/* Size or resolution tag */}
           {generation.parameters.size && (
@@ -362,7 +366,9 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           <span className="font-mono text-[0.5625rem] bg-primary/10 text-primary/70 rounded px-[6px] py-[2px] uppercase">
             {MODE_LABELS[mode] || mode}
           </span>
-          <CardTimeActions generation={generation} onDelete={onDelete} />
+          <div className="basis-full md:ml-auto md:basis-auto">
+            <CardTimeActions generation={generation} onDelete={onDelete} />
+          </div>
           {saved && (
             <span className="flex items-center gap-0.5 text-[0.5625rem] text-primary">
               <Bookmark className="w-2.5 h-2.5 fill-current" />
@@ -429,7 +435,7 @@ function ResultCardBody({ generation, outputIndex = 0, onGenerateVideo, onRetry,
           <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
           <div className="flex items-center gap-2">
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
-              {model_id || mode}
+              {displayModelId(model_id, mode)}
             </span>
             <CardTimeActions generation={generation} onDelete={onDelete} />
           </div>

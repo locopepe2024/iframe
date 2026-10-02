@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2, MoreVertical, Pencil } from "lucide-react";
+import { api, crudApi } from "@/lib/api";
 import type { Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { toast } from "@/store/toastStore";
@@ -116,6 +116,7 @@ function SemanticAssetLibrary() {
   const [viewAxis, setViewAxis] = useState<ViewAxis>("type");
   const [starredOnly, setStarredOnly] = useState(false);
   const [selected, setSelected] = useState<{ sourceId: string; assetId: string; type: AssetTab } | null>(null);
+  const [openAssetMenu, setOpenAssetMenu] = useState<string | null>(null);
   const [newAssetOpen, setNewAssetOpen] = useState(false);
   const taskStateHydrationStarted = useRef(new Set<string>());
   const assetSnapshotVersions = useRef(new Map<string, number>());
@@ -198,21 +199,33 @@ function SemanticAssetLibrary() {
     }));
   };
 
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const deleteAsset = async (assetId: string, type: AssetTab) => {
-    if (deleting) return;
-    setDeleting(assetId);
+  const renameAsset = async (src: AssetSource, asset: Character | Scene | Prop, type: AssetTab) => {
+    const next = window.prompt(t("renamePrompt"), asset.name);
+    if (!next?.trim() || next.trim() === asset.name) return;
     try {
-      await api.deleteLibraryAsset(SINGULAR[type], assetId);
-      setSelected((current) => current?.sourceId === "global" && current.assetId === assetId ? null : current);
-      setSources((current) => current.map((source) => source.kind !== "global" ? source : {
-        ...source,
-        [type]: (source[type] as (Character | Scene | Prop)[]).filter((asset) => asset.id !== assetId),
-      }));
+      if (src.kind === "global") await api.updateLibraryAsset(SINGULAR[type], asset.id, { name: next.trim() });
+      else if (src.kind === "series") await api.updateSeriesAssetAttributes(src.rawId, asset.id, SINGULAR[type], { name: next.trim() });
+      else await api.updateAssetAttributes(src.rawId, asset.id, SINGULAR[type], { name: next.trim() });
+      await loadAssets();
+    } catch (error) {
+      toast.error(t("renameFailed"), { body: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const removeAsset = async (src: AssetSource, asset: Character | Scene | Prop, type: AssetTab) => {
+    if (!window.confirm(t("confirmDelete", { name: asset.name }))) return;
+    try {
+      if (src.kind === "global") await api.deleteLibraryAsset(SINGULAR[type], asset.id);
+      else if (src.kind === "series") await api.deleteSeriesAsset(src.rawId, asset.id, SINGULAR[type]);
+      else if (type === "characters") await crudApi.deleteCharacter(src.rawId, asset.id);
+      else if (type === "scenes") await crudApi.deleteScene(src.rawId, asset.id);
+      else await crudApi.deleteProp(src.rawId, asset.id);
+      setSelected((current) => current?.sourceId === src.id && current.assetId === asset.id ? null : current);
+      await loadAssets();
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
       toast.error(status === 409 ? t("deleteInUse") : t("deleteFailed"));
-    } finally { setDeleting(null); }
+    }
   };
 
   // 全局计数（facet 总览；不受搜索/星标过滤影响，与分组标题里的计数互补）。
@@ -317,6 +330,17 @@ function SemanticAssetLibrary() {
     );
     if (!stillVisible) setSelected(null);
   }, [groups, selected]);
+
+  useEffect(() => {
+    if (!openAssetMenu) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest("[data-asset-menu]")) setOpenAssetMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenAssetMenu(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
+  }, [openAssetMenu]);
 
   const toggleStar = async (sourceId: string, assetId: string, type: AssetTab) => {
     const src = sources.find((s) => s.id === sourceId);
@@ -613,6 +637,8 @@ function SemanticAssetLibrary() {
                       const isSel = selected?.sourceId === src.id && selected?.assetId === asset.id && selected?.type === type;
                       const isStar = !!asset.starred;
                       const isChar = type === "characters";
+                      const menuKey = `${src.id}:${type}:${asset.id}`;
+                      const menuIsOpen = openAssetMenu === menuKey;
                       return (
                         <div
                           key={`${type}-${asset.id}`}
@@ -703,15 +729,20 @@ function SemanticAssetLibrary() {
                             )}
                           </div>
                           <div className="p-3">
-                            <div className="text-sm font-medium text-foreground truncate">{asset.name}</div>
+                            <div className="flex items-center gap-1">
+                              <div className="min-w-0 flex-1 text-sm font-medium text-foreground truncate">{asset.name}</div>
+                              <div className="relative shrink-0" data-asset-menu>
+                                <button type="button" aria-label={t("moreActions")} aria-haspopup="menu" aria-expanded={menuIsOpen} className="h-7 w-7 rounded-md grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg" onClick={(event) => { event.stopPropagation(); setOpenAssetMenu(menuIsOpen ? null : menuKey); }}><MoreVertical size={14} /></button>
+                                {menuIsOpen && <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-28 overflow-hidden rounded-md border border-glass-border bg-surface shadow-xl">
+                                  <button type="button" role="menuitem" className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-hover-bg" onClick={(event) => { event.stopPropagation(); setOpenAssetMenu(null); void renameAsset(src, asset, type); }}><Pencil size={12} />{tc("rename")}</button>
+                                  <button type="button" role="menuitem" className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground hover:bg-red-500/10 hover:text-red-400" onClick={(event) => { event.stopPropagation(); setOpenAssetMenu(null); void removeAsset(src, asset, type); }}><Trash2 size={12} />{tc("delete")}</button>
+                                </div>
+                                }
+                              </div>
+                            </div>
                             {viewAxis === "type" || src.kind === "global" ? (
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-[0.6875rem] text-text-muted truncate">{src.name}</span>
-                                {src.kind === "global" && <button type="button" aria-label={t("deleteNamed", { name: asset.name })}
-                                  disabled={deleting !== null} onClick={(event) => { event.stopPropagation(); void deleteAsset(asset.id, type); }}
-                                  className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:text-status-failed-fg hover:bg-hover-bg disabled:opacity-40">
-                                  <Trash2 size={14} />
-                                </button>}
                               </div>
                             ) : (
                               asset.description && <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{asset.description}</div>

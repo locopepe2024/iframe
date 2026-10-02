@@ -12,6 +12,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi } from "@/lib/api";
 import { getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
 import { selectedVariantUrl } from "@/lib/characterImage";
+import { resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
@@ -22,6 +23,7 @@ export default function StoryboardComposer() {
     const t = useTranslations("storyboard");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
     const selectedFrameId = useProjectStore((state) => state.selectedFrameId);
     const setSelectedFrameId = useProjectStore((state) => state.setSelectedFrameId);
     const updateProject = useProjectStore((state) => state.updateProject);
@@ -290,9 +292,12 @@ export default function StoryboardComposer() {
             }
 
             // Construct enhanced prompt using Art Direction style config.
-            const artDirection = currentProject?.art_direction;
-            const globalStylePrompt = artDirection?.style_config?.positive_prompt || "";
-            const globalNegativePrompt = artDirection?.style_config?.negative_prompt || "";
+            const { positivePrompt: globalStylePrompt, negativePrompt: globalNegativePrompt } =
+                await resolveStoryboardStyleForRender(currentProject, currentSeries, async (seriesId) => {
+                    const series = await api.getSeries(seriesId);
+                    useProjectStore.getState().setCurrentSeries(series);
+                    return series;
+                });
             const frameStylePrompt = resolveStylePrompt(
                 globalStylePrompt,
                 frame.style_prompt_override,

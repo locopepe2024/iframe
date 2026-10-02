@@ -42,7 +42,28 @@ export default function ImportLibraryAssetDialog({ isOpen, seriesId, onClose, on
     setError(null);
     setLoading(true);
     api.listLibraryAssets()
-      .then((data) => setAssets({ character: data.characters || [], scene: data.scenes || [], prop: data.props || [] }))
+      .then(async (data) => {
+        const direct = { character: data.characters || [], scene: data.scenes || [], prop: data.props || [] };
+        // Older deployments expose only the unified asset index. Use it as a
+        // read-only import source so the dialog does not appear empty while
+        // the dedicated global-pool endpoint is being upgraded.
+        if (Object.values(direct).some((items) => items.length > 0)) {
+          setAssets(direct);
+          return;
+        }
+        const indexResponse = await api.getAssetLibraryIndex();
+        const index = Array.isArray(indexResponse) ? indexResponse : indexResponse.assets || [];
+        const fromIndex = { character: [], scene: [], prop: [] } as Record<AssetType, LibraryAsset[]>;
+        for (const entry of index) {
+          if (entry.source_scope !== "global") continue;
+          const type = entry.asset_type as AssetType;
+          if (!(type in fromIndex)) continue;
+          const variants = entry.variants || [];
+          const imageUrl = variants.find((variant: { id: string; url: string }) => variant.id === entry.selected_variant_id)?.url || variants[0]?.url || "";
+          fromIndex[type].push({ id: entry.asset_id, name: entry.name, description: entry.description || "", image_url: imageUrl } as LibraryAsset);
+        }
+        setAssets(fromIndex);
+      })
       .catch(() => setError(t("libraryLoadFailed")))
       .finally(() => setLoading(false));
   }, [isOpen, t]);

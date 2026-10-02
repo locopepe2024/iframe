@@ -6092,6 +6092,23 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_series_data_unlocked()
             return series
 
+    def delete_series_asset(self, series_id: str, asset_id: str, asset_type: str) -> Series:
+        """Delete a shared Series asset after the user explicitly requests it."""
+        with self._save_lock:
+            series = self.get_series(series_id)
+            if not series:
+                raise ValueError("Series not found")
+            collection = {"character": series.characters, "scene": series.scenes, "prop": series.props}.get(asset_type)
+            if collection is None:
+                raise ValueError(f"Invalid asset type: {asset_type}")
+            before = len(collection)
+            collection[:] = [asset for asset in collection if asset.id != asset_id]
+            if len(collection) == before:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found in series")
+            series.updated_at = time.time()
+            self._save_series_data_unlocked()
+            return series
+
     def generate_series_asset(self, series_id: str, asset_id: str, asset_type: str,
                               style_preset: str = None, reference_image_url: str = None,
                               style_prompt: str = None, generation_type: str = "all",

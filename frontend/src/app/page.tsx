@@ -340,7 +340,7 @@ const WS_VIEW_KEY = "lumenx_workspace_view";
 // deriveCover is imported from ProjectCard (single source of truth).
 
 // ── Project Row (Line B list-view item) ──
-function ProjectRow({ project, crumb, onDelete, onCopy }: { project: Project; crumb: string; onDelete: (id: string) => void; onCopy: (id: string) => void }) {
+function ProjectRow({ project, crumb, onDelete, onCopy, onRename }: { project: Project; crumb: string; onDelete: (id: string) => void; onCopy: (id: string) => void; onRename?: (id: string, title: string) => void }) {
   const t = useTranslations("project");
   const tc = useTranslations("common");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -432,10 +432,36 @@ function ProjectRow({ project, crumb, onDelete, onCopy }: { project: Project; cr
       </button>
       {menuOpen && <div ref={menuRef} role="menu" className="absolute right-3 top-full z-20 mt-1 w-36 overflow-hidden rounded-md border border-glass-border bg-surface/96 shadow-xl">
         <button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onCopy(project.id); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-hover-bg">{tc("copy")}</button>
+        {onRename && <button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); const next = window.prompt(t("renamePrompt"), project.title); if (next?.trim() && next.trim() !== project.title) onRename(project.id, next.trim()); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-hover-bg">{tc("rename")}</button>}
         <button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (confirm(t("confirmDelete", { title: project.title }))) onDelete(project.id); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-red-500/10 hover:text-red-400">{tc("delete")}</button>
       </div>}
     </div>
   );
+}
+
+function WorkspaceSeriesHeader({ series, episodeCount, onRename, onDelete }: { series: { id: string; title: string }; episodeCount: number; onRename: (id: string, title: string) => void; onDelete: (id: string) => void }) {
+  const t = useTranslations("workspace");
+  const tc = useTranslations("common");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return <div className="flex items-center gap-3 mt-4 mb-4 mx-0.5">
+    <button onClick={() => { window.location.hash = `#/series/${series.id}`; }} className="font-display atelier-display text-[1.5rem] font-semibold tracking-tight text-foreground hover:text-primary transition-colors">{series.title}</button>
+    <span className="font-mono text-[0.625rem] uppercase tracking-wider text-text-muted">{t("series")} · {t("frames", { count: episodeCount })}</span>
+    <div className="relative ml-1" ref={ref}>
+      <button type="button" onClick={(event) => { event.stopPropagation(); setOpen(value => !value); }} className="h-8 w-8 rounded-lg grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg" aria-label={t("moreActions")} aria-haspopup="menu" aria-expanded={open}><MoreVertical size={15} /></button>
+      {open && <div role="menu" className="absolute left-0 top-full z-30 mt-1 w-32 overflow-hidden rounded-md border border-glass-border bg-surface/96 shadow-xl">
+        <button type="button" role="menuitem" onClick={() => { setOpen(false); const next = window.prompt(t("renameSeriesPrompt"), series.title); if (next?.trim() && next.trim() !== series.title) onRename(series.id, next.trim()); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-hover-bg">{tc("rename")}</button>
+        <button type="button" role="menuitem" onClick={() => { setOpen(false); if (window.confirm(t("confirmDeleteSeries", { title: series.title }))) onDelete(series.id); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-red-500/10 hover:text-red-400">{tc("delete")}</button>
+      </div>}
+    </div>
+    <span className="atelier-group-line h-px flex-1 bg-glass-border" />
+  </div>;
 }
 
 // ── Episode Breadcrumb Wrapper ──
@@ -596,6 +622,21 @@ export default function Home() {
     setSeriesEpisodes((current) => Object.fromEntries(
       Object.entries(current).map(([seriesKey, episodes]) => [seriesKey, episodes.filter((episode) => episode.id !== id)])
     ));
+  };
+
+  const handleRenameProject = async (id: string, title: string) => {
+    try { await api.updateProjectTitle(id, title); await syncProjects(); await loadAllSeriesEpisodes(); }
+    catch (error) { toast.error(t("toastProjectRenameFailed"), { body: error instanceof Error ? error.message : String(error) }); }
+  };
+
+  const handleRenameSeries = async (id: string, title: string) => {
+    try { await api.updateSeries(id, { title }); await fetchSeriesList(); }
+    catch (error) { toast.error(t("toastSeriesRenameFailed"), { body: error instanceof Error ? error.message : String(error) }); }
+  };
+
+  const handleDeleteSeries = async (id: string) => {
+    try { await api.deleteSeries(id); setSeriesEpisodes(current => { const next = { ...current }; delete next[id]; return next; }); await fetchSeriesList(); }
+    catch (error) { toast.error(t("toastSeriesDeleteFailed"), { body: error instanceof Error ? error.message : String(error) }); }
   };
 
   // Close dropdown when clicking outside
@@ -1009,18 +1050,7 @@ export default function Home() {
                 if (eps.length === 0 && wsFiltering) return null;
                 return (
                   <section key={`grp-${s.id}`} aria-label={s.title}>
-                    <div className="flex items-baseline gap-3 mt-4 mb-4 mx-0.5">
-                      <button
-                        onClick={() => { window.location.hash = `#/series/${s.id}`; }}
-                        className="font-display atelier-display text-[1.5rem] font-semibold tracking-tight text-foreground hover:text-primary transition-colors"
-                      >
-                        {s.title}
-                      </button>
-                      <span className="font-mono text-[0.625rem] uppercase tracking-wider text-text-muted">
-                        {t("series")} · {t("frames", { count: eps.length })}
-                      </span>
-                      <span className="atelier-group-line h-px flex-1 bg-glass-border" />
-                    </div>
+                    <WorkspaceSeriesHeader series={s} episodeCount={eps.length} onRename={handleRenameSeries} onDelete={handleDeleteSeries} />
                     {viewMode === "list" ? (
                       <div className="flex flex-col gap-1.5">
                         {eps.map((ep, i) => (
@@ -1034,6 +1064,7 @@ export default function Home() {
                               crumb={`${s.title}${ep.episode_number ? ` · EP.${String(ep.episode_number).padStart(2, "0")}` : ""}`}
                               onDelete={handleDeleteProject}
                               onCopy={handleCopyProject}
+                              onRename={handleRenameProject}
                             />
                           </div>
                         ))}
@@ -1057,7 +1088,7 @@ export default function Home() {
                             className="atelier-reveal"
                             style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                           >
-                            <ProjectCard project={ep} onDelete={handleDeleteProject} onCopy={handleCopyProject} />
+                            <ProjectCard project={ep} onDelete={handleDeleteProject} onCopy={handleCopyProject} onRename={handleRenameProject} />
                           </div>
                         ))}
                         {!wsFiltering && <NewProjectTile episode onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }} />}

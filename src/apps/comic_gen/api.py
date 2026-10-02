@@ -562,6 +562,22 @@ class UpdateScriptTextRequest(BaseModel):
     text: str
 
 
+class UpdateProjectTitleRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+@app.put("/projects/{script_id}/title", response_model=Script)
+def update_project_title(script_id: str, request: UpdateProjectTitleRequest):
+    """Rename a project/episode without reparsing its script."""
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    script.title = request.title.strip()
+    script.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
 @app.put("/projects/{script_id}/text", response_model=Script)
 def update_script_text(script_id: str, request: UpdateScriptTextRequest):
     """Persist `original_text` without re-parsing entities.
@@ -1009,6 +1025,17 @@ def update_series_asset_attributes(series_id: str, request: UpdateAssetAttribute
         series = pipeline.update_series_asset_attributes(
             series_id, request.asset_id, request.asset_type, request.attributes
         )
+        return signed_response(series)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/series/{series_id}/assets/{asset_type}/{asset_id}")
+def delete_series_asset(series_id: str, asset_type: str, asset_id: str):
+    try:
+        series = pipeline.delete_series_asset(series_id, asset_id, asset_type)
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
