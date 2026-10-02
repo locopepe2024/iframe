@@ -458,7 +458,6 @@ export default function DirectorShootingPlanPanel() {
         || plan.source_revision_id !== serverState?.current_lineage?.source_revision_id
         || plan.director_profile_revision !== serverState?.current_lineage?.director_profile_revision
         || plan.director_profile_hash !== serverState?.current_lineage?.director_profile_hash
-        || plan.effective_style_hash !== serverState?.current_lineage?.effective_style_hash
     ));
     const draftStale = Boolean(serverState?.draft_stale || localPlanStale);
     const currentStale = Boolean(serverState?.current_stale);
@@ -834,8 +833,7 @@ export default function DirectorShootingPlanPanel() {
                                 || item.source_revision !== lineage.source_revision
                                 || item.source_revision_id !== lineage.source_revision_id
                                 || item.director_profile_revision !== lineage.director_profile_revision
-                                || item.director_profile_hash !== lineage.director_profile_hash
-                                || item.effective_style_hash !== lineage.effective_style_hash;
+                                || item.director_profile_hash !== lineage.director_profile_hash;
                             return (
                                 <li key={item.revision} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface p-3">
                                     <div className="min-w-0">

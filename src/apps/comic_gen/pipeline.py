@@ -61,6 +61,16 @@ from ..studio_access import (
 
 logger = get_logger(__name__)
 
+# Visual style is downstream generation context. It is recorded on a plan so
+# the generation context remains auditable, but it must not invalidate an
+# already generated or confirmed shooting plan when the current style changes.
+DIRECTOR_PLAN_STABLE_LINEAGE_KEYS = (
+    "source_revision",
+    "source_revision_id",
+    "director_profile_revision",
+    "director_profile_hash",
+)
+
 # --- Security helpers ---
 
 # Allowed pattern for IDs used in file paths (UUID hex + hyphens)
@@ -2962,7 +2972,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         if profile is None:
             raise ValueError("A confirmed Director interpretation is required for the shooting plan")
         expected = self.director_shooting_plan_lineage(script.id)
-        for key, current_value in expected.items():
+        for key in DIRECTOR_PLAN_STABLE_LINEAGE_KEYS:
+            current_value = expected[key]
             if getattr(plan, key) != current_value:
                 raise ValueError(f"Shooting plan lineage is stale: {key} changed")
         story_map = self._effective_shooting_story_map(script, profile)

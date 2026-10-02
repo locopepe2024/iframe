@@ -220,9 +220,16 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "视觉风格摘要约束镜头的可见表达" in prompt
 
 
-def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references():
+def test_plan_lineage_ignores_style_changes_but_rejects_director_changes_and_unknown_references():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
+
+    original_style_hash = plan.effective_style_hash
+    script.art_direction.style_config["visual_language"] = "日系写实"
+    current_lineage = pipeline.director_shooting_plan_lineage("film")
+    assert current_lineage["effective_style_hash"] != original_style_hash
+    accepted_after_style_change = pipeline._validate_director_shooting_plan(script, plan)
+    assert accepted_after_style_change.effective_style_hash == original_style_hash
 
     profile = script.art_direction.director_profile
     profile.content_hash = "director-hash-v4"
@@ -260,6 +267,29 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
     assert restored.director_shooting_plan_draft.scenes[0].beats[0].shots[0].visual_intent == plan.scenes[0].beats[0].shots[0].visual_intent
     assert restored.director_shooting_plan_draft.scenes[0].beats[0].shots[0].director_effect == plan.scenes[0].beats[0].shots[0].director_effect
     assert restored.frames[0].model_dump() == original_frames[0]
+
+
+def test_style_save_preserves_episode_assets_and_director_profile():
+    pipeline, script = make_pipeline()
+    asset_ids_before = (
+        [item.id for item in script.characters],
+        [item.id for item in script.scenes],
+        [item.id for item in script.props],
+    )
+    profile_before = script.art_direction.director_profile
+
+    updated = pipeline.save_art_direction(
+        "film",
+        "japanese-live-action",
+        {"name": "日系写实", "positive_prompt": "自然光、克制色彩"},
+    )
+
+    assert (
+        [item.id for item in updated.characters],
+        [item.id for item in updated.scenes],
+        [item.id for item in updated.props],
+    ) == asset_ids_before
+    assert updated.art_direction.director_profile == profile_before
 
 
 def test_confirmation_allows_missing_performance_physics_or_lighting_for_later_editing():
