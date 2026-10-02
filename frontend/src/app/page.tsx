@@ -27,6 +27,7 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
+const ImageEditorPage = dynamic(() => import("@/components/modules/playground/PlaygroundImageEditor").then(mod => mod.StandaloneImageEditorPage), { ssr: false });
 const RecreationPage = dynamic(() => import("@/components/modules/recreation/RecreationPage"), { ssr: false });
 const DirectorWorkbench = dynamic(() => import("@/components/director3d/DirectorWorkbench"), {
   ssr: false,
@@ -474,7 +475,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'recreation' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -672,6 +673,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/image-editor') {
+        setCurrentView('image-editor');
+        setActiveTab('imageEditor');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       // Menu action: open new project dialog then land on workspace
       if (hash === '#/new-project') {
         setCurrentView('home');
@@ -746,6 +755,9 @@ export default function Home() {
     }
     if (currentView === 'playground') {
       return <PlaygroundPage />;
+    }
+    if (currentView === 'image-editor') {
+      return <ImageEditorPage />;
     }
     if (currentView === 'studio/editor') {
       return <ScriptEditorShell mode="full" />;

@@ -480,11 +480,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setCharacterIdentityFacets([]);
             return () => { active = false; };
         }
-        void agentRequest<{ installed?: Array<{ id: string; enabled?: boolean; workbench_facets?: CharacterIdentityFacet[] }> }>("/skills")
+        void agentRequest<{ installed?: Array<{ id: string; enabled?: boolean; workbench_facets?: CharacterIdentityFacet[] }>; catalog?: Array<{ id: string; workbench_facets?: CharacterIdentityFacet[] }> }>("/skills")
             .then((inventory) => {
                 if (!active) return;
                 const skill = (inventory.installed ?? []).find(item => item.id === "character-identity-design" && item.enabled !== false);
-                setCharacterIdentityFacets(Array.isArray(skill?.workbench_facets) ? skill.workbench_facets : []);
+                // Installed Skills are pinned snapshots. Use the catalog facets when an
+                // older snapshot predates the workbench facet metadata, while keeping
+                // enablement and prompt instructions owner-scoped.
+                const catalogSkill = (inventory.catalog ?? []).find(item => item.id === "character-identity-design");
+                const facets = Array.isArray(skill?.workbench_facets)
+                    ? skill.workbench_facets
+                    : Array.isArray(catalogSkill?.workbench_facets) ? catalogSkill.workbench_facets : [];
+                setCharacterIdentityFacets(facets);
             })
             .catch(() => { if (active) setCharacterIdentityFacets([]); });
         return () => { active = false; };

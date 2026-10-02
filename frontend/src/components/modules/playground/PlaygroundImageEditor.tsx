@@ -92,3 +92,26 @@ export default function PlaygroundImageEditor({ children }: { children: ReactNod
     {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
   </EditorContext.Provider>;
 }
+
+/** Standalone image editing workbench, independent of a generation session. */
+export function StandaloneImageEditorPage() {
+  const t = useTranslations('imageEditor');
+  const [editor, setEditor] = useState<{ reference?: string; title: string; sessionId: string | null } | null>(null);
+  return (
+    <section className="h-full overflow-auto p-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <header>
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">iFrame Atelier</p>
+          <h1 className="mt-2 text-2xl font-display font-semibold text-foreground">{t('title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">{t('standaloneDescription')}</p>
+        </header>
+        <div className="rounded-xl border border-glass-border bg-surface/50 p-5">
+          <button type="button" onClick={() => setEditor({ title: t('title'), sessionId: null })} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            <ImagePlus size={18} />{t('open')}
+          </button>
+        </div>
+      </div>
+      {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
+    </section>
+  );
+}
