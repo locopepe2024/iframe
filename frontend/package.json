@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node ./scripts/run-next-dev.mjs",
-    "build": "next build",
+    "build": "node ./scripts/build-frontend.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "node ./scripts/typecheck.mjs",
