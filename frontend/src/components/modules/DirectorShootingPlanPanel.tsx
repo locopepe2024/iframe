@@ -386,7 +386,10 @@ export default function DirectorShootingPlanPanel() {
         setAction("save");
         setError("");
         try {
-            const result = await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan);
+            const allowStaleLineage = stale || Boolean(serverState?.readiness_error);
+            const result = allowStaleLineage
+                ? await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan, true)
+                : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan);
             setPlan(result.draft);
             setSavedPlan(result.draft);
             setServerState(previous => previous ? {
@@ -420,6 +423,7 @@ export default function DirectorShootingPlanPanel() {
                     sourceRevision,
                     expectedDraftRevision,
                     plan,
+                    stale || Boolean(serverState?.readiness_error),
                 );
                 expectedDraftRevision = saved.draft_revision;
                 confirmedPlan = saved.draft ?? plan;
@@ -433,14 +437,10 @@ export default function DirectorShootingPlanPanel() {
                     draft_stale: false,
                 } : previous);
             }
-            const result = await api.confirmDirectorShootingPlan(
-                projectId,
-                serverState?.current_revision ?? 0,
-                expectedDraftRevision,
-                confirmedPlan,
-                revisionTitle,
-                revisionSummary,
-            );
+            const allowStaleLineage = stale || Boolean(serverState?.readiness_error);
+            const result = allowStaleLineage
+                ? await api.confirmDirectorShootingPlan(projectId, serverState?.current_revision ?? 0, expectedDraftRevision, confirmedPlan, revisionTitle, revisionSummary, true)
+                : await api.confirmDirectorShootingPlan(projectId, serverState?.current_revision ?? 0, expectedDraftRevision, confirmedPlan, revisionTitle, revisionSummary);
             setNotice(t("confirmed", { revision: result.current_revision }));
             await load();
             if (typeof document !== "undefined") {
@@ -495,6 +495,7 @@ export default function DirectorShootingPlanPanel() {
     const draftStale = Boolean(serverState?.draft_stale || localPlanStale);
     const currentStale = Boolean(serverState?.current_stale);
     const stale = draftStale || currentStale;
+    const planNeedsExplicitAccept = Boolean(plan && (stale || serverState?.readiness_error));
     const shotsByScene = scenes.map(scene => scene.beats.reduce((total, beat) => total + beat.shots.length, 0));
     const durationByScene = scenes.map(scene => scene.beats.reduce(
         (sceneTotal, beat) => sceneTotal + beat.shots.reduce((beatTotal, shot) => beatTotal + (shot.duration_seconds ?? 0), 0),
@@ -541,12 +542,15 @@ export default function DirectorShootingPlanPanel() {
                     <span>{t("notReady", { reason: serverState.readiness_error })}</span>
                 </div>
             )}
-            {stale && !serverState?.readiness_error && (
+            {planNeedsExplicitAccept && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
                     <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                        <span>{t(draftStale ? "stale" : "confirmedStale")}</span>
-                        {plan && <button type="button" onClick={() => setViewMode("editor")} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>}
+                        <span>{t(draftStale ? "stale" : serverState?.readiness_error ? "staleWithReadinessError" : "confirmedStale")}</span>
+                        {plan && <>
+                            <button type="button" onClick={() => setViewMode("editor")} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
+                            <span className="text-xs text-amber-100/80">{t("staleChoiceHint")}</span>
+                        </>}
                     </span>
                 </div>
             )}
@@ -841,7 +845,7 @@ export default function DirectorShootingPlanPanel() {
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
                             <button type="button" onClick={save} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
-                            <button type="button" onClick={confirmPlan} disabled={locked || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
+                            <button type="button" onClick={confirmPlan} disabled={locked || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : planNeedsExplicitAccept ? t("continueWithPlan") : t("confirmPlan")}</button>
                         </div>
                     </div>
                 </>

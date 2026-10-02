@@ -4729,6 +4729,7 @@ class DirectorShootingPlanDraftSaveRequest(BaseModel):
     source_revision: int = Field(..., ge=1)
     expected_draft_revision: int = Field(..., ge=0)
     plan: DirectorShootingPlan
+    allow_stale_lineage: bool = False
 
 
 class DirectorShootingPlanConfirmRequest(BaseModel):
@@ -4737,6 +4738,7 @@ class DirectorShootingPlanConfirmRequest(BaseModel):
     plan: DirectorShootingPlan
     user_title: str = Field("", max_length=160)
     summary: str = Field("", max_length=1000)
+    allow_stale_lineage: bool = False
 
 
 class DirectorShootingPlanRestoreRequest(BaseModel):
@@ -5280,6 +5282,7 @@ def save_director_shooting_plan_draft(
             request.source_revision,
             request.expected_draft_revision,
             request.plan,
+            allow_stale_lineage=request.allow_stale_lineage,
         )
         return {
             "project_id": updated.id,
@@ -5310,6 +5313,7 @@ def confirm_director_shooting_plan(
             request.expected_draft_revision,
             user_title=request.user_title,
             summary=request.summary,
+            allow_stale_lineage=request.allow_stale_lineage,
         )
         current = updated.director_shooting_plan_revisions[-1]
         return {

@@ -199,6 +199,7 @@ export async function saveDirectorShootingPlanDraft(
     plan: DirectorShootingPlan,
     userTitle = "",
     summary = "",
+    allowStaleLineage = false,
 ) {
     const response = await axios.put<DirectorShootingPlanDraftSaveResult>(
         `${baseUrl}/projects/${projectId}/director-shooting-plan/draft`,
@@ -208,6 +209,7 @@ export async function saveDirectorShootingPlanDraft(
             plan,
             user_title: userTitle,
             summary,
+            allow_stale_lineage: allowStaleLineage,
         },
     );
     return response.data;
@@ -221,6 +223,7 @@ export async function confirmDirectorShootingPlan(
     plan: DirectorShootingPlan,
     userTitle = "",
     summary = "",
+    allowStaleLineage = false,
 ) {
     const response = await axios.post<DirectorShootingPlanConfirmResult>(
         `${baseUrl}/projects/${projectId}/director-shooting-plan/confirm`,
@@ -230,6 +233,7 @@ export async function confirmDirectorShootingPlan(
             plan,
             user_title: userTitle,
             summary,
+            allow_stale_lineage: allowStaleLineage,
         },
     );
     return response.data;

@@ -3018,6 +3018,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             plan.unresolved_questions = list(dict.fromkeys(value_questions))[:80]
         return plan
 
+    def _validate_director_shooting_plan_structure(self, script: Script, value: Any) -> DirectorShootingPlan:
+        """Validate a user accepted stale snapshot without rewriting its lineage."""
+        plan = value if isinstance(value, DirectorShootingPlan) else DirectorShootingPlan(**value)
+        if self.effective_director_profile(script) is None:
+            raise ValueError("A confirmed Director interpretation is required for the shooting plan")
+        return plan
+
     def preview_director_shooting_plan(
         self,
         script_id: str,
@@ -3310,16 +3317,18 @@ class ComicGenPipeline(StudioOwnerMixin):
         expected_source_revision: int,
         expected_draft_revision: int,
         plan: Any,
+        *,
+        allow_stale_lineage: bool = False,
     ) -> Script:
         with self._save_lock:
             script = self.scripts.get(script_id)
             if not script:
                 raise ValueError("Script not found")
-            if expected_source_revision != script.source_revision:
+            if expected_source_revision != script.source_revision and not allow_stale_lineage:
                 raise ValueError("Script source revision changed; reload the shooting plan")
             if expected_draft_revision != script.director_shooting_plan_draft_revision:
                 raise ValueError("Shooting-plan draft revision changed; reload before saving")
-            validated = self._validate_director_shooting_plan(script, plan)
+            validated = self._validate_director_shooting_plan_structure(script, plan) if allow_stale_lineage else self._validate_director_shooting_plan(script, plan)
             script.director_shooting_plan_draft = validated.model_copy(deep=True)
             script.director_shooting_plan_draft_revision += 1
             script.director_shooting_plan_draft_updated_at = time.time()
@@ -3336,6 +3345,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         *,
         user_title: str = "",
         summary: str = "",
+        allow_stale_lineage: bool = False,
     ) -> Script:
         with self._save_lock:
             script = self.scripts.get(script_id)
@@ -3348,7 +3358,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Shooting-plan draft revision changed; save or reload before confirming")
             if not script.director_shooting_plan_draft:
                 raise ValueError("Save the shooting-plan draft before confirming")
-            validated = self._validate_director_shooting_plan(script, plan)
+            validated = self._validate_director_shooting_plan_structure(script, plan) if allow_stale_lineage else self._validate_director_shooting_plan(script, plan)
             self._validate_director_shooting_plan_for_confirmation(validated)
             if self._shooting_plan_content(script.director_shooting_plan_draft) != self._shooting_plan_content(validated):
                 raise ValueError("Shooting plan has unsaved edits; save it before confirming")

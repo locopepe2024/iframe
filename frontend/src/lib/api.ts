@@ -1191,7 +1191,8 @@ export const api = {
         sourceRevision: number,
         expectedDraftRevision: number,
         plan: DirectorShootingPlan,
-    ) => saveDirectorShootingPlanDraft(API_URL, scriptId, sourceRevision, expectedDraftRevision, plan),
+        allowStaleLineage?: boolean,
+    ) => saveDirectorShootingPlanDraft(API_URL, scriptId, sourceRevision, expectedDraftRevision, plan, "", "", allowStaleLineage),
 
     confirmDirectorShootingPlan: (
         scriptId: string,
@@ -1200,8 +1201,9 @@ export const api = {
         plan: DirectorShootingPlan,
         userTitle?: string,
         summary?: string,
+        allowStaleLineage?: boolean,
     ) => confirmDirectorShootingPlan(
-        API_URL, scriptId, expectedCurrentRevision, expectedDraftRevision, plan, userTitle, summary,
+        API_URL, scriptId, expectedCurrentRevision, expectedDraftRevision, plan, userTitle, summary, allowStaleLineage,
     ),
 
     listDirectorShootingPlanRevisions: (scriptId: string) =>
@@ -1851,6 +1853,12 @@ export const api = {
     /** Core 全局/共享资产池（跨系列/项目聚合）。后端：GET /library/assets → {characters, scenes, props}。 */
     listLibraryAssets: async () => {
         const res = await axios.get(`${API_URL}/library/assets`);
+        return res.data;
+    },
+    importLibraryAssetToSeries: async (seriesId: string, assetType: "character" | "scene" | "prop", libraryAssetId: string) => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/import-from-library`, {
+            asset_type: assetType, library_asset_id: libraryAssetId,
+        });
         return res.data;
     },
     /** 新建一条全局/共享资产。后端：POST /library/assets。
