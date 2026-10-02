@@ -5,6 +5,7 @@ import { Video, AlertCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getAssetUrl } from '@/lib/utils';
 import type { PlaygroundGeneration } from './usePlaygroundStore';
+import { getOutputAspectRatio } from './mediaDisplay';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -103,6 +104,7 @@ export default function GalleryView({
   const isVideo =
     output?.media_type === 'video' || VIDEO_MODES.has(current.mode);
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+  const aspectRatio = getOutputAspectRatio(current.parameters);
 
   return (
     <div className="flex flex-col h-full">
@@ -117,7 +119,10 @@ export default function GalleryView({
               key={current.id}
               src={mediaUrl}
               controls
-              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
+              preload="metadata"
+              playsInline
+              style={{ aspectRatio }}
+              className="h-auto w-full max-h-full max-w-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           ) : (
             <img
@@ -186,7 +191,7 @@ export default function GalleryView({
           ref={thumbnailStripRef}
           className="flex gap-2 h-full items-center"
         >
-          {generations.map((gen, idx) => {
+        {generations.map((gen, idx) => {
             const genOutput = gen.outputs[0];
             const genIsVideo =
               genOutput?.media_type === 'video' || VIDEO_MODES.has(gen.mode);
