@@ -49,6 +49,7 @@ from .pipeline import (
     AssemblyPlanValidationError,
     AssemblyPlanConflictError,
     StaleStoryboardDraftError,
+    DIRECTOR_PLAN_STABLE_LINEAGE_KEYS,
 )
 from .structured_evidence import (
     query_asset_mentions,
@@ -87,6 +88,18 @@ from dotenv import load_dotenv, set_key
 
 app = FastAPI(title="iFrame Studio API", version="0.1.5")
 logger = logging.getLogger(__name__)
+
+
+def _director_plan_lineage_changed(plan: DirectorShootingPlan, lineage: Optional[Dict[str, Any]]) -> bool:
+    """Return whether stable story/Director inputs changed since plan creation.
+
+    `effective_style_hash` is intentionally excluded: style is downstream
+    visual context and changing it must not invalidate an existing plan.
+    """
+    return lineage is None or any(
+        getattr(plan, key) != lineage.get(key)
+        for key in DIRECTOR_PLAN_STABLE_LINEAGE_KEYS
+    )
 
 # Setup logging to user directory
 setup_logging()
@@ -5214,14 +5227,10 @@ def get_director_shooting_plan(
         "current": _director_shooting_plan_revision_summary(confirmed) if confirmed else None,
         "current_lineage": lineage,
         "readiness_error": lineage_error,
-        "draft_stale": bool(script.director_shooting_plan_draft and (
-            lineage is None or any(
-                getattr(script.director_shooting_plan_draft, key) != value for key, value in lineage.items()
-            )
+        "draft_stale": bool(script.director_shooting_plan_draft and _director_plan_lineage_changed(
+            script.director_shooting_plan_draft, lineage,
         )),
-        "current_stale": bool(confirmed and (
-            lineage is None or any(getattr(confirmed.plan, key) != value for key, value in lineage.items())
-        )),
+        "current_stale": bool(confirmed and _director_plan_lineage_changed(confirmed.plan, lineage)),
         "source_chunks": [{
             "source_ref": item["source_ref"],
             "char_start": item["char_start"],

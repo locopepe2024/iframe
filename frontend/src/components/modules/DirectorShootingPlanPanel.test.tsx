@@ -207,6 +207,26 @@ it("blocks confirmation while the saved draft is stale", async () => {
     expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeDisabled();
 });
 
+it("does not stale a plan when only the visual style changes", async () => {
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
+        ...state(plan, 1),
+        current_lineage: {
+            ...state(plan, 1).current_lineage,
+            effective_style_hash: "new-style-hash",
+        },
+        draft_stale: false,
+    });
+
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorShootingPlanPanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
+    expect(screen.queryByText(/visual style changed/i)).not.toBeInTheDocument();
+});
+
 it("lets the user discard a generated but unsaved proposal", async () => {
     vi.spyOn(api, "generateDirectorShootingPlan").mockResolvedValue(plan);
 
