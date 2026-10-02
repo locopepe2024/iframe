@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
+import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon, Download } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, crudApi, type AssetLibraryReference } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
@@ -50,6 +50,8 @@ export default function ConsistencyVault() {
 
     // Create asset dialog state
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+    const [isImportLibraryOpen, setIsImportLibraryOpen] = useState(false);
+    const [libraryEntries, setLibraryEntries] = useState<any[]>([]);
 
     // Upload modal state
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -382,6 +384,33 @@ export default function ConsistencyVault() {
         }
     };
 
+    const openLibraryImport = async () => {
+        try {
+            const index = await api.getAssetLibraryIndex();
+            setLibraryEntries((index.assets || []).filter((entry: any) => entry.source_scope === "global"));
+            setIsImportLibraryOpen(true);
+        } catch (error: any) {
+            alert(`加载资产库失败：${error.message}`);
+        }
+    };
+
+    const importLibraryEntry = async (entry: any) => {
+        if (!currentProject) return;
+        const type = entry.asset_type as "character" | "scene" | "prop";
+        const localList = type === "character" ? currentProject.characters : type === "scene" ? currentProject.scenes : currentProject.props;
+        if (localList.some((asset: any) => asset.name === entry.name)) {
+            alert(`当前分集已存在同名${type === "character" ? "角色" : type === "scene" ? "场景" : "道具"}，未覆盖。`);
+            return;
+        }
+        try {
+            await api.forkLibraryAssetToProject(currentProject.id, type, entry.asset_id);
+            updateProject(currentProject.id, await api.getProject(currentProject.id));
+            setIsImportLibraryOpen(false);
+        } catch (error: any) {
+            alert(`导入资产失败：${error.response?.data?.detail || error.message}`);
+        }
+    };
+
     // Upload handlers
     const handleOpenUploadModal = (asset: any, type: string) => {
         setUploadTarget({
@@ -441,6 +470,15 @@ export default function ConsistencyVault() {
                     />
                 </div>
 
+                <div className="flex items-center gap-2">
+                <WorkflowActionButton
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Download />}
+                    onClick={openLibraryImport}
+                >
+                    导入资产
+                </WorkflowActionButton>
                 <WorkflowActionButton
                     variant="secondary"
                     size="sm"
@@ -450,6 +488,7 @@ export default function ConsistencyVault() {
                 >
                     {tv("syncDesc")}
                 </WorkflowActionButton>
+                </div>
             </div>
 
             {/* Content Grid */}
@@ -557,6 +596,21 @@ export default function ConsistencyVault() {
 
             {/* Create Asset Dialog */}
             <AnimatePresence>
+                {isImportLibraryOpen && (
+                    <motion.div className="fixed inset-0 z-[70] bg-overlay/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsImportLibraryOpen(false)}>
+                        <motion.div className="w-full max-w-xl max-h-[75vh] overflow-hidden rounded-2xl border border-glass-border bg-elevated shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between border-b border-glass-border px-5 py-4"><div><h3 className="font-semibold text-foreground">从资产库导入</h3><p className="text-xs text-text-secondary mt-1">同名资产优先显示，导入后成为当前分集的独立副本。</p></div><button onClick={() => setIsImportLibraryOpen(false)}><X size={18} /></button></div>
+                            <div className="max-h-[58vh] overflow-y-auto p-4 space-y-2">
+                                {libraryEntries.filter((entry) => !currentProject || (entry.asset_type === activeTab && !(activeTab === "character" ? currentProject.characters : activeTab === "scene" ? currentProject.scenes : currentProject.props).some((a: any) => a.name === entry.name))).map((entry) => (
+                                    <button key={`${entry.asset_type}:${entry.asset_id}`} className="flex w-full items-center justify-between rounded-xl border border-glass-border px-4 py-3 text-left hover:border-primary/50 hover:bg-primary/5" onClick={() => void importLibraryEntry(entry)}>
+                                        <span><span className="block text-sm font-medium text-foreground">{entry.name}</span><span className="block text-xs text-text-muted mt-0.5">{entry.asset_type} · {entry.source_name || "全局资产库"}</span></span><Download size={15} className="text-primary" />
+                                    </button>
+                                ))}
+                                {libraryEntries.filter((entry) => entry.asset_type === activeTab).length === 0 && <div className="py-10 text-center text-sm text-text-muted">当前类型没有可导入资产</div>}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
                 {isCreateDialogOpen && (
                     <CreateAssetDialog
                         type={activeTab}

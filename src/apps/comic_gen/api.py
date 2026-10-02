@@ -698,6 +698,10 @@ class UpdateScriptTextRequest(BaseModel):
     text: str
 
 
+class UpdateProjectTitleRequest(BaseModel):
+    title: str
+
+
 @app.put("/projects/{script_id}/text", response_model=Script)
 def update_script_text(script_id: str, request: UpdateScriptTextRequest):
     """Persist `original_text` without re-parsing entities.
@@ -710,6 +714,15 @@ def update_script_text(script_id: str, request: UpdateScriptTextRequest):
         return signed_response(pipeline.update_script_text(script_id, request.text))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.patch("/projects/{script_id}/title", response_model=Script)
+def update_project_title(script_id: str, request: UpdateProjectTitleRequest):
+    try:
+        return signed_response(pipeline.update_script_title(script_id, request.title))
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
 
 
 def _source_snapshots(script: Script) -> List[ScriptSourceRevision]:
@@ -1071,9 +1084,9 @@ def update_series(series_id: str, request: UpdateSeriesRequest):
 
 @app.delete("/series/{series_id}")
 def delete_series(series_id: str):
-    """Delete a Series and disassociate its episodes."""
+    """Delete a Series and its episode projects."""
     try:
-        pipeline.delete_series(series_id)
+        pipeline.delete_series(series_id, cascade_episodes=True)
         return {"status": "deleted"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useId } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, Library, FileUp, X, ChevronDown, FileText,
-  Zap, Film, Sparkles, Search, Clock, MoreVertical,
+  Zap, Film, Sparkles, Search, Clock, MoreVertical, Pencil, Trash2,
 } from "lucide-react";
 import { useProjectStore, Project } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
@@ -340,7 +340,7 @@ const WS_VIEW_KEY = "lumenx_workspace_view";
 // deriveCover is imported from ProjectCard (single source of truth).
 
 // ── Project Row (Line B list-view item) ──
-function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
+function ProjectRow({ project, crumb, onRename, onDelete }: { project: Project; crumb: string; onRename?: (id: string, title: string) => void; onDelete?: (id: string) => void }) {
   const t = useTranslations("project");
   const cover = deriveCover(project);
   const status = deriveStatus(project);
@@ -413,7 +413,14 @@ function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
 
       {/* More */}
       <button
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          const action = window.prompt("输入操作：重命名 或 删除", "重命名");
+          if (action === "重命名") {
+            const next = window.prompt("重命名项目", project.title);
+            if (next && next.trim() && next.trim() !== project.title) onRename?.(project.id, next.trim());
+          } else if (action === "删除" && window.confirm(`删除项目“${project.title}”？此操作不可撤销。`)) onDelete?.(project.id);
+        }}
         className="w-8 h-8 rounded-lg grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors flex-shrink-0"
         aria-label={t("moreActions")}
       >
@@ -476,6 +483,7 @@ export default function Home() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
+  const [seriesMenuId, setSeriesMenuId] = useState<string | null>(null);
   const [standaloneDirectorMindMap, setStandaloneDirectorMindMap] = useState(false);
   const [seriesEpisodes, setSeriesEpisodes] = useState<Record<string, Project[]>>({});
   const [, setEpisodesLoading] = useState(false);
@@ -483,6 +491,7 @@ export default function Home() {
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
+  const renameProject = useProjectStore((state) => state.renameProject);
   const setProjects = useProjectStore((state) => state.setProjects);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
@@ -983,6 +992,7 @@ export default function Home() {
                 return (
                   <section key={`grp-${s.id}`} aria-label={s.title}>
                     <div className="flex items-baseline gap-3 mt-4 mb-4 mx-0.5">
+                      <div className="relative">
                       <button
                         onClick={() => { window.location.hash = `#/series/${s.id}`; }}
                         className="font-display atelier-display text-[1.5rem] font-semibold tracking-tight text-foreground hover:text-primary transition-colors"
@@ -993,6 +1003,19 @@ export default function Home() {
                         {t("series")} · {t("frames", { count: eps.length })}
                       </span>
                       <span className="atelier-group-line h-px flex-1 bg-glass-border" />
+                      <button
+                        type="button"
+                        aria-label="系列操作"
+                        className="w-8 h-8 rounded-lg grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg"
+                        onClick={(e) => { e.stopPropagation(); setSeriesMenuId(seriesMenuId === s.id ? null : s.id); }}
+                      >
+                        <MoreVertical size={15} />
+                      </button>
+                      {seriesMenuId === s.id && <div className="absolute right-0 top-9 z-30 w-36 overflow-hidden rounded-md border border-glass-border bg-surface shadow-lg" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-hover-bg" onClick={async () => { const title = window.prompt("重命名系列", s.title); if (title?.trim() && title.trim() !== s.title) { await api.updateSeries(s.id, { title: title.trim() }); await fetchSeriesList(); } setSeriesMenuId(null); }}><Pencil size={14} />重命名</button>
+                        <button type="button" className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10" onClick={async () => { setSeriesMenuId(null); if (window.confirm(`删除系列“${s.title}”及其全部分集？此操作不可撤销。`)) { await useProjectStore.getState().deleteSeries(s.id); setSeriesEpisodes((current) => { const next = { ...current }; delete next[s.id]; return next; }); await syncProjects(); } }}><Trash2 size={14} />删除</button>
+                      </div>}
+                      </div>
                     </div>
                     {viewMode === "list" ? (
                       <div className="flex flex-col gap-1.5">
@@ -1005,6 +1028,8 @@ export default function Home() {
                             <ProjectRow
                               project={ep}
                               crumb={`${s.title}${ep.episode_number ? ` · EP.${String(ep.episode_number).padStart(2, "0")}` : ""}`}
+                              onRename={renameProject}
+                              onDelete={deleteProject}
                             />
                           </div>
                         ))}
@@ -1028,7 +1053,7 @@ export default function Home() {
                             className="atelier-reveal"
                             style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                           >
-                            <ProjectCard project={ep} onDelete={deleteProject} />
+                            <ProjectCard project={ep} onDelete={deleteProject} onRename={renameProject} />
                           </div>
                         ))}
                         {!wsFiltering && <NewProjectTile episode onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }} />}
@@ -1062,7 +1087,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectRow project={p} crumb="" />
+                          <ProjectRow project={p} crumb="" onRename={renameProject} onDelete={deleteProject} />
                         </div>
                       ))}
                       {!wsFiltering && (
@@ -1085,7 +1110,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectCard project={p} onDelete={deleteProject} />
+                          <ProjectCard project={p} onDelete={deleteProject} onRename={renameProject} />
                         </div>
                       ))}
                       {!wsFiltering && <NewProjectTile onClick={() => setIsDialogOpen(true)} />}

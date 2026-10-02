@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
+import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2, MoreHorizontal, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import type { AssetCoverSelectionResult, AssetReferenceIndexEntry } from "@/lib/api";
@@ -124,6 +124,7 @@ function SemanticAssetLibrary() {
   const [starredOnly, setStarredOnly] = useState(false);
   const [selected, setSelected] = useState<{ sourceId: string; assetId: string; type: AssetTab } | null>(null);
   const [newAssetOpen, setNewAssetOpen] = useState(false);
+  const [assetMenu, setAssetMenu] = useState<string | null>(null);
 
   useEffect(() => {
     loadAssets();
@@ -199,6 +200,16 @@ function SemanticAssetLibrary() {
       const status = (error as { response?: { status?: number } }).response?.status;
       toast.error(status === 409 ? t("deleteInUse") : t("deleteFailed"));
     } finally { setDeleting(null); }
+  };
+
+  const renameAsset = async (item: RenderItem) => {
+    if (item.src.kind !== "global") return;
+    const next = window.prompt("重命名资产", item.asset.name);
+    if (!next?.trim() || next.trim() === item.asset.name) return;
+    try {
+      await api.updateLibraryAsset(SINGULAR[item.type], item.asset.id, { name: next.trim() });
+      await loadAssets();
+    } catch { toast.error("资产重命名失败"); }
   };
 
   // 全局计数（facet 总览；不受搜索/星标过滤影响，与分组标题里的计数互补）。
@@ -655,11 +666,16 @@ function SemanticAssetLibrary() {
                             {viewAxis === "type" || src.kind === "global" ? (
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-[0.6875rem] text-text-muted truncate">{src.name}</span>
-                                {src.kind === "global" && <button type="button" aria-label={t("deleteNamed", { name: asset.name })}
-                                  disabled={deleting !== null} onClick={(event) => { event.stopPropagation(); void deleteAsset(asset.id, type); }}
-                                  className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:text-status-failed-fg hover:bg-hover-bg disabled:opacity-40">
-                                  <Trash2 size={14} />
-                                </button>}
+                              {src.kind === "global" && <div className="relative ml-auto">
+                                <button type="button" aria-label="资产操作" onClick={(event) => { event.stopPropagation(); setAssetMenu(assetMenu === `${src.id}:${asset.id}` ? null : `${src.id}:${asset.id}`); }}
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:text-foreground hover:bg-hover-bg">
+                                  <MoreHorizontal size={15} />
+                                </button>
+                                {assetMenu === `${src.id}:${asset.id}` && <div className="absolute right-0 bottom-full z-30 mb-1 w-32 overflow-hidden rounded-md border border-glass-border bg-surface shadow-lg">
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-hover-bg" onClick={(event) => { event.stopPropagation(); setAssetMenu(null); void renameAsset({ asset, type, src }); }}><Pencil size={13} />重命名</button>
+                                  <button type="button" disabled={deleting !== null} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-40" onClick={(event) => { event.stopPropagation(); setAssetMenu(null); void deleteAsset(asset.id, type); }}><Trash2 size={13} />删除</button>
+                                </div>}
+                              </div>}
                               </div>
                             ) : (
                               asset.description && <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{asset.description}</div>

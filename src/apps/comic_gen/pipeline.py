@@ -761,6 +761,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
             return script
 
+    def update_script_title(self, script_id: str, title: str) -> Script:
+        """Rename a project without reparsing or changing its source revision."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            normalized = (title or "").strip()
+            if not normalized:
+                raise ValueError("Project title cannot be empty")
+            script.title = normalized
+            script.updated_at = time.time()
+            self._save_data()
+            return script
+
     def reparse_project(self, script_id: str, text: str,
                         draft: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Script:
         """Re-parse the text for an existing project, replacing all entities."""
@@ -7443,18 +7457,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_series_data_unlocked()
             return series
 
-    def delete_series(self, series_id: str) -> None:
-        """Delete a Series and disassociate its episodes."""
+    def delete_series(self, series_id: str, cascade_episodes: bool = False) -> None:
+        """Delete a Series; optionally remove its episode projects too.
+
+        The API keeps the historical detach behavior by default. Workspace
+        deletion passes ``cascade_episodes=True`` so the explicit destructive
+        action removes the series and its owned episodes together.
+        """
         with self._save_lock:
             series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
-            # Disassociate episodes
             for ep_id in series.episode_ids:
-                script = self.get_script(ep_id)
-                if script:
-                    script.series_id = None
-                    script.episode_number = None
+                if cascade_episodes:
+                    self.scripts.pop(ep_id, None)
+                else:
+                    script = self.get_script(ep_id)
+                    if script:
+                        script.series_id = None
+                        script.episode_number = None
             self._save_data()
             del self.series_store[series_id]
             self._save_series_data_unlocked()

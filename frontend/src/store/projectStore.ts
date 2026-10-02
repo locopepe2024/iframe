@@ -516,6 +516,7 @@ interface ProjectStore {
     loadProjects: () => void;
     selectProject: (id: string) => Promise<void>;
     updateProject: (id: string, data: Partial<Project>) => void;
+    renameProject: (id: string, title: string) => Promise<void>;
     deleteProject: (id: string) => Promise<void>;
     clearCurrentProject: () => void;
 
@@ -799,6 +800,14 @@ export const useProjectStore = create<ProjectStore>()(
                         state.currentProject?.id === id
                             ? { ...state.currentProject, ...data, updatedAt: new Date().toISOString() }
                             : state.currentProject,
+                }));
+            },
+
+            renameProject: async (id: string, title: string) => {
+                const updated = await api.updateProjectTitle(id, title);
+                set((state) => ({
+                    projects: state.projects.map((p) => p.id === id ? { ...p, title: updated.title } : p),
+                    currentProject: state.currentProject?.id === id ? { ...state.currentProject, title: updated.title } : state.currentProject,
                 }));
             },
 
