@@ -252,7 +252,10 @@ export default function DirectorShootingPlanPanel() {
     const [jobProgress, setJobProgress] = useState<{ completed: number; total: number } | null>(null);
     const [jobStatus, setJobStatus] = useState("");
     const [expandedShots, setExpandedShots] = useState<Set<string>>(() => new Set());
+    const [expandedSceneIds, setExpandedSceneIds] = useState<Set<string>>(() => new Set());
+    const [expandedBeatIds, setExpandedBeatIds] = useState<Set<string>>(() => new Set());
     const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+    const [shotFlowOpen, setShotFlowOpen] = useState(false);
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
     const [revisionTitle, setRevisionTitle] = useState("");
@@ -296,6 +299,8 @@ export default function DirectorShootingPlanPanel() {
                 setPlan(nextState.draft);
                 setSavedPlan(nextState.draft);
                 setExpandedShots(new Set());
+                setExpandedSceneIds(new Set());
+                setExpandedBeatIds(new Set());
             }
             setHistory(nextHistory);
         } catch (cause) {
@@ -314,6 +319,8 @@ export default function DirectorShootingPlanPanel() {
             setSavedPlan(null);
             setHistory([]);
             setExpandedShots(new Set());
+            setExpandedSceneIds(new Set());
+            setExpandedBeatIds(new Set());
             setSourceEditorSceneId(null);
             setError("");
             setNotice("");
@@ -496,6 +503,16 @@ export default function DirectorShootingPlanPanel() {
     const currentStale = Boolean(serverState?.current_stale);
     const stale = draftStale || currentStale;
     const planNeedsExplicitAccept = Boolean(plan && (stale || serverState?.readiness_error));
+    const staleChanges = [
+        plan && serverState?.current_lineage?.source_revision !== undefined && plan.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: plan.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
+        plan && serverState?.current_lineage?.source_revision_id && plan.source_revision_id !== serverState.current_lineage.source_revision_id ? t("changedScriptContent") : null,
+        plan && serverState?.current_lineage?.director_profile_revision !== undefined && plan.director_profile_revision !== Number(serverState.current_lineage.director_profile_revision) ? t("changedDirectorRevision", { from: plan.director_profile_revision, to: Number(serverState.current_lineage.director_profile_revision) }) : null,
+        plan && serverState?.current_lineage?.director_profile_hash && plan.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
+    ].filter((item): item is string => Boolean(item));
+    const openPlanEditor = () => {
+        setViewMode("editor");
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("director-plan-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })));
+    };
     const shotsByScene = scenes.map(scene => scene.beats.reduce((total, beat) => total + beat.shots.length, 0));
     const durationByScene = scenes.map(scene => scene.beats.reduce(
         (sceneTotal, beat) => sceneTotal + beat.shots.reduce((beatTotal, shot) => beatTotal + (shot.duration_seconds ?? 0), 0),
@@ -548,9 +565,10 @@ export default function DirectorShootingPlanPanel() {
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
                         <span>{t(draftStale ? "stale" : serverState?.readiness_error ? "staleWithReadinessError" : "confirmedStale")}</span>
                         {plan && <>
-                            <button type="button" onClick={() => setViewMode("editor")} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
+                            <button type="button" onClick={openPlanEditor} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
                             <span className="text-xs text-amber-100/80">{t("staleChoiceHint")}</span>
                         </>}
+                        {staleChanges.length > 0 && <ul className="basis-full list-disc pl-5 text-xs text-amber-100/90">{staleChanges.map(change => <li key={change}>{change}</li>)}</ul>}
                     </span>
                 </div>
             )}
@@ -603,10 +621,11 @@ export default function DirectorShootingPlanPanel() {
                     </section>
 
                     <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-plan-flow-title">
-                        <div className="mb-3">
-                            <h3 id="director-plan-flow-title" className="text-sm font-semibold text-foreground">Shot flow</h3>
-                            <p className="mt-1 text-xs text-text-muted">Scenes, beats and shots are connected in reading order. Select a shot to open its editable details.</p>
-                        </div>
+                        <button type="button" className="flex w-full items-center justify-between text-left" aria-expanded={shotFlowOpen} onClick={() => setShotFlowOpen(value => !value)}>
+                            <span><h3 id="director-plan-flow-title" className="text-sm font-semibold text-foreground">Shot flow</h3><p className="mt-1 text-xs text-text-muted">{shotFlowOpen ? "Scenes, beats and shots are connected in reading order. Select a shot to open its editable details." : "Collapsed. Open to inspect shot order and details."}</p></span>
+                            <span className="text-xs text-text-secondary">{shotFlowOpen ? "收起" : "展开"}</span>
+                        </button>
+                        {shotFlowOpen && <div className="mt-3">
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
                             <ShotFlowMap
                                 scenes={scenes}
@@ -643,7 +662,7 @@ export default function DirectorShootingPlanPanel() {
                                     );
                                 })()}
                             </aside>
-                        </div>
+                        </div></div>}
                     </section>
 
                     <div className="flex items-center justify-end gap-2">
@@ -653,21 +672,36 @@ export default function DirectorShootingPlanPanel() {
                         </div>
                     </div>
 
-                    {viewMode === "editor" && <div className="space-y-4">
+                    {viewMode === "editor" && <div id="director-plan-editor" className="space-y-4">
                         {scenes.map((scene, sceneIndex) => (
                             <section key={scene.scene_id} className="overflow-hidden rounded-lg border border-border bg-background/30" aria-labelledby={`director-plan-scene-${scene.scene_id}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/60 px-4 py-3">
                                     <div className="min-w-0">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t("sceneNumber", { number: sceneIndex + 1 })}</p>
                                         <h3 id={`director-plan-scene-${scene.scene_id}`} className="mt-1 truncate text-base font-semibold text-foreground">{scene.heading || scene.scene_ref || t("unnamedScene")}</h3>
+                                        <p className="mt-1 text-xs text-text-muted">{t("sceneOverview", { beats: scene.beats.length, shots: scene.beats.reduce((total, beat) => total + beat.shots.length, 0), location: scene.location || t("unspecified"), time: scene.time_anchor || t("unspecified") })}</p>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            aria-expanded={expandedSceneIds.has(scene.scene_id)}
+                                            aria-controls={`director-plan-scene-body-${scene.scene_id}`}
+                                            onClick={() => setExpandedSceneIds(previous => {
+                                                const next = new Set(previous);
+                                                if (next.has(scene.scene_id)) next.delete(scene.scene_id);
+                                                else next.add(scene.scene_id);
+                                                return next;
+                                            })}
+                                            className="min-h-9 rounded border border-border px-3 text-xs text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        >
+                                            {expandedSceneIds.has(scene.scene_id) ? t("collapseScene") : t("expandScene")}
+                                        </button>
                                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: reindex(moveItem(current.scenes, sceneIndex, -1)) }))} disabled={locked || sceneIndex === 0} aria-label={t("moveSceneUp", { number: sceneIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronUp size={16} aria-hidden="true" /></button>
                                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: reindex(moveItem(current.scenes, sceneIndex, 1)) }))} disabled={locked || sceneIndex === scenes.length - 1} aria-label={t("moveSceneDown", { number: sceneIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronDown size={16} aria-hidden="true" /></button>
                                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: reindex(current.scenes.filter((_, index) => index !== sceneIndex)) }))} disabled={locked || scenes.length <= 1} aria-label={t("deleteScene", { number: sceneIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-red-400/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><Trash2 size={16} aria-hidden="true" /></button>
                                     </div>
                                 </div>
-                                <div className="space-y-5 p-4">
+                                {expandedSceneIds.has(scene.scene_id) && <div id={`director-plan-scene-body-${scene.scene_id}`} className="space-y-5 p-4">
                                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                         <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
                                         <Field label={t("fields.heading")} value={scene.heading} placeholder={t("fields.headingPlaceholder")} hint={t("fields.headingHint")} onChange={value => updateScene(sceneIndex, { heading: value })} />
@@ -737,22 +771,39 @@ export default function DirectorShootingPlanPanel() {
                                         {scene.beats.map((beat, beatIndex) => (
                                             <article key={beat.beat_id} className="rounded-md border border-border bg-background/55 p-3 sm:p-4">
                                                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                                    <h4 className="text-sm font-semibold text-foreground">{t("beatNumber", { number: beatIndex + 1 })}</h4>
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-sm font-semibold text-foreground">{t("beatNumber", { number: beatIndex + 1 })}</h4>
+                                                        <p className="mt-1 text-xs text-text-muted">{beat.title || t("flow.untitledBeat")} · {t("beatOverview", { shots: beat.shots.length, purpose: beat.dramatic_purpose || t("unspecified") })}</p>
+                                                    </div>
                                                     <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            aria-expanded={expandedBeatIds.has(beat.beat_id)}
+                                                            aria-controls={`director-plan-beat-body-${beat.beat_id}`}
+                                                            onClick={() => setExpandedBeatIds(previous => {
+                                                                const next = new Set(previous);
+                                                                if (next.has(beat.beat_id)) next.delete(beat.beat_id);
+                                                                else next.add(beat.beat_id);
+                                                                return next;
+                                                            })}
+                                                            className="min-h-9 rounded border border-border px-3 text-xs text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                                        >
+                                                            {expandedBeatIds.has(beat.beat_id) ? t("collapseBeat") : t("expandBeat")}
+                                                        </button>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(moveItem(scene.beats, beatIndex, -1)) })} disabled={locked || beatIndex === 0} aria-label={t("moveBeatUp", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronUp size={15} aria-hidden="true" /></button>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(moveItem(scene.beats, beatIndex, 1)) })} disabled={locked || beatIndex === scene.beats.length - 1} aria-label={t("moveBeatDown", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronDown size={15} aria-hidden="true" /></button>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(scene.beats.filter((_, index) => index !== beatIndex)) })} disabled={locked || scene.beats.length <= 1} aria-label={t("deleteBeat", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-red-400/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><Trash2 size={15} aria-hidden="true" /></button>
                                                     </div>
                                                 </div>
-                                                <div className="grid gap-3 sm:grid-cols-2">
+                                                {expandedBeatIds.has(beat.beat_id) && <div id={`director-plan-beat-body-${beat.beat_id}`} className="grid gap-3 sm:grid-cols-2">
                                                     <Field label={t("fields.beatTitle")} value={beat.title} onChange={value => updateBeat(sceneIndex, beatIndex, { title: value })} />
                                                     <Field label={t("fields.emotionalChange")} value={beat.emotional_change} onChange={value => updateBeat(sceneIndex, beatIndex, { emotional_change: value })} />
                                                     <Field label={t("fields.beatDuration")} type="number" min={1} max={300} value={beat.duration_seconds} onChange={value => updateBeat(sceneIndex, beatIndex, { duration_seconds: value ? Number(value) : null })} />
                                                     <label className="inline-flex items-center gap-2 self-end pb-2 text-xs text-text-secondary"><input type="checkbox" checked={beat.keep_with_next} onChange={event => updateBeat(sceneIndex, beatIndex, { keep_with_next: event.target.checked })} className="accent-primary" />{t("fields.keepWithNext")}</label>
                                                     <div className="sm:col-span-2"><Field label={t("fields.dramaticPurpose")} value={beat.dramatic_purpose} multiline onChange={value => updateBeat(sceneIndex, beatIndex, { dramatic_purpose: value })} /></div>
                                                     <div className="sm:col-span-2"><MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} /></div>
-                                                </div>
-                                                <div className="mt-4 space-y-2">
+                                                </div>}
+                                                {expandedBeatIds.has(beat.beat_id) && <div className="mt-4 space-y-2">
                                                     {beat.shots.map((shot, shotIndex) => (
                                                         <details
                                                             key={shot.shot_id}
@@ -822,12 +873,12 @@ export default function DirectorShootingPlanPanel() {
                                                         </details>
                                                     ))}
                                                     <button type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { shots: [...beat.shots, emptyShot(beat.shots.length)] })} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={15} aria-hidden="true" />{t("addShot")}</button>
-                                                </div>
+                                                </div>}
                                             </article>
                                         ))}
                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: [...scene.beats, emptyBeat(scene.beats.length)] })} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={15} aria-hidden="true" />{t("addBeat")}</button>
                                     </div>
-                                </div>
+                                </div>}
                             </section>
                         ))}
                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: [...current.scenes, emptyScene(current.scenes.length)] }))} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-dashed border-border px-4 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={16} aria-hidden="true" />{t("addScene")}</button>
