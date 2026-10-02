@@ -148,11 +148,14 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Shot flow.*展开/i }));
     const shotNode = screen.getByRole("button", { name: /Open shot 1: Follow the couple/i });
     expect(shotNode).toBeInTheDocument();
     fireEvent.click(shotNode);
     expect(screen.getByText("Shot inspector")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open scene" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open beat" }));
     expect(screen.getAllByText("4 sec")).toHaveLength(3);
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
