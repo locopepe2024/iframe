@@ -13,6 +13,7 @@ import { usePlaygroundImageEditor } from './PlaygroundImageEditor';
 import { useLightbox } from '@/components/shared/preview/LightboxProvider';
 import { downloadOutput } from './downloadOutput';
 import NewLibraryAssetDialog from '@/components/library/NewLibraryAssetDialog';
+import { getOutputAspectRatio } from './mediaDisplay';
 
 interface ResultCardProps {
   generation: PlaygroundGeneration;
@@ -144,6 +145,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const [downloading, setDownloading] = useState(false);
   const [actionError, setActionError] = useState('');
   const [importAssetOpen, setImportAssetOpen] = useState(false);
+  const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
@@ -202,7 +204,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       onClick={() => { if (mediaUrl) lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? "video" : "image" }); }}
     >
       {/* Media area */}
-      <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio: '16/9' }}>
+      <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
         {mediaUrl ? (
           isVideo ? (
             <video src={mediaUrl} preload="metadata" muted playsInline className="w-full h-full object-contain" />
@@ -386,13 +388,14 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 function ResultCardBody({ generation, outputIndex = 0, onGenerateVideo, onRetry, onOpenDetail, onDelete }: ResultCardProps) {
   const { status, prompt, model_id, mode, created_at } = generation;
   const t = useTranslations('playground');
+  const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   // ─── PROCESSING STATE ───────────────────────────────────────────────────────
   if (status === 'pending' || status === 'processing') {
     return (
       <div className="rounded-[20px] border border-glass-border bg-glass atelier-asset-card overflow-hidden">
         {/* Media area */}
-        <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio: '16/9' }}>
+        <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
           {/* Skeleton shimmer */}
           <div className="absolute inset-0 overflow-hidden">
             <div
