@@ -98,6 +98,16 @@ media CPU Blender 已完成 9 帧渲染。方向误差汇总如下：
 
 **Hypothesis**：当前误差主要来自“源向量在图像/世界坐标中计算，目标骨骼却按旧的平面 Euler 局部轴写入”，而不是单纯抖动问题。
 
+### 单帧验证修正
+
+**Observed**：此前单帧 manifest 使用 7 帧平滑轨迹。源帧 120 的原始肩肘点显示双臂展开，平滑轨迹已将快速动作平均到另一姿势；改用原始 `motion-track.v1` 后，Blender 静帧的双臂和跳跃姿态明显恢复。
+
+**Direct implication**：单帧坐标和姿势验收必须使用原始帧；平滑轨迹只允许进入连续视频预览，不能作为单帧真值。
+
+**Observed**：v4 骨骼方向误差为 0°，原因是求解器直接写入 evaluated bone matrix 后又读取同一矩阵测量。
+
+**Direct implication**：该 0° 结果只是求解闭环自检，不能证明与源视频的投影或视觉姿势一致。后续验收应增加 Blender 投影关节点与源帧 2D 关节点的独立误差。
+
 ## 下一步
 
 1. 在 Blender 中读取真实 rest bone head/tail，建立每根目标骨骼的局部基准轴。
