@@ -465,12 +465,16 @@ export default function DirectorShootingPlanPanel() {
     const currentStale = Boolean(serverState?.current_stale);
     const stale = draftStale || currentStale;
     const planNeedsExplicitAccept = Boolean(plan && (stale || serverState?.readiness_error));
-    const staleChanges = [
-        plan && serverState?.current_lineage?.source_revision !== undefined && plan.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: plan.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
-        plan && serverState?.current_lineage?.source_revision_id && plan.source_revision_id !== serverState.current_lineage.source_revision_id ? t("changedScriptContent") : null,
-        plan && serverState?.current_lineage?.director_profile_revision !== undefined && plan.director_profile_revision !== Number(serverState.current_lineage.director_profile_revision) ? t("changedDirectorRevision", { from: plan.director_profile_revision, to: Number(serverState.current_lineage.director_profile_revision) }) : null,
-        plan && serverState?.current_lineage?.director_profile_hash && plan.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
-    ].filter((item): item is string => Boolean(item));
+    const staleReferences = [
+        plan,
+        currentStale ? serverState?.current : null,
+    ].filter((item): item is NonNullable<typeof plan> => Boolean(item));
+    const staleChanges = Array.from(new Set(staleReferences.flatMap(reference => [
+        serverState?.current_lineage?.source_revision !== undefined && reference.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: reference.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
+        serverState?.current_lineage?.source_revision_id && reference.source_revision_id !== serverState.current_lineage.source_revision_id ? t("changedScriptContent") : null,
+        serverState?.current_lineage?.director_profile_revision !== undefined && reference.director_profile_revision !== Number(serverState.current_lineage.director_profile_revision) ? t("changedDirectorRevision", { from: reference.director_profile_revision, to: Number(serverState.current_lineage.director_profile_revision) }) : null,
+        serverState?.current_lineage?.director_profile_hash && reference.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
+    ].filter((item): item is string => Boolean(item)))));
     const openPlanEditor = () => {
         setViewMode("editor");
         requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("director-plan-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })));
