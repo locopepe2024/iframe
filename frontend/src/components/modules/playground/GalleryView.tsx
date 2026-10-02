@@ -109,59 +109,61 @@ export default function GalleryView({
   return (
     <div className="flex flex-col h-full">
       {/* Main media area */}
-      <div
-        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-6 bg-background"
-        onClick={handleClick}
-      >
-        {current.status === 'completed' && mediaUrl ? (
-          isVideo ? (
-            <video
-              key={current.id}
-              src={mediaUrl}
-              controls
-              preload="metadata"
-              playsInline
-              style={{ aspectRatio }}
-              className="h-auto w-full max-h-full max-w-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
-            />
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-background md:flex-row">
+        {/* Media stays in the left pane; metadata uses the otherwise empty right pane. */}
+        <div
+          className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden p-6 md:w-[68%] md:flex-none"
+          onClick={handleClick}
+        >
+          {current.status === 'completed' && mediaUrl ? (
+            isVideo ? (
+              <video
+                key={current.id}
+                src={mediaUrl}
+                controls
+                preload="metadata"
+                playsInline
+                style={{ aspectRatio }}
+                className="h-auto w-full max-h-full max-w-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
+              />
+            ) : (
+              <img
+                key={current.id}
+                src={mediaUrl}
+                alt={current.prompt}
+                className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-primary/30 transition-all duration-200"
+              />
+            )
+          ) : current.status === 'failed' ? (
+            <div className="flex flex-col items-center gap-3 text-status-failed-fg">
+              <AlertCircle className="w-10 h-10" />
+              <p className="font-mono text-xs">Generation failed</p>
+              {current.error && (
+                <p className="text-[0.625rem] text-text-muted max-w-xs text-center line-clamp-3">
+                  {current.error}
+                </p>
+              )}
+              {onRetry && (
+                <button
+                  onClick={() => onRetry(current)}
+                  className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
           ) : (
-            <img
-              key={current.id}
-              src={mediaUrl}
-              alt={current.prompt}
-              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-primary/30 transition-all duration-200"
-            />
-          )
-        ) : current.status === 'failed' ? (
-          <div className="flex flex-col items-center gap-3 text-status-failed-fg">
-            <AlertCircle className="w-10 h-10" />
-            <p className="font-mono text-xs">Generation failed</p>
-            {current.error && (
-              <p className="text-[0.625rem] text-text-muted max-w-xs text-center line-clamp-3">
-                {current.error}
+            <div className="flex flex-col items-center gap-3 text-text-muted">
+              <div className="w-8 h-8 border-2 border-glass-border border-t-primary rounded-full animate-spin" />
+              <p className="font-mono text-xs">
+                {current.status === 'pending' ? 'Queued...' : 'Generating...'}
               </p>
-            )}
-            {onRetry && (
-              <button
-                onClick={() => onRetry(current)}
-                className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3 text-text-muted">
-            <div className="w-8 h-8 border-2 border-glass-border border-t-primary rounded-full animate-spin" />
-            <p className="font-mono text-xs">
-              {current.status === 'pending' ? 'Queued...' : 'Generating...'}
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
 
-      {/* Info bar */}
-      <div className="px-6 py-3 bg-surface space-y-1.5">
+        {/* Info pane */}
+      <div className="shrink-0 border-t border-glass-border bg-surface px-6 py-3 space-y-1.5 md:w-[32%] md:overflow-y-auto md:border-l md:border-t-0 md:flex md:flex-col md:justify-center">
         <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed cursor-pointer hover:text-foreground transition-colors" onClick={handleClick} title={t('gallery.viewDetail')}>
           {current.prompt || '(no prompt)'}
         </p>
@@ -183,6 +185,8 @@ export default function GalleryView({
             {formatTime(current.created_at)}
           </span>
         </div>
+      </div>
+
       </div>
 
       {/* Thumbnail strip */}

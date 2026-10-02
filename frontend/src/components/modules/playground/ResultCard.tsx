@@ -200,11 +200,11 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 
   return (
     <div
-      className={`group rounded-[20px] border bg-glass atelier-asset-card overflow-hidden transition cursor-pointer ${saved ? 'border-primary/40 ring-1 ring-primary/30' : 'border-glass-border hover:border-foreground/30'}`}
+      className={`group rounded-[20px] border bg-glass atelier-asset-card overflow-hidden transition cursor-pointer md:flex md:items-stretch ${saved ? 'border-primary/40 ring-1 ring-primary/30' : 'border-glass-border hover:border-foreground/30'}`}
       onClick={() => { if (mediaUrl) lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? "video" : "image" }); }}
     >
       {/* Media area */}
-      <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
+      <div className="relative overflow-hidden bg-elevated md:w-[68%] md:shrink-0" style={{ aspectRatio }}>
         {mediaUrl ? (
           isVideo ? (
             <video src={mediaUrl} preload="metadata" muted playsInline className="w-full h-full object-contain" />
@@ -338,7 +338,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       </div>
 
       {/* Info area */}
-      <div className="px-3 py-[10px]">
+      <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-[10px] md:w-[32%]">
         {downloading && <p role="status" className="mb-1 text-xs text-text-muted">正在准备下载…</p>}
         {saving && <p role="status" className="mb-1 text-xs text-text-muted">正在保存到资产库…</p>}
         {actionError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{actionError}</p>}
