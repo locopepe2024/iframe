@@ -1,0 +1,1283 @@
+{
+  "schema": "blender-rig-calibration-report.v1",
+  "rig_asset": "white-model-neutral-female-v1.blend",
+  "source_manifest": "single-frame-manifest-raw.json",
+  "coordinate_mapping": "source(x,y,z) -> armature(x,z,-y)",
+  "bones": {
+    "upper_arm_l": {
+      "parent": "clavicle_l",
+      "rest_head": [
+        0.15160001814365387,
+        0.054299913346767426,
+        1.4180997610092163
+      ],
+      "rest_tail": [
+        0.3919000029563904,
+        0.058799926191568375,
+        1.4180997610092163
+      ],
+      "rest_direction_armature": [
+        0.9998247027397156,
+        0.018723363056778908,
+        0.0
+      ],
+      "rest_length": 0.2403421252965927,
+      "rest_local_y_in_armature": [
+        0.9998246431350708,
+        0.01872342638671398,
+        5.820764759079111e-09
+      ]
+    },
+    "spine_mid": {
+      "parent": "spine_lower",
+      "rest_head": [
+        -5.641172208178946e-13,
+        0.0022999364882707596,
+        1.164199948310852
+      ],
+      "rest_tail": [
+        -6.712746677961512e-13,
+        0.0016999254003167152,
+        1.2905999422073364
+      ],
+      "rest_direction_armature": [
+        -8.477550259011757e-13,
+        -0.004746869672089815,
+        0.9999886751174927
+      ],
+      "rest_length": 0.12640142440795898,
+      "rest_local_y_in_armature": [
+        -9.094948101931455e-13,
+        -0.004746877122670412,
+        0.9999887943267822
+      ]
+    },
+    "upper_leg_l": {
+      "parent": "pelvis",
+      "rest_head": [
+        0.11139998584985733,
+        0.051799967885017395,
+        0.9440998435020447
+      ],
+      "rest_tail": [
+        0.11139998584985733,
+        0.03230013698339462,
+        0.5346996784210205
+      ],
+      "rest_direction_armature": [
+        0.0,
+        -0.047576311975717545,
+        -0.9988676309585571
+      ],
+      "rest_length": 0.40986430644989014,
+      "rest_local_y_in_armature": [
+        -3.5899385686377627e-09,
+        -0.04757630079984665,
+        -0.9988675713539124
+      ]
+    },
+    "upper_leg_r": {
+      "parent": "pelvis",
+      "rest_head": [
+        -0.11139998584985733,
+        0.051799967885017395,
+        0.9440998435020447
+      ],
+      "rest_tail": [
+        -0.11139998584985733,
+        0.03230013698339462,
+        0.5346996784210205
+      ],
+      "rest_direction_armature": [
+        0.0,
+        -0.047576311975717545,
+        -0.9988676309585571
+      ],
+      "rest_length": 0.40986430644989014,
+      "rest_local_y_in_armature": [
+        -3.5899385686377627e-09,
+        -0.04757630079984665,
+        -0.9988675713539124
+      ]
+    },
+    "spine_chest": {
+      "parent": "spine_mid",
+      "rest_head": [
+        -6.712748304264771e-13,
+        0.001699940301477909,
+        1.2905999422073364
+      ],
+      "rest_tail": [
+        -1.0869027032567313e-12,
+        0.029973894357681274,
+        1.4318244457244873
+      ],
+      "rest_direction_armature": [
+        -2.88576367662996e-12,
+        0.1963101029396057,
+        0.9805418848991394
+      ],
+      "rest_length": 0.1440270096063614,
+      "rest_local_y_in_armature": [
+        -2.8848039408668757e-12,
+        0.1963101178407669,
+        0.9805418848991394
+      ]
+    },
+    "lower_arm_r": {
+      "parent": "upper_arm_r",
+      "rest_head": [
+        -0.3919000029563904,
+        0.05879994481801987,
+        1.4180996417999268
+      ],
+      "rest_tail": [
+        -0.6411001086235046,
+        0.051599957048892975,
+        1.4180996417999268
+      ],
+      "rest_direction_armature": [
+        -0.9995828866958618,
+        -0.028880342841148376,
+        0.0
+      ],
+      "rest_length": 0.24930404126644135,
+      "rest_local_y_in_armature": [
+        -0.999582827091217,
+        -0.028880344703793526,
+        0.0
+      ]
+    },
+    "pelvis": {
+      "parent": "root",
+      "rest_head": [
+        0.0,
+        0.04569998383522034,
+        0.9317998886108398
+      ],
+      "rest_tail": [
+        0.0,
+        0.01856054551899433,
+        1.0407122373580933
+      ],
+      "rest_direction_armature": [
+        0.0,
+        -0.241792231798172,
+        0.9703280925750732
+      ],
+      "rest_length": 0.11224281042814255,
+      "rest_local_y_in_armature": [
+        0.0,
+        -0.24179211258888245,
+        0.9703280925750732
+      ]
+    },
+    "spine_lower": {
+      "parent": "pelvis",
+      "rest_head": [
+        -1.3774299626248543e-12,
+        0.015099969692528248,
+        1.0546000003814697
+      ],
+      "rest_tail": [
+        -1.2695893598577146e-12,
+        0.0022999467328190804,
+        1.164199948310852
+      ],
+      "rest_direction_armature": [
+        9.773051508690789e-13,
+        -0.11600016802549362,
+        0.993249237537384
+      ],
+      "rest_length": 0.11034487187862396,
+      "rest_local_y_in_armature": [
+        -2.7355895326763857e-13,
+        -0.11600018292665482,
+        0.9932491779327393
+      ]
+    },
+    "clavicle_l": {
+      "parent": "spine_chest",
+      "rest_head": [
+        0.02929999679327011,
+        -0.016000106930732727,
+        1.4304999113082886
+      ],
+      "rest_tail": [
+        0.15286651253700256,
+        0.05316966772079468,
+        1.4303853511810303
+      ],
+      "rest_direction_armature": [
+        0.8725883960723877,
+        0.48845550417900085,
+        -0.0008089881157502532
+      ],
+      "rest_length": 0.14160916209220886,
+      "rest_local_y_in_armature": [
+        0.8725883960723877,
+        0.48845553398132324,
+        -0.000809013843536377
+      ]
+    },
+    "lower_arm_l": {
+      "parent": "upper_arm_l",
+      "rest_head": [
+        0.3919000029563904,
+        0.058799926191568375,
+        1.4180996417999268
+      ],
+      "rest_tail": [
+        0.6411001086235046,
+        0.05159994214773178,
+        1.4180996417999268
+      ],
+      "rest_direction_armature": [
+        0.9995828866958618,
+        -0.028880327939987183,
+        0.0
+      ],
+      "rest_length": 0.24930402636528015,
+      "rest_local_y_in_armature": [
+        0.999582827091217,
+        -0.028880327939987183,
+        9.094944849324937e-13
+      ]
+    },
+    "lower_leg_l": {
+      "parent": "upper_leg_l",
+      "rest_head": [
+        0.11139997839927673,
+        0.03230013698339462,
+        0.5346996784210205
+      ],
+      "rest_tail": [
+        0.11139997839927673,
+        0.07650023698806763,
+        0.07069984078407288
+      ],
+      "rest_direction_armature": [
+        0.0,
+        0.09482958167791367,
+        -0.995493471622467
+      ],
+      "rest_length": 0.4661003053188324,
+      "rest_local_y_in_armature": [
+        -3.5527141023169746e-15,
+        0.09482958912849426,
+        -0.9954935908317566
+      ]
+    },
+    "lower_leg_r": {
+      "parent": "upper_leg_r",
+      "rest_head": [
+        -0.11139997839927673,
+        0.03230013698339462,
+        0.5346996784210205
+      ],
+      "rest_tail": [
+        -0.11139997839927673,
+        0.07650023698806763,
+        0.07069984078407288
+      ],
+      "rest_direction_armature": [
+        0.0,
+        0.09482958167791367,
+        -0.995493471622467
+      ],
+      "rest_length": 0.4661003053188324,
+      "rest_local_y_in_armature": [
+        -3.5527141023169746e-15,
+        0.09482958912849426,
+        -0.9954935908317566
+      ]
+    },
+    "clavicle_r": {
+      "parent": "spine_chest",
+      "rest_head": [
+        -0.02929999679327011,
+        -0.016000088304281235,
+        1.4304999113082886
+      ],
+      "rest_tail": [
+        -0.15286651253700256,
+        0.05316968634724617,
+        1.4303853511810303
+      ],
+      "rest_direction_armature": [
+        -0.8725883960723877,
+        0.48845550417900085,
+        -0.0008089881157502532
+      ],
+      "rest_length": 0.14160916209220886,
+      "rest_local_y_in_armature": [
+        -0.8725885152816772,
+        0.48845553398132324,
+        -0.0008089841576293111
+      ]
+    },
+    "upper_arm_r": {
+      "parent": "clavicle_r",
+      "rest_head": [
+        -0.15160001814365387,
+        0.05429993197321892,
+        1.4180997610092163
+      ],
+      "rest_tail": [
+        -0.3919000029563904,
+        0.05879994481801987,
+        1.4180997610092163
+      ],
+      "rest_direction_armature": [
+        -0.9998247027397156,
+        0.018723363056778908,
+        0.0
+      ],
+      "rest_length": 0.2403421252965927,
+      "rest_local_y_in_armature": [
+        -0.9998247027397156,
+        0.018723398447036743,
+        2.6891935789308263e-08
+      ]
+    }
+  },
+  "frames": [
+    {
+      "source_frame": 1,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            -0.9283565282821655,
+            -0.3688371777534485,
+            0.04596918076276779
+          ],
+          "source_length": 0.08190824538380602,
+          "rest_to_source_angle_degrees": 172.00119779271108,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            -0.5734565258026123,
+            -0.6689193844795227,
+            -0.4729633927345276
+          ],
+          "source_length": 0.15185369171623797,
+          "rest_to_source_angle_degrees": 125.86520972299923,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            -0.6736543774604797,
+            -0.376845121383667,
+            -0.6357495188713074
+          ],
+          "source_length": 0.11131661704883748,
+          "rest_to_source_angle_degrees": 131.49004808942314,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            0.9283565878868103,
+            0.36883705854415894,
+            -0.04596953094005585
+          ],
+          "source_length": 0.08190827518091102,
+          "rest_to_source_angle_degrees": 129.04093349835335,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            0.6108630299568176,
+            0.22977663576602936,
+            -0.7576603293418884
+          ],
+          "source_length": 0.10256044982207004,
+          "rest_to_source_angle_degrees": 127.33352280963355,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            0.23517335951328278,
+            0.6590049266815186,
+            -0.71442711353302
+          ],
+          "source_length": 0.09894605182496866,
+          "rest_to_source_angle_degrees": 104.72070624144561,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            -0.09985080361366272,
+            0.11762820184230804,
+            -0.9880250692367554
+          ],
+          "source_length": 0.1660040228134403,
+          "rest_to_source_angle_degrees": 11.094872202856795,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.09918711334466934,
+            -0.2670982778072357,
+            -0.9585512280464172
+          ],
+          "source_length": 0.1654481194488286,
+          "rest_to_source_angle_degrees": 21.735594882515688,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            0.1046837642788887,
+            0.22605028748512268,
+            -0.9684743881225586
+          ],
+          "source_length": 0.167929530416523,
+          "rest_to_source_angle_degrees": 16.93751847172325,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.16784201562404633,
+            -0.3379652500152588,
+            -0.9260715842247009
+          ],
+          "source_length": 0.15340341454036252,
+          "rest_to_source_angle_degrees": 27.145705761812746,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 60,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.9129111766815186,
+            -0.4027034342288971,
+            0.06650632619857788
+          ],
+          "source_length": 0.070145755744741,
+          "rest_to_source_angle_degrees": 53.141617478745545,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.8336113691329956,
+            0.4750079810619354,
+            -0.28188556432724
+          ],
+          "source_length": 0.08560164140491551,
+          "rest_to_source_angle_degrees": 32.60992881480923,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.9488595724105835,
+            -0.1969914734363556,
+            -0.24669770896434784
+          ],
+          "source_length": 0.06640361978339315,
+          "rest_to_source_angle_degrees": 17.41672454389135,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.9129111766815186,
+            0.40270355343818665,
+            -0.06650632619857788
+          ],
+          "source_length": 0.07014575906398156,
+          "rest_to_source_angle_degrees": 6.610197314583103,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.975674569606781,
+            0.18902623653411865,
+            -0.11103182286024094
+          ],
+          "source_length": 0.0933076728684985,
+          "rest_to_source_angle_degrees": 11.750743679228208,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            -0.8181843161582947,
+            -0.564879298210144,
+            0.10717228055000305
+          ],
+          "source_length": 0.09867009022635917,
+          "rest_to_source_angle_degrees": 33.47185087674065,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.31724420189857483,
+            -0.9467976093292236,
+            -0.05413313955068588
+          ],
+          "source_length": 0.32729343232103714,
+          "rest_to_source_angle_degrees": 84.31167752971898,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.16386593878269196,
+            0.9069303274154663,
+            -0.38810470700263977
+          ],
+          "source_length": 0.2098424976649519,
+          "rest_to_source_angle_degrees": 61.81243334705002,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.5654272437095642,
+            -0.8190041184425354,
+            -0.0975928008556366
+          ],
+          "source_length": 0.2267201983155334,
+          "rest_to_source_angle_degrees": 82.15766809192874,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.6082693338394165,
+            0.7127334475517273,
+            -0.34931281208992004
+          ],
+          "source_length": 0.2069717076438137,
+          "rest_to_source_angle_degrees": 65.46009587329533,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 120,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            -0.9943431615829468,
+            -0.0970289558172226,
+            -0.043208952993154526
+          ],
+          "source_length": 0.05736309718065033,
+          "rest_to_source_angle_degrees": 156.20738254467543,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            -0.46708452701568604,
+            0.8674924969673157,
+            -0.17113974690437317
+          ],
+          "source_length": 0.1324855726409143,
+          "rest_to_source_angle_degrees": 116.79247820317454,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.14285100996494293,
+            0.9896944165229797,
+            0.00992515031248331
+          ],
+          "source_length": 0.1957104723119228,
+          "rest_to_source_angle_degrees": 83.44201003326876,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            0.9943432211875916,
+            0.09702906757593155,
+            0.043209001421928406
+          ],
+          "source_length": 0.05736303832667921,
+          "rest_to_source_angle_degrees": 145.11411714382086,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            0.7159009575843811,
+            -0.5940334796905518,
+            -0.3668924868106842
+          ],
+          "source_length": 0.0880105247176991,
+          "rest_to_source_angle_degrees": 136.6269514019197,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            0.9819512367248535,
+            0.0759328231215477,
+            0.17322196066379547
+          ],
+          "source_length": 0.0724359212297037,
+          "rest_to_source_angle_degrees": 169.6519269069285,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            -0.7544287443161011,
+            0.5422053337097168,
+            -0.3699333369731903
+          ],
+          "source_length": 0.12642683651061035,
+          "rest_to_source_angle_degrees": 69.89642668262367,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.4002700448036194,
+            -0.35051682591438293,
+            -0.8467124104499817
+          ],
+          "source_length": 0.11865346323277957,
+          "rest_to_source_angle_degrees": 35.937535506736914,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            0.1691363900899887,
+            0.642919659614563,
+            -0.7470255494117737
+          ],
+          "source_length": 0.08751011068858548,
+          "rest_to_source_angle_degrees": 44.30827042895146,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            0.05882713943719864,
+            0.09250161051750183,
+            -0.9939731955528259
+          ],
+          "source_length": 0.0960134348850091,
+          "rest_to_source_angle_degrees": 3.3748124771591677,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 150,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.9750363826751709,
+            -0.21789605915546417,
+            -0.04272480681538582
+          ],
+          "source_length": 0.031936933804467,
+          "rest_to_source_angle_degrees": 41.89176999116846,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.28411200642585754,
+            0.25889772176742554,
+            -0.9231751561164856
+          ],
+          "source_length": 0.05284847503371542,
+          "rest_to_source_angle_degrees": 73.20731307146316,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            -0.22310477495193481,
+            -0.7395957708358765,
+            -0.6349979639053345
+          ],
+          "source_length": 0.051462208348546555,
+          "rest_to_source_angle_degrees": 101.63357684981574,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.9750362634658813,
+            0.2178964912891388,
+            0.04272480309009552
+          ],
+          "source_length": 0.031936937050939924,
+          "rest_to_source_angle_degrees": 16.82297790688943,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.7733180522918701,
+            0.5560743808746338,
+            -0.30456623435020447
+          ],
+          "source_length": 0.054053672835793244,
+          "rest_to_source_angle_degrees": 38.40917264659485,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            -0.9927787184715271,
+            -0.09657758474349976,
+            0.07115677744150162
+          ],
+          "source_length": 0.04469210732729215,
+          "rest_to_source_angle_degrees": 5.643092900754426,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.9437227845191956,
+            0.28777003288269043,
+            -0.16302038729190826
+          ],
+          "source_length": 0.06514667417213825,
+          "rest_to_source_angle_degrees": 81.42263045420864,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            0.6354907751083374,
+            0.6519701480865479,
+            -0.41362589597702026
+          ],
+          "source_length": 0.10068425909982465,
+          "rest_to_source_angle_degrees": 61.732547454517544,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.8501850962638855,
+            -0.5063983798027039,
+            -0.14403438568115234
+          ],
+          "source_length": 0.05597112141834697,
+          "rest_to_source_angle_degrees": 80.33054467762614,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.08401632308959961,
+            0.7071213722229004,
+            -0.7020831108093262
+          ],
+          "source_length": 0.07132154657071049,
+          "rest_to_source_angle_degrees": 40.006173327381376,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 180,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.12186417728662491,
+            -0.9923924207687378,
+            0.01750631257891655
+          ],
+          "source_length": 0.12924437780969852,
+          "rest_to_source_angle_degrees": 112.23562870594132,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.8345552682876587,
+            -0.37130531668663025,
+            -0.40700098872184753
+          ],
+          "source_length": 0.09668479289436756,
+          "rest_to_source_angle_degrees": 34.161621435736485,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.3916575610637665,
+            0.24655622243881226,
+            -0.8864617347717285
+          ],
+          "source_length": 0.05672596786662262,
+          "rest_to_source_angle_degrees": 67.3951431066733,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.12186417728662491,
+            0.9923924207687378,
+            -0.01750631257891655
+          ],
+          "source_length": 0.12924437780969852,
+          "rest_to_source_angle_degrees": 53.7655347688587,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            0.5459747314453125,
+            0.7721270322799683,
+            -0.32516375184059143
+          ],
+          "source_length": 0.09684139873566742,
+          "rest_to_source_angle_degrees": 122.10159790540379,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            0.32165974378585815,
+            0.34894517064094543,
+            -0.8802115321159363
+          ],
+          "source_length": 0.0482957211432762,
+          "rest_to_source_angle_degrees": 109.36611597145722,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            -0.12535780668258667,
+            -0.9432790875434875,
+            -0.3074246346950531
+          ],
+          "source_length": 0.23913428672222978,
+          "rest_to_source_angle_degrees": 69.39311004268542,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.2052493840456009,
+            -0.9578814506530762,
+            -0.20083767175674438
+          ],
+          "source_length": 0.3024531534910989,
+          "rest_to_source_angle_degrees": 83.73673269595481,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.18404710292816162,
+            -0.952060878276825,
+            -0.2443493753671646
+          ],
+          "source_length": 0.23671042514041343,
+          "rest_to_source_angle_degrees": 73.17986254118888,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.10602464526891708,
+            -0.9698724150657654,
+            -0.21933111548423767
+          ],
+          "source_length": 0.3325233411990793,
+          "rest_to_source_angle_degrees": 82.74011930359075,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 240,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.6811316609382629,
+            0.7046093344688416,
+            -0.19896075129508972
+          ],
+          "source_length": 0.09532213691820565,
+          "rest_to_source_angle_degrees": 20.169140515244745,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.7319144010543823,
+            0.41174930334091187,
+            -0.5429216623306274
+          ],
+          "source_length": 0.09975711534169732,
+          "rest_to_source_angle_degrees": 42.31155000246285,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.5751664042472839,
+            -0.7499788403511047,
+            -0.3266729414463043
+          ],
+          "source_length": 0.12892017912384987,
+          "rest_to_source_angle_degrees": 53.374209325646575,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.6811315417289734,
+            -0.7046095132827759,
+            0.19896051287651062
+          ],
+          "source_length": 0.09532210409621474,
+          "rest_to_source_angle_degrees": 75.52153142642521,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.3539866805076599,
+            -0.9351903200149536,
+            -0.010601896792650223
+          ],
+          "source_length": 0.24547377878533042,
+          "rest_to_source_angle_degrees": 70.34141350704999,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            0.023117274045944214,
+            -0.9916068315505981,
+            -0.1272062063217163
+          ],
+          "source_length": 0.3834987380720344,
+          "rest_to_source_angle_degrees": 89.68313636850293,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.14548344910144806,
+            -0.7344553470611572,
+            -0.6628800630569458
+          ],
+          "source_length": 0.1773046565581087,
+          "rest_to_source_angle_degrees": 45.80743206497214,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            0.1033928319811821,
+            0.8312682509422302,
+            -0.546171247959137
+          ],
+          "source_length": 0.2230420278892688,
+          "rest_to_source_angle_degrees": 51.498236398400046,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.0311309564858675,
+            -0.9985942840576172,
+            0.04290062189102173
+          ],
+          "source_length": 0.5959850741351672,
+          "rest_to_source_angle_degrees": 89.73314701360577,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            0.05135844275355339,
+            0.7568376064300537,
+            -0.6515819430351257
+          ],
+          "source_length": 0.2010354068455366,
+          "rest_to_source_angle_degrees": 43.91114274003941,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 360,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.8688815832138062,
+            -0.4645053446292877,
+            0.17111286520957947
+          ],
+          "source_length": 0.07051751469262058,
+          "rest_to_source_angle_degrees": 57.91699204828415,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.7269890904426575,
+            -0.6464672088623047,
+            -0.23144535720348358
+          ],
+          "source_length": 0.07399146101313461,
+          "rest_to_source_angle_degrees": 44.37666111311079,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.5181830525398254,
+            -0.8121463656425476,
+            -0.26815012097358704
+          ],
+          "source_length": 0.10789391019917331,
+          "rest_to_source_angle_degrees": 57.21950679062079,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.868881344795227,
+            0.464505672454834,
+            -0.17111319303512573
+          ],
+          "source_length": 0.07051746609508801,
+          "rest_to_source_angle_degrees": 9.868206940189294,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.4929802119731903,
+            -0.05291388928890228,
+            -0.868429958820343
+          ],
+          "source_length": 0.07934657891872215,
+          "rest_to_source_angle_degrees": 60.53425906653051,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            -0.48707565665245056,
+            -0.78001868724823,
+            -0.39284634590148926
+          ],
+          "source_length": 0.1287651355276073,
+          "rest_to_source_angle_degrees": 59.37615268143065,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.2213723510503769,
+            -0.9721383452415466,
+            0.07708027958869934
+          ],
+          "source_length": 0.35263350183088715,
+          "rest_to_source_angle_degrees": 91.7616790461537,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.012283552438020706,
+            0.8338724970817566,
+            -0.5518205761909485
+          ],
+          "source_length": 0.18278486254445223,
+          "rest_to_source_angle_degrees": 51.06711827308342,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.062246426939964294,
+            -0.9740411043167114,
+            -0.21764491498470306
+          ],
+          "source_length": 0.3866882998587082,
+          "rest_to_source_angle_degrees": 74.7079192924933,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            0.2620633542537689,
+            0.7170661091804504,
+            -0.6458629369735718
+          ],
+          "source_length": 0.1668110319401168,
+          "rest_to_source_angle_degrees": 44.687619135453964,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 480,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.39698857069015503,
+            0.9154799580574036,
+            -0.06554761528968811
+          ],
+          "source_length": 0.1257808333140207,
+          "rest_to_source_angle_degrees": 37.47377482466701,
+          "parent": "spine_chest"
+        },
+        "upper_arm_l": {
+          "source_direction_armature": [
+            0.7528725266456604,
+            0.6419669985771179,
+            -0.14512528479099274
+          ],
+          "source_length": 0.08828206043153615,
+          "rest_to_source_angle_degrees": 40.114325957793945,
+          "parent": "clavicle_l"
+        },
+        "lower_arm_l": {
+          "source_direction_armature": [
+            0.41470441222190857,
+            -0.9056404829025269,
+            -0.08851940184831619
+          ],
+          "source_length": 0.13340030841384612,
+          "rest_to_source_angle_degrees": 63.85230349362017,
+          "parent": "upper_arm_l"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.396988183259964,
+            -0.9154801368713379,
+            0.0655476301908493
+          ],
+          "source_length": 0.12578080277116305,
+          "rest_to_source_angle_degrees": 95.78622458061115,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.8987253308296204,
+            -0.4076397716999054,
+            -0.16162459552288055
+          ],
+          "source_length": 0.07761032730681303,
+          "rest_to_source_angle_degrees": 27.00897220481826,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            0.30358433723449707,
+            -0.6713517308235168,
+            -0.6761090159416199
+          ],
+          "source_length": 0.08927336031519086,
+          "rest_to_source_angle_degrees": 106.50319436952219,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.32147476077079773,
+            -0.9313833117485046,
+            -0.17081882059574127
+          ],
+          "source_length": 0.21853687476495778,
+          "rest_to_source_angle_degrees": 77.58816225416349,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            -0.05139030143618584,
+            0.9189645648002625,
+            -0.39097729325294495
+          ],
+          "source_length": 0.23335796143894197,
+          "rest_to_source_angle_degrees": 61.552039215132446,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.7378629446029663,
+            -0.17621475458145142,
+            -0.6515417098999023
+          ],
+          "source_length": 0.1197602535051118,
+          "rest_to_source_angle_degrees": 48.76205920179835,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.322178453207016,
+            0.9396371245384216,
+            -0.11525246500968933
+          ],
+          "source_length": 0.28069180696224894,
+          "rest_to_source_angle_degrees": 78.23848505560791,
+          "parent": "upper_leg_r"
+        }
+      }
+    },
+    {
+      "source_frame": 556,
+      "segments": {
+        "clavicle_l": {
+          "source_direction_armature": [
+            0.13695991039276123,
+            0.9895794987678528,
+            -0.04443437233567238
+          ],
+          "source_length": 0.1612694881429399,
+          "rest_to_source_angle_degrees": 52.92132338744513,
+          "parent": "spine_chest"
+        },
+        "clavicle_r": {
+          "source_direction_armature": [
+            -0.13695953786373138,
+            -0.9895794987678528,
+            0.04443437233567238
+          ],
+          "source_length": 0.16126947993168844,
+          "rest_to_source_angle_degrees": 111.3394259245656,
+          "parent": "spine_chest"
+        },
+        "upper_arm_r": {
+          "source_direction_armature": [
+            -0.14024631679058075,
+            -0.9756389260292053,
+            -0.16869992017745972
+          ],
+          "source_length": 0.22568864543341732,
+          "rest_to_source_angle_degrees": 82.99508343511815,
+          "parent": "clavicle_r"
+        },
+        "lower_arm_r": {
+          "source_direction_armature": [
+            -0.04110751301050186,
+            -0.9725666046142578,
+            -0.22896359860897064
+          ],
+          "source_length": 0.24911854910934136,
+          "rest_to_source_angle_degrees": 86.03319938926401,
+          "parent": "upper_arm_r"
+        },
+        "upper_leg_l": {
+          "source_direction_armature": [
+            0.12639407813549042,
+            0.7463067173957825,
+            -0.6534912586212158
+          ],
+          "source_length": 0.1608816146749959,
+          "rest_to_source_angle_degrees": 51.8847943695715,
+          "parent": "pelvis"
+        },
+        "lower_leg_l": {
+          "source_direction_armature": [
+            0.156703919172287,
+            0.8029630184173584,
+            -0.5750603079795837
+          ],
+          "source_length": 0.14773747939981532,
+          "rest_to_source_angle_degrees": 49.56285790084733,
+          "parent": "upper_leg_l"
+        },
+        "upper_leg_r": {
+          "source_direction_armature": [
+            -0.17533515393733978,
+            -0.7683939337730408,
+            -0.6154903173446655
+          ],
+          "source_length": 0.16941543380093477,
+          "rest_to_source_angle_degrees": 49.35648373507539,
+          "parent": "pelvis"
+        },
+        "lower_leg_r": {
+          "source_direction_armature": [
+            -0.3711312711238861,
+            0.4564012587070465,
+            -0.8086775541305542
+          ],
+          "source_length": 0.13044536096825915,
+          "rest_to_source_angle_degrees": 31.97127880665636,
+          "parent": "upper_leg_r"
+        }
+      }
+    }
+  ],
+  "evidence_boundary": {
+    "observed": [
+      "rest bone axes and source segment directions"
+    ],
+    "not_proven": [
+      "camera calibration",
+      "true depth",
+      "twist",
+      "IK",
+      "temporal continuity"
+    ]
+  }
+}

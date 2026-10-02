@@ -230,6 +230,8 @@
 
 **Retargeting boundary**：一次 world-space 直接覆盖 pose bone matrix 的实验导致子骨骼重复继承父级旋转，出现前臂和小腿交叉。该路径已撤回；当前继续使用父子链中的 local swing，并把 `clavicle → upper_arm → lower_arm` 作为下一轮校准顺序。
 
+新增只读校准报告 `tools/motion_track/build_rig_calibration_report.py`，记录 rig rest bone axis、父子关系和 9 个代表帧的源段方向。报告显示肩臂源向量与 rig rest 轴存在明显基准差异；body-frame 映射的首版实验因矩阵约定未固定而恶化，已撤回，不作为当前 retarget 结果。
+
 ### 逐段方向诊断
 
 独立投影报告增加了相似变换后的逐段角度误差。当前 raw/estimated-depth 代表帧平均绝对角度误差约为：
