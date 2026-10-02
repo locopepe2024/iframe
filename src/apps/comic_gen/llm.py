@@ -87,7 +87,11 @@ DIRECTOR_PROFILE_TIMEOUT_SECONDS = 1800
 # A shooting-plan chunk must fail visibly when the upstream request never
 # reaches or never answers at the gateway. The job can be retried and cached
 # completed chunks are retained; it must not leave the UI running indefinitely.
-DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 600
+# UniArt shooting-plan requests have observed successful responses beyond ten
+# minutes. Keep the local request deadline above that provider tail latency;
+# the bounded retry loop (with SDK retries disabled) still prevents duplicate
+# long submissions.
+DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
 # The provider occasionally returns a transient 502/503 after accepting a
 # long Director request.  Allow one SDK retry for retryable HTTP failures;
 # keep this bounded so a costly analysis cannot loop indefinitely.
@@ -1812,6 +1816,58 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} dialogue 格式无效"
         return None
 
+    @staticmethod
+    def _coerce_director_shooting_chunk(payload: Any, source_ref: str = "") -> Dict[str, Any]:
+        """Turn a model response into an editable chunk without admission gates.
+
+        The model response is creative analysis, not persisted domain truth.
+        Missing or extra creative fields are retained where possible and
+        represented as unresolved questions. Only the pipeline later assigns
+        stable scene/beat/shot identities and binds known asset references.
+        """
+        if not isinstance(payload, dict):
+            payload = {}
+        scenes = payload.get("scenes") if isinstance(payload.get("scenes"), list) else []
+        questions = payload.get("unresolved_questions")
+        normalized_questions = [str(item)[:500] for item in questions[:20] if str(item).strip()] if isinstance(questions, list) else []
+        if not scenes:
+            normalized_questions.append("模型未返回可直接入库的场景结构，已创建待补充场景供用户编辑。")
+            scenes = [{
+                "scene_ref": "原文未标明",
+                "heading": "待用户补充",
+                "location": "",
+                "time_anchor": "",
+                "environment_atmosphere": "",
+                "prop_ids": [],
+                "unresolved_questions": ["请补充本段场景地点、时间和环境。"],
+                "beats": [],
+            }]
+        normalized_scenes = []
+        for raw_scene in scenes:
+            scene = dict(raw_scene) if isinstance(raw_scene, dict) else {}
+            beats = scene.get("beats") if isinstance(scene.get("beats"), list) else []
+            normalized_beats = []
+            for raw_beat in beats:
+                beat = dict(raw_beat) if isinstance(raw_beat, dict) else {}
+                shots = beat.get("shots") if isinstance(beat.get("shots"), list) else []
+                normalized_shots = []
+                for raw_shot in shots:
+                    shot = dict(raw_shot) if isinstance(raw_shot, dict) else {}
+                    shot.setdefault("dialogue", [])
+                    shot.setdefault("character_ids", [])
+                    shot.setdefault("prop_ids", [])
+                    shot.setdefault("lighting", {})
+                    shot.setdefault("ambient_sound", "")
+                    normalized_shots.append(shot)
+                beat["shots"] = normalized_shots
+                beat.setdefault("story_event_ids", [])
+                normalized_beats.append(beat)
+            scene["beats"] = normalized_beats
+            scene.setdefault("prop_ids", [])
+            scene.setdefault("unresolved_questions", [])
+            normalized_scenes.append(scene)
+        return {"scenes": normalized_scenes, "unresolved_questions": normalized_questions}
+
     def plan_director_shooting_chunk(
         self,
         script_chunk: str,
@@ -1906,23 +1962,21 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                     ]
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
-                last_error = self._validate_director_shooting_chunk(result) or ""
-                if not last_error:
-                    logger.info(
-                        "Director shooting-plan chunk admitted: source_ref=%s attempt=%s scenes=%s",
-                        source_ref or "<unspecified>", attempt + 1, len(result.get("scenes", [])),
-                    )
-                    return result
-                logger.warning(
-                    "Director shooting-plan chunk contract rejected: source_ref=%s attempt=%s error=%s",
-                    source_ref or "<unspecified>", attempt + 1, last_error,
+                result = self._coerce_director_shooting_chunk(result, source_ref)
+                logger.info(
+                    "Director shooting-plan chunk normalized for editing: source_ref=%s attempt=%s scenes=%s",
+                    source_ref or "<unspecified>", attempt + 1, len(result.get("scenes", [])),
                 )
+                return result
             if attempt == 0:
                 retry_note = (
                     "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error
                 )
 
-        raise RuntimeError(f"拍摄计划模型结果连续两次不符合完整镜头契约：{last_error}")
+        # JSON could not be decoded after the bounded retry. Preserve task
+        # progress with an editable placeholder instead of rejecting the model
+        # analysis at the admission boundary.
+        return self._coerce_director_shooting_chunk({}, source_ref)
 
     @staticmethod
     def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:

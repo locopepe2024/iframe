@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
 RETENTION = 86400
 STORYBOARD_TIMEOUT = 30 * 60
-DIRECTOR_SHOOTING_PLAN_TIMEOUT = 15 * 60
+# A single plan chunk may legitimately use up to the 30-minute provider
+# deadline. The job expiry must not terminate it first.
+DIRECTOR_SHOOTING_PLAN_TIMEOUT = 45 * 60
 
 
 class ExtractionJobs:

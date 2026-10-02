@@ -2935,7 +2935,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         }
         missing_events = requested_event_ids - valid_event_ids
         if missing_events:
-            raise ValueError("Shooting plan references unknown Director story events: " + ", ".join(sorted(missing_events)))
+            # Model analysis and plan admission are separate boundaries.  A
+            # model may return a useful scene/shot plan while referring to an
+            # event id that was not emitted by the confirmed story map. Keep
+            # the reference for user review and surface it as an unresolved
+            # question; do not discard the whole plan after the upstream call
+            # has already succeeded.
+            logger.warning(
+                "Shooting plan contains unbound Director story event references: %s",
+                sorted(missing_events),
+            )
+            value_questions = list(getattr(plan, "unresolved_questions", []) or [])
+            value_questions.append(
+                "模型返回了未登记剧情事件引用，已保留供用户修订："
+                + ", ".join(sorted(missing_events)[:20])
+            )
+            plan.unresolved_questions = list(dict.fromkeys(value_questions))[:80]
 
         available_entities = self.resolve_episode_assets(script)
         available_characters = {character.id for character in available_entities["characters"]}
@@ -3073,22 +3088,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                     previous_scene,
                     source_ref=chunk["source_ref"],
                 )
-                chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
-                if chunk_error:
-                    raise RuntimeError(
-                        f"拍摄计划分析第 {index + 1}/{len(chunks)} 段未通过镜头契约校验：{chunk_error}"
-                    )
                 if save_batch and not save_batch(index, chunk["source_ref"], {"result": chunk_result}):
                     raise RuntimeError("拍摄计划任务已过期，请重试。")
-            if ScriptProcessor._validate_director_shooting_chunk(chunk_result):
-                raise RuntimeError(f"拍摄计划缓存段 {index + 1}/{len(chunks)} 已不符合当前镜头契约，请重新生成。")
 
             chunk_questions = chunk_result.get("unresolved_questions", [])
             if isinstance(chunk_questions, list):
                 unresolved_questions.extend(str(item)[:500] for item in chunk_questions[:20] if str(item).strip())
             raw_scenes = chunk_result.get("scenes", [])
-            if not raw_scenes:
-                raise RuntimeError(f"拍摄计划分析第 {index + 1}/{len(chunks)} 段没有返回场景。")
             for scene_index, raw_scene in enumerate(raw_scenes):
                 if not isinstance(raw_scene, dict):
                     raise RuntimeError("拍摄计划场景必须是对象。")

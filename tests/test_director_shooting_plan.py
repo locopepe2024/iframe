@@ -196,6 +196,34 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
     assert processor.llm.chat.call_count == 1
 
 
+def test_llm_does_not_gate_creative_chunk_on_contract_shape():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({
+        "scenes": [{
+            "heading": "未登记场景",
+            "beats": [{
+                "title": "待编辑节拍",
+                "story_event_ids": ["model-only-event"],
+                "shots": [{"title": "只有标题", "unknown_creative_field": "保留在模型边界外"}],
+            }],
+        }],
+        "unresolved_questions": [],
+    }, ensure_ascii=False)
+
+    result = processor.plan_director_shooting_chunk(
+        "一段剧本内容",
+        {"characters": [], "props": []},
+        {"story_map": {"phases": []}},
+        {"style": "生活化电影"},
+        source_ref="source:chars-0-20",
+    )
+
+    assert result["scenes"][0]["beats"][0]["story_event_ids"] == ["model-only-event"]
+    assert result["scenes"][0]["beats"][0]["shots"][0]["title"] == "只有标题"
+    assert processor.llm.chat.call_count == 1
+
+
 def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
@@ -232,8 +260,9 @@ def test_plan_lineage_rejects_director_or_style_changes_and_unknown_references()
     profile.content_hash = "director-hash-v3"
     invalid = plan.model_dump()
     invalid["scenes"][0]["beats"][0]["story_event_ids"] = ["unknown-event"]
-    with pytest.raises(ValueError, match="unknown Director story events"):
-        pipeline._validate_director_shooting_plan(script, invalid)
+    accepted = pipeline._validate_director_shooting_plan(script, invalid)
+    assert accepted.scenes[0].beats[0].story_event_ids == ["unknown-event"]
+    assert "unknown-event" in accepted.unresolved_questions[0]
 
     invalid = plan.model_dump()
     invalid["scenes"][0]["beats"][0]["shots"][0]["prop_ids"] = ["unknown-prop"]
