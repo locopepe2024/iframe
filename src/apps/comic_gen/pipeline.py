@@ -7421,6 +7421,30 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_library_data_unlocked()
             return new_asset
 
+    def fork_library_asset_to_series(self, series_id: str, asset_type: str, library_asset_id: str):
+        """Copy one global library asset into a series shared-asset scope."""
+        import copy
+        if asset_type not in ("character", "scene", "prop"):
+            raise ValueError(f"Invalid asset type: {asset_type}")
+        with self._save_lock:
+            series = self.get_series(series_id)
+            if not series:
+                raise ValueError(f"Series not found: {series_id}")
+            source_asset = self._find_library_asset(asset_type, library_asset_id)
+            new_asset = copy.deepcopy(source_asset)
+            prefix = {"character": "char", "scene": "scene", "prop": "prop"}[asset_type]
+            new_asset.id = f"{prefix}_{uuid.uuid4().hex[:12]}"
+            if asset_type == "character":
+                series.characters.append(new_asset)
+            elif asset_type == "scene":
+                series.scenes.append(new_asset)
+            else:
+                series.props.append(new_asset)
+            series.updated_at = time.time()
+            self.series_store[series_id] = series
+            self._save_series_data_unlocked()
+            return new_asset
+
     def fork_library_asset_to_project(self, script_id: str, asset_type: str, library_asset_id: str):
         """Deep-copy a *global library* asset into a project's local asset list
         with a fresh id, persist the project, and return the new (now

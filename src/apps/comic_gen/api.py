@@ -1305,6 +1305,11 @@ class ImportAssetsRequest(BaseModel):
     asset_ids: List[str]
 
 
+class ForkFromLibraryRequest(BaseModel):
+    asset_type: str          # "character" | "scene" | "prop"
+    library_asset_id: str    # id of the source asset in the global library
+
+
 # R2V v2 Phase 5 — quick-create CRUD for series-shared assets.
 # Used by Cast step's "+ 新角色 / 新场景 / 新道具" modal. Optional
 # `image_url` lets the user attach a pre-uploaded master sheet so the
@@ -1315,6 +1320,30 @@ class CreateSeriesAssetRequest(BaseModel):
     persona: Optional[str] = ""        # characters only — grouping label
     image_url: Optional[str] = None    # optional uploaded master sheet
     voice_id: Optional[str] = None     # characters only — TTS voice binding
+
+
+class CreateAvatarRequest(BaseModel):
+    name: str
+    description: str = ""
+    voice_id: Optional[str] = None
+
+
+class AddAvatarSourceRequest(BaseModel):
+    media_url: str
+    media_type: Literal["image", "video"] = "image"
+    duration_seconds: Optional[float] = None
+
+
+class CreateAvatarPreviewRequest(BaseModel):
+    script: str = Field(min_length=1)
+
+
+class UpdateAvatarAppearanceRequest(BaseModel):
+    face: Optional[Dict[str, Any]] = None
+    body: Optional[Dict[str, Any]] = None
+    extraction_source: Optional[Literal["manual", "inferred", "imported"]] = None
+    confidence: Optional[float] = Field(None, ge=0, le=1)
+    notes: Optional[str] = None
 
 
 def _new_id(prefix: str) -> str:
@@ -1408,6 +1437,20 @@ def import_series_assets(series_id: str, request: ImportAssetsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/series/{series_id}/assets/import-from-library")
+def import_series_asset_from_library(series_id: str, request: ForkFromLibraryRequest):
+    """Copy one global library asset into the series shared asset scope."""
+    try:
+        asset = pipeline.fork_library_asset_to_series(
+            series_id, request.asset_type, request.library_asset_id
+        )
+        return signed_response(asset.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================
 # Global Asset Library (project-independent shared pool) — CRUD + promote
 # ============================================================
@@ -1446,11 +1489,6 @@ class PromoteAssetRequest(BaseModel):
     source_id: str
     asset_type: str    # "character" | "scene" | "prop"
     asset_id: str
-
-
-class ForkFromLibraryRequest(BaseModel):
-    asset_type: str          # "character" | "scene" | "prop"
-    library_asset_id: str    # id of the source asset in the global library
 
 
 def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext) -> Dict[str, Any]:
@@ -1496,6 +1534,79 @@ def create_library_asset(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/library/avatars")
+def list_library_avatars():
+    return signed_response({"avatars": [a.model_dump() for a in pipeline.list_library_avatars()]})
+
+
+@app.post("/library/avatars")
+def create_library_avatar(
+    request: CreateAvatarRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    avatar = pipeline.create_library_avatar(request.model_dump())
+    return signed_response(avatar.model_dump())
+
+
+@app.get("/library/avatars/{avatar_id}")
+def get_library_avatar(avatar_id: str):
+    try:
+        return signed_response(pipeline.get_library_avatar(avatar_id).model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/library/avatars/{avatar_id}/sources")
+def add_library_avatar_source(
+    avatar_id: str,
+    request: AddAvatarSourceRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    try:
+        avatar = pipeline.add_avatar_source(avatar_id, request.model_dump())
+        return signed_response(avatar.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/library/avatars/{avatar_id}/process")
+def process_library_avatar(
+    avatar_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    try:
+        avatar = pipeline.process_library_avatar(avatar_id)
+        return signed_response(avatar.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.patch("/library/avatars/{avatar_id}/appearance")
+def update_library_avatar_appearance(
+    avatar_id: str,
+    request: UpdateAvatarAppearanceRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    try:
+        avatar = pipeline.update_avatar_appearance(avatar_id, request.model_dump(exclude_none=True))
+        return signed_response(avatar.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/library/avatars/{avatar_id}/preview")
+def create_library_avatar_preview(
+    avatar_id: str,
+    request: CreateAvatarPreviewRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    try:
+        task = pipeline.create_avatar_preview_task(avatar_id, request.script)
+        return signed_response(task.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/library/assets/upload")

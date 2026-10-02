@@ -2064,6 +2064,13 @@ export const api = {
         const response = await axios.post(`${API_URL}/series/${seriesId}/assets/import`, { source_series_id: sourceSeriesId, asset_ids: assetIds });
         return response.data;
     },
+    importLibraryAssetToSeries: async (seriesId: string, assetType: "character" | "scene" | "prop", libraryAssetId: string) => {
+        const response = await axios.post(`${API_URL}/series/${seriesId}/assets/import-from-library`, {
+            asset_type: assetType,
+            library_asset_id: libraryAssetId,
+        });
+        return response.data;
+    },
     forkLibraryAssetToProject: async (scriptId: string, assetType: string, libraryAssetId: string) => {
         const response = await axios.post(`${API_URL}/projects/${scriptId}/assets/fork_from_library`, {
             asset_type: assetType,
