@@ -2781,7 +2781,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         if projected is None:
             return None
         self._bind_director_story_map(script, self.resolve_episode_assets(script), projected)
-        return projected
+        # _bind_director_story_map normalizes and binds a copied map into the
+        # profile payload. Return that server-bound copy; returning the
+        # pre-bind projection leaves source_revision unset and makes a valid
+        # legacy Director profile look stale to shooting-plan lineage checks.
+        return raw.get("story_map") or projected
 
     @staticmethod
     def _legacy_story_map_for_planning(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
