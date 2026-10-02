@@ -129,6 +129,17 @@ it('offers enabled character identity Skill facets as editable prompt suggestion
  expect(promptEditor().editor.getText()).toContain('clear natural eyes');
 });
 
+it('uses catalog facets when an older installed Skill snapshot has none', async () => {
+ vi.mocked(agentRequest).mockResolvedValueOnce({
+   installed: [{ id: 'character-identity-design', enabled: true }],
+   catalog: [{ id: 'character-identity-design', workbench_facets: [
+     { id: 'costume-lock', section: 'continuity', label_zh: '服装连续性锁', label_en: 'Costume continuity lock', prompt_zh: '服装连续', prompt_en: 'costume continuity' },
+   ] }],
+ } as any);
+ show();
+ expect(await screen.findByRole('button', { name: /Costume continuity lock/ })).toBeInTheDocument();
+});
+
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {
  const withLibrary = { ...project, scenes: [{ id: 'scene-1', name: 'Night train', description: 'Train' }], props: [{ id: 'prop-1', name: 'Pocket watch', description: 'Watch' }] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
