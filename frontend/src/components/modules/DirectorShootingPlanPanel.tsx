@@ -271,9 +271,19 @@ export default function DirectorShootingPlanPanel() {
     const localDirtyRef = useRef(dirty);
     localDirtyRef.current = dirty;
     const activeProjectId = useRef<string | undefined>(projectId);
-    const storyEventOptions = confirmedProfile?.story_map?.phases.flatMap(phase =>
-        phase.events.map(event => ({ id: event.event_id, label: `${phase.label} · ${event.title || event.description.slice(0, 48)}` })),
-    ) ?? [];
+    // Older Director profiles use `timeline`/`relationships` and do not have
+    // the newer story_map shape. The shooting-plan editor is rendered even
+    // while its tab is hidden, so this must remain a total read rather than
+    // assuming `story_map.phases` exists.
+    const storyPhases = Array.isArray(confirmedProfile?.story_map?.phases)
+        ? confirmedProfile.story_map.phases
+        : [];
+    const storyEventOptions = storyPhases.flatMap(phase =>
+        (Array.isArray(phase.events) ? phase.events : []).map(event => ({
+            id: event.event_id,
+            label: `${phase.label || ""} · ${event.title || String(event.description ?? "").slice(0, 48)}`,
+        })),
+    );
     const characterOptions = (currentProject?.characters ?? []).map(item => ({ id: item.id, label: `${item.name}${item.persona ? ` · ${item.persona}` : ""}` }));
     const propOptions = (currentProject?.props ?? []).map(item => ({ id: item.id, label: item.name }));
 

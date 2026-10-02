@@ -221,3 +221,38 @@ it("lets the user discard a generated but unsaved proposal", async () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
     expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
 });
+
+it("renders when the confirmed Director profile is from the legacy timeline schema", async () => {
+    useProjectStore.setState({
+        currentProject: {
+            ...useProjectStore.getState().currentProject!,
+            art_direction: {
+                selected_style_id: "hong_kong_cinema",
+                style_config: {
+                    id: "hong_kong_cinema",
+                    name: "Hong Kong Cinema",
+                    positive_prompt: "",
+                    negative_prompt: "",
+                    is_custom: false,
+                },
+                custom_styles: [],
+                ai_recommendations: [],
+                // This is the shape persisted by older Director analyses.
+                director_profile: {
+                    setting: { time: "大学时期", geography: "西安" },
+                    timeline: [{ order: 1, time_anchor: "大学时期", event: "相遇" }],
+                    relationships: [],
+                } as any,
+            },
+        },
+    });
+
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorShootingPlanPanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
+    expect(screen.queryByText(/Application error/i)).not.toBeInTheDocument();
+});
