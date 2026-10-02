@@ -259,10 +259,6 @@ export default function DirectorShootingPlanPanel() {
     const [revisionSummary, setRevisionSummary] = useState("");
 
     const sourceRevision = currentProject?.source_revision ?? 1;
-    const styleToken = JSON.stringify(currentProject?.art_direction?.style_config ?? {
-        style_preset: currentProject?.style_preset,
-        style_prompt: currentProject?.style_prompt,
-    });
     const dirty = useMemo(() => planFingerprint(plan) !== planFingerprint(savedPlan), [plan, savedPlan]);
     const scenes = plan?.scenes ?? [];
     const beats = scenes.flatMap(scene => scene.beats);
@@ -323,7 +319,7 @@ export default function DirectorShootingPlanPanel() {
             setNotice("");
         }
         void load(!changedProject);
-    }, [load, sourceRevision, confirmedProfile?.revision, confirmedProfile?.content_hash, styleToken]);
+    }, [load, sourceRevision, confirmedProfile?.revision, confirmedProfile?.content_hash]);
 
     const updatePlan = (update: (current: DirectorShootingPlan) => DirectorShootingPlan) => {
         setPlan(current => current ? update(current) : current);
