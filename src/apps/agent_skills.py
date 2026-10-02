@@ -23,6 +23,10 @@ def catalog():
     for package in packages:
         if package.get("instructions_file"):
             package["instructions"] = (CATALOG_DIR / package["instructions_file"]).read_text(encoding="utf-8")
+        if package.get("workbench_facets_file"):
+            package["workbench_facets"] = json.loads(
+                (CATALOG_DIR / package["workbench_facets_file"]).read_text(encoding="utf-8")
+            )
         package["license_text"] = (CATALOG_DIR / package["license_file"]).read_text(encoding="utf-8")
         package["revision"] = hashlib.sha256(json.dumps(package, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return packages

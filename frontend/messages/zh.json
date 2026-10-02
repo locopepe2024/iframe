@@ -274,6 +274,8 @@
     "resetTemplate": "还原模板",
     "resetTemplateHint": "用名称 + 描述 + 镜头模板重新填充输入框",
     "promptHintCharacter": "目标：在同一张图中呈现 头部特写 + 正面/侧面/背面三视图，便于后续作为参考。",
+    "characterSkillTitle": "角色塑造建议",
+    "characterSkillHint": "来自已启用角色设计 Skill 的可选建议。点击加入提示词后，仍可继续修改或删除。",
     "promptHintScene": "目标：环境定调镜头，无人物前景。",
     "promptHintProp": "目标：道具产品图，干净背景，多角度展示。",
     "batchLabel": "本次生成数量",

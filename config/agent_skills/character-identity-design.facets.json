@@ -1,0 +1,11 @@
+[
+  {"id":"realistic-human","label_zh":"真人写实","label_en":"Live-action realism","prompt_zh":"真人写实质感，保留真实皮肤纹理和自然比例","prompt_en":"live-action realism with natural skin texture and proportions"},
+  {"id":"age-stage","label_zh":"年龄感","label_en":"Age stage","prompt_zh":"年龄感清晰，与角色设定一致","prompt_en":"a clear age stage consistent with the character brief"},
+  {"id":"face-shape","label_zh":"脸型五官","label_en":"Face and features","prompt_zh":"脸型、五官比例和左右对称关系稳定","prompt_en":"stable face shape, feature proportions, and facial symmetry"},
+  {"id":"eyes-gaze","label_zh":"眼神","label_en":"Eyes and gaze","prompt_zh":"眼神清晰自然，视线方向稳定，避免失焦","prompt_en":"clear natural eyes with stable gaze direction, no unfocused eyes"},
+  {"id":"smile-expression","label_zh":"笑容表情","label_en":"Smile and expression","prompt_zh":"笑容自然克制，表情变化细腻，不夸张变形","prompt_en":"a natural restrained smile with subtle expressions and no exaggeration"},
+  {"id":"hairline-style","label_zh":"发型发际线","label_en":"Hair and hairline","prompt_zh":"发型、发际线、发色和发量保持一致","prompt_en":"consistent hairstyle, hairline, hair color, and hair volume"},
+  {"id":"skin","label_zh":"肤质","label_en":"Skin","prompt_zh":"肤色稳定，保留自然肤质和轻微毛孔细节","prompt_en":"stable skin tone with natural texture and subtle pores"},
+  {"id":"body-proportion","label_zh":"身材体态","label_en":"Body and posture","prompt_zh":"身高感、肩宽、身材比例和体态保持稳定","prompt_en":"stable height impression, shoulder width, body proportions, and posture"},
+  {"id":"identity-anchor","label_zh":"识别锚点","label_en":"Identity anchor","prompt_zh":"保留一至两个稳定识别锚点，跨视角和候选图保持一致","prompt_en":"retain one or two stable identity anchors across views and variants"}
+]
