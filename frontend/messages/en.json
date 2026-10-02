@@ -1521,7 +1521,7 @@
       "blankCreated": "Blank plan created. Add source chunks and complete the shot design.",
       "notReady": "The plan is not ready to generate: {reason}. Save and adopt the current Director interpretation first. If the interpretation changes, regenerate the shooting plan.",
       "stale": "The source script or Director interpretation changed. Regenerate or revise the plan before confirming it.",
-      "confirmedStale": "The confirmed revision uses an older script, Director interpretation, or style. A fresh draft can still be confirmed against the current inputs.",
+      "confirmedStale": "The confirmed revision uses an older script or Director interpretation. A fresh draft can still be confirmed against the current inputs.",
       "summaryTitle": "Shooting-plan summary",
       "sceneCount": "Scenes",
       "beatCount": "Dramatic beats",

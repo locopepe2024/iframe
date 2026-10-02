@@ -203,7 +203,7 @@ it("blocks confirmation while the saved draft is stale", async () => {
         </NextIntlClientProvider>,
     );
 
-    expect(await screen.findByText(/source script, Director interpretation, or visual style changed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/source script or Director interpretation changed/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeDisabled();
 });
 
