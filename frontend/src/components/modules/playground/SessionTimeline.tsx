@@ -8,7 +8,6 @@ import ResultCard from './ResultCard';
 import OverflowActions from './OverflowActions';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { shortReferenceLabel } from './referenceMedia';
-import { getAssetUrl } from '@/lib/utils';
 import { toast } from '@/store/toastStore';
 
 const MODE_LABELS: Record<string, string> = {
@@ -33,9 +32,7 @@ function PromptWithReferences({ prompt, mediaNames, mediaPaths = [], mediaMap = 
     const index = match.index ?? 0;
     if (index > cursor) parts.push(prompt.slice(cursor, index));
     const fullName = match[1];
-    const path = Object.entries(mediaMap).find(([, name]) => name === fullName)?.[0] || mediaPaths[names.indexOf(fullName)] || mediaPaths[0];
-    parts.push(<span key={`${index}-${fullName}`} title={fullName} className="mx-0.5 inline-flex max-w-[9rem] items-center gap-1 rounded-md bg-emerald-500/15 px-1 py-0.5 align-baseline text-emerald-300 ring-1 ring-inset ring-emerald-400/20">
-      {path && <img src={getAssetUrl(path)} alt="" className="h-5 w-5 rounded object-cover" />}
+    parts.push(<span key={`${index}-${fullName}`} title={fullName} className="mx-0.5 inline-flex max-w-[12rem] items-center rounded-md bg-emerald-500/15 px-1 py-0.5 align-baseline text-emerald-300 ring-1 ring-inset ring-emerald-400/20">
       <span className="truncate">@{shortReferenceLabel(fullName)}</span>
     </span>);
     cursor = index + match[0].length;
@@ -91,7 +88,7 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
         <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[0.625rem] uppercase tracking-[0.1em] text-text-muted">
           <span>{MODE_LABELS[generation.mode] || generation.mode}</span>
           <span>·</span>
-          <span className="normal-case tracking-normal">{generation.model_id}</span>
+          <span className="normal-case tracking-normal">{generation.model_id.replace(/^uniart\//, '')}</span>
           {generation.parent_generation_id && (
             <span className="inline-flex items-center gap-1 rounded bg-surface-inset px-1.5 py-0.5 normal-case tracking-normal">
               <GitBranch size={10} /> {t('continued')}
