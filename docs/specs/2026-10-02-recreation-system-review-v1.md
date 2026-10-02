@@ -228,6 +228,25 @@
 
 **Not yet proven**：该 RMSE 尚未设定最终产品阈值，也未覆盖快速旋转的连续时序和脚部接触。
 
+### 逐段方向诊断
+
+独立投影报告增加了相似变换后的逐段角度误差。当前 raw/estimated-depth 代表帧平均绝对角度误差约为：
+
+| 骨段 | 平均绝对角度误差 |
+|---|---:|
+| upper arm L | 15.31° |
+| lower arm L | 13.69° |
+| upper arm R | 12.75° |
+| lower arm R | 10.18° |
+| upper leg L | 8.63° |
+| upper leg R | 6.31° |
+| lower leg L | 5.90° |
+| lower leg R | 6.56° |
+
+**Observed**：上臂和前臂误差明显高于腿部，肩/臂局部轴或肩胛/锁骨处理是下一处高风险边界。
+
+**Direct implication**：下一步优先校准 `clavicle_l/r → upper_arm_l/r → lower_arm_l/r` 的父子局部旋转；不要先扩大深度模型或时序平滑范围。
+
 ## 7. 成功标准
 
 ### 商品复刻

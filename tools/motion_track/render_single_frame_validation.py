@@ -295,6 +295,7 @@ def project_pose(arm, camera, case):
     cos_r = num_c / math.sqrt(num_c * num_c + num_s * num_s) if num_c or num_s else 1.0
     sin_r = num_s / math.sqrt(num_c * num_c + num_s * num_s) if num_c or num_s else 0.0
     residuals = {}
+    segment_errors = {}
     squared = 0.0
     for name, u, v in zip(common, actual, target):
         dx, dy = u[0] - ax, u[1] - ay
@@ -302,6 +303,41 @@ def project_pose(arm, camera, case):
         error = math.sqrt((fit[0] - v[0]) ** 2 + (fit[1] - v[1]) ** 2)
         residuals[name] = error
         squared += error * error
+    segment_pairs = {
+        "upper_arm_l": ("left_shoulder", "left_elbow"),
+        "lower_arm_l": ("left_elbow", "left_wrist"),
+        "upper_arm_r": ("right_shoulder", "right_elbow"),
+        "lower_arm_r": ("right_elbow", "right_wrist"),
+        "upper_leg_l": ("left_hip", "left_knee"),
+        "lower_leg_l": ("left_knee", "left_ankle"),
+        "upper_leg_r": ("right_hip", "right_knee"),
+        "lower_leg_r": ("right_knee", "right_ankle"),
+    }
+    for segment, (a, b) in segment_pairs.items():
+        if a not in raw or b not in raw or a not in source or b not in source:
+            continue
+        # Compare after the same fitted similarity transform used for joint
+        # residuals. This removes camera framing/scale while preserving the
+        # segment's relative direction.
+        ua, ub = Vector(raw[a]), Vector(raw[b])
+        ta = Vector((scale * (cos_r * (ua.x - ax) - sin_r * (ua.y - ay)),
+                     scale * (sin_r * (ua.x - ax) + cos_r * (ua.y - ay))))
+        tb = Vector((scale * (cos_r * (ub.x - ax) - sin_r * (ub.y - ay)),
+                     scale * (sin_r * (ub.x - ax) + cos_r * (ub.y - ay))))
+        projected = tb - ta
+        observed = Vector((float(source[b][0]) - float(source[a][0]),
+                           -(float(source[b][1]) - float(source[a][1]))))
+        if projected.length < 1e-8 or observed.length < 1e-8:
+            continue
+        angle_error = math.degrees(projected.angle(observed))
+        if projected.cross(observed) < 0:
+            angle_error *= -1
+        segment_errors[segment] = {
+            "angle_error_degrees": angle_error,
+            "projected_length": projected.length,
+            "source_length": observed.length,
+            "length_ratio": projected.length / observed.length,
+        }
     return {
         "status": "measured",
         "points": len(common),
@@ -309,6 +345,7 @@ def project_pose(arm, camera, case):
         "rmse_normalized_image": math.sqrt(squared / len(common)),
         "max_normalized_image_error": max(residuals.values()),
         "joint_errors": residuals,
+        "segment_errors": segment_errors,
     }
 
 
