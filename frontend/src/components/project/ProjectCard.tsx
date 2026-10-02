@@ -257,7 +257,7 @@ export default function ProjectCard({ project, onDelete, onRename }: ProjectCard
                         </span>
                     </div>
                 </div>
-                <div className="relative" ref={menuWrapRef} onClick={(e) => e.stopPropagation()}>
+                <div className="absolute top-12 right-3 z-[6]" ref={menuWrapRef} onClick={(e) => e.stopPropagation()}>
                     <button
                         type="button"
                         onClick={(e) => {
@@ -275,7 +275,7 @@ export default function ProjectCard({ project, onDelete, onRename }: ProjectCard
                         <div
                             role="menu"
                             aria-label={t("moreActions")}
-                            className="absolute right-0 bottom-full z-20 mb-2 w-40 overflow-hidden rounded-md border border-glass-border bg-surface/96 shadow-[0_8px_28px_-6px_rgba(0,0,0,0.7)] backdrop-blur-md"
+                            className="absolute right-0 top-full z-20 mt-2 w-40 overflow-hidden rounded-md border border-glass-border bg-surface/96 shadow-[0_8px_28px_-6px_rgba(0,0,0,0.7)] backdrop-blur-md"
                         >
                             <button
                                 type="button"
