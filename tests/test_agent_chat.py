@@ -244,6 +244,41 @@ def test_h3_restore_uses_answer_marker_when_followup_does_not_repeat_model(setup
     assert '@lake.jpg' in assistant['content']
 
 
+def test_followup_without_materials_does_not_revalidate_historical_duplicate_names(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
+    # Simulate a legacy turn that was persisted before the filename gate was
+    # introduced. A follow-up without materials must still be sendable.
+    with agent.database() as db:
+        row, session = agent.read_session(db, setup.owner_profile_id, sid)
+        session['messages'] = [{
+            'id': 'legacy-user', 'role': 'user', 'content': '旧素材',
+            'asset_names': ['same.png', 'same.png'],
+            'input_media': ['/tmp/a.png', '/tmp/b.png'],
+            'context': '', 'created_at': 1, 'model': 'qwen',
+        }]
+        db.execute('UPDATE sessions SET payload=? WHERE owner=? AND id=?', (agent.json.dumps(session), setup.owner_profile_id, sid))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='继续处理'))
+
+    result = agent.send(sid, agent.MessageCreate(content='继续', asset_names=[]), setup)
+
+    assert result['assistant_message']['content'] == '继续处理'
+
+
+def test_current_duplicate_material_names_are_still_rejected(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    with pytest.raises(HTTPException, match='参考素材名称重复'):
+        agent.send(
+            sid,
+            agent.MessageCreate(
+                content='使用素材',
+                input_media=['/tmp/a.png', '/tmp/b.png'],
+                asset_names=['same.png', 'same.png'],
+            ),
+            setup,
+        )
+
+
 def test_seedance_agent_keeps_filenames_in_model_context_and_answer(setup, monkeypatch):
     call = Mock(return_value='Seedance 提示词：让 `@1` 与 @2 在湖边唱歌')
     monkeypatch.setattr(agent, 'complete', call)

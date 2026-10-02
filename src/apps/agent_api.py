@@ -317,6 +317,13 @@ def complete(ctx, model, history):
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
         raise HTTPException(400, "消息或素材名称无效")
+    # Validate only the references attached to this request. Historical turns
+    # are immutable context; replaying them must not re-run an input gate and
+    # block a follow-up message that contains no materials.
+    if body.input_media:
+        named = [name for name in body.asset_names if name]
+        if len(named) != len(set(named)):
+            raise HTTPException(422, "参考素材名称重复，请为素材设置不同的原始文件名")
     if sid.startswith("playground-"):
         require_playground(ctx, sid.removeprefix("playground-"))
     owner = ctx.owner_profile_id
@@ -345,9 +352,6 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                 refs = message["input_media"]
                 names = message.get("asset_names", [])
                 labels = [names[i] if i < len(names) else "" for i in range(len(refs))]
-                named = [label for label in labels if label]
-                if len(named) != len(set(named)):
-                    raise HTTPException(422, "参考素材名称重复，请为素材设置不同的原始文件名")
                 # Keep the stable user-facing filename in the Agent context.
                 # Numeric slots are an internal provider mapping only; exposing
                 # them here makes the model copy @1/@2 into the returned draft.
