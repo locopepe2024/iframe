@@ -84,7 +84,10 @@ def build_visual_style_summary(style_config: Optional[Dict[str, Any]]) -> str:
 # shorter than observed provider response times and caused a local timeout
 # even when the API key and route were valid.
 DIRECTOR_PROFILE_TIMEOUT_SECONDS = 1800
-DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
+# A shooting-plan chunk must fail visibly when the upstream request never
+# reaches or never answers at the gateway. The job can be retried and cached
+# completed chunks are retained; it must not leave the UI running indefinitely.
+DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 600
 # The provider occasionally returns a transient 502/503 after accepting a
 # long Director request.  Allow one SDK retry for retryable HTTP failures;
 # keep this bounded so a costly analysis cannot loop indefinitely.
@@ -1826,6 +1829,10 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         last_error = ""
         style_summary = build_visual_style_summary(style_config)
         for attempt in range(2):
+            logger.info(
+                "Director shooting-plan chunk attempt started: source_ref=%s attempt=%s/2",
+                source_ref or "<unspecified>", attempt + 1,
+            )
             handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
 
@@ -1860,12 +1867,23 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                           {"role": "user", "content": "按完整视觉拍摄计划契约返回 JSON。"}],
                 response_format={"type": "json_object"},
                 timeout_seconds=DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
-                max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                # The surrounding loop owns the bounded retry.  Do not let
+                # the OpenAI SDK silently issue another long request after an
+                # upstream response has already been received.
+                max_retries=0,
             ) or "").strip()
+            logger.info(
+                "Director shooting-plan chunk response received: source_ref=%s attempt=%s chars=%s",
+                source_ref or "<unspecified>", attempt + 1, len(content),
+            )
             try:
                 result = json.loads(_strip_markdown_json(content))
             except json.JSONDecodeError as exc:
                 last_error = f"JSON 格式错误：{exc}"
+                logger.warning(
+                    "Director shooting-plan chunk JSON parse failed: source_ref=%s attempt=%s error=%s",
+                    source_ref or "<unspecified>", attempt + 1, last_error,
+                )
             else:
                 # Keep the plan usable when creative details are omitted. The
                 # storyboard editor exposes these empty fields for later completion.
@@ -1890,7 +1908,15 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                 shot.setdefault("prop_ids", [])
                 last_error = self._validate_director_shooting_chunk(result) or ""
                 if not last_error:
+                    logger.info(
+                        "Director shooting-plan chunk admitted: source_ref=%s attempt=%s scenes=%s",
+                        source_ref or "<unspecified>", attempt + 1, len(result.get("scenes", [])),
+                    )
                     return result
+                logger.warning(
+                    "Director shooting-plan chunk contract rejected: source_ref=%s attempt=%s error=%s",
+                    source_ref or "<unspecified>", attempt + 1, last_error,
+                )
             if attempt == 0:
                 retry_note = (
                     "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error

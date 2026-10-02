@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
 RETENTION = 86400
 STORYBOARD_TIMEOUT = 30 * 60
+DIRECTOR_SHOOTING_PLAN_TIMEOUT = 15 * 60
 
 
 class ExtractionJobs:
@@ -100,6 +101,11 @@ class ExtractionJobs:
             "UPDATE jobs SET status='failed', result=NULL, error=? "
             "WHERE status='running' AND fingerprint LIKE 'storyboard:%' AND created<?",
             ('分镜分析超时，请重试。', now - STORYBOARD_TIMEOUT),
+        )
+        db.execute(
+            "UPDATE jobs SET status='failed', result=NULL, error=? "
+            "WHERE status='running' AND fingerprint LIKE 'director_shooting_plan:%' AND created<?",
+            ('导演拍摄计划分析超时，请重试；已完成的分段已保留。', now - DIRECTOR_SHOOTING_PLAN_TIMEOUT),
         )
 
     @staticmethod
@@ -249,16 +255,23 @@ class ExtractionJobs:
                     ('superseded' if stale else ('failed' if error else 'completed'),
                      None if stale else encoded,
                      '该修订已被更新的请求替代。' if stale else error,
-                     job_id),
+                    job_id),
+                )
+                logger.info(
+                    'Script extraction %s finished: status=%s error=%s',
+                    job_id,
+                    'superseded' if stale else ('failed' if error else 'completed'),
+                    (str(error)[:240] if error else ''),
                 )
         self._pending_work.pop(job_id, None)
         self._dispatch_after_finish()
 
     def _run(self, job_id, work, pass_job_id=False):
+        logger.info('Script extraction %s worker started', job_id)
         try:
             self._finish(job_id, result=work(job_id) if pass_job_id else work())
         except Exception as exc:
-            logger.error('Script extraction %s failed (%s)', job_id, type(exc).__name__)
+            logger.error('Script extraction %s failed (%s): %s', job_id, type(exc).__name__, str(exc)[:500], exc_info=True)
             with closing(self.connect()) as db:
                 row = db.execute('SELECT fingerprint FROM jobs WHERE id=?', (job_id,)).fetchone()
             message = (
