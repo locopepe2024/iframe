@@ -2775,7 +2775,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         save the explicit map as part of the Director revision.
         """
         if profile.story_map is not None:
-            return profile.story_map.model_dump()
+            explicit = profile.story_map.model_dump()
+            # Older confirmed profiles can contain an explicit map shell whose
+            # source identity was never bound. Rebind that persisted map to
+            # the current script before lineage checks instead of rejecting a
+            # valid Director confirmation as stale.
+            if explicit.get("source_revision") in (None, "") or explicit.get("source_revision_id") in (None, "", "__pending__"):
+                profile_payload = profile.model_dump()
+                profile_payload["story_map"] = explicit
+                self._bind_director_story_map(script, self.resolve_episode_assets(script), profile_payload)
+                return profile_payload["story_map"]
+            return explicit
         raw = profile.model_dump(exclude={"story_map"})
         projected = self._legacy_story_map_for_planning(raw)
         if projected is None:
