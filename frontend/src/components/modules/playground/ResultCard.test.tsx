@@ -89,3 +89,14 @@ it.each(['completed', 'failed', 'pending', 'processing'] as const)('deletes a %s
   expect(onDelete).toHaveBeenCalledWith(generation);
   expect(onOpenDetail).not.toHaveBeenCalled();
 });
+
+it.each(['completed', 'failed', 'pending', 'processing'] as const)('keeps the %s media frame bound to the persisted output ratio', (status) => {
+  const { container } = render(<ResultCard generation={{
+    id: `ratio-${status}`, mode: 't2v', model_id: 'model', prompt: 'portrait', input_media: [],
+    parameters: { aspect_ratio: '9:16' }, batch_size: 1,
+    outputs: [{ id: 'out', media_path: '/generated.mp4', media_type: 'video', saved_to_library: false }],
+    status, created_at: '2026-09-15T08:00:00Z',
+  }} />);
+  const media = container.querySelector('[style*="aspect-ratio"]');
+  expect(media).toHaveStyle({ aspectRatio: '9 / 16' });
+});

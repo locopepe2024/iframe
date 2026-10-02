@@ -67,6 +67,7 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
   const t = useTranslations('playground');
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -81,7 +82,7 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
     <div className="rounded-[20px] border border-status-failed-border bg-glass overflow-hidden">
       <div
         className="relative overflow-hidden bg-elevated flex flex-col items-center justify-center cursor-pointer"
-        style={{ aspectRatio: expanded ? undefined : '16/9', minHeight: expanded ? 120 : undefined }}
+        style={{ aspectRatio: expanded ? undefined : aspectRatio, minHeight: expanded ? 120 : undefined }}
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="absolute inset-0 bg-status-failed-bg" />
