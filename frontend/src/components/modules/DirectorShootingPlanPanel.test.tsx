@@ -165,7 +165,7 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     fireEvent.change(performance, { target: { value: "They trade a brief smile while keeping the same pace." } });
     const effect = screen.getAllByLabelText("Director effect (audience / editorial effect)").at(-1)!;
     fireEvent.change(effect, { target: { value: "Make the bright entrance feel emotionally unstable." } });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save shooting plan" }));
 
     await waitFor(() => expect(save).toHaveBeenCalledWith(
         "film", 1, 0,
@@ -218,7 +218,7 @@ it("lets the user discard a generated but unsaved proposal", async () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard shooting-plan changes" }));
     expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
 });
 
