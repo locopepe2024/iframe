@@ -16,6 +16,21 @@ import {
 } from "./directorProfile";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
 
+// API methods in this module use axios directly. Read the persisted identity
+// token at request time so the first workspace sync after a hard refresh does
+// not race AuthProvider's asynchronous initialization and fall back to a new
+// anonymous browser profile.
+axios.interceptors.request.use((config) => {
+    if (typeof window !== "undefined" && !config.headers?.Authorization) {
+        const token = window.localStorage.getItem("lumenx-access-token");
+        if (token) {
+            config.headers = config.headers ?? {};
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+    }
+    return config;
+});
+
 // Dynamic API URL detection (no port enumeration):
 // 1. Explicit override: NEXT_PUBLIC_API_URL (any env / proxy setup).
 // 2. Browser dev mode (`next dev`, NODE_ENV==='development'): use Next's
