@@ -271,10 +271,9 @@ export default function DirectorShootingPlanPanel() {
     const localDirtyRef = useRef(dirty);
     localDirtyRef.current = dirty;
     const activeProjectId = useRef<string | undefined>(projectId);
-    // Older Director profiles use `timeline`/`relationships` and do not have
-    // the newer story_map shape. The shooting-plan editor is rendered even
-    // while its tab is hidden, so this must remain a total read rather than
-    // assuming `story_map.phases` exists.
+    // A shooting plan can only consume the current canonical story map.
+    // Profiles without it are incomplete and must be re-analyzed; they are
+    // not converted from retired Director structures here.
     const storyPhases = Array.isArray(confirmedProfile?.story_map?.phases)
         ? confirmedProfile.story_map.phases
         : [];
@@ -414,16 +413,44 @@ export default function DirectorShootingPlanPanel() {
         setAction("confirm");
         setError("");
         try {
+            // A generated plan is an editable local proposal. Confirmation
+            // persists that proposal first, so users do not have to discover
+            // a separate save action before continuing the workflow.
+            let expectedDraftRevision = serverState?.draft_revision ?? 0;
+            let confirmedPlan = plan;
+            if (dirty) {
+                const saved = await api.saveDirectorShootingPlanDraft(
+                    projectId,
+                    sourceRevision,
+                    expectedDraftRevision,
+                    plan,
+                );
+                expectedDraftRevision = saved.draft_revision;
+                confirmedPlan = saved.draft ?? plan;
+                setPlan(confirmedPlan);
+                setSavedPlan(confirmedPlan);
+                setServerState(previous => previous ? {
+                    ...previous,
+                    draft: confirmedPlan,
+                    draft_revision: saved.draft_revision,
+                    draft_updated_at: saved.draft_updated_at,
+                    draft_stale: false,
+                } : previous);
+            }
             const result = await api.confirmDirectorShootingPlan(
                 projectId,
                 serverState?.current_revision ?? 0,
-                serverState?.draft_revision ?? 0,
-                plan,
+                expectedDraftRevision,
+                confirmedPlan,
                 revisionTitle,
                 revisionSummary,
             );
             setNotice(t("confirmed", { revision: result.current_revision }));
             await load();
+            if (typeof document !== "undefined") {
+                const nextStep = currentProject?.workflow_mode === "r2v" ? "cast" : "assets";
+                document.dispatchEvent(new CustomEvent("lumenx:navigateStep", { detail: nextStep }));
+            }
         } catch (cause) {
             setError(extractErrorDetail(cause) || t("confirmFailed"));
         } finally {
@@ -815,7 +842,7 @@ export default function DirectorShootingPlanPanel() {
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
                             <button type="button" onClick={save} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
-                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
+                            <button type="button" onClick={confirmPlan} disabled={locked || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>
                 </>

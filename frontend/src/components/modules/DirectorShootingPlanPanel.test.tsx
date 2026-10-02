@@ -157,8 +157,8 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
     expect(screen.getByRole("checkbox", { name: /Input chunk 1/ })).toBeChecked();
-    const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
-    expect(confirmButton).toBeDisabled();
+    const confirmButton = screen.getByRole("button", { name: /Confirm plan and continue to Cast/i });
+    expect(confirmButton).toBeEnabled();
 
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
     const performance = await screen.findByLabelText("Character performance (gaze, expression, posture, pace)");
@@ -180,8 +180,8 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
             })],
         }),
     ));
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm shooting plan" }));
+    expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith(
         "film", 0, 1,
@@ -204,7 +204,7 @@ it("blocks confirmation while the saved draft is stale", async () => {
     );
 
     expect(await screen.findByText(/source script, Director interpretation, or visual style changed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Confirm plan and continue to Cast/i })).toBeDisabled();
 });
 
 it("lets the user discard a generated but unsaved proposal", async () => {
@@ -222,7 +222,7 @@ it("lets the user discard a generated but unsaved proposal", async () => {
     expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
 });
 
-it("renders when the confirmed Director profile is from the legacy timeline schema", async () => {
+it("renders without a canonical story map and leaves the profile for re-analysis", async () => {
     useProjectStore.setState({
         currentProject: {
             ...useProjectStore.getState().currentProject!,
@@ -237,12 +237,7 @@ it("renders when the confirmed Director profile is from the legacy timeline sche
                 },
                 custom_styles: [],
                 ai_recommendations: [],
-                // This is the shape persisted by older Director analyses.
-                director_profile: {
-                    setting: { time: "大学时期", geography: "西安" },
-                    timeline: [{ order: 1, time_anchor: "大学时期", event: "相遇" }],
-                    relationships: [],
-                } as any,
+                director_profile: undefined,
             },
         },
     });

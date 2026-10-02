@@ -148,67 +148,6 @@ export function inferEventCharacterIds(description: string, phaseLabel: string, 
     return result;
 }
 
-function legacyEvents(value: unknown): DirectorStoryEvent[] {
-    const inputs = Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value];
-    return inputs.map((input, order) => {
-        const entry = asEntry(input);
-        const description = typeof input === "string"
-            ? input
-            : asText(entry.description ?? entry.event ?? entry.action ?? "");
-        return {
-            event_id: createId("event"),
-            order,
-            title: asText(entry.title ?? entry.name ?? "") || eventTitleFromDescription(description),
-            description,
-            character_ids: [],
-            dramatic_function: asText(entry.dramatic_function ?? entry.function ?? entry.purpose ?? ""),
-            source_fact_ids: [],
-            evidence_status: "interpretation",
-        };
-    });
-}
-
-export function createDirectorStoryMapFromLegacy(
-    profile: Draft,
-    sourceRevision: number,
-    characters: Character[],
-): DirectorStoryMap {
-    const phases: DirectorStoryPhase[] = rows(profile.timeline).map((raw, order) => {
-        const entry = asEntry(raw);
-        const sourceEvents = entry.events ?? entry.event ?? entry.actions;
-        return {
-            phase_id: createId("phase"),
-            order,
-            label: asText(entry.phase ?? entry.label ?? ""),
-            time_anchor: "",
-            events: legacyEvents(sourceEvents),
-        };
-    });
-    const allEvents = phases.flatMap(phase => phase.events);
-    const legacyPeople = makePeople(characters);
-    return {
-        schema_version: 1,
-        source_revision: sourceRevision,
-        // The server binds the stable source identity when this user-created map is saved.
-        source_revision_id: "",
-        fact_ledger_revision: null,
-        people: legacyPeople,
-        phases,
-        // Legacy initial/change/final summaries deliberately remain unconverted.
-        relationship_arcs: [],
-        story_threads: allEvents.length > 0 ? [{
-            thread_id: createId("thread"),
-            label: "待整理主线",
-            person_ids: legacyPeople.map(person => person.person_id),
-            milestones: allEvents.map((event, index) => ({
-                event_id: event.event_id,
-                role: index === 0 ? "setup" as const : index === allEvents.length - 1 ? "close" as const : "progress" as const,
-                note: "由时间线自动整理，需导演审阅",
-            })),
-        }] : [],
-    };
-}
-
 function Field({
     label,
     value,
@@ -460,7 +399,6 @@ function StoryMapSection({
     mindMapOnly?: boolean;
 }) {
     const t = useTranslations("artDirection.directorEditor.storyMap");
-    const tLegacy = useTranslations("artDirection.directorEditor");
     const rawStoryMap = profile.story_map;
     const map = isDirectorStoryMap(rawStoryMap) ? rawStoryMap : null;
     const invalidMap = rawStoryMap !== undefined && rawStoryMap !== null && !map;
@@ -773,9 +711,6 @@ function StoryMapSection({
         story_threads: current.story_threads.filter(item => item.thread_id !== thread.thread_id),
     }));
 
-    const oldRelationships = rows(profile.relationships).map(asEntry);
-    const oldTimeline = rows(profile.timeline).map(asEntry);
-    const oldKeyEvents = rows(profile.key_events).map(asEntry);
     const sceneSummaries = rows(profile.scene_summaries).map(asEntry);
     const updateSceneSummary = (index: number, patch: Draft) => onChange({
         ...profile,
@@ -785,11 +720,6 @@ function StoryMapSection({
         ...profile,
         scene_summaries: [...sceneSummaries, { scene_ref: "", summary: "", state_in: "", state_out: "" }],
     });
-    const newMap = () => onChange({
-        ...profile,
-        story_map: createDirectorStoryMapFromLegacy(profile, sourceRevision, characters),
-    });
-
     const selectNode = (kind: string, title: string, body: string, meta: string) => () => {
         setSelectedGraphNode({ kind, title, body, meta });
     };
@@ -895,14 +825,9 @@ function StoryMapSection({
                         <h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3>
                         <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("mindMapEntryHint")}</p>
                     </div>
-                    <button type="button" onClick={newMap} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
-                        <Plus size={15} aria-hidden="true" />{t("enterMindMap")}
-                    </button>
                 </div>
                 <div className="mt-4 rounded-md border border-border bg-surface p-3 text-xs leading-5 text-text-secondary">
-                    {oldTimeline.length + oldRelationships.length + oldKeyEvents.length > 0
-                        ? t("legacyDataNotice", { count: oldTimeline.length + oldRelationships.length + oldKeyEvents.length })
-                        : t("noLegacyDataNotice")}
+                    {t("noLegacyDataNotice")}
                 </div>
             </section>
         );
@@ -1305,17 +1230,6 @@ function StoryMapSection({
             </section>
             </>}
 
-            {(oldTimeline.length > 0 || oldRelationships.length > 0 || oldKeyEvents.length > 0) && (
-                <details className="rounded-lg border border-border bg-background/30 p-4">
-                    <summary className="cursor-pointer text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">{t("legacyDataTitle")}</summary>
-                    <p className="mt-2 text-xs leading-5 text-text-muted">{t("legacyDataHint")}</p>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                        {oldTimeline.length > 0 && <LegacyList title={tLegacy("timelineTitle")} items={oldTimeline.map(item => `${asText(item.phase)}：${asText(item.events)}`)} />}
-                        {oldRelationships.length > 0 && <LegacyList title={tLegacy("relationshipsTitle")} items={oldRelationships.map(item => `${asText(item.pair ?? item.people)}：${asText(item.initial)} → ${asText(item.change)} → ${asText(item.final)}`)} />}
-                        {oldKeyEvents.length > 0 && <LegacyList title={tLegacy("keyEventsTitle")} items={oldKeyEvents.map(item => `${asText(item.event ?? item.scene)}：${asText(item.function)}`)} />}
-                    </div>
-                </details>
-            )}
         </div>
     );
 }
@@ -1382,17 +1296,6 @@ function RelationshipGraph({
                 ))}
             </svg>
             <p className="mt-2 text-[10px] text-text-muted">{t("graphKeyboardHint")}</p>
-        </div>
-    );
-}
-
-function LegacyList({ title, items }: { title: string; items: string[] }) {
-    return (
-        <div className="rounded-md border border-border bg-surface p-3">
-            <h4 className="text-xs font-semibold text-foreground">{title}</h4>
-            <ul className="mt-2 space-y-1.5">
-                {items.map((item, index) => <li key={index} className="whitespace-pre-wrap text-xs text-text-secondary">{item}</li>)}
-            </ul>
         </div>
     );
 }

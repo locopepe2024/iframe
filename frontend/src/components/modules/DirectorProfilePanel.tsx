@@ -18,9 +18,18 @@ import ScriptFactLedgerPanel from "./ScriptFactLedgerPanel";
 import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
 
 const editableProfile = (profile?: DirectorProfile) => {
-    if (!profile) return "";
+    // Only the canonical story-map profile can enter the editable Director
+    // workflow. Retired timeline/relationship profiles are intentionally not
+    // adapted or shown as current drafts; the user must re-run analysis.
+    if (!profile?.story_map) return "";
     const { revision: _revision, content_hash: _hash, confirmed_at: _confirmed, ...draft } = profile;
     return JSON.stringify(draft, null, 2);
+};
+
+const hasCanonicalStoryMap = (value: unknown): value is Record<string, unknown> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const storyMap = (value as Record<string, unknown>).story_map;
+    return Boolean(storyMap && typeof storyMap === "object" && !Array.isArray(storyMap));
 };
 
 type DirectorAction = "analyze" | "refine" | "save" | "apply";
@@ -152,7 +161,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         api.getDirectorProfileDraft(currentProject.id)
             .then(saved => {
                 if (!active) return;
-                const serverLoaded = saved.draft ? JSON.stringify(saved.draft, null, 2) : fallback;
+                const serverLoaded = hasCanonicalStoryMap(saved.draft)
+                    ? JSON.stringify(saved.draft, null, 2)
+                    : fallback;
                 setDraftName(saved.draft_name ?? "");
                 let loaded = serverLoaded;
                 let loadedRevision = saved.draft_revision;
@@ -162,7 +173,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                     if (local?.schemaVersion === 1 && local.projectId === currentProject.id
                         && local.sourceRevision === sourceRevision && local.draft && typeof local.draft === "object") {
                         const serverUpdatedAt = saved.updated_at ? saved.updated_at * 1000 : 0;
-                        if (!serverUpdatedAt || (local.savedAt ?? 0) >= serverUpdatedAt) {
+                        if ((!serverUpdatedAt || (local.savedAt ?? 0) >= serverUpdatedAt) && hasCanonicalStoryMap(local.draft)) {
                             loaded = JSON.stringify(local.draft, null, 2);
                             loadedRevision = saved.draft_revision;
                         }
@@ -219,7 +230,10 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         if (!currentProject) return;
         let active = true;
         api.listDirectorProfileRevisions(currentProject.id)
-            .then(value => { if (active) setRevisions(value as DirectorProfileRevision[]); })
+            .then(value => {
+                if (!active) return;
+                setRevisions((value as DirectorProfileRevision[]).filter(item => hasCanonicalStoryMap(item.profile)));
+            })
             .catch(() => { if (active) setRevisions([]); });
         return () => { active = false; };
     }, [currentProject?.id, confirmed?.content_hash]);

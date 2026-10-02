@@ -2242,13 +2242,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         Episode Director draft may still add local events and continuity.
         """
         art_direction = self.effective_art_direction(script)
-        if art_direction and art_direction.director_profile:
+        if art_direction and art_direction.director_profile and art_direction.director_profile.story_map is not None:
             return art_direction.director_profile
         if script.series_id:
             series = self.series_store.get(script.series_id)
             if series:
                 if series.director_profile_revisions:
-                    return series.director_profile_revisions[-1].profile
+                    profile = series.director_profile_revisions[-1].profile
+                    if profile.story_map is not None:
+                        return profile
         return None
 
     def effective_series_director_profile(self, series_id: str) -> Optional[DirectorProfile]:
@@ -2256,8 +2258,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not series:
             return None
         if series.director_profile_revisions:
-            return series.director_profile_revisions[-1].profile
-        return series.art_direction.director_profile if series.art_direction else None
+            profile = series.director_profile_revisions[-1].profile
+            if profile.story_map is not None:
+                return profile
+        profile = series.art_direction.director_profile if series.art_direction else None
+        return profile if profile and profile.story_map is not None else None
 
     def preview_series_director_profile(self, series_id: str) -> Dict[str, Any]:
         series = self.series_store.get(series_id)
