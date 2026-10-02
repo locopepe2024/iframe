@@ -3,7 +3,10 @@ export function getOutputAspectRatio(
   parameters: Record<string, unknown> | undefined,
   fallback = '16 / 9',
 ): string {
-  const raw = parameters?.aspect_ratio ?? parameters?.ratio;
+  // `aspect_ratio` is the canonical API field. Keep the two historical spellings
+  // readable at the display boundary so old persisted generations do not silently
+  // render as the 16:9 fallback after a reload.
+  const raw = parameters?.aspect_ratio ?? parameters?.ratio ?? parameters?.aspectRatio;
   if (typeof raw !== 'string') return fallback;
   const match = raw.trim().match(/^(\d+)\s*[:/]\s*(\d+)$/);
   if (!match) return fallback;
