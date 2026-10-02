@@ -393,13 +393,14 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 function ResultCardBody({ generation, outputIndex = 0, onGenerateVideo, onRetry, onOpenDetail, onDelete }: ResultCardProps) {
   const { status, prompt, model_id, mode, created_at } = generation;
   const t = useTranslations('playground');
+  const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   // ─── PROCESSING STATE ───────────────────────────────────────────────────────
   if (status === 'pending' || status === 'processing') {
     return (
       <div className="rounded-[20px] border border-glass-border bg-glass atelier-asset-card overflow-hidden">
         {/* Media area */}
-        <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio: '16/9' }}>
+        <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
           {/* Skeleton shimmer */}
           <div className="absolute inset-0 overflow-hidden">
             <div
