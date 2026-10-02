@@ -12,6 +12,7 @@ from pathlib import Path
 
 import bpy
 from mathutils import Vector, Matrix
+from bpy_extras.object_utils import world_to_camera_view
 
 
 def parse_args():
@@ -241,6 +242,76 @@ def measure(arm, expected):
     return result
 
 
+def project_pose(arm, camera, case):
+    """Compare projected evaluated bone joints with source 2D points.
+
+    A similarity fit removes camera framing and rig scale, but keeps relative
+    joint layout, side assignment, and pose direction. This is independent of
+    the bone-direction self-check because it starts from evaluated endpoints
+    and ends in source image coordinates.
+    """
+    source = case.get("semantic_joints") or {}
+    pairs = {
+        "left_shoulder": ("upper_arm_l", "head"),
+        "left_elbow": ("upper_arm_l", "tail"),
+        "left_wrist": ("lower_arm_l", "tail"),
+        "right_shoulder": ("upper_arm_r", "head"),
+        "right_elbow": ("upper_arm_r", "tail"),
+        "right_wrist": ("lower_arm_r", "tail"),
+        "left_hip": ("upper_leg_l", "head"),
+        "left_knee": ("upper_leg_l", "tail"),
+        "left_ankle": ("lower_leg_l", "tail"),
+        "right_hip": ("upper_leg_r", "head"),
+        "right_knee": ("upper_leg_r", "tail"),
+        "right_ankle": ("lower_leg_r", "tail"),
+    }
+    evaluated = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    raw = {}
+    for name, (bone_name, endpoint) in pairs.items():
+        if name not in source:
+            continue
+        bone = evaluated.pose.bones.get(bone_name)
+        if bone is None:
+            continue
+        point = bone.head if endpoint == "head" else bone.tail
+        ndc = world_to_camera_view(bpy.context.scene, camera, arm.matrix_world @ point)
+        raw[name] = (float(ndc.x), float(ndc.y))
+    common = [name for name in pairs if name in raw and name in source]
+    if len(common) < 3:
+        return {"status": "insufficient_points", "points": len(common)}
+    target = [(float(source[n][0]), 1.0 - float(source[n][1])) for n in common]
+    actual = [raw[n] for n in common]
+    tx = sum(p[0] for p in target) / len(target)
+    ty = sum(p[1] for p in target) / len(target)
+    ax = sum(p[0] for p in actual) / len(actual)
+    ay = sum(p[1] for p in actual) / len(actual)
+    # 2D Procrustes similarity: target ~= scale * R(actual-center) + target-center.
+    num_c = sum((u[0] - ax) * (v[0] - tx) + (u[1] - ay) * (v[1] - ty) for u, v in zip(actual, target))
+    num_s = sum((u[0] - ax) * (v[1] - ty) - (u[1] - ay) * (v[0] - tx) for u, v in zip(actual, target))
+    den = sum((u[0] - ax) ** 2 + (u[1] - ay) ** 2 for u in actual)
+    if den < 1e-10:
+        return {"status": "degenerate_projection", "points": len(common)}
+    scale = math.sqrt(num_c * num_c + num_s * num_s) / den
+    cos_r = num_c / math.sqrt(num_c * num_c + num_s * num_s) if num_c or num_s else 1.0
+    sin_r = num_s / math.sqrt(num_c * num_c + num_s * num_s) if num_c or num_s else 0.0
+    residuals = {}
+    squared = 0.0
+    for name, u, v in zip(common, actual, target):
+        dx, dy = u[0] - ax, u[1] - ay
+        fit = (tx + scale * (cos_r * dx - sin_r * dy), ty + scale * (sin_r * dx + cos_r * dy))
+        error = math.sqrt((fit[0] - v[0]) ** 2 + (fit[1] - v[1]) ** 2)
+        residuals[name] = error
+        squared += error * error
+    return {
+        "status": "measured",
+        "points": len(common),
+        "similarity_scale": scale,
+        "rmse_normalized_image": math.sqrt(squared / len(common)),
+        "max_normalized_image_error": max(residuals.values()),
+        "joint_errors": residuals,
+    }
+
+
 def main():
     args = parse_args()
     global DEPTH_MODE
@@ -273,6 +344,7 @@ def main():
             "matched_source_frame": frame,
             "warnings": warnings,
             "bone_direction_errors": measure(arm, expected),
+            "projection_error": project_pose(arm, bpy.context.scene.camera, case),
         })
     result = {
         "schema": "single-frame-blender-validation.v1",

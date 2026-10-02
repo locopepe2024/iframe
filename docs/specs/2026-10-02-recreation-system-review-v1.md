@@ -160,7 +160,7 @@
 ### P1：完整动作复刻单帧校准
 
 1. 使用 raw track，不使用平滑 track。
-2. 增加 Blender 投影 2D 误差。
+2. 使用 Blender evaluated bone endpoints 投影回 2D，计算独立投影误差。
 3. 对比 flatten depth、MediaPipe depth 和 CPU 深度模型。
 4. 校准 rest pose 到 body-local frame 的 local quaternion。
 5. 优先修正肩、上臂、髋、大腿、躯干朝向。
@@ -212,6 +212,21 @@
 - 帧 240、360、480、556：补充姿态。
 
 每个测试同时保存：源帧、raw joints、body frame、Blender 静帧、投影误差、人工结论。
+
+### 当前投影验证结果
+
+使用 raw `motion-track.v1` 的 9 个代表帧，在 media CPU Blender 上完成了独立投影验证。相似变换只消除相机 framing 和 rig scale，不消除关节点相对布局错误。
+
+| 深度模式 | 平均归一化 2D 投影 RMSE |
+|---|---:|
+| flatten depth | 0.0463 |
+| MediaPipe estimated depth | 0.0449 |
+
+**Observed**：两种模式差异很小，estimated depth 只略优于 flatten depth。
+
+**Direct implication**：当前最大误差不应继续归因于深度插件；应优先检查 source 2D 关键点、相机投影、骨骼父子局部旋转和人体朝向。
+
+**Not yet proven**：该 RMSE 尚未设定最终产品阈值，也未覆盖快速旋转的连续时序和脚部接触。
 
 ## 7. 成功标准
 
