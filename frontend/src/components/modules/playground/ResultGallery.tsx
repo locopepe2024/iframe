@@ -264,7 +264,7 @@ export default function ResultGallery() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 content-start">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(390px,1fr))] gap-4 content-start">
             {gridItems.map((it) => {
               if (it.kind === 'divider') {
                 return (
