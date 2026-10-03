@@ -52,3 +52,17 @@ def test_h3_preserves_subject_business_labels_when_binding_media_references():
     )
 
     assert result == "<Subject 1> is the family; use <Picture 1> for identity."
+
+
+def test_h3_resolves_editor_shortened_reference_labels():
+    result = bind_h3_canonical_prompt(
+        "<Subject 1> is the subject; use @Weixi... for identity and @22291... for motion.",
+        ["Weixi_portrait_reference.jpg", "22291_runway_reference.mp4"],
+        ["Weixi_portrait_reference.jpg", "22291_runway_reference.mp4"],
+        {
+            "Weixi_portrait_reference.jpg": "Weixi_portrait_reference.jpg",
+            "22291_runway_reference.mp4": "22291_runway_reference.mp4",
+        },
+    )
+
+    assert result == "<Subject 1> is the subject; use <Picture 1> for identity and <Video 1> for motion."
