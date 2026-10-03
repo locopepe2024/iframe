@@ -366,6 +366,7 @@ class PlaygroundService:
         from ...models.mulerouter import MuleRouterVideoModel
         from ...models.uniart import UniArtVideoModel
 
+        model_lower = gen.model_id.lower()
         runtime_config = self._load_provider_config()
         use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
             os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
