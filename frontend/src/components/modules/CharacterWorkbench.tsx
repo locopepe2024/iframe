@@ -646,21 +646,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                 </div>
 
-                <section className="mx-6 mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3" aria-label="角色特征建议">
-                    <div className="text-xs font-medium text-primary">角色特征建议</div>
-                    <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">点击建议后才会加入当前图像提示词；未点击的建议不会生效。</p>
-                    {(["identity", "look", "continuity"] as const).map((section) => {
-                        const facets = CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === section);
-                        const title = section === "identity" ? "永久角色身份" : section === "look" ? "本集造型变体" : "连续性锁";
-                        return <div key={section} className="mt-2">
-                            <div className="mb-1 text-[0.6875rem] font-medium text-text-secondary">{title}</div>
-                            <div className="flex flex-wrap gap-1.5">
-                                {facets.map((facet) => <button key={facet.id} type="button" onClick={() => appendCharacterFacet(facet)} className="rounded border border-primary/20 bg-background/40 px-2 py-1 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary">+ {facet.label_zh}</button>)}
-                            </div>
-                        </div>;
-                    })}
-                </section>
-
                 {/* Footer: Negative Prompt & Art Direction Settings */}
                 <div className="border-t border-glass-border bg-surface flex flex-col">
                     {/* Top Row: User's Negative Prompt + Apply Style Toggle */}
@@ -742,6 +727,21 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     )}
                 </div>
+
+                <section className="shrink-0 max-h-44 overflow-y-auto border-t border-glass-border bg-surface px-6 py-3" aria-label="角色特征建议">
+                    <div className="text-xs font-medium text-primary">角色特征建议</div>
+                    <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">建议位于 Prompt 编辑器下方；点击后才会加入当前图像提示词。</p>
+                    {(["identity", "look", "continuity"] as const).map((section) => {
+                        const facets = CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === section);
+                        const title = section === "identity" ? "永久角色身份" : section === "look" ? "本集造型变体" : "连续性锁";
+                        return <div key={section} className="mt-2">
+                            <div className="mb-1 text-[0.6875rem] font-medium text-text-secondary">{title}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {facets.map((facet) => <button key={facet.id} type="button" onClick={() => appendCharacterFacet(facet)} className="rounded border border-primary/20 bg-background/40 px-2 py-1 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary">+ {facet.label_zh}</button>)}
+                            </div>
+                        </div>;
+                    })}
+                </section>
             </motion.div>
         </div>
     );
