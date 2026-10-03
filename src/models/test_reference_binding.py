@@ -43,12 +43,12 @@ def test_h3_rejects_audio_reference_without_audio_slot_even_in_negative_text():
         )
 
 
-def test_h3_rejects_subject_business_labels():
-    with pytest.raises(ValueError, match="Subject"):
-        bind_h3_canonical_prompt(
-            "<Subject 1> is the family",
-            ["family.jpg"],
-            ["family.jpg"],
-            {"family.jpg": "family.jpg"},
-        )
+def test_h3_preserves_subject_business_labels_when_binding_media_references():
+    result = bind_h3_canonical_prompt(
+        "<Subject 1> is the family; use @family.jpg for identity.",
+        ["family.jpg"],
+        ["family.jpg"],
+        {"family.jpg": "family.jpg"},
+    )
 
+    assert result == "<Subject 1> is the family; use <Picture 1> for identity."

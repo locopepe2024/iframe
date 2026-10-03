@@ -74,10 +74,7 @@ def bind_h3_canonical_prompt(
     """
     canonical_pattern = re.compile(r"<(Picture|Video|Audio)\s+(\d+)>")
     has_canonical = bool(canonical_pattern.search(prompt))
-    has_subject = bool(re.search(r"<Subject\s+\d+>", prompt, re.IGNORECASE))
     has_legacy = bool(re.search(r"@[^\s@]+", prompt))
-    if has_subject:
-        raise ValueError("H3 prompt cannot mix <Subject N> business labels with media references")
     if has_canonical and has_legacy:
         raise ValueError("H3 prompt cannot mix canonical media references with @ references")
 
