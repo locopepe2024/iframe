@@ -163,6 +163,10 @@
 
 iframe 不重复实现角色素材库、参考图存储或真人角色资产版本服务。上述能力由 Avatar 素材库提供，iframe 通过适配器调用。
 
+当前 `Character.digital_avatar` 只能视为迁移期间的过渡数据。它可以帮助旧项目保留用户已经确认的身份、造型和连续性选择，但不能发展为 iframe 内部的 Avatar 素材库，也不能成为生产环境的权威角色存储。
+
+iframe 不应继续扩展本地 Avatar 素材库 CRUD。角色、参考图、候选版本、声音和动作资产的最终持久化与版本管理必须由 Avatar 服务负责。iframe 内的本地 mock 只能用于开发和自动化测试，必须通过显式配置注入，不能在生产环境静默回退为本地存储。
+
 ### iframe 负责
 
 - 展示角色身份、造型变体和连续性锁。
@@ -192,6 +196,8 @@ interface AvatarCharacterAssetClient {
 }
 ```
 
+`AvatarCharacterAssetClient` 是角色工作台的唯一依赖边界。工作台不应直接依赖 Avatar 的 HTTP 细节，也不应直接读取本地图片路径。生产环境由 Avatar HTTP adapter 注入，测试环境可以注入 mock client。
+
 所有写入必须带有 `character_id`、当前 revision 和操作者来源。Avatar 返回的版本如果已经过期，iframe 应提示用户刷新角色状态，不得静默覆盖新的身份或造型。
 
 ### 与 3D 导演台的连接
@@ -209,7 +215,37 @@ interface AvatarCharacterAssetClient {
 }
 ```
 
+3D 导演台不能把 iframe 的本地图片副本当作权威身份来源。图片副本最多是预览缓存，必须带有 Avatar 资产 ID 和版本；当本地预览与 Avatar 版本不一致时，应重新读取 Avatar 资产，不能继续使用旧副本编译正式动作或渲染任务。
+
 3D 导演台可以生成姿态、动作轨迹、IK 和镜头安排，但不能修改角色永久身份。角色工作台的身份更新也不会反向触发 Director 理解或拍摄计划重算；只有明确引用了新角色版本的下游任务才需要重新执行。
+
+## 当前代码状态与迁移边界
+
+### 已观察到的代码事实
+
+- iframe 当前 `Character` 模型已经可以暂存 `digital_avatar` 结构。
+- 当前角色工作台仍通过项目资产更新接口写入角色对象；这只能作为开发过渡，
+  不能被视为 Avatar 素材库的最终所有权实现。
+- 当前仓库还没有可调用的 Avatar 服务端点，因此不能在 iframe 内伪造一个
+  “远程素材库已经存在”的实现。
+
+### 迁移要求
+
+- 新增或扩展 Avatar 字段时，优先定义 `AvatarCharacterAssetClient` 的请求/响应
+  类型，不继续扩展 iframe 本地素材库的 CRUD 责任。
+- 角色工作台可以保留本地 mock/fixture 适配器用于开发测试，但 mock 必须显式
+  标记为开发实现，不能默默降级成生产本地存储。
+- 接入真实 Avatar 服务后，角色工作台的身份、造型、参考图和候选操作必须走
+  Avatar 适配器；iframe 只保存当前引用的 `character_id`、版本和工作流快照。
+- 3D 导演台不得读取 iframe 本地角色图片副本作为权威身份来源。
+
+### 下一步实现顺序
+
+1. 在 iframe 内建立 Avatar contract types 和注入式 client interface。
+2. 建立仅用于测试的 in-memory/mock client，并覆盖 revision 冲突和候选接受。
+3. 将角色工作台的保存、候选生成和参考素材读取改为调用 client。
+4. 等 Avatar 服务 API 确认后，再实现 HTTP adapter；不提前猜测供应商路径。
+5. 将 3D 导演台的角色引用收窄为 `character_id + identity_revision + look_revision`。
 
 ## 角色工作台的生成顺序
 
@@ -222,6 +258,35 @@ interface AvatarCharacterAssetClient {
 7. 只有用户确认的版本才能被 3D 导演台、分镜和视频生成引用。
 
 未确认的候选不能覆盖当前角色身份，也不能自动写入连续性锁。
+
+## 本地素材导入迁移要求
+
+当前未提交实现中的：
+
+```text
+POST /series/{series_id}/assets/import-from-library
+fork_library_asset_to_series()
+```
+
+仍然会把全局素材复制进 iframe 的系列资产池。这与 Avatar 权威资产边界冲突，后续必须改为保存 Avatar 资产引用和版本，例如：
+
+```json
+{
+  "avatar_character_id": "character_123",
+  "identity_revision": 3,
+  "look_revision": 2,
+  "source": "avatar",
+  "preview_url": "..."
+}
+```
+
+迁移完成前，旧 deep-copy 路径必须标记为 legacy，不得继续扩展新的本地角色素材 CRUD。新实现顺序如下：
+
+1. 定义 contract types 和注入式 `AvatarCharacterAssetClient`。
+2. 建立仅用于开发测试的 mock client。
+3. 角色工作台改为通过 client 读取和写入角色。
+4. Avatar 服务 API 确认后，再实现 HTTP adapter。
+5. 3D 导演台只引用 `character_id + identity_revision + look_revision`。
 
 ## v1 成功标准
 
