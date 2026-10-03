@@ -412,6 +412,15 @@ class Character(BaseModel):
     gender: Optional[str] = Field(None, description="Gender of the character")
     clothing: Optional[str] = Field(None, description="Clothing description")
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
+
+    # Digital avatar character board v1.  This is deliberately separate from
+    # the free-text description and provider prompts: accepted identity/look
+    # decisions must remain editable and traceable without leaking Director's
+    # internal JSON into image generation.
+    digital_avatar: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured digital-avatar identity, look variants, continuity locks and review state",
+    )
     
     # === R2V v2 Phase 5: Unified reference sheet ===
     # Single master sheet (multi-view or single portrait both OK) replaces

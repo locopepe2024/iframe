@@ -195,6 +195,37 @@ it("loads the project reference index for the character workbench", async () => 
     ));
 });
 
+it("persists accepted identity facets separately from the provider prompt", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn();
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onUpdateAttributes={onUpdateAttributes}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+        />,
+    );
+
+    const facet = screen.getByRole("button", { name: /眼神/ });
+    fireEvent.click(facet);
+    expect(facet).toHaveAttribute("aria-pressed", "true");
+    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
+        digital_avatar: expect.objectContaining({
+            schema_version: "digital-avatar-character.v1",
+            identity_facet_ids: ["eyes-gaze"],
+        }),
+    }));
+
+    fireEvent.click(facet);
+    expect(facet).toHaveAttribute("aria-pressed", "false");
+    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
+        digital_avatar: expect.objectContaining({ identity_facet_ids: [] }),
+    }));
+});
+
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
     apiMocks.getAssetReferenceIndex.mockReset();
     projectStoreMocks.currentProject = {

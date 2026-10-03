@@ -65,6 +65,7 @@ interface CharacterWorkbenchProps {
     asset: any;
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
+    onUpdateAttributes?: (attributes: Record<string, unknown>) => void | Promise<void>;
     onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
@@ -74,7 +75,7 @@ interface CharacterWorkbenchProps {
     isGeneratingVideo?: boolean;
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
@@ -258,12 +259,53 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
+    const [acceptedFacetIds, setAcceptedFacetIds] = useState<string[]>(() => {
+        const avatar = asset.digital_avatar || {};
+        return [
+            ...(Array.isArray(avatar.identity_facet_ids) ? avatar.identity_facet_ids : []),
+            ...(Array.isArray(avatar.look_facet_ids) ? avatar.look_facet_ids : []),
+            ...(Array.isArray(avatar.continuity_lock_ids) ? avatar.continuity_lock_ids : []),
+        ];
+    });
     const activePromptSetter = activePanel === "full_body" ? setFullBodyPrompt : activePanel === "three_view" ? setThreeViewPrompt : setHeadshotPrompt;
     const activePrompt = activePanel === "full_body" ? fullBodyPrompt : activePanel === "three_view" ? threeViewPrompt : headshotPrompt;
+    useEffect(() => {
+        const avatar = asset.digital_avatar || {};
+        setAcceptedFacetIds([
+            ...(Array.isArray(avatar.identity_facet_ids) ? avatar.identity_facet_ids : []),
+            ...(Array.isArray(avatar.look_facet_ids) ? avatar.look_facet_ids : []),
+            ...(Array.isArray(avatar.continuity_lock_ids) ? avatar.continuity_lock_ids : []),
+        ]);
+    }, [asset.id, asset.digital_avatar]);
+
+    const persistAcceptedFacets = (acceptedIds: string[]) => {
+        const avatar = asset.digital_avatar || {};
+        const accepted = new Set(acceptedIds);
+        onUpdateAttributes?.({
+            digital_avatar: {
+                schema_version: "digital-avatar-character.v1",
+                character_id: asset.id,
+                ...avatar,
+                identity_facet_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "identity" && accepted.has(facet.id)).map((facet) => facet.id),
+                look_facet_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "look" && accepted.has(facet.id)).map((facet) => facet.id),
+                continuity_lock_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "continuity" && accepted.has(facet.id)).map((facet) => facet.id),
+                review_status: "needs_user_review",
+            },
+        });
+    };
     const appendCharacterFacet = (facet: typeof CHARACTER_IDENTITY_FACETS_FALLBACK[number]) => {
         const value = facet.prompt_zh;
-        if (activePrompt.includes(value)) return;
-        activePromptSetter((current) => `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`);
+        if (!acceptedFacetIds.includes(facet.id)) {
+            const next = [...acceptedFacetIds, facet.id];
+            setAcceptedFacetIds(next);
+            persistAcceptedFacets(next);
+        }
+        if (!activePrompt.includes(value)) activePromptSetter((current) => `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`);
+    };
+    const removeCharacterFacet = (facet: typeof CHARACTER_IDENTITY_FACETS_FALLBACK[number]) => {
+        const next = acceptedFacetIds.filter((id) => id !== facet.id);
+        setAcceptedFacetIds(next);
+        persistAcceptedFacets(next);
     };
 
     // Get the uploaded image URL for reverse generation reference
@@ -728,7 +770,16 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         return <div key={section} className="mt-2">
                             <div className="mb-1 text-[0.6875rem] font-medium text-text-secondary">{title}</div>
                             <div className="flex flex-wrap gap-1.5">
-                                {facets.map((facet) => <button key={facet.id} type="button" onClick={() => appendCharacterFacet(facet)} className="rounded border border-primary/20 bg-background/40 px-2 py-1 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary">+ {facet.label_zh}</button>)}
+                                {facets.map((facet) => {
+                                    const accepted = acceptedFacetIds.includes(facet.id);
+                                    return <button
+                                        key={facet.id}
+                                        type="button"
+                                        aria-pressed={accepted}
+                                        onClick={() => accepted ? removeCharacterFacet(facet) : appendCharacterFacet(facet)}
+                                        className={`rounded border px-2 py-1 text-[0.6875rem] transition-colors ${accepted ? "border-primary/60 bg-primary/15 text-primary" : "border-primary/20 bg-background/40 text-text-secondary hover:border-primary/50 hover:text-primary"}`}
+                                    >{accepted ? "✓ " : "+ "}{facet.label_zh}</button>;
+                                })}
                             </div>
                         </div>;
                     })}

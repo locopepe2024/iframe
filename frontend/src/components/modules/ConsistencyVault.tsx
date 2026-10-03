@@ -85,6 +85,16 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleUpdateAttributes = async (assetId: string, type: string, attributes: Record<string, unknown>) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, attributes);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to update asset attributes:", error);
+        }
+    };
+
     const handleClearGenerationState = async (assetId: string, type: string) => {
         if (!currentProject) return;
         try {
@@ -524,6 +534,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
+                            onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
                             onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
