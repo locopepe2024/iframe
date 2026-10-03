@@ -48,6 +48,13 @@ def bind_reference_names(prompt: str, labels: list[str]) -> str:
     for index, label in enumerate(labels, 1):
         if label:
             positions.setdefault(label, []).append(index)
+            # The editor renders long selected references as the first five
+            # characters plus an ellipsis.  Older drafts can therefore carry
+            # that display label in plain text instead of the full filename.
+            # Accept the alias only when it identifies one submitted asset.
+            if len(label) > 5:
+                for alias in (label[:5] + "...", label[:5] + "…"):
+                    positions.setdefault(alias, []).append(index)
     if not positions:
         return prompt
     pattern = r"@(" + "|".join(re.escape(name) for name in sorted(positions, key=len, reverse=True)) + r")(?=$|[\s，。！？、,.!?;；:：\u3400-\u9fff])"
