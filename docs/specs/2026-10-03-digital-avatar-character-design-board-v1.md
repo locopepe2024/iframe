@@ -159,6 +159,70 @@
 - 角色工作台只读取经过投影的可执行视觉约束。
 - 角色工作台的修改不会反向修改 Director 理解或拍摄计划。
 
+## Avatar 素材库边界
+
+iframe 不重复实现角色素材库、参考图存储或真人角色资产版本服务。上述能力由 Avatar 素材库提供，iframe 通过适配器调用。
+
+### iframe 负责
+
+- 展示角色身份、造型变体和连续性锁。
+- 将用户选择、修改和删除转换为结构化更新。
+- 请求 Avatar 生成角色候选。
+- 展示候选并允许用户接受、继续编辑或删除。
+- 将当前 `character_id`、`identity_revision` 和 `look_revision` 传递给后续工作流。
+- 在生成 Prompt 前投影必要的视觉约束，不把 Director 内部 JSON 直接传入 Avatar。
+
+### Avatar 负责
+
+- 角色素材库的持久化、检索和版本管理。
+- 身份参考图、服装参考图、动作参考图和声音/动作资产的职责管理。
+- 真人角色候选生成及候选版本保存。
+- 角色图片、视频、声音和动作资产的 lineage 记录。
+- 向 iframe 返回可引用的角色资产版本，而不是要求 iframe 保存图片副本。
+
+### 最小调用契约
+
+```ts
+interface AvatarCharacterAssetClient {
+  getCharacter(characterId: string): Promise<DigitalAvatarCharacter>;
+  updateIdentity(characterId: string, patch: IdentityPatch): Promise<DigitalAvatarCharacter>;
+  createLookVariant(characterId: string, input: LookVariantInput): Promise<DigitalAvatarCharacter>;
+  generateCandidate(characterId: string, input: CandidateRequest): Promise<AvatarCandidateTask>;
+  listReferenceAssets(characterId: string, role?: ReferenceRole): Promise<ReferenceAsset[]>;
+}
+```
+
+所有写入必须带有 `character_id`、当前 revision 和操作者来源。Avatar 返回的版本如果已经过期，iframe 应提示用户刷新角色状态，不得静默覆盖新的身份或造型。
+
+### 与 3D 导演台的连接
+
+场景、运镜、人物动作和空间关系由 3D 导演台负责。3D 导演台只读取 Avatar 返回的已确认角色资产：
+
+```json
+{
+  "character_id": "...",
+  "identity_revision": 3,
+  "look_revision": 2,
+  "reference_asset_ids": ["..."],
+  "continuity_lock_ids": ["..."],
+  "review_status": "confirmed"
+}
+```
+
+3D 导演台可以生成姿态、动作轨迹、IK 和镜头安排，但不能修改角色永久身份。角色工作台的身份更新也不会反向触发 Director 理解或拍摄计划重算；只有明确引用了新角色版本的下游任务才需要重新执行。
+
+## 角色工作台的生成顺序
+
+1. 从 Avatar 读取当前角色资产和版本。
+2. 用户编辑结构化身份或造型字段。
+3. iframe 生成一份可读的视觉提示投影供用户检查。
+4. 用户确认后调用 Avatar 生成候选。
+5. Avatar 返回候选资产和 lineage。
+6. 用户接受、继续编辑、删除或保留候选。
+7. 只有用户确认的版本才能被 3D 导演台、分镜和视频生成引用。
+
+未确认的候选不能覆盖当前角色身份，也不能自动写入连续性锁。
+
 ## v1 成功标准
 
 1. 用户能建立一个稳定的真人角色身份。
