@@ -143,6 +143,33 @@ ScriptFactLedger 由 Script 阶段维护。Director 可以判断事实的戏剧�
 - 与剧情事件相关的状态变化；
 - 不把动作本身误写成道具固有属性。
 
+#### Shot flow 绑定边界
+
+`shot flow` 是 Director 计划与 Assets/Storyboard 之间的执行绑定层。它不复制完整角色或场景
+提示词，也不建立第二套资产库；它只引用实体 ID、版本和镜头需要的连续性状态。
+
+角色引用必须区分：
+
+```text
+person_id（全剧永久身份）
+  → era_variant_id（时间线/人生阶段）
+  → scene_look_id（本集或本场造型）
+  → continuity_state（镜头连续性状态）
+```
+
+跨越五至十年的作品继续使用同一个 `person_id`，通过多个 `era_variant_id` 表达大学、研究生、
+职场或婚礼等阶段。一集只覆盖几天时，可以在同一个阶段下选择冬季室外、图书馆、女生寝室、
+新生聚会等不同 `scene_look_id`，不得因为换装或室内外变化创建新人物。
+
+Shot flow 的最小绑定内容为：
+
+- 人物：`person_id`、可选 `era_variant_id`、可选 `scene_look_id`、外套/道具/湿身/发型/妆容/站位等连续性状态；
+- 场景：`scene_asset_id`、室内/室外、时段、季节和天气上下文；
+- 道具：`prop_id` 以及出现、携带、缺席或状态变化。
+
+资产可以先输出 `unresolved` 或 `suggested` 候选，用户接受、修改或删除后再变成 `selected` / `confirmed`。
+未生成图片不阻止拍摄计划草稿保存；只有分镜或视频真正使用某个镜头时，才检查该镜头所需绑定是否已确认。
+
 禁止：Assets 自行决定镜头数量、镜头时长或运镜。Assets 只能提供可被镜头引用的视觉事实和约束。
 
 ### 4. Storyboard：正式镜头描述层

@@ -17,7 +17,8 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 1. Store the plan separately from `DirectorProfile`, with its own current draft, draft revision, confirmed revision, immutable confirmed snapshots and content hash. The plan may cite a Director profile, but changing the plan does not rewrite story understanding.
 2. Bind every generated/saved/confirmed plan to the current script source revision, confirmed Director profile revision/hash, and effective visual-style hash. Refuse confirmation if any bound input changed.
 3. Use one canonical hierarchy: ordered scenes contain ordered dramatic beats, and beats contain ordered shots. Timeline cards and future visual maps are views of this same structure.
-4. A scene records a screenplay-facing scene reference, location/time labels, its environment and atmosphere, prop references, and source chunk references. A beat records dramatic purpose, emotional change, optional stable story-map event IDs, and shots. A shot records visual intent, an optional user-editable `director_effect` annotation, character performance, observable physical action, structured lighting (key source/direction, color tone, contrast, practical sources), composition, shot size, camera angle/movement, duration, dialogue, ambient sound, and optional character-variant/prop IDs. `director_effect` states the intended audience or editorial effect for this shot; it is a direction note, not a new screenplay fact. These are reviewable visual proposals, not claims about facts absent from the script.
+4. A scene records a screenplay-facing scene reference, location/time labels, its environment and atmosphere, prop references, and source chunk references. A beat records dramatic purpose, emotional change, optional stable story-map event IDs, and shots. A shot records visual intent, an optional user-editable `director_effect` annotation, character performance, observable physical action, structured lighting (key source/direction, color tone, contrast, practical sources), composition, shot size, camera angle/movement, duration, dialogue, ambient sound, and explicit cast/scene/prop bindings. `director_effect` states the intended audience or editorial effect for this shot; it is a direction note, not a new screenplay fact. These are reviewable visual proposals, not claims about facts absent from the script.
+4b. Shot flow is the execution-binding layer between Director planning, Assets and Storyboard. It references canonical entities and revisions; it does not copy their full prompts or create a second asset store. A shot may bind `person_id`, an optional `era_variant_id` (the character's timeline/life-stage variant), an optional `scene_look_id` (the episode or scene wardrobe/look), `scene_asset_id`, and `prop_id` values. The binding also carries scene-specific continuity state such as outerwear on/off, carried props, wetness, hairstyle, makeup, position and facing. `person_id` answers who the character is; `era_variant_id` answers which timeline stage they are in; look and continuity fields answer how they appear in this scene and shot. A time-stage or scene look must never create a replacement person identity.
 4a. Confirmed regional or setting decisions (for example, “the school is in Xi'an”) are downstream visual constraints. If the script does not name a landmark, local food or street detail, the plan may propose an optional visual anchor in `location`, `environment_atmosphere`, `visual_intent`, or `director_effect`. The proposal must be labeled as an optional Director addition and may also be surfaced in `unresolved_questions`; it must not be recorded as an established screenplay event or force a new action, dialogue, or scene. The user decides whether to keep, edit, or remove it.
 5. Shot count is derived from `scenes[].beats[].shots[]`; it is never inferred from action/event count, and no separate count field is accepted. Total runtime is derived from shot durations. Do not copy old storyboard frames or convert `sample_plan` items into shots.
 6. Long scripts use the existing bounded natural-boundary source chunker and resumable extraction-job batch storage. Every returned scene records the source chunk(s) that informed it; chunk bounds must not be presented as exact semantic scene boundaries.
@@ -27,9 +28,9 @@ Add a reviewable Director shooting-plan resource that converts the current scrip
 ## Contract and validation
 
 - `DirectorShootingPlan`: schema version, source revision and stable source ID, confirmed Director revision/hash, effective-style hash, ordered scenes, and generated-at metadata.
-- Scene: stable ID/order, scene reference, optional heading/location/time, environment/atmosphere, prop IDs, source chunk refs, and beats.
+- Scene: stable ID/order, scene reference, optional heading/location/time, environment/atmosphere, prop IDs, source chunk refs, and beats. Scene-level asset candidates may be attached, but selected shot bindings remain authoritative for execution.
 - Beat: stable ID/order, title, dramatic purpose, emotional change, optional story-map event references, and shots.
-- Shot: stable ID/order, visual intent, optional `director_effect` (maximum 2400 characters), character performance, physical action, structured lighting, shot size, camera angle, composition, camera movement, duration in seconds, dialogue lines, ambient sound, character variant IDs, and prop IDs.
+- Shot: stable ID/order, visual intent, optional `director_effect` (maximum 2400 characters), character performance, physical action, structured lighting, shot size, camera angle, composition, camera movement, duration in seconds, dialogue lines, ambient sound, and reference-only cast/scene/prop bindings. Cast bindings use `person_id`, optional `era_variant_id`, optional `scene_look_id`, and a continuity-state object; scene bindings use `scene_asset_id` plus interior/exterior, time-of-day and season context when known; prop bindings use `prop_id` plus presence/state. These bindings are IDs and small state snapshots, not duplicated asset descriptions.
 - Strict Pydantic models reject unknown keys, duplicate IDs/order values, unresolved story-map event IDs, or unavailable character/prop references. Drafts and confirmed plans may retain incomplete creative details. The system may suggest missing environment, performance, lighting, sound, camera or duration fields, but suggestions never block generation, saving, or confirmation; the user decides whether to accept, edit, or leave them blank. Structural integrity, valid references and recoverable task state remain technical checks. `director_effect` is optional so existing plans remain confirmable; when present it is persisted with the shot and included in the confirmed plan revision. Durations are bounded and totals are derived.
 - Source chunk references identify model input provenance only. They are not exact source ranges or proof that the model's interpretation is correct.
 - Normal Script responses omit plan drafts and histories. Dedicated endpoints own plan reads, draft save, confirmation, history, and generation jobs.
@@ -115,6 +116,49 @@ The primary review surface is a three-lane graph rather than nested drawers:
 The first implementation may use a lightweight DOM graph with semantic connectors. A graph library
 such as XYFlow can be introduced only if pan/zoom, edge editing, or large-plan performance requires
 it; adopting a library is not itself a change to the Director data contract.
+
+## Continuation slice: cast, scene and prop bindings (2026-10-03)
+
+Shot flow is the execution-binding layer between Director planning, Assets and Storyboard. It does not
+copy full prompts or create a second asset store. Character references use four distinct layers:
+
+```text
+person_id（全剧永久身份）
+  → era_variant_id（时间线/人生阶段）
+  → scene_look_id（本集或本场造型）
+  → continuity_state（镜头连续性状态）
+```
+
+`person_id` answers who the character is; `era_variant_id` answers which timeline stage they are in;
+`scene_look_id` answers how they are dressed and presented in this episode or scene; continuity state
+answers how coat, props, wetness, hairstyle, makeup, position and facing carry between shots. A five-to-
+ten-year production keeps one `person_id` and may use multiple era variants. An episode covering a few
+days can select outdoor, indoor, dormitory or party looks under the same era variant. A look change must
+never create a replacement character identity.
+
+Minimum shot binding:
+
+```json
+{
+  "cast": [{
+    "person_id": "shenxia",
+    "era_variant_id": "shenxia-university",
+    "scene_look_id": "shenxia-winter-outdoor",
+    "continuity_state": {"outerwear": "on", "carried_props": []}
+  }],
+  "scene": {
+    "scene_asset_id": "campus-winter-exterior",
+    "interior_exterior": "exterior",
+    "time_of_day": "day",
+    "season": "winter"
+  },
+  "props": [{"prop_id": "zhouhan-luggage", "state": "present"}]
+}
+```
+
+Bindings may be `unresolved`, `suggested`, `selected` or `confirmed`. Missing generated images do not
+block plan drafting. Storyboard/video generation may require confirmed bindings for the assets actually
+used by a requested shot. User acceptance, editing and deletion remain explicit decisions.
 
 ## Revision catalog and retrieval boundary
 
