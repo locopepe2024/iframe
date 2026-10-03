@@ -996,16 +996,22 @@ class ComicGenPipeline(StudioOwnerMixin):
                 subject_ids=[asset_id],
                 director_profile=director_profile,
             )
-            director_context = self.director_prompt_context(
-                script,
-                subject_ids=[asset_id],
-                director_profile=director_profile,
-                execution_context=director_execution,
-            )
-            if director_context:
-                effective_positive_prompt = ". ".join(filter(None, [
-                    effective_positive_prompt, director_context,
-                ]))
+            # Director execution context is an internal lineage/context
+            # contract for downstream storyboards and shot planning. It must
+            # not be appended to a character image prompt: that would leak
+            # canon_state, story_map and source metadata into the provider
+            # prompt and make those fields look like visual character traits.
+            if asset_type != "character":
+                director_context = self.director_prompt_context(
+                    script,
+                    subject_ids=[asset_id],
+                    director_profile=director_profile,
+                    execution_context=director_execution,
+                )
+                if director_context:
+                    effective_positive_prompt = ". ".join(filter(None, [
+                        effective_positive_prompt, director_context,
+                    ]))
         generation_lineage = self.generation_lineage(
             script, director_profile, director_execution,
         )

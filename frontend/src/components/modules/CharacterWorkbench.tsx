@@ -61,6 +61,15 @@ function selectedVariant(unit: any): any | undefined {
     return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
 }
 
+/** Remove legacy internal Director context that was accidentally persisted in
+ * old character prompt fields. New generations never append this context. */
+function visibleCharacterPrompt(value: string | undefined): string {
+    const prompt = String(value ?? "");
+    const marker = prompt.indexOf("Director profile revision:");
+    if (marker < 0) return prompt;
+    return prompt.slice(0, marker).replace(/[\s,，。]+$/, "").trim();
+}
+
 interface CharacterWorkbenchProps {
     asset: any;
     onClose: () => void;
@@ -233,7 +242,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
-        if (existingPrompt) return existingPrompt;
+        if (existingPrompt) return visibleCharacterPrompt(existingPrompt);
 
         if (type === "full_body") {
             return buildCharacterImagePrompt("full_body", asset.name, asset.description, hasNonFullBodyUpload);
