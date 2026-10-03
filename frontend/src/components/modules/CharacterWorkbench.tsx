@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Pencil, Video, Upload, Loader2 } from "lucide-react";
-import dynamic from "next/dynamic";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video, Upload, Loader2 } from "lucide-react";
 import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -25,15 +24,9 @@ import ReferencePromptEditor, {
     type ReferenceSuggestion,
 } from "./playground/ReferencePromptEditor";
 
-const ImageEditor = dynamic(() => import("@/components/shared/image-editor/ImageEditor"), { ssr: false });
+import { CHARACTER_IDENTITY_FACETS_FALLBACK } from "./cast/characterIdentityFacets";
 
 type CharacterEditUploadType = "reference_sheet" | "full_body" | "three_views" | "head_shot";
-
-interface CharacterEditTarget {
-    source: string;
-    title: string;
-    uploadType: CharacterEditUploadType;
-}
 
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
     const variants = Array.isArray(unit?.variants)
@@ -83,11 +76,9 @@ interface CharacterWorkbenchProps {
 
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
-    const ti = useTranslations("imageEditor");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
-    const [editTarget, setEditTarget] = useState<CharacterEditTarget | null>(null);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
@@ -149,15 +140,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return candidates;
     }, [assetIndex]);
 
-    const openVariantEditor = (unit: any, fallback: string | undefined, panelTitle: string, uploadType: CharacterEditUploadType) => {
-        const variant = selectedVariant(unit);
-        const source = currentProject && variant?.id
-            ? api.assetVariantContentUrl(currentProject.id, "character", asset.id, variant.id)
-            : getAssetUrl(fallback || variant?.url);
-        if (!source) return;
-        setEditTarget({ source, title: `${asset.name} · ${panelTitle}`, uploadType });
-    };
-
     // Uploads are immediately usable in the same explicit @ index. The
     // project asset index is fetched once per workbench session, so merge the
     // newly created selected variant locally instead of requiring a reload.
@@ -209,22 +191,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
         retainUploadedVariantInIndex(updatedProject, uploadType);
         toast.success(tc("uploadRef"));
-    };
-
-    const saveEditedImage = async (file: File) => {
-        if (!currentProject || !editTarget) throw new Error("Project is no longer available");
-        const updatedProject = await api.uploadAsset(
-            currentProject.id,
-            "character",
-            asset.id,
-            file,
-            editTarget.uploadType,
-            asset.description,
-        );
-        updateProject(currentProject.id, updatedProject);
-        retainUploadedVariantInIndex(updatedProject, editTarget.uploadType);
-        toast.success(ti("saved"));
-        setEditTarget(null);
     };
 
     // Mode state for Asset Activation v2 (Static/Motion)
@@ -292,6 +258,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
+    const activePromptSetter = activePanel === "full_body" ? setFullBodyPrompt : activePanel === "three_view" ? setThreeViewPrompt : setHeadshotPrompt;
+    const activePrompt = activePanel === "full_body" ? fullBodyPrompt : activePanel === "three_view" ? threeViewPrompt : headshotPrompt;
+    const appendCharacterFacet = (facet: typeof CHARACTER_IDENTITY_FACETS_FALLBACK[number]) => {
+        const value = facet.prompt_zh;
+        if (activePrompt.includes(value)) return;
+        activePromptSetter((current) => `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`);
+    };
 
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
@@ -540,8 +513,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={masterAsset}
                         currentImageUrl={masterImageUrl}
-                        editImageUrl={masterImageUrl}
-                        onEditImage={() => openVariantEditor(masterAsset, masterImageUrl, tc("masterAsset"), masterImageUploadType)}
                         onUploadImage={(file: File) => uploadCharacterImage(file, masterImageUploadType)}
                         onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
@@ -595,8 +566,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
-                        editImageUrl={selectedVariantUrl(asset.three_view_asset, asset.three_view_image_url)}
-                        onEditImage={() => openVariantEditor(asset.three_view_asset, asset.three_view_image_url, tc("threeViews"), "three_views")}
                         onUploadImage={(file: File) => uploadCharacterImage(file, "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
@@ -630,8 +599,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
-                        editImageUrl={selectedVariantUrl(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url)}
-                        onEditImage={() => openVariantEditor(asset.headshot_asset, asset.headshot_image_url || asset.avatar_url, tc("avatar"), "head_shot")}
                         onUploadImage={(file: File) => uploadCharacterImage(file, "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
@@ -669,6 +636,21 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 
                 </div>
+
+                <section className="mx-6 mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3" aria-label="角色特征建议">
+                    <div className="text-xs font-medium text-primary">角色特征建议</div>
+                    <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">点击建议后才会加入当前图像提示词；未点击的建议不会生效。</p>
+                    {(["identity", "look", "continuity"] as const).map((section) => {
+                        const facets = CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === section);
+                        const title = section === "identity" ? "永久角色身份" : section === "look" ? "本集造型变体" : "连续性锁";
+                        return <div key={section} className="mt-2">
+                            <div className="mb-1 text-[0.6875rem] font-medium text-text-secondary">{title}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {facets.map((facet) => <button key={facet.id} type="button" onClick={() => appendCharacterFacet(facet)} className="rounded border border-primary/20 bg-background/40 px-2 py-1 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary">+ {facet.label_zh}</button>)}
+                            </div>
+                        </div>;
+                    })}
+                </section>
 
                 {/* Footer: Negative Prompt & Art Direction Settings */}
                 <div className="border-t border-glass-border bg-surface flex flex-col">
@@ -752,14 +734,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
             </motion.div>
-            {editTarget && (
-                <ImageEditor
-                    source={editTarget.source}
-                    title={editTarget.title}
-                    onClose={() => setEditTarget(null)}
-                    onSave={saveEditedImage}
-                />
-            )}
         </div>
     );
 }
@@ -773,8 +747,6 @@ export function WorkbenchPanel({
     // Variant Props
     asset,
     currentImageUrl,
-    editImageUrl,
-    onEditImage,
     onUploadImage,
     onSelect,
     onDelete,
@@ -866,18 +838,6 @@ export function WorkbenchPanel({
                                     {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                                     <span className="hidden text-xs sm:inline">{tc("uploadRef")}</span>
                                 </label>
-                            )}
-                            {onEditImage && editImageUrl && (
-                                <button
-                                    type="button"
-                                    onClick={(event) => { event.stopPropagation(); onEditImage(); }}
-                                    className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                    title={ti("title")}
-                                    aria-label={`${ti("title")}: ${title}`}
-                                >
-                                    <Pencil size={16} />
-                                    <span className="hidden text-xs sm:inline">{ti("title")}</span>
-                                </button>
                             )}
                         </div>
                     )}
