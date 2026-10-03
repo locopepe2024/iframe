@@ -400,6 +400,12 @@ class Character(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the character")
     description: str = Field(..., description="Physical appearance and personality description")
+    # Structured Director-derived identity/look context. The base description
+    # remains user-editable; this field stores scene/time variants separately.
+    digital_avatar: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured identity, scene/time look variants and continuity context",
+    )
 
     # R2V v2 Phase 4 — persona grouping. The character.id is the *visual
     # unit* (e.g. "young Zhang San" vs "adult Zhang San" are two ids).

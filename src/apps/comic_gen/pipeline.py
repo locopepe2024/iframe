@@ -1511,6 +1511,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         """
         Syncs entity descriptions from ScriptProcessor parsed entities.
         This clears saved prompts so the UI will regenerate them from the current description.
+
+        The Director profile and shooting plan are execution context, not a
+        replacement for the user's base identity description.  Keep the base
+        text intact and append a deterministic, replaceable block containing
+        only scene/time bindings that were actually admitted into the plan.
         
         Note: This only updates prompts, not generated images/videos.
         """
@@ -1520,6 +1525,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         # Clear saved prompts for all characters so UI will regenerate from description
         for character in script.characters:
+            self._sync_director_character_context(script, character)
             character.full_body_prompt = None
             character.three_view_prompt = None
             character.headshot_prompt = None
@@ -1537,6 +1543,84 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         logger.info(f"Descriptions synced for script {script_id}: cleared prompts for {len(script.characters)} characters, {len(script.scenes)} scenes, {len(script.props)} props")
         return script
+
+    @staticmethod
+    def _director_context_text(value: Any, limit: int = 500) -> str:
+        if value in (None, "", [], {}):
+            return ""
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        return str(value).strip()[:limit]
+
+    def _sync_director_character_context(self, script: Script, character: Character) -> None:
+        """Attach scene/time wardrobe context without inventing bindings."""
+        marker = "\n\n【导演场景与时间变体】"
+        base_description = (character.description or "").split(marker, 1)[0].rstrip()
+        profile = self.effective_director_profile(script)
+        plan = script.director_shooting_plan_draft
+        if plan is None and script.director_shooting_plan_revisions:
+            plan = script.director_shooting_plan_revisions[-1].plan
+
+        profile_data = profile.model_dump() if profile else {}
+        setting = profile_data.get("setting") if isinstance(profile_data.get("setting"), dict) else {}
+        episode_setting = {
+            key: self._director_context_text(setting.get(key), 600)
+            for key in ("era", "time", "time_range", "geography", "locations", "season")
+            if self._director_context_text(setting.get(key), 600)
+        }
+        scene_variants: List[Dict[str, Any]] = []
+        aliases = {str(value).strip() for value in (character.id, character.name, character.persona) if value}
+        if plan is not None:
+            for scene in plan.scenes:
+                for beat in scene.beats:
+                    for shot in beat.shots:
+                        bindings = [binding for binding in shot.cast_bindings if binding.person_id in aliases]
+                        if not bindings and not aliases.intersection(set(shot.character_ids)):
+                            continue
+                        for binding in bindings or [None]:
+                            scene_binding = shot.scene_binding
+                            row = {
+                                "scene_ref": scene.scene_ref or scene.heading or scene.scene_id,
+                                "location": scene.location,
+                                "time_anchor": scene.time_anchor,
+                                "interior_exterior": getattr(scene_binding, "interior_exterior", None) if scene_binding else None,
+                                "time_of_day": getattr(scene_binding, "time_of_day", None) if scene_binding else None,
+                                "season": getattr(scene_binding, "season", None) if scene_binding else None,
+                                "weather": getattr(scene_binding, "weather", None) if scene_binding else None,
+                                "era_variant_id": getattr(binding, "era_variant_id", None) if binding else None,
+                                "scene_look_id": getattr(binding, "scene_look_id", None) if binding else None,
+                                "continuity_state": getattr(binding, "continuity_state", {}) if binding else {},
+                            }
+                            row = {key: value for key, value in row.items() if value not in (None, "", {}, [])}
+                            if row and row not in scene_variants:
+                                scene_variants.append(row)
+        context = {
+            "source": "director_profile_and_shooting_plan",
+            "director_profile_revision": profile.revision if profile else None,
+            "shooting_plan_revision": len(script.director_shooting_plan_revisions) or None,
+            "episode_setting": episode_setting,
+            "scene_variants": scene_variants[:80],
+        }
+        context = {key: value for key, value in context.items() if value not in (None, {}, [])}
+        avatar = dict(character.digital_avatar or {})
+        if context.get("scene_variants") or context.get("episode_setting"):
+            avatar["director_context"] = context
+            lines = [marker.strip()]
+            if episode_setting:
+                lines.append("本集时间与空间：" + self._director_context_text(episode_setting, 1200))
+            if scene_variants:
+                lines.append("本角色在拍摄计划中的场景/时间造型：")
+                for index, row in enumerate(scene_variants[:24], 1):
+                    details = []
+                    for key in ("scene_ref", "location", "time_anchor", "interior_exterior", "time_of_day", "season", "weather", "era_variant_id", "scene_look_id", "continuity_state"):
+                        if row.get(key) not in (None, "", {}, []):
+                            details.append(f"{key}={self._director_context_text(row[key], 360)}")
+                    lines.append(f"{index}. " + "; ".join(details))
+            character.description = base_description + "\n\n" + "\n".join(lines)
+        else:
+            avatar.pop("director_context", None)
+            character.description = base_description
+        character.digital_avatar = avatar
 
     def add_character(self, script_id: str, name: str, description: str) -> Script:
         script = self.scripts.get(script_id)
