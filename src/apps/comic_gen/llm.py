@@ -2001,7 +2001,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
                               director_profile: Optional[Dict[str, Any]] = None,
                               visual_style: Optional[Dict[str, Any]] = None,
-                              previous_frames: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+                              previous_frames: Optional[List[Dict[str, Any]]] = None,
+                              shooting_plan: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -2035,6 +2036,15 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
+        if shooting_plan:
+            system_prompt += (
+                "\n# 已确认拍摄计划（本段的执行约束）\n"
+                "以下场景、时间、季节、室内外、角色造型和连续性绑定来自已确认拍摄计划。"
+                "分镜必须优先匹配对应 scene_ref；没有匹配项时不得把其他场景的服装或时间移植过来。\n"
+                "<confirmed_shooting_plan>\n"
+                + json.dumps(shooting_plan, ensure_ascii=False, indent=2)
+                + "\n</confirmed_shooting_plan>\n"
+            )
         if previous_frames:
             # A compact handoff helps adjacent batches without resending the
             # entire growing draft into every model request.
@@ -2144,6 +2154,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         custom_extraction_prompt: str = "",
         director_profile: Optional[Dict[str, Any]] = None,
         visual_style: Optional[Dict[str, Any]] = None,
+        shooting_plan: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -2157,6 +2168,15 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
+        if shooting_plan:
+            baseline += (
+                "\n# 已确认拍摄计划（本段的执行约束）\n"
+                "修订时保留并遵守对应场景的时间、季节、室内外、角色造型和连续性绑定；"
+                "不得把未匹配场景的状态带入当前镜头。\n"
+                "<confirmed_shooting_plan>\n"
+                + json.dumps(shooting_plan, ensure_ascii=False, indent=2)
+                + "\n</confirmed_shooting_plan>\n"
+            )
         if director_profile:
             execution_context = director_execution_payload(director_profile)
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(

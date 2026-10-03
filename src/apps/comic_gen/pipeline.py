@@ -3833,6 +3833,41 @@ class ComicGenPipeline(StudioOwnerMixin):
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
         return script, entities_json, prompt
 
+    @staticmethod
+    def _storyboard_shooting_plan_context(script: Script) -> Optional[Dict[str, Any]]:
+        """Project the confirmed shooting plan into a bounded storyboard contract."""
+        plan = script.director_shooting_plan_draft
+        if plan is None and script.director_shooting_plan_revisions:
+            plan = script.director_shooting_plan_revisions[-1].plan
+        if plan is None:
+            return None
+        scenes = []
+        for scene in plan.scenes[:80]:
+            scene_payload = {
+                "scene_ref": scene.scene_ref,
+                "heading": scene.heading,
+                "location": scene.location,
+                "time_anchor": scene.time_anchor,
+                "environment_atmosphere": scene.environment_atmosphere,
+                "continuity_in": scene.continuity_in,
+                "continuity_out": scene.continuity_out,
+                "beats": [],
+            }
+            for beat in scene.beats[:20]:
+                beat_payload = {"title": beat.title, "dramatic_purpose": beat.dramatic_purpose, "shots": []}
+                for shot in beat.shots[:20]:
+                    beat_payload["shots"].append({
+                        "title": shot.title,
+                        "visual_intent": shot.visual_intent,
+                        "performance_action": shot.performance_action,
+                        "character_ids": shot.character_ids,
+                        "cast_bindings": [binding.model_dump() for binding in shot.cast_bindings],
+                        "scene_binding": shot.scene_binding.model_dump() if shot.scene_binding else None,
+                    })
+                scene_payload["beats"].append(beat_payload)
+            scenes.append(scene_payload)
+        return {"revision": len(script.director_shooting_plan_revisions) or None, "scenes": scenes}
+
     def preview_storyboard_analysis(self, script_id: str, text: str,
                                     load_batches=None, save_batch=None,
                                     expected_lineage: Optional[ArtifactLineage] = None) -> List[Dict[str, Any]]:
@@ -3852,12 +3887,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             self.validate_storyboard_lineage(script_id, text, expected_lineage)
             lineage = expected_lineage
         visual_style = self.storyboard_visual_style(script)
+        shooting_plan = self._storyboard_shooting_plan_context(script)
         if len(text) <= 1800 or load_batches is None or save_batch is None:
             if lineage.status == "pinned":
                 self.validate_storyboard_lineage(script_id, text, lineage)
             frames = self.script_processor.analyze_to_storyboard(
                 text, entities_json, custom_extraction_prompt=prompt,
                 director_profile=director_profile, visual_style=visual_style,
+                shooting_plan=shooting_plan,
             )
         else:
             from .llm import split_director_source
@@ -3891,6 +3928,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         ),
                         visual_style=visual_style,
                         previous_frames=frames[-3:],
+                        shooting_plan=shooting_plan,
                     )
                     if not batch_frames:
                         raise RuntimeError(f"分镜分析第 {index + 1}/{len(chunks)} 段没有返回镜头。")
@@ -3917,10 +3955,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             source_range=self._source_range_for_text(script, text),
             director_profile=self.effective_director_profile(script),
         )
+        shooting_plan = self._storyboard_shooting_plan_context(script)
         frames = self.script_processor.refine_storyboard_analysis(
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
+            shooting_plan=shooting_plan,
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -3953,6 +3993,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             source_range=source_range,
             director_profile=confirmed_director_profile,
         )
+        shooting_plan = self._storyboard_shooting_plan_context(script)
         generated_lineage = self.generation_lineage(
             script, confirmed_director_profile, director_profile, source_range,
             pinned=draft is None or (lineage is not None and lineage.status == "pinned"),
@@ -3966,6 +4007,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
+            shooting_plan=shooting_plan,
         )
 
         if not raw_frames:
