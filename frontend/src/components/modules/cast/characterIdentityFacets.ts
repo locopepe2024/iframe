@@ -136,5 +136,85 @@ export const CHARACTER_IDENTITY_FACETS_FALLBACK: CharacterIdentityFacet[] = [
     "label_en": "Reference role",
     "prompt_zh": "明确身份图、服装图和动作参考各自负责什么，不混用来源",
     "prompt_en": "state whether each identity, costume, or motion reference controls, without mixing their roles"
+  },
+  {
+    "id": "eye-shape",
+    "section": "identity",
+    "label_zh": "眼型",
+    "label_en": "Eye shape",
+    "prompt_zh": "眼型清晰稳定，与角色身份一致",
+    "prompt_en": "a clear, consistent eye shape aligned with the character identity"
+  },
+  {
+    "id": "eye-color",
+    "section": "identity",
+    "label_zh": "眼睛颜色",
+    "label_en": "Eye color",
+    "prompt_zh": "眼睛颜色稳定，不因镜头变化漂移",
+    "prompt_en": "stable eye color without shot-to-shot drift"
+  },
+  {
+    "id": "brow-shape",
+    "section": "identity",
+    "label_zh": "眉形",
+    "label_en": "Brow shape",
+    "prompt_zh": "眉形和眉毛密度保持稳定",
+    "prompt_en": "consistent brow shape and brow density"
+  },
+  {
+    "id": "nose-mouth",
+    "section": "identity",
+    "label_zh": "鼻唇特征",
+    "label_en": "Nose and mouth",
+    "prompt_zh": "鼻梁、鼻翼和唇形比例稳定",
+    "prompt_en": "stable nose structure and lip proportions"
+  },
+  {
+    "id": "body-build",
+    "section": "identity",
+    "label_zh": "体型",
+    "label_en": "Body build",
+    "prompt_zh": "体型偏瘦、匀称或健壮由用户指定并保持一致",
+    "prompt_en": "keep the user-selected slim, balanced, or athletic body build consistent"
+  },
+  {
+    "id": "height-presence",
+    "section": "identity",
+    "label_zh": "身高感",
+    "label_en": "Height presence",
+    "prompt_zh": "身高感和人物之间的相对高矮保持稳定",
+    "prompt_en": "stable height impression and relative height between characters"
+  },
+  {
+    "id": "shoulder-posture",
+    "section": "identity",
+    "label_zh": "肩颈体态",
+    "label_en": "Shoulders and posture",
+    "prompt_zh": "肩宽、颈部比例和基础体态保持稳定",
+    "prompt_en": "stable shoulder width, neck proportions, and base posture"
+  },
+  {
+    "id": "skin-tone",
+    "section": "identity",
+    "label_zh": "肤色",
+    "label_en": "Skin tone",
+    "prompt_zh": "肤色由用户指定并在不同光线下保持合理连续",
+    "prompt_en": "keep the user-selected skin tone coherent under different lighting"
+  },
+  {
+    "id": "skin-texture",
+    "section": "identity",
+    "label_zh": "皮肤纹理",
+    "label_en": "Skin texture",
+    "prompt_zh": "保留自然皮肤纹理、毛孔和轻微不完美",
+    "prompt_en": "retain natural skin texture, pores, and subtle imperfections"
+  },
+  {
+    "id": "facial-mark",
+    "section": "identity",
+    "label_zh": "面部识别特征",
+    "label_en": "Facial identifier",
+    "prompt_zh": "保留用户指定的痣、疤痕或其他稳定面部识别特征",
+    "prompt_en": "retain user-specified moles, scars, or other stable facial identifiers"
   }
 ];
