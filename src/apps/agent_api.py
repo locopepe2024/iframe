@@ -25,6 +25,19 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
 logger = logging.getLogger(__name__)
 
+# Agent models are deliberately curated instead of exposing every upstream
+# catalog entry. H3 IR is an optional prompt-optimization capability: it is
+# only returned when UniArt exposes the model for the current user.
+CHAT_MODEL_LABELS = {
+    "gpt-5.6-sol": "GPT 5.6 Sol",
+    "gpt-5.6-luna": "GPT 5.6 Luna",
+    "qwen3.8-flash": "Qwen 3.8 Flash",
+    "glm-5.3": "GLM 5.3",
+    "glm-5.3-flash": "GLM 5.3 Flash",
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
+    "minimax-h3-ir": "MiniMax H3 IR（提示词优化）",
+}
+
 
 def _restore_model_reference_names(answer: str, asset_names: list[str], request: str, history=()) -> str:
     """Keep Agent-facing H3/Seedance drafts addressable by filenames.
@@ -120,9 +133,16 @@ def catalog(ctx):
             items = normalize_uniart_catalog(json.load(response))
     except Exception:
         raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
-    labels = {"gpt-5.6-sol": "GPT 5.6 Sol", "gpt-5.6-luna": "GPT 5.6 Luna", "qwen3.8-flash": "Qwen 3.8 Flash", "glm-5.3": "GLM 5.3", "glm-5.3-flash": "GLM 5.3 Flash", "deepseek-v4.1-flash": "DeepSeek V4.1 Flash"}
+    return _agent_chat_models(items)
+
+
+def _agent_chat_models(items):
     by_id = {m["api_model_id"]: m for m in items if "chat" in m.get("capabilities", [])}
-    return [{**by_id[model], "display_name": label} for model, label in labels.items() if model in by_id]
+    return [{
+        **by_id[model],
+        "display_name": label,
+        **({"agent_capability": "h3_prompt_optimization"} if model == "minimax-h3-ir" else {}),
+    } for model, label in CHAT_MODEL_LABELS.items() if model in by_id]
 
 
 
