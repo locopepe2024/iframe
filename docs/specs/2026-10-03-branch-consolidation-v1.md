@@ -37,3 +37,22 @@ merged as whole branches.
 - No unrelated branch-drift files enter the integration branch.
 - The two development branches can be closed after the integration branch is
   verified; archive tags remain for audit and rollback.
+
+## Initial integration result
+
+The following storyboard capability slice has been imported cleanly onto the
+current baseline:
+
+- provider-supported video resolution selection
+- UniArt capability-based resolution lookup
+- catalog-supported aspect-ratio submission
+- catalog-supported 720p preference
+
+Source commits: `9269ded5`, `ceb763ee`, `19d33483`, `2bafd9e2`.
+
+Frontend typecheck and `tests/test_recreation.py` pass on this slice.
+
+The director deployment branch was not imported as a whole. Its feature files
+depend on older overlapping API, store, and model definitions; a whole-tree
+replay produced duplicate declarations and was discarded. Director features
+remain queued for separate contract-sized slices.
