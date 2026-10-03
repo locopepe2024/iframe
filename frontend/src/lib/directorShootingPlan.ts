@@ -12,6 +12,31 @@ export interface DirectorPlanDialogueLine {
     line: string;
 }
 
+export type DirectorPlanBindingStatus = "unresolved" | "suggested" | "selected" | "confirmed";
+
+export interface DirectorPlanCastBinding {
+    person_id: string;
+    era_variant_id?: string | null;
+    scene_look_id?: string | null;
+    continuity_state: Record<string, unknown>;
+    binding_status: DirectorPlanBindingStatus;
+}
+
+export interface DirectorPlanSceneBinding {
+    scene_asset_id?: string | null;
+    interior_exterior?: "interior" | "exterior" | "mixed" | null;
+    time_of_day?: string | null;
+    season?: string | null;
+    weather?: string | null;
+    binding_status: DirectorPlanBindingStatus;
+}
+
+export interface DirectorPlanPropBinding {
+    prop_id: string;
+    state: string;
+    binding_status: DirectorPlanBindingStatus;
+}
+
 export interface DirectorPlanShot {
     shot_id: string;
     order: number;
@@ -30,6 +55,9 @@ export interface DirectorPlanShot {
     ambient_sound: string;
     character_ids: string[];
     prop_ids: string[];
+    cast_bindings?: DirectorPlanCastBinding[];
+    scene_binding?: DirectorPlanSceneBinding | null;
+    prop_bindings?: DirectorPlanPropBinding[];
     unresolved_entity_refs?: string[];
 }
 
