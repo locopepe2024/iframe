@@ -50,19 +50,10 @@ const baseProps = {
     description: "Character reference",
 };
 
-it("exposes a labelled edit action for the selected character image", () => {
-    const onEditImage = vi.fn();
-    render(<WorkbenchPanel {...baseProps} editImageUrl="/files/character.png" onEditImage={onEditImage} />);
+it("keeps image editing out of the character workbench", () => {
+    render(<WorkbenchPanel {...baseProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "title: Full body" }));
-
-    expect(onEditImage).toHaveBeenCalledTimes(1);
-});
-
-it("does not offer editing when a panel has no selected image", () => {
-    render(<WorkbenchPanel {...baseProps} editImageUrl={undefined} onEditImage={vi.fn()} />);
-
-    expect(screen.queryByRole("button", { name: "title: Full body" })).not.toBeInTheDocument();
+    expect(screen.queryByText("title")).not.toBeInTheDocument();
 });
 
 it("unlocks derived asset prompts when the canonical reference sheet is available", () => {

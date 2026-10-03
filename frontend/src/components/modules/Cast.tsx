@@ -31,6 +31,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
 import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
+import CharacterWorkbenchBridge from "./cast/CharacterWorkbenchBridge";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -259,12 +260,16 @@ export default function Cast() {
             )}
 
             {/* Workbench — per-entity generate / pick reference image */}
-            <CastWorkbenchModal
-                isOpen={workbench !== null}
-                kind={workbench?.kind ?? null}
-                entityId={workbench?.entityId ?? null}
-                onClose={() => setWorkbench(null)}
-            />
+            {workbench?.kind === "character" ? (
+                <CharacterWorkbenchBridge entityId={workbench.entityId} onClose={() => setWorkbench(null)} />
+            ) : (
+                <CastWorkbenchModal
+                    isOpen={workbench !== null}
+                    kind={workbench?.kind ?? null}
+                    entityId={workbench?.entityId ?? null}
+                    onClose={() => setWorkbench(null)}
+                />
+            )}
 
             {/* R2V v2 Phase 5 — real Add new cast modal (AI / upload tabs). */}
             <AddCastPlaceholderModal
