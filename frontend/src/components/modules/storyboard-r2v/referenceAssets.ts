@@ -129,20 +129,20 @@ export function bindH3MultiReferencePrompt(
     bound = bound.replace(/__IFRAME_PICTURE_(\d+)__/g, "<Picture $1>");
     bound = bound.replace(/\[character(\d+):([^\]]+)\]/g, (token, slotText, name) => {
         const group = bySlot.get(Number(slotText));
-        return group ? `<Subject ${group.slot}> ${name}` : token;
+        return group ? `${name} (reference asset ${group.slot})` : token;
     });
     bound = bound.replace(/\[(character|scene|prop):([^\]]+)\]/g, (token, _kind, name) => {
         const group = byName.get(name);
-        return group ? `<Subject ${group.slot}> ${name}` : token;
+        return group ? `${name} (reference asset ${group.slot})` : token;
     });
 
     const bindings = groups.map((group) =>
-        `<Subject ${group.slot}> is ${group.name}, the same physical ${group.kind} shown in ${pictureList(group)}.`,
+        `Reference asset ${group.slot} is ${group.name}, the same physical ${group.kind} shown in ${pictureList(group)}.`,
     );
     const productRules = groups
         .filter((group) => group.kind === "prop")
         .map((group) =>
-            `For <Subject ${group.slot}>, preserve exact package geometry, logo placement, typography layout and colors across views; do not invent, reflow or replace printed text.`,
+            `For reference asset ${group.slot}, preserve exact package geometry, logo placement, typography layout and colors across views; do not invent, reflow or replace printed text.`,
         );
     const mapping = [...bindings, ...productRules].join("\n");
     if (/subject_definitions\s*:/i.test(bound)) {

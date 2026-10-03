@@ -76,7 +76,7 @@ describe("storyboard multi-reference assets", () => {
         expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-front"]);
     });
 
-    it("binds all selected product pictures to one H3 subject and shifts later slots", () => {
+    it("binds all selected product pictures without mixing Subject and Picture syntax", () => {
         const result = resolveReferenceSubmission(
             "subject_definitions:\nold\n[character1:穿心莲] beside [character2:女主播] <Picture 2>",
             assets,
@@ -88,9 +88,10 @@ describe("storyboard multi-reference assets", () => {
             "subject_definitions:\nold\n[character1:穿心莲] beside [character2:女主播] <Picture 2>",
             result.groups,
         );
-        expect(prompt).toContain("<Subject 1> is 穿心莲");
+        expect(prompt).toContain("Reference asset 1 is 穿心莲");
         expect(prompt).toContain("<Picture 1> (front), <Picture 2> (right), <Picture 3> (macro)");
-        expect(prompt).toContain("<Subject 2> is 女主播, the same physical character shown in <Picture 4>");
-        expect(prompt).toContain("<Subject 1> 穿心莲 beside <Subject 2> 女主播 <Picture 4>");
+        expect(prompt).toContain("Reference asset 2 is 女主播, the same physical character shown in <Picture 4>");
+        expect(prompt).toContain("穿心莲 (reference asset 1) beside 女主播 (reference asset 2) <Picture 4>");
+        expect(prompt).not.toMatch(/<Subject\s+\d+>/);
     });
 });
