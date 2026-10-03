@@ -39,6 +39,18 @@
 3. 只有当肩臂、髋腿在夹具中通过左右映射和方向测试，才进入 2–3 秒连续片段。
 4. 连续片段需额外检查四元数符号连续性、root yaw、脚部接触和落地帧。
 
+## 人工姿态夹具结果
+
+新增 `tools/motion_track/build_pose_calibration_fixture.py`，生成 6 个不依赖检测器的姿态：中立、左右抬臂、左右腿外展、躯干左倾。
+
+在 media 的真实白模 rig 上执行后：
+
+- 各夹具投影 RMSE 为 `0.0577–0.0660`。
+- 上臂方向误差约 `10°–15°`，没有出现左右反转或 180° 翻转。
+- 大腿方向误差约 `0.5°–11.2°`，左右外展仍有可见残差。
+
+这说明当前左右侧映射和基本坐标方向在人工输入下可工作，但尚不能证明源视频姿态的深度、相机朝向或连续动作求解正确。
+
 ## 复现命令
 
 ```bash
@@ -50,4 +62,3 @@ ssh ubuntu@media '/opt/blender-4.5.9/blender -b --python /tmp/render_single_fram
   --output /tmp/single-frame-validation-baseline \
   --depth-mode flatten --no-render'
 ```
-
