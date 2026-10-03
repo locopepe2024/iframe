@@ -21,7 +21,7 @@ from .models import (
 )
 from .storage import PlaygroundStorage
 from ...utils import get_logger
-from ...models.reference_binding import bind_reference_names, media_kind, video_reference_prompt
+from ...models.reference_binding import bind_h3_canonical_prompt, bind_reference_names, media_kind, video_reference_prompt
 
 logger = get_logger(__name__)
 
@@ -417,7 +417,14 @@ class PlaygroundService:
                     raise ValueError("Image-to-video requires exactly one image; use reference mode for multiple materials")
             elif gen.mode == PlaygroundMode.F2V and any(media_kind(ref) != "image" for ref in references):
                 raise ValueError("First/last-frame mode requires images")
-            kwargs["reference_prompt"] = video_reference_prompt(gen.prompt, gen.input_media, references, gen.media_names)
+            if "h3" in model_lower:
+                kwargs["reference_prompt"] = bind_h3_canonical_prompt(
+                    gen.prompt, gen.input_media, references, gen.media_names,
+                )
+            else:
+                kwargs["reference_prompt"] = video_reference_prompt(
+                    gen.prompt, gen.input_media, references, gen.media_names,
+                )
             kwargs["generate_audio"] = params.get("audio")
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",

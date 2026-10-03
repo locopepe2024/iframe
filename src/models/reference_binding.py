@@ -57,3 +57,58 @@ def bind_reference_names(prompt: str, labels: list[str]) -> str:
             raise ValueError("Referenced materials have duplicate names; use explicit @1, @2 indices")
         return "@" + str(indices[0])
     return re.sub(pattern, replace, prompt)
+
+
+def bind_h3_canonical_prompt(
+    prompt: str,
+    originals: list[str],
+    ordered_media: list[str],
+    names: dict[str, str],
+) -> str:
+    """Compile one user-facing reference syntax into H3 canonical syntax.
+
+    The editor may keep ``@原始文件名`` (or legacy ``@1``) so users can read
+    and edit a prompt. H3 receives only modality-specific canonical labels:
+    ``<Picture N>``, ``<Video N>`` and ``<Audio N>``. Canonical labels and
+    legacy @ labels must not be mixed in one request.
+    """
+    canonical_pattern = re.compile(r"<(Picture|Video|Audio)\s+(\d+)>")
+    has_canonical = bool(canonical_pattern.search(prompt))
+    has_subject = bool(re.search(r"<Subject\s+\d+>", prompt, re.IGNORECASE))
+    has_legacy = bool(re.search(r"@[^\s@]+", prompt))
+    if has_subject:
+        raise ValueError("H3 prompt cannot mix <Subject N> business labels with media references")
+    if has_canonical and has_legacy:
+        raise ValueError("H3 prompt cannot mix canonical media references with @ references")
+
+    kind_for_ref = {ref: media_kind(ref) for ref in ordered_media}
+    counts = {"image": 0, "video": 0, "audio": 0}
+    canonical_for_ref: dict[str, str] = {}
+    for ref in ordered_media:
+        kind = kind_for_ref[ref]
+        counts[kind] += 1
+        label = {"image": "Picture", "video": "Video", "audio": "Audio"}[kind]
+        canonical_for_ref[ref] = f"<{label} {counts[kind]}>"
+
+    if has_legacy:
+        labels = [names.get(ref, "") for ref in originals]
+        bound = bind_reference_names(prompt, labels)
+        original_by_ordinal = {index: ref for index, ref in enumerate(originals, 1)}
+
+        def replace_ordinal(match: re.Match[str]) -> str:
+            ref = original_by_ordinal.get(int(match.group(1)))
+            if not ref:
+                raise ValueError("H3 @ reference is outside the submitted media list")
+            return canonical_for_ref.get(ref) or ""
+
+        bound = re.sub(r"@(\d+)(?![0-9A-Za-z_.])", replace_ordinal, bound)
+        if re.search(r"@[^\s@]+", bound):
+            raise ValueError("H3 prompt contains unresolved @ reference syntax")
+    else:
+        bound = prompt
+
+    for label, number in canonical_pattern.findall(bound):
+        kind = {"Picture": "image", "Video": "video", "Audio": "audio"}[label]
+        if int(number) < 1 or int(number) > counts[kind]:
+            raise ValueError(f"H3 {label} reference is outside the submitted {kind} media slots")
+    return bound
