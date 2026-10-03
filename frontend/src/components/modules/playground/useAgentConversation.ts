@@ -89,7 +89,12 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         const message = e instanceof Error ? e.message : '发送失败';
         setError(message);
         if (message === '当前会话正在回复') setRemoteBusy(true);
-        if (!usePlaygroundStore.getState().prompt) usePlaygroundStore.getState().setPrompt(snapshot.prompt);
+        // The composer is intentionally cleared at submission time. A slow or
+        // busy Qwen/UniArt request must not put the submitted text back into
+        // the live input after the user has already cleared it (or started a
+        // new draft). The submitted content remains in the session/message
+        // request for retry or inspection instead of being restored into the
+        // editable composer.
       }
     }
     finally { sending.current = false; setBusy(false); }

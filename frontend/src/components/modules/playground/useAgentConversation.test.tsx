@@ -65,7 +65,7 @@ it('clears the submitted prompt immediately and keeps it clear after success', a
     hook.unmount();
 });
 
-it('restores the submitted prompt when sending fails and the input is still empty', async () => {
+it('keeps the composer empty when sending fails after submission', async () => {
     const response = deferred<unknown>();
     mockConversation(response.promise);
     usePlaygroundStore.setState({ prompt: '需要重试的内容' });
@@ -77,7 +77,7 @@ it('restores the submitted prompt when sending fails and the input is still empt
     expect(usePlaygroundStore.getState().prompt).toBe('');
     await act(async () => { response.reject(new Error('上游失败')); await sending; });
 
-    expect(usePlaygroundStore.getState().prompt).toBe('需要重试的内容');
+    expect(usePlaygroundStore.getState().prompt).toBe('');
     expect(hook.result.current.error).toBe('上游失败');
     hook.unmount();
 });
