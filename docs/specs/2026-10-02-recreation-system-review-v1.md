@@ -232,6 +232,10 @@
 
 新增只读校准报告 `tools/motion_track/build_rig_calibration_report.py`，记录 rig rest bone axis、父子关系和 9 个代表帧的源段方向。报告显示肩臂源向量与 rig rest 轴存在明显基准差异；body-frame 映射的首版实验因矩阵约定未固定而恶化，已撤回，不作为当前 retarget 结果。
 
+### 全局轴符号扫描
+
+对 source x/y/z 三轴正负组合进行了 8 组对照。当前垂直映射 `image_y → Blender Z` 的符号正确：翻转该轴后平均投影 RMSE 从约 `0.04491` 升至约 `0.123`。X 镜像在相似变换指标下不可区分，Z 深度符号只产生很小差异。因此下一步不再尝试全局 Y 翻转，重点转向相机前后轴和肩臂局部解算。
+
 ### 逐段方向诊断
 
 独立投影报告增加了相似变换后的逐段角度误差。当前 raw/estimated-depth 代表帧平均绝对角度误差约为：

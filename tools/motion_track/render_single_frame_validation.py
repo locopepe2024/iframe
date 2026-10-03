@@ -21,6 +21,8 @@ def parse_args():
     p.add_argument("--state", help="Deprecated; cases come directly from manifest")
     p.add_argument("--mode", choices=("quaternion",), default="quaternion")
     p.add_argument("--depth-mode", choices=("estimated", "flatten"), default="estimated")
+    p.add_argument("--axis-signs", default="1,1,1", help="source x,y,z signs before image-to-Blender mapping")
+    p.add_argument("--no-render", action="store_true")
     p.add_argument("--source-blend", required=True)
     p.add_argument("--manifest", required=True)
     p.add_argument("--output", required=True)
@@ -153,12 +155,15 @@ SEGMENTS = {
 
 
 DEPTH_MODE = "estimated"
+AXIS_SIGNS = (1.0, 1.0, 1.0)
 
 
 def source_points(case):
     # Use the exact case, not a 24fps resampled neighbor. Recompute centers
     # from these same joints; old derived_body can predate smoothing.
-    joints = {name: Vector((p[0], 0.0 if DEPTH_MODE == "flatten" else p[2], -p[1]))
+    joints = {name: Vector((AXIS_SIGNS[0] * p[0],
+                            AXIS_SIGNS[2] * (0.0 if DEPTH_MODE == "flatten" else p[2]),
+                            AXIS_SIGNS[1] * -p[1]))
               for name, p in case.get("semantic_joints", {}).items()}
     for name, left, right in (("hip_center", "left_hip", "right_hip"),
                               ("shoulder_center", "left_shoulder", "right_shoulder")):
@@ -353,7 +358,11 @@ def project_pose(arm, camera, case):
 def main():
     args = parse_args()
     global DEPTH_MODE
+    global AXIS_SIGNS
     DEPTH_MODE = args.depth_mode
+    AXIS_SIGNS = tuple(float(v) for v in args.axis_signs.split(","))
+    if len(AXIS_SIGNS) != 3 or any(abs(v) != 1 for v in AXIS_SIGNS):
+        raise SystemExit("--axis-signs must contain three values of 1 or -1")
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(Path(args.manifest).read_text())
@@ -374,8 +383,9 @@ def main():
     for case in cases:
         frame = int(case["frame"])
         expected, warnings = apply_sample(root, arm, case)
-        bpy.context.scene.render.filepath = str(out / f"blender-frame-{frame:04d}.png")
-        bpy.ops.render.render(write_still=True)
+        if not args.no_render:
+            bpy.context.scene.render.filepath = str(out / f"blender-frame-{frame:04d}.png")
+            bpy.ops.render.render(write_still=True)
         diagnostics.append({
             "source_frame": frame,
             "adapter_frame": None,
