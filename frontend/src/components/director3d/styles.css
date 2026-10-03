@@ -100,6 +100,27 @@
 .director3d-root .camera-tools-inspector > [role="tabpanel"] { min-width: 0; }
 .director3d-root .camera-tools-inspector > [role="tabpanel"] > section { border-color: rgba(52,211,153,.18); background: rgba(255,255,255,.018); }
 .director3d-root .panel-section { padding: 14px; border-bottom: 1px solid var(--border); }
+.director3d-root .motion-annotation-review { display: grid; gap: 10px; }
+.director3d-root .motion-annotation-file-row, .director3d-root .motion-annotation-body, .director3d-root .motion-annotation-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.director3d-root .motion-annotation-file-row label, .director3d-root .motion-annotation-body label, .director3d-root .motion-annotation-actions label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+.director3d-root .motion-annotation-review input, .director3d-root .motion-annotation-review select, .director3d-root .motion-annotation-review textarea { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: rgba(255,255,255,.04); }
+.director3d-root .motion-annotation-review input[type="file"] { padding: 5px; font-size: 10px; }
+.director3d-root .motion-annotation-review textarea { min-height: 52px; resize: vertical; }
+.director3d-root .motion-annotation-meta { color: var(--subtle); font-family: var(--font-jetbrains-mono, ui-monospace, monospace); overflow-wrap: anywhere; }
+.director3d-root .motion-annotation-error { padding: 8px; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); border-radius: 6px; color: #fecaca; background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.director3d-root .motion-annotation-editor { display: grid; gap: 9px; }
+.director3d-root .motion-annotation-editor > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+.director3d-root .motion-annotation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; max-height: 280px; overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: rgba(0,0,0,.12); }
+.director3d-root .motion-annotation-joint { display: grid; grid-template-columns: minmax(0, 1fr) 48px 48px; align-items: center; gap: 4px; color: var(--muted); font-size: 9px; }
+.director3d-root .motion-annotation-joint strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-family: var(--font-jetbrains-mono, ui-monospace, monospace); }
+.director3d-root .motion-annotation-joint label { display: grid; gap: 2px; color: var(--subtle); }
+.director3d-root .motion-annotation-joint input { padding: 5px 3px; font-size: 10px; }
+.director3d-root .motion-annotation-body { align-items: end; }
+.director3d-root .motion-annotation-body label { display: flex; align-items: center; gap: 5px; }
+.director3d-root .motion-annotation-body label:nth-child(-n+2) { display: grid; }
+.director3d-root .motion-annotation-actions { align-items: end; }
+.director3d-root .motion-annotation-actions button { min-height: 40px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: rgba(255,255,255,.05); }
+.director3d-root .motion-annotation-actions button.primary { border-color: transparent; color: #fff; background: var(--primary); }
 .director3d-root .section-heading { justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .director3d-root .count-badge, .director3d-root .revision-badge { padding: 4px 8px; border-radius: 999px; color: #d1fae5; background: rgba(52,211,153,.12); font-size: 10px; }
 
