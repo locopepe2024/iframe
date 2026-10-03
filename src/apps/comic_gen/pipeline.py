@@ -8,6 +8,7 @@ import uuid
 import subprocess
 import threading
 import platform
+import copy
 from urllib.parse import quote
 from .models import (
     Script,
@@ -1523,6 +1524,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
+        # Assets displays episode > series > global. Fork shared assets into the
+        # episode before applying episode-specific Director context, otherwise
+        # the visible object remains the historical shared asset.
+        resolved = self.resolve_episode_assets(script)
+        local_ids = {
+            "characters": {item.id for item in script.characters},
+            "scenes": {item.id for item in script.scenes},
+            "props": {item.id for item in script.props},
+        }
+        for attr in ("characters", "scenes", "props"):
+            for asset in resolved[attr]:
+                if asset.id not in local_ids[attr]:
+                    getattr(script, attr).append(copy.deepcopy(asset))
+                    local_ids[attr].add(asset.id)
+
         # Clear saved prompts for all characters so UI will regenerate from description
         for character in script.characters:
             self._sync_director_character_context(script, character)
@@ -1531,6 +1547,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             character.headshot_prompt = None
             character.video_prompt = None
         
+        for scene in script.scenes:
+            self._sync_director_scene_context(script, scene)
+
         # Scenes and props might also have prompts to clear (if applicable)
         for scene in script.scenes:
             if hasattr(scene, 'prompt'):
@@ -1543,6 +1562,42 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         logger.info(f"Descriptions synced for script {script_id}: cleared prompts for {len(script.characters)} characters, {len(script.scenes)} scenes, {len(script.props)} props")
         return script
+
+    def _sync_director_scene_context(self, script: Script, scene: Scene) -> None:
+        """Append confirmed plan time/season/interior constraints to a scene."""
+        marker = "\n\n【导演场景与时间约束】"
+        base_description = (scene.description or "").split(marker, 1)[0].rstrip()
+        plan = script.director_shooting_plan_draft
+        if plan is None and script.director_shooting_plan_revisions:
+            plan = script.director_shooting_plan_revisions[-1].plan
+        if plan is None:
+            scene.description = base_description
+            return
+        rows = []
+        aliases = {str(value).strip() for value in (scene.id, scene.name) if value}
+        for planned in plan.scenes:
+            if aliases.intersection({planned.scene_id, planned.scene_ref, planned.heading, planned.location}):
+                rows.append({
+                    "scene_ref": planned.scene_ref or planned.heading or planned.scene_id,
+                    "location": planned.location,
+                    "time_anchor": planned.time_anchor,
+                    "environment_atmosphere": planned.environment_atmosphere,
+                    "continuity_in": planned.continuity_in,
+                    "continuity_out": planned.continuity_out,
+                    "shot_bindings": [shot.scene_binding.model_dump() for beat in planned.beats for shot in beat.shots if shot.scene_binding],
+                })
+        if not rows:
+            for planned in plan.scenes:
+                if scene.name and (scene.name in planned.scene_ref or planned.scene_ref in scene.name):
+                    rows.append({"scene_ref": planned.scene_ref, "location": planned.location, "time_anchor": planned.time_anchor, "environment_atmosphere": planned.environment_atmosphere})
+        if rows:
+            lines = [marker.strip(), "已确认的拍摄计划场景约束："]
+            for index, row in enumerate(rows[:12], 1):
+                values = [f"{key}={value}" for key, value in row.items() if value not in (None, "", [], {})]
+                lines.append(f"{index}. " + "; ".join(values))
+            scene.description = base_description + "\n\n" + "\n".join(lines)
+        else:
+            scene.description = base_description
 
     @staticmethod
     def _director_context_text(value: Any, limit: int = 500) -> str:

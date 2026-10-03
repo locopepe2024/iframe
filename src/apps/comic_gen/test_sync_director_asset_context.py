@@ -7,6 +7,7 @@ from src.apps.comic_gen.models import (
     DirectorPlanScene,
     DirectorPlanShot,
     DirectorProfile,
+    Scene,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -55,3 +56,23 @@ def test_sync_descriptions_includes_admitted_scene_and_time_character_context():
     assert "西安校园" in character.description
     assert "shenxia-winter-outdoor" in character.description
     assert character.digital_avatar["director_context"]["scene_variants"][0]["season"] == "winter"
+
+
+def test_sync_scene_description_includes_plan_time_and_environment():
+    planned = SimpleNamespace(
+        scene_id="scene-1", scene_ref="学校 日 外", heading="学校", location="西安校园",
+        time_anchor="2020年冬天", environment_atmosphere="清冷冬日",
+        continuity_in="", continuity_out="", beats=[],
+    )
+    script = SimpleNamespace(
+        director_shooting_plan_draft=SimpleNamespace(scenes=[planned]),
+        director_shooting_plan_revisions=[],
+    )
+    scene = Scene(id="scene-1", name="学校", description="校园基础环境")
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+
+    pipeline._sync_director_scene_context(script, scene)
+
+    assert "校园基础环境" in scene.description
+    assert "2020年冬天" in scene.description
+    assert "清冷冬日" in scene.description
