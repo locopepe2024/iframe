@@ -3227,6 +3227,41 @@ class ComicGenPipeline(StudioOwnerMixin):
                             raise RuntimeError("shot dialogue 必须是数组。")
                         raw_character_ids = raw_shot.get("character_ids", [])
                         raw_prop_ids = raw_shot.get("prop_ids", [])
+                        raw_cast_bindings = raw_shot.get("cast_bindings", [])
+                        cast_bindings = []
+                        if isinstance(raw_cast_bindings, list):
+                            for binding in raw_cast_bindings[:20]:
+                                if not isinstance(binding, dict) or not str(binding.get("person_id", "")).strip():
+                                    continue
+                                cast_bindings.append({
+                                    "person_id": str(binding["person_id"])[:120],
+                                    "era_variant_id": str(binding["era_variant_id"])[:120] if binding.get("era_variant_id") else None,
+                                    "scene_look_id": str(binding["scene_look_id"])[:120] if binding.get("scene_look_id") else None,
+                                    "continuity_state": binding.get("continuity_state") if isinstance(binding.get("continuity_state"), dict) else {},
+                                    "binding_status": binding.get("binding_status") if binding.get("binding_status") in {"unresolved", "suggested", "selected", "confirmed"} else "suggested",
+                                })
+                        raw_scene_binding = raw_shot.get("scene_binding")
+                        scene_binding = None
+                        if isinstance(raw_scene_binding, dict):
+                            scene_binding = {
+                                "scene_asset_id": str(raw_scene_binding["scene_asset_id"])[:120] if raw_scene_binding.get("scene_asset_id") else None,
+                                "interior_exterior": raw_scene_binding.get("interior_exterior") if raw_scene_binding.get("interior_exterior") in {"interior", "exterior", "mixed"} else None,
+                                "time_of_day": str(raw_scene_binding["time_of_day"])[:80] if raw_scene_binding.get("time_of_day") else None,
+                                "season": str(raw_scene_binding["season"])[:80] if raw_scene_binding.get("season") else None,
+                                "weather": str(raw_scene_binding["weather"])[:160] if raw_scene_binding.get("weather") else None,
+                                "binding_status": raw_scene_binding.get("binding_status") if raw_scene_binding.get("binding_status") in {"unresolved", "suggested", "selected", "confirmed"} else "suggested",
+                            }
+                        raw_prop_bindings = raw_shot.get("prop_bindings", [])
+                        prop_bindings = []
+                        if isinstance(raw_prop_bindings, list):
+                            for binding in raw_prop_bindings[:20]:
+                                if not isinstance(binding, dict) or not str(binding.get("prop_id", "")).strip():
+                                    continue
+                                prop_bindings.append({
+                                    "prop_id": str(binding["prop_id"])[:120],
+                                    "state": str(binding.get("state", "present"))[:120],
+                                    "binding_status": binding.get("binding_status") if binding.get("binding_status") in {"unresolved", "suggested", "selected", "confirmed"} else "suggested",
+                                })
                         character_ids = [item for item in raw_character_ids if item in available_character_ids] if isinstance(raw_character_ids, list) else []
                         prop_ids = [item for item in raw_prop_ids if item in available_prop_ids] if isinstance(raw_prop_ids, list) else []
                         unresolved_entity_refs = []
@@ -3253,6 +3288,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
                             "character_ids": character_ids,
                             "prop_ids": prop_ids,
+                            "cast_bindings": cast_bindings,
+                            "scene_binding": scene_binding,
+                            "prop_bindings": prop_bindings,
                             "unresolved_entity_refs": unresolved_entity_refs,
                         })
                     target["beats"].append(beat)

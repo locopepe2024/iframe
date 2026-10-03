@@ -20,6 +20,7 @@ import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import type {
     DirectorPlanBeat,
+    DirectorPlanCastBinding,
     DirectorPlanDialogueLine,
     DirectorPlanScene,
     DirectorPlanShot,
@@ -42,7 +43,25 @@ function emptyShot(order: number): DirectorPlanShot {
         action_physics: "", shot_size: "", camera_angle: "", composition: "", camera_movement: "",
         lighting: emptyLighting(), duration_seconds: 3, dialogue: [], ambient_sound: "",
         character_ids: [], prop_ids: [],
+        cast_bindings: [], scene_binding: null, prop_bindings: [],
     };
+}
+
+function castBindingsText(bindings: DirectorPlanCastBinding[]): string {
+    return bindings.map(binding => [binding.person_id, binding.era_variant_id || "", binding.scene_look_id || ""].join("|")).join("\n");
+}
+
+function parseCastBindings(value: string): DirectorPlanCastBinding[] {
+    return value.split("\n").map(line => line.trim()).filter(Boolean).map(line => {
+        const [person_id, era_variant_id, scene_look_id] = line.split("|").map(item => item.trim());
+        return {
+            person_id,
+            era_variant_id: era_variant_id || null,
+            scene_look_id: scene_look_id || null,
+            continuity_state: {},
+            binding_status: "selected" as const,
+        };
+    }).filter(binding => binding.person_id);
 }
 
 function emptyBeat(order: number): DirectorPlanBeat {
@@ -823,6 +842,33 @@ export default function DirectorShootingPlanPanel() {
                                                                 <div className="grid gap-3 lg:grid-cols-2">
                                                                     <MultiSelect label={t("fields.characters")} values={shot.character_ids} options={characterOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { character_ids: values })} />
                                                                     <MultiSelect label={t("fields.shotProps")} values={shot.prop_ids} options={propOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { prop_ids: values })} />
+                                                                    <div className="lg:col-span-2">
+                                                                        <Field
+                                                                            label="角色造型绑定（每行：person_id|era_variant_id|scene_look_id）"
+                                                                            value={castBindingsText(shot.cast_bindings || [])}
+                                                                            multiline
+                                                                            placeholder="shenxia|shenxia-university|shenxia-dormitory"
+                                                                            onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { cast_bindings: parseCastBindings(value) })}
+                                                                        />
+                                                                    </div>
+                                                                    <Field
+                                                                        label="场景资产 ID"
+                                                                        value={shot.scene_binding?.scene_asset_id || ""}
+                                                                        onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
+                                                                            scene_binding: { ...(shot.scene_binding || { binding_status: "selected" as const }), scene_asset_id: value || null },
+                                                                        })}
+                                                                    />
+                                                                    <Field
+                                                                        label="室内/室外"
+                                                                        value={shot.scene_binding?.interior_exterior || ""}
+                                                                        placeholder="interior / exterior / mixed"
+                                                                        onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
+                                                                            scene_binding: {
+                                                                                ...(shot.scene_binding || { binding_status: "selected" as const }),
+                                                                                interior_exterior: value === "interior" || value === "exterior" || value === "mixed" ? value : null,
+                                                                            },
+                                                                        })}
+                                                                    />
                                                                 </div>
                                                                 <fieldset className="space-y-2 rounded-md border border-border p-3">
                                                                     <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.dialogue")}</legend>

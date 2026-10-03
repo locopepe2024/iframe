@@ -1041,6 +1041,29 @@ class DirectorPlanLighting(_DirectorShootingPlanModel):
     practical_sources: List[str] = Field(default_factory=list, max_length=12)
 
 
+class DirectorPlanCastBinding(_DirectorShootingPlanModel):
+    person_id: str = Field(..., min_length=1, max_length=120)
+    era_variant_id: Optional[str] = Field(None, max_length=120)
+    scene_look_id: Optional[str] = Field(None, max_length=120)
+    continuity_state: Dict[str, Any] = Field(default_factory=dict)
+    binding_status: Literal["unresolved", "suggested", "selected", "confirmed"] = "unresolved"
+
+
+class DirectorPlanSceneBinding(_DirectorShootingPlanModel):
+    scene_asset_id: Optional[str] = Field(None, max_length=120)
+    interior_exterior: Optional[Literal["interior", "exterior", "mixed"]] = None
+    time_of_day: Optional[str] = Field(None, max_length=80)
+    season: Optional[str] = Field(None, max_length=80)
+    weather: Optional[str] = Field(None, max_length=160)
+    binding_status: Literal["unresolved", "suggested", "selected", "confirmed"] = "unresolved"
+
+
+class DirectorPlanPropBinding(_DirectorShootingPlanModel):
+    prop_id: str = Field(..., min_length=1, max_length=120)
+    state: str = Field("present", max_length=120)
+    binding_status: Literal["unresolved", "suggested", "selected", "confirmed"] = "unresolved"
+
+
 class DirectorPlanShot(_DirectorShootingPlanModel):
     shot_id: str = Field(..., min_length=1, max_length=120)
     order: int = Field(..., ge=0)
@@ -1059,6 +1082,9 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     ambient_sound: str = Field("", max_length=1000)
     character_ids: List[str] = Field(default_factory=list, max_length=20)
     prop_ids: List[str] = Field(default_factory=list, max_length=20)
+    cast_bindings: List[DirectorPlanCastBinding] = Field(default_factory=list, max_length=20)
+    scene_binding: Optional[DirectorPlanSceneBinding] = None
+    prop_bindings: List[DirectorPlanPropBinding] = Field(default_factory=list, max_length=20)
     unresolved_entity_refs: List[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -1067,6 +1093,12 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
             raise ValueError("shooting-plan shot character IDs must be unique")
         if len(self.prop_ids) != len(set(self.prop_ids)):
             raise ValueError("shooting-plan shot prop IDs must be unique")
+        person_ids = [item.person_id for item in self.cast_bindings]
+        prop_binding_ids = [item.prop_id for item in self.prop_bindings]
+        if len(person_ids) != len(set(person_ids)):
+            raise ValueError("shooting-plan cast binding person IDs must be unique")
+        if len(prop_binding_ids) != len(set(prop_binding_ids)):
+            raise ValueError("shooting-plan prop binding IDs must be unique")
         return self
 
 
