@@ -255,6 +255,19 @@
 
 **Direct implication**：下一步优先校准 `clavicle_l/r → upper_arm_l/r → lower_arm_l/r` 的父子局部旋转；不要先扩大深度模型或时序平滑范围。
 
+### 深度对肩臂的影响
+
+同一组 raw 代表帧的逐段对照如下：
+
+| 深度模式 | 平均投影 RMSE | 左上臂 | 左前臂 | 右上臂 | 右前臂 |
+|---|---:|---:|---:|---:|---:|
+| flatten | 0.0463 | 12.13° | 12.07° | 13.00° | 7.89° |
+| estimated | 0.0449 | 15.31° | 13.69° | 12.75° | 10.18° |
+
+**Observed**：estimated depth 的整体 RMSE 略低，但左臂和右前臂局部误差更高。
+
+**Direct implication**：单帧骨骼方向校准优先使用 flatten depth；estimated depth 仅作为前后关系对照，不直接覆盖肩臂局部姿态。
+
 ## 7. 成功标准
 
 ### 商品复刻
