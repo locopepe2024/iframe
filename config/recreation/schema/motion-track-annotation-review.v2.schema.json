@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "motion-track-annotation-review.v2",
+  "type": "object",
+  "required": ["schema", "source_revision", "frames"],
+  "properties": {
+    "schema": {"const": "motion-track-annotation-review.v2"},
+    "source_revision": {"type": "string", "minLength": 1},
+    "review_status": {"enum": ["draft", "reviewed", "approved"]},
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["frame"],
+        "properties": {
+          "frame": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["tracked", "manual_recovered", "detector_missed", "real_occlusion", "out_of_frame", "pending"]},
+          "joints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": {"type": "number"}
+            }
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "facing": {"type": "string"},
+              "root_yaw_degrees": {"type": "number"},
+              "left_foot_contact": {"type": "boolean"},
+              "right_foot_contact": {"type": "boolean"},
+              "phase": {"enum": ["unknown", "neutral", "takeoff", "airborne", "landing", "turn", "contact"]}
+            },
+            "additionalProperties": true
+          },
+          "reviewer_note": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
