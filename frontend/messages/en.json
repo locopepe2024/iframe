@@ -2244,6 +2244,13 @@
   },
   "character": {
     "workbench": "Character Workbench",
+    "guidanceTabsLabel": "Character workbench settings",
+    "workbenchConstraints": "Workbench constraints",
+    "characterFacetSuggestions": "Character traits",
+    "shootingPlanConstraints": "Shooting plan",
+    "noShootingPlanConstraints": "No shooting plan constraints yet",
+    "negativePromptLabel": "Negative prompt",
+    "applyStyle": "Apply style",
     "tipConsistency": "Keep the three images consistent for best results",
     "masterAsset": "1. Master Asset (Full Body)",
     "threeViews": "2. Three-Views",

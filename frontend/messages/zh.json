@@ -2244,6 +2244,13 @@
   },
   "character": {
     "workbench": "角色工作台",
+    "guidanceTabsLabel": "角色工作台设置",
+    "workbenchConstraints": "角色工作台约束",
+    "characterFacetSuggestions": "角色特征建议",
+    "shootingPlanConstraints": "拍摄计划约束",
+    "noShootingPlanConstraints": "暂无拍摄计划约束",
+    "negativePromptLabel": "负向提示词",
+    "applyStyle": "应用风格",
     "tipConsistency": "保持三张图片风格一致以获得最佳效果",
     "masterAsset": "1. 主体资产（全身图）",
     "threeViews": "2. 三视图",
