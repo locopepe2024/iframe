@@ -22,3 +22,39 @@ def test_oss_prefix_remains_active_without_cos(monkeypatch):
     monkeypatch.setattr(oss_utils, 'is_cos_configured', lambda: False)
     assert oss_utils.is_object_key('comic_gen/cover.png')
     assert not oss_utils.is_object_key('unrelated/cover.png')
+
+
+def test_persisted_cos_signed_url_is_refreshed(monkeypatch):
+    monkeypatch.setenv('LUMENX_COS_KEY_PREFIX', 'lumenx')
+    monkeypatch.setattr(oss_utils, 'is_cos_configured', lambda: True)
+
+    class Storage:
+        is_configured = True
+        base_path = 'lumenx'
+        domain = ''
+        endpoint = ''
+
+        def sign_url_for_display(self, value):
+            assert value == 'lumenx/character.png'
+            return 'https://cos.example/new-signature'
+
+    old_url = 'https://bucket.cos.ap-tokyo.myqcloud.com/lumenx/character.png?q-sign-time=1%3B2&q-signature=old'
+    response = oss_utils.sign_oss_urls_in_data({'url': old_url}, Storage())
+    assert response['url'] == 'https://cos.example/new-signature'
+
+
+def test_external_http_url_is_not_rewritten(monkeypatch):
+    monkeypatch.setattr(oss_utils, 'is_cos_configured', lambda: True)
+
+    class Storage:
+        is_configured = True
+        base_path = 'lumenx'
+        domain = ''
+        endpoint = ''
+
+        def sign_url_for_display(self, value):
+            raise AssertionError('external URL must not be signed')
+
+    external = 'https://images.example.com/lumenx/character.png'
+    response = oss_utils.sign_oss_urls_in_data({'url': external}, Storage())
+    assert response['url'] == external

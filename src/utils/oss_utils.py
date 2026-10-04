@@ -3,6 +3,7 @@ import oss2
 import hashlib
 import tempfile
 import time
+from urllib.parse import urlparse
 from typing import Optional, Tuple
 from . import get_logger
 from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJECT_KEY
@@ -315,11 +316,48 @@ def sign_oss_urls_in_data(data, uploader: OSSImageUploader = None):
     if not uploader.is_configured:
         # OSS not configured, return data as-is (local mode)
         return data
-    
+
+    def stale_signed_object_key(value: str) -> Optional[str]:
+        """Recover a managed object key from a previously persisted signed URL.
+
+        Older asset records stored COS/OSS display URLs instead of object keys.
+        Those URLs expire, so refresh only URLs that clearly belong to the
+        configured storage provider and whose path starts at the configured key
+        prefix. Ordinary external URLs remain untouched.
+        """
+        try:
+            parsed = urlparse(value)
+        except ValueError:
+            return None
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return None
+        host = parsed.hostname or ""
+        configured_hosts = set()
+        for attribute in ("domain", "endpoint"):
+            configured = getattr(uploader, attribute, None)
+            if configured:
+                configured_host = urlparse(str(configured) if "://" in str(configured) else f"https://{configured}").hostname
+                if configured_host:
+                    configured_hosts.add(configured_host.lower())
+        is_managed_host = host.lower() in configured_hosts or (
+            is_cos_configured() and host.lower().endswith(".myqcloud.com")
+        )
+        if not is_managed_host:
+            return None
+        prefix = str(getattr(uploader, "base_path", None) or get_oss_base_path()).strip("/")
+        path = parsed.path.lstrip("/")
+        if not prefix or not (path == prefix or path.startswith(prefix + "/")):
+            return None
+        return path
+
     def process_value(value):
         if isinstance(value, str):
             if is_object_key(value):
                 signed_url = uploader.sign_url_for_display(value)
+                return signed_url if signed_url else value
+            recovered_key = stale_signed_object_key(value)
+            if recovered_key:
+                signed_url = uploader.sign_url_for_display(recovered_key)
                 return signed_url if signed_url else value
             # print(f"DEBUG: sign_oss_urls_in_data - skipping string '{value[:50]}...'")
             return value
