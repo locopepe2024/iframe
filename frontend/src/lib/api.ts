@@ -21,6 +21,9 @@ import {
     confirmDirectorShootingPlan,
     generateDirectorShootingPlan,
     getDirectorShootingPlan,
+    getEpisodeVisualContext,
+    syncEpisodeAssetsFromShootingPlan,
+    getStoryboardAssetContext,
     getDirectorShootingPlanRevision,
     listDirectorShootingPlanRevisions,
     restoreDirectorShootingPlanRevision,
@@ -1182,6 +1185,15 @@ export const api = {
 
     getDirectorShootingPlan: (scriptId: string) =>
         getDirectorShootingPlan(API_URL, scriptId),
+
+    getEpisodeVisualContext: (scriptId: string) =>
+        getEpisodeVisualContext(API_URL, scriptId),
+
+    syncEpisodeAssetsFromShootingPlan: (scriptId: string) =>
+        syncEpisodeAssetsFromShootingPlan(API_URL, scriptId),
+
+    getStoryboardAssetContext: (scriptId: string, frameId: string) =>
+        getStoryboardAssetContext(API_URL, scriptId, frameId),
 
     saveDirectorShootingPlanDraft: (
         scriptId: string,
