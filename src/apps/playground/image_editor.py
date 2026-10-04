@@ -115,21 +115,28 @@ class ImageEditStore:
             return [json.loads(row[0]) for row in db.execute(
                 'SELECT data FROM edits ORDER BY created DESC, id DESC LIMIT ? OFFSET ?', (limit, offset))]
 
-    def save(self, reference, source_sha256, data, title, operation_key):
+    def save(self, reference, source_sha256, data, title, operation_key, projection_type='perspective_plane'):
+        if projection_type not in ('perspective_plane', 'equirectangular'):
+            raise HTTPException(422, 'Unsupported image projection')
         source = self.source(reference)
         if source['sha256'] != source_sha256:
             raise HTTPException(409, 'Source changed; reopen the editor')
         width, height, fmt = inspect_image(data)
+        if projection_type == 'equirectangular' and width != 2 * height:
+            raise HTTPException(422, 'Equirectangular projection requires an exact 2:1 image')
         digest = hashlib.sha256(data).hexdigest()
         title = Path(title).name[:200] or 'edited.png'
-        intent = json.dumps([source['reference'], source_sha256, digest, title])
+        intent = json.dumps([source['reference'], source_sha256, digest, title, projection_type])
         target = None
         try:
             with self.db() as db:
                 db.execute('BEGIN IMMEDIATE')
                 prior = db.execute('SELECT intent, data FROM edits WHERE operation_key=?', (operation_key,)).fetchone()
                 if prior:
-                    if prior[0] != intent:
+                    legacy_intent = json.dumps([source['reference'], source_sha256, digest, title])
+                    if prior[0] not in (intent, legacy_intent):
+                        raise HTTPException(409, 'Save key already used for another edit')
+                    if prior[0] == legacy_intent and projection_type != 'perspective_plane':
                         raise HTTPException(409, 'Save key already used for another edit')
                     return json.loads(prior[1])
                 media_id = uuid4().hex
@@ -141,6 +148,7 @@ class ImageEditStore:
                 record = {'id': media_id, 'path': f'/playground/input-media/{filename}', 'title': title,
                           'source_reference': source['reference'], 'source_sha256': source_sha256,
                           'sha256': digest, 'width': width, 'height': height, 'created_at': time.time(),
+                          'projection_type': projection_type,
                           'operation': 'local_image_edit', 'editor_user_id': self.storage.owner_user_id}
                 db.execute('INSERT INTO edits VALUES (?, ?, ?, ?, ?)',
                            (media_id, operation_key, intent, record['created_at'], json.dumps(record)))
