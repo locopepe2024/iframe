@@ -8,6 +8,9 @@ it("round-trips reviewed evidence and invalidates stale foot contacts without mu
  const parsed = parseMotionTrackReviewManifest({ schema: "motion-track-annotation-review.v1", source_track_revision: "sha", frames: [{ frame: 1, status: "manual_recovered", joint_overrides: { left_ankle: [0.5, 0.8, -0.1] } }] });
  const review: MotionTrackReviewState = { status: "approved", manifest: parsed.manifest, selectedFrame: 1, editedFrames: {}, dirty: true, errors: [] };
  const compiled = compileReviewedMotionTrack(source, review);
+ const changedReview: MotionTrackReviewState = structuredClone(review);
+ changedReview.manifest!.frames[0].jointOverrides.left_ankle = [0.6, 0.8, -0.1];
+ expect(compileReviewedMotionTrack(source, changedReview).report.outputRevision).not.toBe(compiled.report.outputRevision);
  const reloaded = parseMotionTrackManifest(exportReviewedMotionTrack(compiled.manifest!));
  expect(reloaded.ok).toBe(true);
  expect(reloaded.state.manifest?.sourceRevision).toBe(compiled.report.outputRevision);

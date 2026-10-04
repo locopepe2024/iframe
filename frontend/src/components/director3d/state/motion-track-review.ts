@@ -46,12 +46,16 @@ function mergedFrame(source: MotionTrackFrame, review: MotionTrackFrameReview | 
 export function compileReviewedMotionTrack(source: MotionTrackImportState["manifest"], review: MotionTrackReviewState): { manifest: MotionTrackImportState["manifest"]; report: MotionTrackReviewReport } {
   if (!source) throw new Error("尚未导入原始 motion-track。");
   if (!review.manifest) throw new Error("尚未导入 annotation review manifest。");
-  if (review.manifest.sourceTrackRevision !== source.sourceRevision) throw new Error("review source revision 与原始 motion-track 不匹配。");
+  if (!source.sourceRevision || review.manifest.sourceTrackRevision !== source.sourceRevision) throw new Error("review source revision 与原始 motion-track 不匹配。");
   if (review.status !== "approved") throw new Error("review 必须先 approved 才能编译。");
   if (review.manifest.frames.some((frame) => (review.editedFrames[frame.frame] ?? frame).status === "pending")) throw new Error("仍有待审核帧。");
   const byFrame = new Map(review.manifest.frames.map((frame) => [frame.frame, review.editedFrames[frame.frame] ?? frame])); const frames = source.frames.map((frame) => mergedFrame(frame, byFrame.get(frame.frame)));
   const missingFrames = frames.flatMap((frame) => { const reviewFrame = byFrame.get(frame.frame); const missingJoints = JOINTS.filter((joint) => !frame.semanticJoints[joint]); return missingJoints.length && reviewFrame?.status !== "real_occlusion" && reviewFrame?.status !== "out_of_frame" ? [{ frame: frame.frame, missingJoints, status: reviewFrame?.status ?? "pending", reason: reviewFrame ? "missing semantic joints after review" : "frame not reviewed" }] : []; });
   const counts = Object.fromEntries(( ["tracked", "manual_recovered", "detector_missed", "real_occlusion", "out_of_frame", "pending"] as MotionTrackReviewStatus[]).map((status) => [status, review.manifest!.frames.filter((frame) => (review.editedFrames[frame.frame] ?? frame).status === status).length])) as Record<MotionTrackReviewStatus, number>;
-  const outputRevision = `${source.sourceRevision ?? "unknown"}:review:${review.manifest.sourceTrackRevision ?? "unknown"}:${review.manifest.frames.length}`;
+  // Content fingerprint distinguishes successive manual corrections with the
+  // same frame count. This is provenance identification, not a security hash.
+  let fingerprint = 2166136261;
+  for (const char of JSON.stringify(Array.from(byFrame.values()))) fingerprint = Math.imul(fingerprint ^ char.charCodeAt(0), 16777619) >>> 0;
+  const outputRevision = `${source.sourceRevision}:review:${review.manifest.frames.length}:${fingerprint.toString(16)}`;
   return { manifest: { ...structuredClone(source), sourceRevision: outputRevision, frames }, report: { sourceRevision: source.sourceRevision, outputRevision, totalFrames: frames.length, counts, missingFrames, errors: [] } };
 }
