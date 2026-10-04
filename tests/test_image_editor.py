@@ -140,3 +140,29 @@ def test_library_import_uses_owner_index_and_variant_id(editor):
         with pytest.raises(HTTPException) as exc:
             store.import_library_variant(index, scope, 'project-1', 'scene', 'scene-1', variant_id, resolve)
         assert exc.value.status_code == 404
+
+
+def test_library_import_route_rejects_other_owner_asset(editor, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.playground import api as playground_api
+    from src.apps.comic_gen import api as studio_api
+    from src.apps.identity import require_user_context, UserContext
+    store, path = editor
+    entry = SimpleNamespace(source_scope='project', source_container_id='project-1',
+                            asset_type='scene', asset_id='scene-1', name='Room',
+                            variants=[SimpleNamespace(id='variant-1', url=str(path))])
+    monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index',
+                        lambda owner: SimpleNamespace(assets=[entry] if owner == 'a' else []))
+    monkeypatch.setattr(studio_api.pipeline, '_resolve_stored_reference_value', lambda value, owner: value)
+    monkeypatch.setattr(playground_api, '_storage_for', lambda identity: store.storage)
+    app = FastAPI(); app.include_router(playground_api.router, prefix='/playground')
+    client = TestClient(app)
+    request = {'source_scope': 'project', 'source_container_id': 'project-1',
+               'asset_type': 'scene', 'asset_id': 'scene-1', 'variant_id': 'variant-1'}
+    app.dependency_overrides[require_user_context] = lambda: UserContext('b', 'b', '', '')
+    assert client.post('/playground/image-editor/library-import', data=request).status_code == 404
+    app.dependency_overrides[require_user_context] = lambda: UserContext('a', 'a', '', '')
+    response = client.post('/playground/image-editor/library-import', data=request)
+    assert response.status_code == 200
+    assert response.json()['path'].startswith('/playground/input-media/library-')
