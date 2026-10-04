@@ -173,3 +173,39 @@ def test_h3_agent_prompt_with_t2v_history_keeps_material_slots(tmp_path, monkeyp
     assert captured["prompt"].startswith("<Picture 1>")
     assert captured["kwargs"]["mode"] == "reference2video"
     assert captured["kwargs"]["ref_image_urls"] == ["/tmp/identity.jpg"]
+
+
+def test_h3_i2v_keeps_product_mode_but_uses_reference_material_transport(tmp_path, monkeypatch):
+    storage = make_storage(tmp_path)
+    service = PlaygroundService(storage)
+    service._load_provider_config = lambda: {"base_url": "https://uniart.test", "api_key": "test"}
+    captured = {}
+
+    class FakeUniArtVideoModel:
+        def __init__(self, _config):
+            pass
+
+        def generate(self, prompt, output_path, **kwargs):
+            captured.update(prompt=prompt, kwargs=kwargs)
+            return output_path, 0.0
+
+    monkeypatch.setattr("src.models.uniart.UniArtVideoModel", FakeUniArtVideoModel)
+    monkeypatch.setattr("src.models.mulerouter.MuleRouterVideoModel", FakeUniArtVideoModel)
+    generation = PlaygroundGeneration(
+        id="h3-i2v",
+        owner_user_id="user-a",
+        owner_profile_id="profile-a",
+        mode=PlaygroundMode.I2V,
+        model_id="uniart/minimax-h3-vip",
+        prompt="<Picture 1> is the subject; make her dance.",
+        input_media=["/tmp/identity.jpg"],
+        media_names={"/tmp/identity.jpg": "Screenshot.png"},
+        parameters={"resolution": "720p", "duration": 15},
+        created_at="2026-10-04T00:00:00+00:00",
+    )
+
+    service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
+
+    assert generation.mode is PlaygroundMode.I2V
+    assert captured["kwargs"]["mode"] == "reference2video"
+    assert captured["kwargs"]["ref_image_urls"] == ["/tmp/identity.jpg"]
