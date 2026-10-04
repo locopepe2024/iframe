@@ -20,7 +20,7 @@ export function MotionTrackReviewPanel() {
   const approve = useWorkbenchStore((state) => state.approveMotionTrackReview);
   const compile = useWorkbenchStore((state) => state.compileReviewedMotionTrack);
   const inputRef = useRef<HTMLInputElement>(null); const [error, setError] = useState<string | null>(null);
-  const current = review.selectedFrame === null ? null : review.manifest?.frames.find((frame) => frame.frame === review.selectedFrame) ?? review.editedFrames[review.selectedFrame] ?? null;
+  const current = review.selectedFrame === null ? null : review.editedFrames[review.selectedFrame] ?? review.manifest?.frames.find((frame) => frame.frame === review.selectedFrame) ?? null;
   useEffect(() => { if (review.selectedFrame !== null) setPlayhead(review.selectedFrame); }, [review.selectedFrame, setPlayhead]);
   const loadFile = async (file: File | undefined) => { if (!file) return; try { const parsed = parseMotionTrackReviewManifest(JSON.parse(await file.text())); if (!parsed.ok || !parsed.manifest) throw new Error(parsed.errors.join("；")); load(parsed.manifest); setError(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "review manifest 读取失败。"); } };
   const choose = (frame: number) => { select(frame); setPlayhead(frame); };
