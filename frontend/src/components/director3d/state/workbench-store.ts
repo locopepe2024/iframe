@@ -846,6 +846,7 @@ export interface WorkbenchState {
   compileReviewedMotionTrack: () => { manifest: MotionTrackImportState["manifest"]; report: import("../types").MotionTrackReviewReport } | null;
   applyActionStructure: (request: { actionId: string; characterId: string; opponentId: string | null; startSeconds: number; durationSeconds: number; includeContact: boolean }) => void;
   addTimelineTrack: (track: { trackKind: TimelineTrackKind; targetType: TimelineTargetType; targetId: string; propertyKey: string }) => void;
+  stageCameraPathOnTimeline: (cameraId: string) => void;
   removeTimelineTrack: (trackId: string) => void;
   upsertTimelineKeyframe: (trackId: string, keyframe: { keyframeId?: string; timeSeconds: number; value: unknown; interpolation: TimelineInterpolation }) => void;
   moveTimelineKeyframe: (trackId: string, keyframeId: string, timeSeconds: number) => void;
@@ -1770,6 +1771,26 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const nextSequence = state.dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;
     const track: TimelineTrackState = { trackId: `track-${String(nextSequence).padStart(4, "0")}`, trackKind: request.trackKind, target: { targetType: request.targetType, targetId: request.targetId }, propertyKey: request.propertyKey.trim().slice(0, 120), keyframes: [] };
     return mutateScene(state, "timeline.track.add", { dialogueTimeline: { ...state.dialogueTimeline, tracks: [...state.dialogueTimeline.tracks, track], activeCameraTrackId: request.trackKind === "active_camera" ? track.trackId : state.dialogueTimeline.activeCameraTrackId } });
+  }),
+  stageCameraPathOnTimeline: (cameraId) => set((state) => {
+    const path = state.cameraPaths[`path-${cameraId}-motion`];
+    const camera = state.cameras[cameraId];
+    if (!path || !camera || path.locked || camera.locked || path.controlPoints.length < 2 || !Number.isFinite(path.durationSeconds) || path.durationSeconds <= 0) return state;
+    const existing = state.dialogueTimeline.tracks.find((track) => track.trackKind === "camera_path_progress" && track.target.targetId === path.pathId);
+    if (existing) return { viewMode: "camera", playheadFrame: 1 };
+    const nextTrack = state.dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;
+    const track: TimelineTrackState = {
+      trackId: `track-${String(nextTrack).padStart(4, "0")}`,
+      trackKind: "camera_path_progress",
+      target: { targetType: "path", targetId: path.pathId },
+      propertyKey: "path.progress",
+      keyframes: [],
+    };
+    return { ...mutateScene(state, "timeline.camera_path.stage", { dialogueTimeline: {
+      ...state.dialogueTimeline,
+      durationSeconds: Math.max(state.dialogueTimeline.durationSeconds, path.durationSeconds),
+      tracks: [...state.dialogueTimeline.tracks, track],
+    } }), viewMode: "camera", playheadFrame: 1 };
   }),
   removeTimelineTrack: (trackId) => set((state) => {
     const track = state.dialogueTimeline.tracks.find((item) => item.trackId === trackId);

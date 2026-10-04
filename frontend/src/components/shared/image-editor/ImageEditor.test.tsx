@@ -69,6 +69,13 @@ it('shows original and generated images together in canvas preview', () => {
   expect(screen.getByRole('img', { name: 'Generated result' })).toHaveAttribute('src', 'blob:result');
 });
 
+it('saves an untouched 2:1 source after explicit panorama selection', async () => {
+  const saveOriginal = vi.fn().mockResolvedValue(undefined);
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:panorama" title="room.png" panoramaEligible projectionType="equirectangular" onSavePanoramaSource={saveOriginal} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'Save original as panorama' }));
+  await waitFor(() => expect(saveOriginal).toHaveBeenCalledTimes(1));
+});
+
 it('isolates the background and restores focus without trapping engine portals in a native modal', () => {
   const opener = document.createElement('button'); document.body.append(opener); opener.focus();
   const close = mount(vi.fn());
