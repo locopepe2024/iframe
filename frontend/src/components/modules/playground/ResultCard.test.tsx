@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { downloadOutput } from './downloadOutput';
 import { playgroundApi } from '@/lib/api';
 import { expect, it, vi } from 'vitest';
@@ -99,4 +99,35 @@ it.each(['completed', 'failed', 'pending', 'processing'] as const)('keeps the %s
   }} />);
   const media = container.querySelector('[style*="aspect-ratio"]');
   expect(media).toHaveStyle({ aspectRatio: '9 / 16' });
+});
+
+it('loads video preview media only when its card approaches the viewport', () => {
+  let reveal: ((entry: { isIntersecting: boolean }) => void) | undefined;
+  const disconnect = vi.fn();
+  const previousObserver = globalThis.IntersectionObserver;
+  globalThis.IntersectionObserver = class {
+    constructor(callback: IntersectionObserverCallback) {
+      reveal = (entry) => callback([entry as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    observe() {}
+    disconnect = disconnect;
+    unobserve() {}
+    takeRecords() { return []; }
+  } as unknown as typeof IntersectionObserver;
+  try {
+    const { container } = render(<ResultCard generation={{
+      id: 'lazy-video', mode: 't2v', model_id: 'model', prompt: 'video', input_media: [],
+      parameters: {}, batch_size: 1, status: 'completed', created_at: '2026-09-15T08:00:00Z',
+      outputs: [{ id: 'out', media_path: '/generated.mp4', media_type: 'video', saved_to_library: false }],
+    }} />);
+    const video = container.querySelector('video')!;
+    expect(video.getAttribute('src')).toBeNull();
+    expect(video).toHaveAttribute('preload', 'none');
+    act(() => reveal?.({ isIntersecting: true }));
+    expect(video).toHaveAttribute('src', 'https://garage.uniart.fun/files/generated.mp4');
+    expect(video).toHaveAttribute('preload', 'metadata');
+    expect(disconnect).toHaveBeenCalled();
+  } finally {
+    globalThis.IntersectionObserver = previousObserver;
+  }
 });

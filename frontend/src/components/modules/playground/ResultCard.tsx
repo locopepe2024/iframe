@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine, LibraryBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -146,10 +146,27 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const [downloading, setDownloading] = useState(false);
   const [actionError, setActionError] = useState('');
   const [importAssetOpen, setImportAssetOpen] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
   const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+  useEffect(() => {
+    if (!isVideo || !mediaUrl || !previewRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setPreviewVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setPreviewVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '400px' });
+    observer.observe(previewRef.current);
+    return () => observer.disconnect();
+  }, [isVideo, mediaUrl]);
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -205,10 +222,17 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       onClick={() => { if (mediaUrl) lightbox.open({ src: mediaUrl, alt: prompt, kind: isVideo ? "video" : "image" }); }}
     >
       {/* Media area */}
-      <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
+      <div ref={previewRef} className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
         {mediaUrl ? (
           isVideo ? (
-            <video src={mediaUrl} preload="metadata" muted playsInline className="w-full h-full object-contain" />
+            <video
+              src={previewVisible ? mediaUrl : undefined}
+              poster={previewVisible && output?.thumbnail_path ? getMediaUrl(output.thumbnail_path) : undefined}
+              preload={previewVisible ? 'metadata' : 'none'}
+              muted
+              playsInline
+              className="w-full h-full object-contain"
+            />
           ) : imgError ? (
             <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex flex-col items-center justify-center gap-1.5">
               <svg className="w-8 h-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
