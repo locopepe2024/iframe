@@ -14,12 +14,13 @@ it('orders chat and media by time and keeps legacy chat order', () => {
   ]).map(x => x.id)).toEqual(['old', 'prompt', 'image', 'reply']);
 });
 it('restores prompt and reference names and exposes message deletion', () => {
-  usePlaygroundStore.setState({ history: [], inputMedia: [], mediaNames: {}, prompt: '' });
+  usePlaygroundStore.setState({ history: [], inputMedia: [], mediaNames: {}, prompt: '', mode: 't2v' });
   const remove = vi.fn();
   render(<SessionTimeline onDeleteMessage={remove} messages={[{ id: 'reply', role: 'assistant', content: '让 @reference.png 跳舞', input_media: ['/playground/input-media/a.png'], asset_names: ['reference.png'], created_at: 3 }]} />);
   fireEvent.click(screen.getByRole('button', { name: '填入输入框' }));
   expect(usePlaygroundStore.getState().prompt).toBe('让 @reference.png 跳舞');
   expect(usePlaygroundStore.getState().inputMedia).toEqual(['/playground/input-media/a.png']);
+  expect(usePlaygroundStore.getState().mode).toBe('i2v');
   fireEvent.click(screen.getByRole('button', { name: '消息操作' }));
   fireEvent.click(screen.getByRole('menuitem', { name: '删除' }));
   expect(remove).toHaveBeenCalledWith('reply');
