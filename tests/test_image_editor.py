@@ -17,6 +17,14 @@ def panorama_png():
     out = BytesIO(); Image.new('RGB', (64, 32), 'teal').save(out, format='PNG'); return out.getvalue()
 
 
+def panorama_with_pole_gap():
+    image = Image.new('RGBA', (64, 32), 'teal')
+    for y in range(2):
+        for x in range(64):
+            image.putpixel((x, y), (0, 0, 0, 0))
+    out = BytesIO(); image.save(out, format='PNG'); return out.getvalue()
+
+
 @pytest.fixture
 def editor(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -103,10 +111,20 @@ def test_panorama_projection_requires_explicit_declaration_and_exact_ratio(edito
     assert exc.value.status_code == 422
     panorama = store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'equirectangular')
     assert panorama['projection_type'] == 'equirectangular'
+    assert panorama['panorama_quality']['status'] == 'pass'
     assert ImageEditStore(store.storage).list()[0] == panorama
     with pytest.raises(HTTPException) as exc:
         store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'perspective_plane')
-    assert exc.value.status_code == 409
+        assert exc.value.status_code == 409
+
+
+def test_panorama_projection_rejects_pole_gaps(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], panorama_with_pole_gap(), 'bad-pano.png', 'panorama-gap-key', 'equirectangular')
+    assert exc.value.status_code == 422
+    assert 'gap' in str(exc.value.detail)
 
 
 def test_pre_projection_save_key_still_replays_a_standard_edit(editor):

@@ -12,7 +12,7 @@ import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferenceProm
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
 export type GeneratedResultOptions = { panoramaCandidate: true };
-export const PANORAMA_PROMPT_PREFIX = 'Create a seamless 360-degree equirectangular panorama with a level horizon and a 2:1 composition. The left and right edges must join continuously. ';
+export const PANORAMA_PROMPT_PREFIX = 'Create a production-ready 360-degree equirectangular panorama in exact 2:1 format. Fill the complete sphere: continuous sky through the zenith, continuous ground through the nadir, no black/transparent holes, no empty bands, no missing ceiling or floor, level horizon, and seamless left/right edge continuity. Keep architectural lines and lighting consistent across the wrap. ';
 
 export function generationInputMedia(references: EditorReference[]): string[] {
   return references.map(reference => reference.path);

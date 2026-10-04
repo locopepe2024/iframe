@@ -11,7 +11,7 @@ import { parseLocalAnimationManifest } from "./state/local-animation-import";
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid";
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
-import { admittedPanoramaEntries } from "./scene/PanoramaEnvironmentPanel";
+import { admittedPanoramaEntries, rejectedPanoramaCount } from "./scene/PanoramaEnvironmentPanel";
 import { imageEditorApi } from "@/lib/imageEditor";
 
 vi.mock("@/lib/imageEditor", () => ({ imageEditorApi: { list: vi.fn().mockResolvedValue([]) } }));
@@ -23,16 +23,17 @@ vi.mock("./scene/HumanoidStage", () => ({
 const initialState = useWorkbenchStore.getState();
 
 it("admits only explicitly declared owned 2:1 panorama edits", () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200 };
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
   expect(admittedPanoramaEntries([{ ...record, projection_type: "perspective_plane" }])).toHaveLength(0);
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", height: 201 }])).toHaveLength(0);
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", path: "https://example.test/pano.png" }])).toHaveLength(0);
   const [entry] = admittedPanoramaEntries([{ ...record, projection_type: "equirectangular" }]);
   expect(entry).toMatchObject({ inputId: record.path, projection: "equirectangular", environmentAllowed: true, admissionChecksum: record.sha256 });
+  expect(rejectedPanoramaCount([{ ...record, projection_type: "equirectangular", panorama_quality: { status: "review", blocking_codes: ["black_pole_gap"] } }])).toBe(1);
 });
 
 it("loads an edited panorama and assigns it to the director stage", async () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const };
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
   vi.mocked(imageEditorApi.list).mockResolvedValueOnce([record]);
   render(<App />);
   const select = await screen.findByRole("combobox", { name: "选择全景素材" });

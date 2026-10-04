@@ -7,6 +7,7 @@ import type { EnvironmentInputEntry } from '../types';
 
 export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof imageEditorApi.list>>): EnvironmentInputEntry[] {
   return records.filter(record => record.projection_type === 'equirectangular'
+    && record.panorama_quality?.status === 'pass'
     && record.width === record.height * 2 && record.height > 0
     && /^\/playground\/input-media\/[^/]+$/.test(record.path)
     && /^[a-f0-9]{64}$/.test(record.sha256)).map(record => ({
@@ -28,6 +29,12 @@ export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof image
     }));
 }
 
+export function rejectedPanoramaCount(records: Awaited<ReturnType<typeof imageEditorApi.list>>): number {
+  return records.filter(record => record.projection_type === 'equirectangular'
+    && record.width === record.height * 2 && record.height > 0
+    && record.panorama_quality?.status !== 'pass').length;
+}
+
 export function PanoramaEnvironmentPanel() {
   const catalog = useWorkbenchStore(state => state.environmentInputCatalog);
   const panorama = useWorkbenchStore(state => state.renderScene.panorama);
@@ -47,7 +54,8 @@ export function PanoramaEnvironmentPanel() {
         page = await imageEditorApi.list(100, records.length);
         records.push(...page);
       } while (page.length === 100);
-      setCatalog({ status: 'ready', message: '已读取图片编辑副本', entries: admittedPanoramaEntries(records) });
+      const rejected = rejectedPanoramaCount(records);
+      setCatalog({ status: 'ready', message: rejected ? `已读取图片编辑副本；${rejected} 张全景因接缝或天顶/地面缺口未通过检查。` : '已读取图片编辑副本', entries: admittedPanoramaEntries(records) });
     } catch {
       setCatalog({ status: 'error', message: '全景素材读取失败，请重试。', entries: [] });
     } finally { setRefreshing(false); }
@@ -64,6 +72,6 @@ export function PanoramaEnvironmentPanel() {
       <button type="button" disabled={!activeCalibrationId} onClick={() => activeCalibrationId && confirm(activeCalibrationId)}>确认方向</button>
       <button type="button" title="移除全景" aria-label="移除全景" onClick={() => assign(null)}><X size={16}/></button>
     </div>}
-    <p role="status">{catalog.status === 'error' ? catalog.message : panorama.inputId ? preview.message : catalog.entries.length ? `${catalog.entries.length} 个已声明全景可用` : '没有已声明的 2:1 全景；请在图片编辑中保存。'}</p>
+    <p role="status">{catalog.status === 'error' ? catalog.message : panorama.inputId ? preview.message : catalog.message || (catalog.entries.length ? `${catalog.entries.length} 个已声明全景可用` : '没有通过质量检查的全景；请在图片编辑中修复接缝、天顶和地面后保存。')}</p>
   </section>;
 }
