@@ -63,17 +63,34 @@ it('loads a generated image into the main canvas without closing the workbench',
 it('restores an unsaved generation from server history after reopening and adds it to references', async () => {
   const path = '/playground/media/history/image';
   mocks.history.mockResolvedValue([{ id: 'history', mode: 't2i', status: 'completed', prompt: 'A quiet room', outputs: [{ id: 'image', media_type: 'image', media_path: path }] }]);
-  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
-  fireEvent.click(screen.getByText('title'));
+  render(<PlaygroundImageEditor><OpenSource /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('Open source'));
   await screen.findByRole('button', { name: 'A quiet room' });
   fireEvent.click(screen.getByText('Close'));
-  fireEvent.click(screen.getByText('title'));
+  fireEvent.click(screen.getByText('Open source'));
+  fireEvent.click(await screen.findByRole('button', { name: 'addReference A quiet room' }));
+  expect(screen.getByRole('button', { name: 'addReference A quiet room' })).toBeDisabled();
   fireEvent.click(await screen.findByRole('button', { name: 'A quiet room' }));
   await waitFor(() => expect(mocks.load).toHaveBeenCalledWith(path, expect.any(AbortSignal)));
-  fireEvent.click(screen.getByRole('button', { name: 'addReference A quiet room' }));
-  expect(screen.getByRole('button', { name: 'addReference A quiet room' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'A quiet room' })).not.toBeInTheDocument();
   expect(mocks.history).toHaveBeenCalledTimes(2);
   expect(mocks.save).not.toHaveBeenCalled();
+});
+it('moves the displaced generated image into the left queue when the main image changes', async () => {
+  const newest = '/playground/media/generated/image';
+  const older = '/playground/media/older/image';
+  mocks.history.mockResolvedValue([
+    { id: 'generated', mode: 't2i', status: 'completed', prompt: 'New image', outputs: [{ id: 'image', media_type: 'image', media_path: newest }] },
+    { id: 'older', mode: 't2i', status: 'completed', prompt: 'Older image', outputs: [{ id: 'image', media_type: 'image', media_path: older }] },
+  ]);
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  await screen.findByRole('button', { name: 'Older image' });
+  fireEvent.click(screen.getByRole('button', { name: 'Generated result' }));
+  expect(screen.queryByRole('button', { name: 'New image' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Older image' }));
+  expect(screen.queryByRole('button', { name: 'Older image' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New image' })).toBeInTheDocument();
 });
 it('pages past newer tasks when looking for older generated images', async () => {
   const newer = Array.from({ length: 100 }, (_, index) => ({ id: `video-${index}`, mode: 't2v', status: 'completed', prompt: 'Video', outputs: [] }));

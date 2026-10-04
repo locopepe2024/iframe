@@ -119,6 +119,9 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   };
   const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
   const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
+  const queuedOutputs = history.flatMap(item => item.outputs
+    .filter(output => output.media_type === 'image' && output.media_path !== selected)
+    .map(output => ({ generation: item, output })));
   return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
     onModified={() => setHasUnsavedEdit(true)}
     onDiscard={() => setHasUnsavedEdit(false)}
@@ -130,15 +133,15 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     leftPanel={<div className="space-y-1 text-xs">
       <div className="flex items-center justify-between px-2 pt-2"><h3 className="font-semibold text-text-muted">{t('generationHistory')}</h3><button type="button" title={t('refreshHistory')} aria-label={t('refreshHistory')} disabled={historyLoading} onClick={() => void refreshHistory()} className="grid h-9 w-9 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><RefreshCw size={15}/></button></div>
       {historyError && <p role="alert" className="px-2 text-status-failed-fg">{t('generationHistoryFailed')}</p>}
-      {!historyLoading && !historyError && history.length === 0 && <p className="px-2 text-text-muted">{t('generationHistoryEmpty')}</p>}
-      {history.flatMap(item => item.outputs.filter(output => output.media_type === 'image').map(output => {
+      {!historyLoading && !historyError && queuedOutputs.length === 0 && <p className="px-2 text-text-muted">{t('generationHistoryEmpty')}</p>}
+      {queuedOutputs.map(({ generation: item, output }) => {
         const candidate = item.prompt.startsWith(PANORAMA_PROMPT_PREFIX);
         const label = candidate ? t('panoramaGeneration') : item.prompt || t('generatedImage');
         return <div key={`${item.id}:${output.id}`} className="flex min-w-0 items-center gap-1">
           <button type="button" onClick={() => useResult(output.media_path, label, candidate ? { panoramaCandidate: true } : undefined)} title={label} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{label}</button>
           <button type="button" title={t('addReference')} aria-label={`${t('addReference')} ${label}`} disabled={references.length >= 9 || references.some(reference => reference.path === output.media_path)} onClick={() => addReference({ path: output.media_path, title: label })} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/></button>
         </div>;
-      }))}
+      })}
       {hasMoreHistory && <button type="button" disabled={historyLoading} onClick={() => void loadHistory(historyOffset)} className="min-h-10 w-full rounded px-2 text-left text-primary hover:bg-hover-bg disabled:opacity-40">{t('moreHistory')}</button>}
       <h3 className="border-t border-glass-border px-2 pt-3 font-semibold text-text-muted">{t('copies')}</h3>
       {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">

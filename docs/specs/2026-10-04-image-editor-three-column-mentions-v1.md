@@ -11,7 +11,7 @@
 ## UI and behavior
 
 1. Opening the standalone image editor enters its full-screen workbench immediately.
-2. The left rail selects canvas preview, local editing, or panorama browsing where eligible. It lists recent generated images from owner-scoped Playground history, with actions to open or add each image to references. Locally saved edit copies remain separately accessible.
+2. The left rail selects canvas preview, local editing, or panorama browsing where eligible. Its recent-generation queue lists prior images from owner-scoped Playground history, excluding the image currently on the main canvas. Clicking an earlier image makes it current and returns the displaced generated image to the queue. Queue items can also be added to references. Locally saved edit copies remain separately accessible.
 3. The middle canvas shows one current image and generation progress. A completed image output becomes the current canvas image automatically. Clicking a reference thumbnail on the right replaces the current canvas image.
 4. A completed panorama candidate opens the 360 viewer automatically. The user can rotate, adjust field of view, and return to flat preview. Loading and texture failures are visible.
 5. The right rail is always visible and contains ordered reference thumbnails, upload, owner library picker, model, and mention-aware prompt.
@@ -22,6 +22,7 @@
 - A prompt such as `将@file1.png的背包替换成@file2.png` binds the selected images in order.
 - Generating from a blank editor, selecting images, and loading a result all stay inside one workbench.
 - A generated result that was never saved as a local edit remains discoverable from server history after closing and reopening the editor.
+- After another image is generated, the newest result occupies the main canvas and the prior result appears in the left queue; the current result is never duplicated there.
 - Saved local edits and panorama copies preserve the existing immutable save and projection rules.
 - A generated panorama can be inspected without saving; non-2:1 outputs never become `equirectangular` copies by preview alone.
 - Typecheck, focused UI tests, and production build pass. No unrelated worktree changes are included.

@@ -3198,7 +3198,7 @@
     "generationHistory": "Recent generations",
     "refreshHistory": "Refresh generation history",
     "generationHistoryFailed": "Could not load generation history. Retry.",
-    "generationHistoryEmpty": "No generated images yet.",
+    "generationHistoryEmpty": "No earlier generated images to revisit.",
     "moreHistory": "Load older images",
     "copies": "Local edit copies",
     "empty": "Saved images will appear here.",

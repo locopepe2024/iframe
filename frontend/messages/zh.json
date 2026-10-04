@@ -3198,7 +3198,7 @@
     "generationHistory": "最近生成图",
     "refreshHistory": "刷新生成历史",
     "generationHistoryFailed": "生成历史读取失败，请重试。",
-    "generationHistoryEmpty": "暂无生成图。",
+    "generationHistoryEmpty": "暂无可回看的生成图。",
     "moreHistory": "加载更早的生成图",
     "copies": "本地编辑副本",
     "empty": "保存后的图片会显示在这里。",
