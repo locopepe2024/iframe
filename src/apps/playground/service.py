@@ -388,8 +388,15 @@ class PlaygroundService:
             "watermark": params.get("watermark", False),
         }
 
-        # r2v: reference images
-        if gen.mode == PlaygroundMode.R2V and gen.input_media:
+        # H3 IR returns canonical <Picture N>/<Video N> labels. Agent history
+        # can retain T2V as the UI mode even when the original message had
+        # attachments; in that case the provider request must still carry the
+        # referenced materials, otherwise H3 sees zero material slots.
+        h3_with_t2v_references = "h3" in model_lower and gen.mode == PlaygroundMode.T2V and bool(gen.input_media)
+        reference_mode = gen.mode == PlaygroundMode.R2V or h3_with_t2v_references
+
+        # r2v: reference images (including H3 prompts restored from Agent)
+        if reference_mode and gen.input_media:
             kwargs["generation_mode"] = "r2v"
             kwargs["ref_image_urls"] = list(gen.input_media)
 
@@ -404,7 +411,7 @@ class PlaygroundService:
             kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
             references = list(gen.input_media)
-            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V):
+            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V) or h3_with_t2v_references:
                 grouped = {kind: [ref for ref in references if media_kind(ref) == kind] for kind in ("image", "video", "audio")}
                 references = grouped["image"] + grouped["video"] + grouped["audio"]
                 kwargs["ref_image_urls"] = grouped["image"]
@@ -427,14 +434,15 @@ class PlaygroundService:
                     gen.prompt, gen.input_media, references, gen.media_names,
                 )
             kwargs["generate_audio"] = params.get("audio")
+            effective_mode = PlaygroundMode.R2V if h3_with_t2v_references else gen.mode
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",
                 PlaygroundMode.I2V: "image2video",
                 PlaygroundMode.R2V: "reference2video",
                 PlaygroundMode.F2V: "frames2video",
                 PlaygroundMode.V2V: "reference2video",
-            }[gen.mode]
-            if gen.mode == PlaygroundMode.T2V:
+            }[effective_mode]
+            if effective_mode == PlaygroundMode.T2V:
                 img_path, img_url = None, None
 
         if gen.mode == PlaygroundMode.F2V:
