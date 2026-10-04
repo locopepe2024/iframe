@@ -35,6 +35,8 @@ export function CameraPathPresetPanel() {
   const appendPoint = useWorkbenchStore((state) => state.appendCameraPathControlPoint);
   const removePoint = useWorkbenchStore((state) => state.removeCameraPathControlPoint);
   const reversePath = useWorkbenchStore((state) => state.reverseCameraPath);
+  const stagePath = useWorkbenchStore((state) => state.stageCameraPathOnTimeline);
+  const staged = useWorkbenchStore((state) => state.dialogueTimeline.tracks.some(track => track.trackKind === "camera_path_progress" && track.target.targetId === `path-${state.selectedCameraId}-motion`));
   const [presetId, setPresetId] = useState<CameraPathPresetId>("push_in");
   const [mode, setMode] = useState<CameraPathApplyMode>("replace");
   const [duration, setDuration] = useState("4");
@@ -49,7 +51,7 @@ export function CameraPathPresetPanel() {
   const disabled = camera.locked || Boolean(path?.locked);
   return <section className="camera-path-panel" aria-labelledby="camera-path-title">
     <div className="dialogue-heading"><div><p className="kicker">Camera motion paths</p><h3 id="camera-path-title">相机运动路径</h3></div><span className="revision-badge">{path ? `rev ${path.revision}` : "未创建"}</span></div>
-    <p>预设生成真实 cubic Bezier 路径。创建后可数值编辑或在舞台直接拖动点位和两个手柄；所有修改继续归属当前机位。</p>
+    <p>路径随播放头预演。加入时间轴后可添加进度关键帧；未添加时保留路径缓动。</p>
     <form className="camera-path-form" onSubmit={submit}>
       <label><span>运镜预设</span><select value={presetId} disabled={disabled} onChange={(event) => setPresetId(event.target.value as CameraPathPresetId)}>{CAMERA_PATH_PRESETS.map((item) => <option key={item.presetId} value={item.presetId}>{item.label}</option>)}</select></label>
       <label><span>应用方式</span><select value={mode} disabled={disabled} onChange={(event) => setMode(event.target.value as CameraPathApplyMode)}><option value="replace">替换当前路径</option><option value="append">追加后续路径段</option></select></label>
@@ -59,6 +61,7 @@ export function CameraPathPresetPanel() {
       <button type="submit" disabled={disabled}>{mode === "append" && path ? "追加路径段" : "生成并替换路径"}</button>
     </form>
     {path ? <>
+      <button type="button" disabled={disabled} onClick={() => stagePath(camera.cameraId)}>{staged ? "查看时间轴预演" : "加入时间轴预演"}</button>
       <dl className="environment-summary"><div><dt>机位</dt><dd>{camera.label}</dd></div><div><dt>路径</dt><dd>{path.pathId}</dd></div><div><dt>控制点</dt><dd>{points.length}</dd></div></dl>
       <div className="actor-path-settings">
         <label><span>总时长</span><span className="number-input"><PathNumberField label="相机路径总时长" value={path.durationSeconds} disabled={disabled} minimum={0.1} maximum={3600} step={0.1} onCommit={(value) => setPathDuration(path.pathId, value)}/><span>s</span></span></label>
@@ -68,7 +71,7 @@ export function CameraPathPresetPanel() {
       <div className="environment-input-actions"><button type="button" disabled={disabled || points.length >= 128} onClick={() => appendPoint(path.pathId)}>追加控制点</button><button type="button" className="secondary" disabled={disabled} onClick={() => reversePath(path.pathId)}>反向路径</button></div>
       <ol className="actor-path-point-list camera-path-point-list">{points.map((point) => <li key={point.controlPointId} className={selectedPoint?.controlPointId === point.controlPointId ? "active" : ""}><button type="button" onClick={() => selectControlPoint(point.controlPointId)}><strong>点 {point.order + 1}</strong><span>{point.positionM.map((value) => value.toFixed(2)).join(" / ")} m</span></button><button type="button" className="dialogue-remove" disabled={disabled || points.length <= 2} aria-label={`删除相机路径控制点 ${point.order + 1}`} onClick={() => removePoint(path.pathId, point.controlPointId)}>删除</button></li>)}</ol>
       {selectedPoint && <div className="actor-path-point-editor camera-path-point-editor"><strong>编辑点 {selectedPoint.order + 1}</strong><small>{selectedPoint.controlPointId}</small><VectorRow point={selectedPoint} field="positionM" label="点位" disabled={disabled} onCommit={(axis, value) => setVector(path.pathId, selectedPoint.controlPointId, "positionM", axis, value)}/><VectorRow point={selectedPoint} field="handleInM" label="进入手柄" disabled={disabled} onCommit={(axis, value) => setVector(path.pathId, selectedPoint.controlPointId, "handleInM", axis, value)}/><VectorRow point={selectedPoint} field="handleOutM" label="离开手柄" disabled={disabled} onCommit={(axis, value) => setVector(path.pathId, selectedPoint.controlPointId, "handleOutM", axis, value)}/></div>}
-      <p className="dialogue-status" role="status" aria-live="polite">{path.pathId} · target {path.targetId} · target-owned · 拖动释放后写入单条 undo · playhead evaluation pending 6.5–6.6</p>
+      <p className="dialogue-status" role="status" aria-live="polite">{staged ? "已连接时间轴，可使用底部播放控件预演。" : "路径已创建；底部播放控件可直接预演。"}</p>
     </> : <p className="dialogue-status" role="status">当前机位尚无运动路径；静态 transform 与构图保持有效。</p>}
   </section>;
 }

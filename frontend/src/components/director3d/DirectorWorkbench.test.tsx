@@ -43,6 +43,30 @@ it("loads an edited panorama and assigns it to the director stage", async () => 
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
 });
 
+it("stages a camera path without replacing its easing and supports undo", () => {
+  const cameraId = useWorkbenchStore.getState().selectedCameraId;
+  act(() => {
+    useWorkbenchStore.getState().applyCameraPathPreset(cameraId, "push_in", "replace", 4, "ease_in_out");
+    useWorkbenchStore.getState().stageCameraPathOnTimeline(cameraId);
+  });
+  const state = useWorkbenchStore.getState();
+  const track = state.dialogueTimeline.tracks.find(item => item.trackKind === "camera_path_progress" && item.target.targetId === `path-${cameraId}-motion`);
+  expect(track?.keyframes).toEqual([]);
+  expect(state.cameraPaths[`path-${cameraId}-motion`].easing).toBe("ease_in_out");
+  const at = (frame: number) => evaluateDirectorFrame({
+    frame, durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
+    tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
+    selectedCameraId: cameraId, characters: state.characters, cameras: state.cameras,
+    sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
+  }).activeCameraPositionM;
+  expect(at(1)).not.toEqual(at(1 + 2 * state.dialogueTimeline.fps));
+  expect(state.viewMode).toBe("camera");
+  act(() => useWorkbenchStore.getState().stageCameraPathOnTimeline(cameraId));
+  expect(useWorkbenchStore.getState().dialogueTimeline.tracks.filter(item => item.trackKind === "camera_path_progress" && item.target.targetId === `path-${cameraId}-motion`)).toHaveLength(1);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().dialogueTimeline.tracks.some(item => item.trackId === track?.trackId)).toBe(false);
+});
+
 beforeEach(() => {
   useWorkbenchStore.setState(initialState, true);
   vi.stubGlobal("fetch", vi.fn());
