@@ -152,8 +152,9 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+  const coverUrl = isVideo && output?.thumbnail_path ? getMediaUrl(output.thumbnail_path) : null;
   useEffect(() => {
-    if (!isVideo || !mediaUrl || !previewRef.current) return;
+    if (!isVideo || !coverUrl || !previewRef.current) return;
     if (typeof IntersectionObserver === 'undefined') {
       setPreviewVisible(true);
       return;
@@ -166,7 +167,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
     }, { rootMargin: '400px' });
     observer.observe(previewRef.current);
     return () => observer.disconnect();
-  }, [isVideo, mediaUrl]);
+  }, [isVideo, coverUrl]);
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -225,14 +226,12 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       <div ref={previewRef} className="relative overflow-hidden bg-elevated" style={{ aspectRatio }}>
         {mediaUrl ? (
           isVideo ? (
-            <video
-              src={previewVisible ? mediaUrl : undefined}
-              poster={previewVisible && output?.thumbnail_path ? getMediaUrl(output.thumbnail_path) : undefined}
-              preload={previewVisible ? 'metadata' : 'none'}
-              muted
-              playsInline
-              className="w-full h-full object-contain"
-            />
+            <div className="relative h-full w-full">
+              {previewVisible && coverUrl && <img src={coverUrl} alt="" className="h-full w-full object-contain" />}
+              <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-black/60 text-white"><Video size={22} /></span>
+              </div>
+            </div>
           ) : imgError ? (
             <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex flex-col items-center justify-center gap-1.5">
               <svg className="w-8 h-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
