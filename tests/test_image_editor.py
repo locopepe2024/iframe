@@ -1,4 +1,6 @@
 from io import BytesIO
+import json
+from types import SimpleNamespace
 from pathlib import Path
 import pytest
 from PIL import Image
@@ -9,6 +11,10 @@ from src.apps.playground.image_editor import ImageEditStore
 
 def png(color='red'):
     out = BytesIO(); Image.new('RGB', (32, 24), color).save(out, format='PNG'); return out.getvalue()
+
+
+def panorama_png():
+    out = BytesIO(); Image.new('RGB', (64, 32), 'teal').save(out, format='PNG'); return out.getvalue()
 
 
 @pytest.fixture
@@ -85,3 +91,52 @@ def test_bounds_and_cross_owner_generated_source(editor):
     with pytest.raises(HTTPException) as exc:
         other.source('/playground/media/someone-elses-generation/output')
     assert exc.value.status_code==404
+
+
+def test_panorama_projection_requires_explicit_declaration_and_exact_ratio(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    flat = store.save(source['reference'], source['sha256'], panorama_png(), 'flat.png', 'flat-key-1')
+    assert flat['projection_type'] == 'perspective_plane'
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], png(), 'bad.png', 'panorama-key-1', 'equirectangular')
+    assert exc.value.status_code == 422
+    panorama = store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'equirectangular')
+    assert panorama['projection_type'] == 'equirectangular'
+    assert ImageEditStore(store.storage).list()[0] == panorama
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'perspective_plane')
+    assert exc.value.status_code == 409
+
+
+def test_pre_projection_save_key_still_replays_a_standard_edit(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    saved = store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1')
+    old_intent = json.dumps([source['reference'], source['sha256'], saved['sha256'], 'old.png'])
+    with store.db() as db:
+        db.execute('UPDATE edits SET intent=? WHERE operation_key=?', (old_intent, 'legacy-key-1'))
+    assert store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1') == saved
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1', 'equirectangular')
+    assert exc.value.status_code == 422
+
+
+def test_library_import_uses_owner_index_and_variant_id(editor):
+    store, path = editor
+    variant = SimpleNamespace(id='variant-1', url=str(path))
+    entry = SimpleNamespace(source_scope='project', source_container_id='project-1',
+                            asset_type='scene', asset_id='scene-1', name='Room', variants=[variant])
+    index = SimpleNamespace(assets=[entry])
+    def resolve(value, owner):
+        assert owner == store.storage.owner_profile_id
+        assert value == str(path)
+        return value
+    imported = store.import_library_variant(index, 'project', 'project-1', 'scene', 'scene-1', 'variant-1', resolve)
+    assert imported['path'].startswith('/playground/input-media/library-')
+    assert store.source(imported['path'])['sha256'] == imported['sha256']
+    assert path.read_bytes() == png()
+    for scope, variant_id in [('series', 'variant-1'), ('project', 'other')]:
+        with pytest.raises(HTTPException) as exc:
+            store.import_library_variant(index, scope, 'project-1', 'scene', 'scene-1', variant_id, resolve)
+        assert exc.value.status_code == 404
