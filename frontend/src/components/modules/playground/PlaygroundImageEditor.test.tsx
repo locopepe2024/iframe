@@ -3,28 +3,29 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import type { ImageEditorProps } from '@/components/shared/image-editor/ImageEditor';
 import PlaygroundImageEditor, { ImageEditorButton, StandaloneImageEditorPage, usePlaygroundImageEditor } from './PlaygroundImageEditor';
 import { usePlaygroundStore } from './usePlaygroundStore';
-const mocks = vi.hoisted(() => ({ load: vi.fn(), list: vi.fn(), save: vi.fn(), upload: vi.fn(), toast: vi.fn() }));
+const mocks = vi.hoisted(() => ({ load: vi.fn(), list: vi.fn(), save: vi.fn(), upload: vi.fn(), history: vi.fn(), toast: vi.fn() }));
 vi.mock('next-intl', () => ({ useTranslations: () => translate }));
 const translate = (key: string) => key;
 vi.mock('@/lib/imageEditor', () => ({ imageEditorApi: mocks }));
-vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', playgroundApi: { uploadMedia: mocks.upload } }));
+vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', playgroundApi: { uploadMedia: mocks.upload, getHistory: mocks.history } }));
 vi.mock('@/store/toastStore', () => ({ toast: { success: mocks.toast } }));
-vi.mock('./ImageEditorReferenceTools', () => ({ default: (props: { onUseResult: (path: string, title: string, options?: { panoramaCandidate: true }) => void; onGenerationChange: (generation: unknown) => void }) => <><button onClick={() => {
+vi.mock('./ImageEditorReferenceTools', () => ({ PANORAMA_PROMPT_PREFIX: 'Panorama: ', default: (props: { onUseResult: (path: string, title: string, options?: { panoramaCandidate: true }) => void; onGenerationChange: (generation: unknown) => void }) => <><button onClick={() => {
   props.onGenerationChange({ id: 'generated', status: 'completed', outputs: [{ id: 'image', media_type: 'image', media_path: '/playground/media/generated/image' }] });
   props.onUseResult('/playground/media/generated/image', 'Generated');
 }}>Generated result</button><button onClick={() => props.onUseResult('/playground/media/panorama/image', 'Panorama', { panoramaCandidate: true })}>Panorama result</button></> }));
 vi.mock('next/dynamic', () => ({ default: () => function Editor(props: ImageEditorProps) {
-  return <div>{props.leftPanel}{props.toolPanel}<span data-testid="editor-view">{props.initialView}</span><span data-testid="panorama-gate">{props.panoramaEligible ? 'browse' : 'none'}:{props.panoramaSaveEligible ? 'save' : 'no-save'}</span>{props.comparisonSource && <span data-testid="comparison-source">{props.comparisonSource}</span>}{props.source ? <button onClick={() => {
+  return <div>{props.leftPanel}{props.toolPanel}<span data-testid="editor-view">{props.initialView}</span><span data-testid="panorama-gate">{props.panoramaEligible ? 'browse' : 'none'}:{props.panoramaSaveEligible ? 'save' : 'no-save'}</span><span data-testid="canvas-source">{props.source}</span>{props.source ? <button onClick={() => {
     const file = new File(['edited'], 'edited.png');
     file.arrayBuffer = async () => new TextEncoder().encode('edited').buffer;
     void props.onSave(file);
-  }}>Save</button> : props.emptyState}<button onClick={props.onClose}>Close</button></div>;
+  }}>Save</button> : props.emptyState}{props.onSavePanoramaSource && <button onClick={() => void props.onSavePanoramaSource?.()}>Save panorama</button>}<button onClick={props.onClose}>Close</button></div>;
 } }));
 const saved = { id: 'edit', path: '/playground/input-media/edit.png', title: 'Edited' };
 function OpenSource() { const open = usePlaygroundImageEditor(); return <button onClick={() => open?.('/playground/input-media/source.png', 'source')}>Open source</button>; }
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.list.mockResolvedValue([saved]);
+  mocks.history.mockResolvedValue([]);
   mocks.load.mockResolvedValue({ source: { reference: '/playground/input-media/source.png', sha256: 'a'.repeat(64) }, blob: new Blob(['source']) });
   mocks.save.mockResolvedValue(saved);
   vi.stubGlobal('crypto', { subtle: { digest: vi.fn().mockResolvedValue(new ArrayBuffer(32)) }, randomUUID: () => 'operation-key' });
@@ -55,8 +56,33 @@ it('loads a generated image into the main canvas without closing the workbench',
   await screen.findByText('Save');
   fireEvent.click(screen.getByText('Generated result'));
   await waitFor(() => expect(mocks.load).toHaveBeenCalledWith('/playground/media/generated/image', expect.any(AbortSignal)));
-  expect(screen.getByTestId('comparison-source')).toHaveTextContent('/playground/input-media/source.png');
+  expect(screen.queryByTestId('comparison-source')).not.toBeInTheDocument();
+  expect(screen.getByTestId('canvas-source')).toHaveTextContent('blob:preview');
   expect(screen.getByText('Close')).toBeInTheDocument();
+});
+it('restores an unsaved generation from server history after reopening and adds it to references', async () => {
+  const path = '/playground/media/history/image';
+  mocks.history.mockResolvedValue([{ id: 'history', mode: 't2i', status: 'completed', prompt: 'A quiet room', outputs: [{ id: 'image', media_type: 'image', media_path: path }] }]);
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  await screen.findByRole('button', { name: 'A quiet room' });
+  fireEvent.click(screen.getByText('Close'));
+  fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByRole('button', { name: 'A quiet room' }));
+  await waitFor(() => expect(mocks.load).toHaveBeenCalledWith(path, expect.any(AbortSignal)));
+  fireEvent.click(screen.getByRole('button', { name: 'addReference A quiet room' }));
+  expect(screen.getByRole('button', { name: 'addReference A quiet room' })).toBeDisabled();
+  expect(mocks.history).toHaveBeenCalledTimes(2);
+  expect(mocks.save).not.toHaveBeenCalled();
+});
+it('pages past newer tasks when looking for older generated images', async () => {
+  const newer = Array.from({ length: 100 }, (_, index) => ({ id: `video-${index}`, mode: 't2v', status: 'completed', prompt: 'Video', outputs: [] }));
+  mocks.history.mockResolvedValueOnce(newer).mockResolvedValueOnce([{ id: 'old-image', mode: 't2i', status: 'completed', prompt: 'Old image', outputs: [{ id: 'image', media_type: 'image', media_path: '/playground/media/old-image/image' }] }]);
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByRole('button', { name: 'moreHistory' }));
+  expect(await screen.findByRole('button', { name: 'Old image' })).toBeInTheDocument();
+  expect(mocks.history).toHaveBeenNthCalledWith(2, 100, 100);
 });
 it('opens a non-2:1 panorama candidate in the main viewer without enabling panorama save', async () => {
   mocks.load.mockResolvedValue({ source: { reference: '/playground/media/panorama/image', sha256: 'a'.repeat(64), width: 1024, height: 600, mime: 'image/png' }, blob: new Blob(['candidate']) });
@@ -65,6 +91,13 @@ it('opens a non-2:1 panorama candidate in the main viewer without enabling panor
   fireEvent.click(screen.getByText('Panorama result'));
   await waitFor(() => expect(screen.getByTestId('editor-view')).toHaveTextContent('panorama'));
   expect(screen.getByTestId('panorama-gate')).toHaveTextContent('browse:no-save');
+});
+it('writes explicit panorama metadata only through the save panorama action', async () => {
+  mocks.load.mockResolvedValue({ source: { reference: '/playground/input-media/pano.png', sha256: 'a'.repeat(64), width: 800, height: 400, mime: 'image/png' }, blob: new Blob(['panorama'], { type: 'image/png' }) });
+  render(<PlaygroundImageEditor><OpenSource /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('Open source'));
+  fireEvent.click(await screen.findByText('Save panorama'));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.anything(), expect.any(File), 'operation-key', 'equirectangular'));
 });
 it('opens the standalone page directly into the editor workbench', () => {
   render(<StandaloneImageEditorPage />);

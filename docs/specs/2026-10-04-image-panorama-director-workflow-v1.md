@@ -8,7 +8,7 @@
 
 ## Contract and boundaries
 
-- Image editor: preserve the source image, save a new asset with `projection_type` (`perspective_plane` by default; `equirectangular` only on explicit selection and exact 2:1 pixels), and browse saved panoramas with mouse/touch orbit controls.
+- Image editor: preserve the source image, save ordinary edits as `perspective_plane`, and expose a separate "Save as panorama" action for exact 2:1 sources. That action writes `equirectangular`; users do not choose raw projection metadata. Browse panorama candidates with mouse/touch orbit controls.
 - Playground API: persist projection metadata in the same immutable edit record and idempotency intent; reject an equirectangular declaration for non-2:1 output.
 - Director: read only the current owner's saved edits, admit only declared 2:1 equirectangular images whose stored checksum matches the catalog admission checksum, show a spherical background, and let the user assign/clear it. Existing scene objects, white models, cameras, motion paths and timeline remain the editable foreground.
 - The environment catalog is session state. Director drafts must not silently restore a panorama without reloading and validating its owner-scoped asset record.

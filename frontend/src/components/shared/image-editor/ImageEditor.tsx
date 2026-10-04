@@ -6,7 +6,6 @@ import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
 import { X, Rotate3D, Pencil, Save, Image as ImageIcon } from 'lucide-react';
 import type { FilerobotImageEditorConfig } from 'react-filerobot-image-editor';
-import type { ImageProjectionType } from '@/lib/imageEditor';
 
 // Adapted from iyishow's Filerobot workbench; no canvas, API or store dependency.
 const Engine = dynamic(() => import('react-filerobot-image-editor').then(m => m.default), { ssr: false });
@@ -101,7 +100,6 @@ const IMAGE_EDITOR_THEME: NonNullable<FilerobotImageEditorConfig["theme"]> = {
 
 export interface ImageEditorProps {
   source?: string;
-  comparisonSource?: string;
   title: string;
   emptyState?: ReactNode;
   leftPanel?: ReactNode;
@@ -111,16 +109,14 @@ export interface ImageEditorProps {
   onModified?: () => void;
   onDiscard?: () => void;
   onSavePanoramaSource?: () => Promise<void>;
-  projectionType?: ImageProjectionType;
   panoramaEligible?: boolean;
   panoramaSaveEligible?: boolean;
   panoramaCandidate?: boolean;
-  onProjectionChange?: (projection: ImageProjectionType) => void;
-  onSave: (file: File, projectionType?: ImageProjectionType) => Promise<void>;
+  onSave: (file: File) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, comparisonSource, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -194,14 +190,8 @@ export default function ImageEditor({ source, comparisonSource, title, emptyStat
           <div className="min-w-0"><h2 id="image-editor-title" className="font-semibold">{t('title')}</h2><p className="truncate text-sm text-text-muted">{title}</p></div>
           <button ref={closeButton} type="button" disabled={saving} onClick={close} aria-label={t('close')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={20} /></button>
         </header>
-        {source && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-4 py-2 text-sm">
-          <label className="flex items-center gap-2">{t('projection')}
-            <select value={projectionType} onChange={event => onProjectionChange?.(event.target.value as ImageProjectionType)} disabled={saving} className="min-h-9 rounded border border-glass-border bg-surface px-2">
-              <option value="perspective_plane">{t('perspective')}</option>
-              <option value="equirectangular" disabled={!canSavePanorama}>{t('equirectangular')}</option>
-            </select>
-          </label>
-          {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
+        {source && canSavePanorama && onSavePanoramaSource && <div className="border-b border-glass-border px-4 py-2 text-sm">
+          <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-10 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>
         </div>}
         {panoramaCandidate && <p role="status" className={`border-b border-glass-border px-4 py-2 text-xs ${canSavePanorama ? 'text-text-secondary' : 'text-status-failed-fg'}`}>
           {t(canSavePanorama ? 'panoramaCandidatePreview' : 'panoramaCandidateRatioWarning')}
@@ -226,7 +216,7 @@ export default function ImageEditor({ source, comparisonSource, title, emptyStat
               onSave={async image => {
                 if (inFlight.current) return;
                 inFlight.current = true; setSaving(true); setError('');
-                try { await onSave(await exportedImageFile(image, title), projectionType); dirty.current = false; }
+                try { await onSave(await exportedImageFile(image, title)); dirty.current = false; }
                 catch { setError(t('saveFailed')); }
                 finally { inFlight.current = false; setSaving(false); }
               }}
@@ -234,17 +224,10 @@ export default function ImageEditor({ source, comparisonSource, title, emptyStat
               avoidChangesNotSavedAlertOnLeave disableSaveIfNoChanges savingPixelRatio={1} previewPixelRatio={1}
               tabsIds={['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize']}
               defaultTabId="Adjust" defaultToolId="Rotate" observePluginContainerSize />
-          </fieldset> : source ? <div className={`grid h-full min-h-[280px] gap-2 p-3 ${comparisonSource ? 'grid-cols-1 md:grid-cols-2' : 'place-items-center'}`}>
-            {comparisonSource && <div className="flex min-h-0 min-w-0 flex-col border border-white/10 bg-black/20">
-              <span className="px-2 py-1 text-xs text-white/80">{t('sourceImage')}</span>
-              <div className="grid min-h-[150px] flex-1 place-items-center overflow-hidden p-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={comparisonSource} alt={t('sourceImage')} className="max-h-full max-w-full object-contain" />
-              </div>
-            </div>}
+          </fieldset> : source ? <div className="grid h-full min-h-[280px] place-items-center p-3">
             <div className="grid min-h-0 min-w-0 place-items-center overflow-hidden p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={source} alt={comparisonSource ? t('resultImage') : title} className="max-h-full max-w-full object-contain" />
+              <img src={source} alt={title} className="max-h-full max-w-full object-contain" />
             </div>
           </div> : emptyState}
           {canvasStatus && <div className="absolute bottom-3 left-3 right-3 rounded bg-black/75 px-3 py-2 text-sm text-white" role="status">{canvasStatus}</div>}

@@ -29,6 +29,13 @@ it('binds named mentions to ordered reference inputs in a generation request', a
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'i2i', model_id: 'image-model', prompt: '将@One的背包替换成@Two', input_media: [references[0].path, references[1].path], media_names: { [references[0].path]: 'One', [references[1].path]: 'Two' } })));
 });
 
+it('uses a clicked reference thumbnail as the current canvas image', () => {
+  const onUseResult = vi.fn();
+  render(<ImageEditorReferenceTools references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={onUseResult}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'canvasPreview Two' }));
+  expect(onUseResult).toHaveBeenCalledWith(references[1].path, references[1].title);
+});
+
 it('offers selected reference images when typing @ and opens a completed result on the canvas', async () => {
   const onUseResult = vi.fn();
   mocks.generate.mockResolvedValue({ id: 'generation-2', status: 'completed', outputs: [{ id: 'output', media_type: 'image', media_path: '/playground/media/generation-2/output' }] });
