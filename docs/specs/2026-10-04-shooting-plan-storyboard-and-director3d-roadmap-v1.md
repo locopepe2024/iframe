@@ -205,7 +205,9 @@ Storyboard 对每个 shot 选择：
 
 ## B 线：3D 导演台场景与镜头参考
 
-### B1. 场景 Blockout Contract
+本线第一阶段只验收 3D 导演台自身能力。它先使用模块内状态、本地草稿或示例数据完成场景、机位、全景、深度和人物占位；暂不要求与导演管理层建立跨工作流 revision 引用。
+
+### B1. 场景 Blockout Contract（模块内）
 
 先定义与资产库和 Storyboard 解耦的场景空间契约：
 
@@ -253,7 +255,9 @@ Storyboard 对每个 shot 选择：
 
 人物占位不携带真实角色脸、服装或表演身份。真实视觉仍由 Assets 和 Storyboard 负责。
 
-### B5. 3D 结果导入 Storyboard
+### B5. 3D 结果导入 Storyboard（后续阶段）
+
+只有 B1-B4 能力独立验收通过后，才启用以下跨工作流导入：
 
 Storyboard 可引用：
 
@@ -267,14 +271,13 @@ Storyboard 可引用：
 
 ## 汇合顺序
 
-1. 先完成 A2 的 plan-to-storyboard 确定性拆分；
-2. 定义 A3 的 EpisodeVisualContext 和分集视觉变体索引；
-3. 完成 A4 的场景分镜资产生成与用户审核；
-4. 并行定义 B1 的 3D Scene Blockout Contract；
-5. 实现 B2/B3 的场景、机位、全景和深度参考；
-6. 实现 B4 的人物占位和视频参考；
-7. 在 B5 将 3D snapshot 作为可选 Storyboard reference 接入；
-8. 最后再评估自动从 3D blocking 生成或修订 shot prompt。
+1. 3D 导演台独立完成 B1-B4 能力和本地验收；
+2. 图片编辑独立完成底座/变体编辑和候选保存能力；
+3. 管理层完成 A2 的 plan-to-storyboard 确定性拆分；
+4. 定义 A3 的 EpisodeVisualContext 和分集视觉变体索引；
+5. 完成 A4 的场景分镜资产生成与用户审核；
+6. 能力和数据边界稳定后，才在 B5 将 3D snapshot 作为可选 Storyboard reference 接入；
+7. 最后再评估自动从 3D blocking 生成或修订 shot prompt。
 
 ## 不改变的边界
 
