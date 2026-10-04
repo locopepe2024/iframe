@@ -24,6 +24,15 @@ from .models import (
     DirectorProfileRevision,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
+    DirectorPlanSceneBinding,
+    DirectorPlanCastBinding,
+    DirectorPlanPropBinding,
+    EpisodeVisualContext,
+    EpisodeVisualSceneContext,
+    EpisodeVisualCharacterContext,
+    EpisodeVisualPropContext,
+    EpisodeVisualShotContext,
+    EpisodeAssetBinding,
     ArtifactLineage,
     SourceRange,
     ScriptSourceRevision,
@@ -992,6 +1001,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 effective_positive_prompt = ". ".join(filter(None, [
                     effective_positive_prompt, director_context,
                 ]))
+        episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
+        if episode_context_prompt:
+            effective_positive_prompt = ". ".join(filter(None, [
+                effective_positive_prompt, episode_context_prompt,
+            ]))
         generation_lineage = self.generation_lineage(
             script, director_profile, director_execution,
         )
@@ -3417,6 +3431,266 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
             return script
 
+    def project_episode_visual_context(self, script_id: str) -> EpisodeVisualContext:
+        """Project the confirmed shooting plan into bounded asset-facing context."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if not script.director_shooting_plan_revisions:
+            raise ValueError("Confirm the shooting plan before syncing episode assets")
+        revision = script.director_shooting_plan_revisions[-1]
+        plan = revision.plan
+        resolved_assets = self.resolve_episode_assets(script)
+        character_ids_by_person: Dict[str, List[str]] = {}
+        for character in resolved_assets["characters"]:
+            character_ids_by_person.setdefault(character.base_character_id or character.id, []).append(character.id)
+            character_ids_by_person.setdefault(character.id, [character.id])
+        profile = self.effective_director_profile(script)
+        if profile and profile.story_map:
+            for person in profile.story_map.people:
+                ids = [item for item in person.variant_character_ids
+                       if any(character.id == item for character in resolved_assets["characters"])]
+                if ids:
+                    character_ids_by_person[person.person_id] = ids
+        def matching_character_assets(person_id: str, era_variant_id: Optional[str] = None) -> List[str]:
+            candidates = character_ids_by_person.get(person_id, [])
+            if era_variant_id in candidates:
+                return [era_variant_id]
+            return candidates if len(candidates) == 1 else []
+        scenes: List[EpisodeVisualSceneContext] = []
+        characters: Dict[tuple, EpisodeVisualCharacterContext] = {}
+        props: Dict[tuple, EpisodeVisualPropContext] = {}
+        shots: List[EpisodeVisualShotContext] = []
+        for scene in plan.scenes:
+            scene_bindings = [
+                shot.scene_binding for beat in scene.beats for shot in beat.shots
+                if shot.scene_binding is not None
+            ]
+            binding = scene_bindings[0] if scene_bindings else None
+            if isinstance(binding, dict):
+                binding = DirectorPlanSceneBinding.model_validate(binding)
+            scenes.append(EpisodeVisualSceneContext(
+                scene_id=scene.scene_id,
+                scene_asset_id=scene.scene_asset_id or (binding.scene_asset_id if binding else None),
+                scene_ref=scene.scene_ref,
+                location=scene.location,
+                time_anchor=scene.time_anchor,
+                interior_exterior=binding.interior_exterior if binding else None,
+                time_of_day=binding.time_of_day if binding else None,
+                season=binding.season if binding else None,
+                weather=binding.weather if binding else None,
+                atmosphere=scene.environment_atmosphere,
+                prop_ids=list(scene.prop_ids),
+            ))
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    cast_items = [DirectorPlanCastBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.cast_bindings]
+                    prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
+                    shot_char_ids = list(dict.fromkeys(shot.character_ids + [b.person_id for b in cast_items]))
+                    shot_prop_ids = list(dict.fromkeys(shot.prop_ids + [b.prop_id for b in prop_items]))
+                    shots.append(EpisodeVisualShotContext(
+                        scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
+                        character_ids=shot_char_ids, prop_ids=shot_prop_ids,
+                        visual_intent=shot.visual_intent, performance_action=shot.performance_action,
+                        composition=shot.composition, camera_movement=shot.camera_movement,
+                        lighting=shot.lighting.model_dump(),
+                    ))
+                    for cast in cast_items:
+                        key = (cast.person_id, scene.scene_id, cast.era_variant_id, cast.scene_look_id,
+                               json.dumps(cast.continuity_state, sort_keys=True, ensure_ascii=False))
+                        item = characters.setdefault(key, EpisodeVisualCharacterContext(
+                            person_id=cast.person_id,
+                            character_asset_ids=matching_character_assets(cast.person_id, cast.era_variant_id),
+                            era_variant_id=cast.era_variant_id,
+                            scene_look_id=cast.scene_look_id, continuity_state=cast.continuity_state,
+                            scene_ids=[scene.scene_id],
+                        ))
+                        item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
+                    for person_id in shot.character_ids:
+                        if any(person_id == cast.person_id or
+                               person_id in character_ids_by_person.get(cast.person_id, [])
+                               for cast in cast_items):
+                            continue
+                        item = characters.setdefault((person_id, scene.scene_id, None, None, ""),
+                            EpisodeVisualCharacterContext(person_id=person_id,
+                                character_asset_ids=matching_character_assets(person_id),
+                                scene_ids=[scene.scene_id]))
+                        item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
+                    for prop in prop_items:
+                        item = props.setdefault((prop.prop_id, scene.scene_id, prop.state),
+                            EpisodeVisualPropContext(prop_id=prop.prop_id, state=prop.state, scene_ids=[scene.scene_id]))
+                        item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
+                    for prop_id in shot.prop_ids:
+                        if any(prop.prop_id == prop_id for prop in prop_items):
+                            continue
+                        item = props.setdefault((prop_id, scene.scene_id, "present"),
+                            EpisodeVisualPropContext(prop_id=prop_id, scene_ids=[scene.scene_id]))
+                        item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
+            for prop_id in scene.prop_ids:
+                props.setdefault((prop_id, scene.scene_id, "present"),
+                    EpisodeVisualPropContext(prop_id=prop_id, scene_ids=[scene.scene_id]))
+        return EpisodeVisualContext(
+            source_revision=plan.source_revision,
+            source_revision_id=plan.source_revision_id,
+            director_profile_revision=plan.director_profile_revision,
+            shooting_plan_revision=revision.revision,
+            shooting_plan_hash=revision.content_hash,
+            context_status="complete" if not plan.unresolved_questions else "partial",
+            scenes=scenes, characters=list(characters.values()), props=list(props.values()), shots=shots,
+        )
+
+    def sync_episode_assets_from_shooting_plan(self, script_id: str) -> Dict[str, Any]:
+        """Persist the context and return a non-destructive, reviewable diff."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            previous_context = script.episode_visual_context
+            context = self.project_episode_visual_context(script_id)
+            previous = {(b.asset_type, b.asset_id): b for b in script.episode_asset_bindings}
+            desired: List[EpisodeAssetBinding] = []
+            for scene in context.scenes:
+                asset_id = scene.scene_asset_id or scene.scene_id
+                existing_scene = next((item for item in desired if item.asset_type == "scene" and item.asset_id == asset_id), None)
+                if existing_scene:
+                    existing_scene.scene_ids.append(scene.scene_id)
+                else:
+                    desired.append(EpisodeAssetBinding(asset_type="scene", asset_id=asset_id,
+                        scene_ids=[scene.scene_id], source_plan_revision=context.shooting_plan_revision,
+                        source_plan_hash=context.shooting_plan_hash, context_status=context.context_status))
+            for asset_type, items, id_field in (("character", context.characters, "person_id"),
+                                                ("prop", context.props, "prop_id")):
+                grouped: Dict[str, EpisodeAssetBinding] = {}
+                for entry in items:
+                    asset_ids = entry.character_asset_ids if asset_type == "character" else [getattr(entry, id_field)]
+                    for asset_id in asset_ids:
+                        binding = grouped.setdefault(asset_id, EpisodeAssetBinding(
+                            asset_type=asset_type, asset_id=asset_id,
+                            source_plan_revision=context.shooting_plan_revision,
+                            source_plan_hash=context.shooting_plan_hash, context_status=context.context_status))
+                        binding.scene_ids = list(dict.fromkeys(binding.scene_ids + entry.scene_ids))
+                        binding.shot_ids = list(dict.fromkeys(binding.shot_ids + entry.shot_ids))
+                desired.extend(grouped.values())
+            new_bindings, reusable, changed = [], [], []
+            for item in desired:
+                old = previous.get((item.asset_type, item.asset_id))
+                if old is None:
+                    new_bindings.append(item)
+                elif (old.scene_ids == item.scene_ids and old.shot_ids == item.shot_ids
+                      and previous_context is not None
+                      and self._asset_context_signature(previous_context, old) == self._asset_context_signature(context, item)):
+                    item.selected_variant_id = old.selected_variant_id
+                    item.status = old.status
+                    reusable.append(item)
+                else:
+                    item.selected_variant_id = old.selected_variant_id
+                    item.status = "stale" if old.status == "accepted" else "suggested"
+                    changed.append(item)
+            desired_keys = {(b.asset_type, b.asset_id) for b in desired}
+            stale = [b.model_copy(update={"status": "stale"}) for key, b in previous.items() if key not in desired_keys]
+            resolved = self.resolve_episode_assets(script)
+            available = {
+                "character": {item.id for item in resolved["characters"]},
+                "scene": {item.id for item in resolved["scenes"]},
+                "prop": {item.id for item in resolved["props"]},
+            }
+            unresolved = [item.model_dump() for item in desired if item.asset_id not in available[item.asset_type]]
+            unresolved.extend({"asset_type": "character", "person_id": item.person_id,
+                               "scene_ids": item.scene_ids, "reason": "era_variant_unresolved"}
+                              for item in context.characters if not item.character_asset_ids)
+            script.episode_visual_context = context
+            script.episode_asset_bindings = desired + stale
+            script.updated_at = time.time()
+            self._save_data()
+            return {"project_id": script.id, "context": context.model_dump(),
+                    "bindings": [x.model_dump() for x in script.episode_asset_bindings],
+                    "new_bindings": [x.model_dump() for x in new_bindings],
+                    "reusable_bindings": [x.model_dump() for x in reusable],
+                    "changed_bindings": [x.model_dump() for x in changed],
+                    "stale_bindings": [x.model_dump() for x in stale],
+                    "unresolved_bindings": unresolved}
+
+    @staticmethod
+    def _asset_context_signature(context: EpisodeVisualContext, binding: EpisodeAssetBinding) -> str:
+        scene_ids = set(binding.scene_ids)
+        shot_ids = set(binding.shot_ids)
+        scenes = [item.model_dump(exclude={"scene_id"}) for item in context.scenes if item.scene_id in scene_ids]
+        if binding.asset_type == "character":
+            details = [item.model_dump(exclude={"scene_ids", "shot_ids"}) for item in context.characters
+                       if binding.asset_id in item.character_asset_ids and scene_ids.intersection(item.scene_ids)]
+        elif binding.asset_type == "prop":
+            details = [item.model_dump(exclude={"scene_ids", "shot_ids"}) for item in context.props
+                       if item.prop_id == binding.asset_id and scene_ids.intersection(item.scene_ids)]
+        else:
+            details = []
+        shots = [item.model_dump(exclude={"beat_id", "shot_id"}) for item in context.shots
+                 if item.shot_id in shot_ids]
+        return json.dumps({"scenes": scenes, "details": details, "shots": shots},
+                          sort_keys=True, ensure_ascii=False)
+
+    def get_episode_visual_context(self, script_id: str) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        return {"context": script.episode_visual_context.model_dump() if script.episode_visual_context else None,
+                "bindings": [b.model_dump() for b in script.episode_asset_bindings]}
+
+    def resolve_storyboard_asset_selection(self, script_id: str, frame_id: str) -> Dict[str, Any]:
+        """Resolve asset lineage for one storyboard frame without changing it."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        bindings = {(item.asset_type, item.asset_id): item for item in script.episode_asset_bindings
+                    if item.status != "stale"}
+        resolved = self.resolve_episode_assets(script)
+        by_type = {
+            "character": {item.id: item for item in resolved["characters"]},
+            "scene": {item.id: item for item in resolved["scenes"]},
+            "prop": {item.id: item for item in resolved["props"]},
+        }
+        result = []
+        ids = [("scene", frame.scene_id)] + [("character", item) for item in frame.character_ids] + [("prop", item) for item in frame.prop_ids]
+        for asset_type, asset_id in ids:
+            binding = bindings.get((asset_type, asset_id))
+            asset = by_type[asset_type].get(asset_id)
+            if binding and binding.selected_variant_id:
+                source = "episode_scene_variant" if asset_type == "scene" else "episode_variant"
+                result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": binding.selected_variant_id, "source": source})
+            elif asset is not None:
+                unit = getattr(asset, "reference_sheet", None) if asset_type == "character" else getattr(asset, "image_asset", None)
+                selected = getattr(unit, "selected_image_id", None) if unit else None
+                selected = selected or getattr(asset, "cover_variant_id", None)
+                result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": selected,
+                               "source": "episode_look_baseline" if asset_type != "scene" else "episode_scene_baseline"})
+            else:
+                result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": None, "source": "global_base", "missing": True})
+        return {"frame_id": frame_id, "scene_id": frame.scene_id, "shot_id": frame.shot_id,
+                "context_status": script.episode_visual_context.context_status if script.episode_visual_context else "missing",
+                "assets": result}
+
+    @staticmethod
+    def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
+        context = script.episode_visual_context
+        if not context:
+            return ""
+        if asset_type == "character":
+            matches = [item.model_dump(exclude_none=True) for item in context.characters
+                       if asset_id in item.character_asset_ids]
+        elif asset_type == "prop":
+            matches = [item.model_dump(exclude_none=True) for item in context.props if item.prop_id == asset_id]
+        else:
+            matches = [item.model_dump(exclude_none=True) for item in context.scenes if item.scene_id == asset_id or item.scene_asset_id == asset_id]
+        if not matches:
+            return ""
+        # A generic asset generation has no scene selection. Mixing distinct looks
+        # or prop states would produce contradictory instructions.
+        if len(matches) > 1:
+            return ""
+        return "本集拍摄计划视觉约束（仅用于本集资产变体，不改变全局底座）：" + json.dumps(matches, ensure_ascii=False, separators=(",", ":"))[:4000]
+
     def save_director_profile_draft(
         self,
         script_id: str,
@@ -3708,6 +3982,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }
+        if script.episode_visual_context:
+            entities_json["episode_visual_context"] = script.episode_visual_context.model_dump()
         series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
         return script, entities_json, prompt
@@ -3901,12 +4177,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                     if pname == pn or pn in pname or pname in pn:
                         prop_ids.append(prop.id)
                         break
+
+            shot_id = frame_data.get("shot_id")
+            if not shot_id and script.episode_visual_context:
+                context_scene_ids = {scene_id}
+                context_scene_ids.update(
+                    item.scene_id for item in script.episode_visual_context.scenes
+                    if item.scene_asset_id == scene_id
+                )
+                candidate = next((item for item in script.episode_visual_context.shots
+                                  if item.scene_id in context_scene_ids and
+                                  (not item.character_ids or set(item.character_ids) & set(character_ids))), None)
+                shot_id = candidate.shot_id if candidate else None
             
             frame = StoryboardFrame(
                 id=str(uuid.uuid4()),
                 owner_user_id=script.owner_user_id,
                 owner_profile_id=script.owner_profile_id,
                 scene_id=scene_id,
+                shot_id=shot_id,
                 character_ids=character_ids,
                 prop_ids=prop_ids,
                 action_description=frame_data.get("action_summary", frame_data.get("action_description", "")),

@@ -10,7 +10,10 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorPlanBeat,
+    DirectorPlanCastBinding,
     DirectorPlanLighting,
+    DirectorPlanPropBinding,
+    DirectorPlanSceneBinding,
     DirectorPlanShot,
     DirectorProfile,
     DirectorShootingPlan,
@@ -278,7 +281,6 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
     confirmed = pipeline.apply_director_shooting_plan("film", plan, 0, 1)
     assert confirmed.director_shooting_plan_revisions[-1].revision == 1
     assert confirmed.frames[0].model_dump() == original_frames[0]
-
     edited = plan.model_dump()
     edited["scenes"][0]["beats"][0]["shots"][0]["visual_intent"] = "画面改为从入口右侧观察两人。"
     pipeline.save_director_shooting_plan_draft("film", 1, 1, edited)
@@ -288,6 +290,124 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
     assert restored.director_shooting_plan_draft.scenes[0].beats[0].shots[0].director_effect == plan.scenes[0].beats[0].shots[0].director_effect
     assert restored.frames[0].model_dump() == original_frames[0]
 
+
+def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(**{
+        "person_id": "shen-xia-young",
+        "era_variant_id": "era-campus",
+        "scene_look_id": "look-winter-outdoor",
+        "continuity_state": {"coat": "white down jacket"},
+        "binding_status": "confirmed",
+    })]
+    plan.scenes[0].beats[0].shots[0].scene_binding = DirectorPlanSceneBinding(**{
+        "scene_asset_id": "cinema",
+        "interior_exterior": "exterior",
+        "time_of_day": "day",
+        "season": "winter",
+        "weather": "overcast",
+        "binding_status": "confirmed",
+    })
+    plan.scenes[0].beats[0].shots[0].prop_bindings = [DirectorPlanPropBinding(**{
+        "prop_id": "ticket", "state": "held", "binding_status": "confirmed",
+    })]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    context = pipeline.project_episode_visual_context("film")
+    assert context.scenes[0].season == "winter"
+    assert context.characters[0].scene_look_id == "look-winter-outdoor"
+    assert context.characters[0].shot_ids == [plan.scenes[0].beats[0].shots[0].shot_id]
+    assert context.props[0].state == "held"
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert len(result["new_bindings"]) == 3
+    assert script.episode_visual_context is not None
+
+
+def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    first = pipeline.sync_episode_assets_from_shooting_plan("film")
+    pipeline.scripts["film"].episode_asset_bindings[0].selected_variant_id = "variant-kept"
+    plan.scenes[0].time_anchor = "夜间"
+    pipeline.save_director_shooting_plan_draft("film", 1, 1, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 1, 2)
+    second = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert second["changed_bindings"]
+    assert any(item["selected_variant_id"] == "variant-kept" for item in second["changed_bindings"])
+    assert not second["stale_bindings"]
+
+
+def test_asset_sync_maps_person_to_character_and_preserves_distinct_scene_looks():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.cast_bindings = [DirectorPlanCastBinding(
+        person_id="shen-xia", scene_look_id="outdoor-coat",
+        continuity_state={"coat": "white down jacket"}, binding_status="confirmed")]
+    second_scene = plan.scenes[0].model_copy(deep=True)
+    second_scene.scene_id = "cinema-interior"
+    second_scene.order = 1
+    second_scene.scene_ref = "电影院内景"
+    second_scene.beats[0].beat_id = "beat-interior"
+    second_scene.beats[0].shots[0].shot_id = "shot-interior"
+    second_scene.beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(
+        person_id="shen-xia", scene_look_id="indoor-knitwear",
+        continuity_state={"coat": "removed"}, binding_status="confirmed")]
+    plan.scenes.append(second_scene)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    context = pipeline.project_episode_visual_context("film")
+    assert {item.scene_look_id for item in context.characters} == {"outdoor-coat", "indoor-knitwear"}
+    assert all(item.character_asset_ids == ["shen-xia-young"] for item in context.characters)
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+    character_bindings = [item for item in result["bindings"] if item["asset_type"] == "character"]
+    assert len(character_bindings) == 1
+    assert character_bindings[0]["asset_id"] == "shen-xia-young"
+    assert character_bindings[0]["scene_ids"] == ["scene-cinema", "cinema-interior"]
+    assert pipeline._episode_asset_context_prompt(script, "character", "shen-xia-young") == ""
+
+
+def test_multi_era_person_requires_explicit_variant_before_asset_binding():
+    pipeline, script = make_pipeline()
+    career = Character(id="shen-xia-career", name="沈夏（职场）", description="职场时期", base_character_id="shen-xia")
+    script.characters.append(career)
+    script.art_direction.director_profile.story_map.people[0].variant_character_ids.append(career.id)
+    pipeline.resolve_episode_assets.return_value["characters"].append(career)
+    plan = make_plan(pipeline)
+    plan.scenes[0].beats[0].shots[0].character_ids = []
+    plan.scenes[0].beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert any(item.get("reason") == "era_variant_unresolved" for item in result["unresolved_bindings"])
+    assert not any(item["asset_type"] == "character" for item in result["bindings"])
+
+
+def test_sync_only_marks_assets_affected_by_a_plan_change():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    second_scene = plan.scenes[0].model_copy(deep=True)
+    second_scene.scene_id = "scene-restaurant"
+    second_scene.order = 1
+    second_scene.beats[0].beat_id = "beat-restaurant"
+    second_scene.beats[0].shots[0].shot_id = "shot-restaurant"
+    plan.scenes.append(second_scene)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    plan.scenes[1].time_anchor = "冬季夜间"
+    pipeline.save_director_shooting_plan_draft("film", 1, 1, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 1, 2)
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert any(item["asset_id"] == "scene-cinema" for item in result["reusable_bindings"])
+    assert any(item["asset_id"] == "scene-restaurant" for item in result["changed_bindings"])
 
 def test_style_save_preserves_episode_assets_and_director_profile():
     pipeline, script = make_pipeline()
