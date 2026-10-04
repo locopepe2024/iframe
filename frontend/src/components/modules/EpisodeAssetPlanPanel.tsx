@@ -1,8 +1,9 @@
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 
-export default function EpisodeAssetPlanPanel({ entries, onUse }: {
+export default function EpisodeAssetPlanPanel({ entries, onUse, busy = false }: {
     entries: AssetPlanEntry[];
-    onUse?: (prompt: string) => void;
+    onUse?: (entry: AssetPlanEntry) => void;
+    busy?: boolean;
 }) {
     if (!entries.length) return null;
     return (
@@ -15,7 +16,7 @@ export default function EpisodeAssetPlanPanel({ entries, onUse }: {
                             <p className="font-medium text-foreground">{entry.sceneLabel}</p>
                             <p className="text-xs leading-5 text-text-secondary break-words">{entry.details.join(" · ")}</p>
                         </div>
-                        {onUse && <button type="button" onClick={() => onUse(entry.prompt)} className="shrink-0 text-xs text-primary hover:underline">加入提示词</button>}
+                        {onUse && <button type="button" disabled={busy} onClick={() => onUse(entry)} className="shrink-0 text-xs text-primary hover:underline disabled:opacity-50">{busy ? "创建中" : "新建场景资产"}</button>}
                     </div>
                 ))}
             </div>

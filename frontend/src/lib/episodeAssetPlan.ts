@@ -2,6 +2,7 @@ import type { EpisodeVisualContext } from "./directorShootingPlan";
 
 export interface AssetPlanEntry {
     key: string;
+    sceneId: string;
     sceneLabel: string;
     details: string[];
     prompt: string;
@@ -15,6 +16,7 @@ export function getAssetPlanEntries(
     context: EpisodeVisualContext | null,
     assetType: "character" | "scene" | "prop",
     assetId: string,
+    sceneNames: Record<string, string> = {},
 ): AssetPlanEntry[] {
     if (!context) return [];
     const entries: AssetPlanEntry[] = [];
@@ -26,7 +28,7 @@ export function getAssetPlanEntries(
                 : scene.scene_asset_id === assetId || scene.scene_id === assetId ? [scene] : [];
         matches.forEach((match, index) => {
             const details = [
-                scene.location,
+                sceneNames[scene.location] || (isReadableLabel(scene.location) ? scene.location : ""),
                 scene.time_anchor,
                 scene.interior_exterior === "interior" ? "室内" : scene.interior_exterior === "exterior" ? "室外" : scene.interior_exterior === "mixed" ? "室内/室外" : "",
                 scene.time_of_day,
@@ -44,9 +46,11 @@ export function getAssetPlanEntries(
             } else if (assetType === "prop" && "state" in match) {
                 details.push(`道具状态：${match.state}`);
             }
-            const sceneLabel = scene.scene_ref || scene.location || `场景 ${scene.scene_id}`;
+            const sceneLabel = scene.scene_ref || sceneNames[scene.location]
+                || (isReadableLabel(scene.location) ? scene.location : "场景");
             entries.push({
                 key: `${scene.scene_id}:${assetType}:${index}`,
+                sceneId: scene.scene_id,
                 sceneLabel,
                 details,
                 prompt: `拍摄计划场景「${sceneLabel}」：${details.join("；")}`,

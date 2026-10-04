@@ -28,6 +28,14 @@ confirmed DirectorShootingPlan
   → Storyboard 按 scene/shot 选择变体
 ```
 
+## 场景剧情资产创建与生成入口
+
+- 拍摄计划条目属于特定场景，不追加到基础资产的持久提示词。
+- 用户从某条场景约束创建独立的分集资产草稿；草稿记录 `episode_scene_id` 和来源计划版本。参考图由用户在工作台显式选择，不建立自动身份继承关系。
+- 封面操作只打开工作台。生成按钮保留在可编辑提示词、参考图和参数旁，点击后直接提交，不增加二次确认。
+- 新草稿的生成图先作为候选；只有用户选择候选后才更新该草稿的选中图。基础资产及其选中图不受影响。
+- 未知地点 ID 不进入可读描述或生成提示词；可识别的场景资产 ID 显示对应名称。
+
 ## 实现切片
 
 ### P0.1 EpisodeVisualContext 投影
@@ -61,13 +69,13 @@ confirmed DirectorShootingPlan
 用户从差异列表选择生成后，任务使用：
 
 ```text
-全局/分集底座参考
-  + EpisodeVisualContext
+用户显式选择的参考图（可为空）
+  + 当前场景的 EpisodeVisualContext
   + 当前 scene/shot 约束
   + 用户编辑内容
 ```
 
-任务和新变体保存来源 plan revision、scene/shot IDs、身份/造型引用和审核状态。没有完整场景上下文时只能生成 `context_status: partial` 的分集定妆候选。
+场景资产草稿保存来源 plan revision/hash 和 scene ID；生成图仅作为待选候选。shot 级引用与审核状态属于后续切片，不由当前生成入口推断。
 
 ### P0.4 Storyboard 资产选择
 

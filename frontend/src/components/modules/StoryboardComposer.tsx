@@ -237,7 +237,7 @@ export default function StoryboardComposer() {
             };
 
             // Helper to get selected variant URL from an asset
-            const getSelectedVariantUrl = (asset: any): string | null => {
+            const getSelectedVariantUrl = (asset: any, requireSelection = false): string | null => {
                 if (!asset || !asset.variants || asset.variants.length === 0) return null;
 
                 // Try to get selected variant first
@@ -248,14 +248,14 @@ export default function StoryboardComposer() {
 
                 // Fallback: auto-select first variant if no selection exists
                 // This handles the case where selected_id is null/undefined
-                return asset.variants[0]?.url || null;
+                return requireSelection ? null : asset.variants[0]?.url || null;
             };
 
             // 1. Add Scene Image - prioritize selected variant
             if (frame.scene_id) {
                 const scene = currentProject.scenes?.find((s: any) => s.id === frame.scene_id);
                 if (scene) {
-                    const sceneUrl = getSelectedVariantUrl(scene.image_asset) || scene.image_url;
+                    const sceneUrl = getSelectedVariantUrl(scene.image_asset, Boolean(scene.episode_scene_id)) || scene.image_url;
                     if (sceneUrl) compositionData.reference_image_urls.push(sceneUrl);
                 }
             }
@@ -266,10 +266,11 @@ export default function StoryboardComposer() {
                     const char = currentProject.characters?.find((c: any) => c.id === charId);
                     if (char) {
                         // Priority: three_view_asset > full_body_asset > headshot_asset > legacy fields
-                        const charUrl = selectedVariantUrl(char.reference_sheet)
-                            || getSelectedVariantUrl(char.three_view_asset)
-                            || getSelectedVariantUrl(char.full_body_asset)
-                            || getSelectedVariantUrl(char.headshot_asset)
+                        const requireSelection = Boolean(char.episode_scene_id);
+                        const charUrl = selectedVariantUrl(char.reference_sheet, requireSelection)
+                            || getSelectedVariantUrl(char.three_view_asset, requireSelection)
+                            || getSelectedVariantUrl(char.full_body_asset, requireSelection)
+                            || getSelectedVariantUrl(char.headshot_asset, requireSelection)
                             || char.three_view_image_url
                             || char.full_body_image_url
                             || char.headshot_image_url
@@ -285,7 +286,7 @@ export default function StoryboardComposer() {
                 frame.prop_ids.forEach((propId: string) => {
                     const prop = currentProject.props?.find((p: any) => p.id === propId);
                     if (prop) {
-                        const propUrl = getSelectedVariantUrl(prop.image_asset) || prop.image_url;
+                        const propUrl = getSelectedVariantUrl(prop.image_asset, Boolean(prop.episode_scene_id)) || prop.image_url;
                         if (propUrl) compositionData.reference_image_urls.push(propUrl);
                     }
                 });

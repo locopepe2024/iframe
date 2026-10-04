@@ -76,9 +76,11 @@ interface CharacterWorkbenchProps {
     onDeleteVideo?: (videoId: string) => void;
     isGeneratingVideo?: boolean;
     planEntries?: AssetPlanEntry[];
+    onCreateSceneAsset?: (entry: AssetPlanEntry) => void;
+    creatingSceneAsset?: boolean;
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
@@ -221,7 +223,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const hasAnyUpload = hasUploadedThreeViews || hasUploadedHeadshot || hasUploadedFullBody;
     const hasNonFullBodyUpload = hasUploadedThreeViews || hasUploadedHeadshot;
     const hasReferenceSheetVariants = !!asset.reference_sheet?.image_variants?.length;
-    const referenceSheetImageUrl = selectedReferenceSheetUrl(asset.reference_sheet);
+    const referenceSheetImageUrl = asset.episode_scene_id && !asset.reference_sheet?.selected_image_id
+        ? undefined : selectedReferenceSheetUrl(asset.reference_sheet);
     const referenceSheetImageAsset = hasReferenceSheetVariants
         ? { selected_id: asset.reference_sheet.selected_image_id, variants: asset.reference_sheet.image_variants }
         : undefined;
@@ -229,7 +232,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // silently show an unrelated legacy full-body image.
     const masterImageUrl = hasReferenceSheetVariants
         ? referenceSheetImageUrl
-        : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
+        : asset.episode_scene_id && !asset.full_body_asset?.selected_id
+            ? undefined : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
@@ -546,11 +550,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </button>
                 </div>
 
-                <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => {
-                    if (activePanel === "three_view") setThreeViewPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                    else if (activePanel === "headshot") setHeadshotPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                    else setFullBodyPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                }} />
+                <EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} />
 
                 {/* Main Content - 3 Columns */}
                 <div className="flex-1 flex overflow-hidden">

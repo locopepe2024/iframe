@@ -23,4 +23,15 @@ describe("episode asset plan context", () => {
         expect(entries[1].prompt).toContain("室内");
         expect(getAssetPlanEntries(context, "character", "other")).toEqual([]);
     });
+
+    it("resolves a location asset ID to a readable name before building the prompt", () => {
+        const context = {
+            scenes: [{ scene_id: "shot-scene", scene_asset_id: "asset-1", scene_ref: "29、街上 日 外", location: "4b54432f-6f02-42cb-b3cd-95884a4aff96", time_anchor: "2020年秋天", atmosphere: "", prop_ids: [] }],
+            characters: [], props: [], shots: [],
+        } as unknown as EpisodeVisualContext;
+        const entries = getAssetPlanEntries(context, "scene", "asset-1", { "4b54432f-6f02-42cb-b3cd-95884a4aff96": "北京街道" });
+        expect(entries[0].sceneId).toBe("shot-scene");
+        expect(entries[0].prompt).toContain("北京街道");
+        expect(entries[0].prompt).not.toContain("4b54432f");
+    });
 });

@@ -28,4 +28,17 @@ describe('character image resolution', () => {
         expect(characterImageUrl(character)).toBe(deletedView.url);
         expect(characterReferenceVariants(character).map((variant) => variant.id)).toEqual(['deleted-view']);
     });
+
+    it('does not treat a scene asset candidate as its accepted character image', () => {
+        const character = {
+            id: 'scene-character',
+            name: 'Scene character',
+            episode_scene_id: 'scene-1',
+            reference_sheet: { selected_image_id: null, image_variants: [currentView] },
+        } as any;
+
+        expect(characterImageUrl(character)).toBeUndefined();
+        character.reference_sheet.selected_image_id = currentView.id;
+        expect(characterImageUrl(character)).toBe(currentView.url);
+    });
 });

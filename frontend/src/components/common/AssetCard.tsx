@@ -22,7 +22,7 @@ function getImageUrl(asset: Character | Scene | Prop, type: AssetTab): string | 
       const selected = scene.image_asset.variants.find(
         (v) => v.id === scene.image_asset?.selected_id
       );
-      return selected?.url || scene.image_asset.variants[0]?.url;
+      return selected?.url || (scene.episode_scene_id ? undefined : scene.image_asset.variants[0]?.url);
     }
     return scene.image_url;
   }
@@ -31,7 +31,7 @@ function getImageUrl(asset: Character | Scene | Prop, type: AssetTab): string | 
     const selected = prop.image_asset.variants.find(
       (v) => v.id === prop.image_asset?.selected_id
     );
-    return selected?.url || prop.image_asset.variants[0]?.url;
+    return selected?.url || (prop.episode_scene_id ? undefined : prop.image_asset.variants[0]?.url);
   }
   return prop.image_url;
 }

@@ -1192,6 +1192,16 @@ export const api = {
     syncEpisodeAssetsFromShootingPlan: (scriptId: string) =>
         syncEpisodeAssetsFromShootingPlan(API_URL, scriptId),
 
+    createEpisodeSceneAsset: async (scriptId: string, payload: {
+        asset_type: "character" | "scene" | "prop";
+        source_asset_id: string;
+        scene_id: string;
+        description: string;
+    }): Promise<{ asset_id: string; asset_type: "character" | "scene" | "prop" }> => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/episode-scene-assets`, payload);
+        return response.data;
+    },
+
     getStoryboardAssetContext: (scriptId: string, frameId: string) =>
         getStoryboardAssetContext(API_URL, scriptId, frameId),
 

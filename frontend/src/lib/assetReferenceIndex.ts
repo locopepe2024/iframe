@@ -10,7 +10,8 @@ export function legacyAssetsToReferenceIndex(
       ? (item.reference_sheet?.image_variants?.length ? item.reference_sheet : item.full_body_asset)
       : item.image_asset;
     const variants = container?.image_variants ?? container?.variants ?? [];
-    const selected = container?.selected_image_id ?? container?.selected_id ?? variants[0]?.id ?? null;
+    const selected = container?.selected_image_id ?? container?.selected_id
+      ?? (item.episode_scene_id ? null : variants[0]?.id ?? null);
     return {
       asset_type: assetType,
       asset_id: item.id,
