@@ -31,7 +31,7 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn();
   usePlaygroundStore.setState({ activeSessionId: 'original', mode: 'i2v', inputMedia: ['/first.png', '/second.png'] });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); window.location.hash = ''; vi.unstubAllGlobals(); });
 it('appends a saved edit without replacing ordered references or changing mode', async () => {
   render(<PlaygroundImageEditor><OpenSource /></PlaygroundImageEditor>);
   fireEvent.click(screen.getByText('Open source'));
@@ -62,6 +62,13 @@ it('opens the standalone page directly into the editor workbench', () => {
   render(<StandaloneImageEditorPage />);
   expect(screen.getByText('Generated result')).toBeInTheDocument();
   expect(screen.queryByText('open')).not.toBeInTheDocument();
+});
+it('keeps a saved panorama entry to the director in the left list', async () => {
+  mocks.list.mockResolvedValue([{ ...saved, projection_type: 'equirectangular' }]);
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByRole('button', { name: 'openDirector Edited' }));
+  expect(window.location.hash).toBe('#/director');
 });
 it('does not insert a delayed save into a different session', async () => {
   let finish!: (value: typeof saved) => void;

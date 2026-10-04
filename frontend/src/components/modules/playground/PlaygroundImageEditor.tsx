@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { ImagePlus, Plus } from 'lucide-react';
+import { Box, ImagePlus, Plus } from 'lucide-react';
 import type { PlaygroundGenerationResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
 import { getAssetUrl } from '@/lib/utils';
@@ -110,7 +110,11 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     leftPanel={<div className="space-y-1 text-xs">
       {selected && <button type="button" disabled={references.length >= 9 || references.some(item => item.path === selected)} onClick={() => addReference({ path: selected, title: name })} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/>{t('addCurrentReference')}</button>}
       <h3 className="px-2 pt-2 font-semibold text-text-muted">{t('copies')}</h3>
-      {copies.map(copy => <button key={copy.id} type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="block min-h-10 w-full truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>)}
+      {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
+        <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
+        {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
+        {copy.projection_type === 'equirectangular' && <button type="button" title={t('openDirector')} aria-label={`${t('openDirector')} ${copy.title}`} onClick={() => { onClose(); window.location.hash = '#/director'; }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Box size={15}/></button>}
+      </div>)}
     </div>}
     toolPanel={referenceTools}
     canvasStatus={busy ? t('loading') : generation?.status === 'pending' || generation?.status === 'processing' ? t('generating') : undefined}
