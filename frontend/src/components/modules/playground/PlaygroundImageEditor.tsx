@@ -9,7 +9,7 @@ import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedIm
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
-import ImageEditorReferenceTools, { type EditorReference } from './ImageEditorReferenceTools';
+import ImageEditorReferenceTools, { type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -36,6 +36,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const generationRef = useRef<PlaygroundGenerationResponse | null>(null);
   const updateGeneration = useCallback((next: PlaygroundGenerationResponse | null) => { generationRef.current = next; setGeneration(next); }, []);
   const [comparisonPath, setComparisonPath] = useState<string | null>(null);
+  const [panoramaCandidatePath, setPanoramaCandidatePath] = useState<string | null>(null);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const retry = useRef<{ hash: string; key: string }>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
@@ -78,10 +79,11 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     [next[index], next[target]] = [next[target], next[index]];
     return next;
   });
-  const useResult = (path: string, resultTitle: string) => {
+  const useResult = (path: string, resultTitle: string, options?: GeneratedResultOptions) => {
     if (path === selected) return;
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
     setComparisonPath(generationRef.current?.outputs.some(output => output.media_path === path) ? selected ?? null : null);
+    setPanoramaCandidatePath(options?.panoramaCandidate ? path : null);
     setName(resultTitle); setSelected(path);
   };
   const referenceTools = <ImageEditorReferenceTools references={references}
@@ -97,13 +99,15 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
       ? await imageEditorApi.save(loaded.source, file, retry.current.key)
       : await imageEditorApi.save(loaded.source, file, retry.current.key, selectedProjection);
     append(saved); copiesRef.current = [saved, ...copiesRef.current.filter(copy => copy.id !== saved.id)]; setCopies(copiesRef.current);
-    toast.success(t('saved')); setComparisonPath(null); setName(saved.title); setSelected(saved.path);
+    toast.success(t('saved')); setComparisonPath(null); setPanoramaCandidatePath(null); setName(saved.title); setSelected(saved.path);
   };
-  return <ImageEditor source={loaded?.url} comparisonSource={comparisonPath ? getAssetUrl(comparisonPath) : undefined} title={name} onClose={onClose} projectionType={projectionType} initialView="preview"
+  const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
+  const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
+  return <ImageEditor source={loaded?.url} comparisonSource={comparisonPath ? getAssetUrl(comparisonPath) : undefined} title={name} onClose={onClose} projectionType={projectionType} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
     onModified={() => setHasUnsavedEdit(true)}
     onDiscard={() => setHasUnsavedEdit(false)}
-    panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
-    onSavePanoramaSource={loaded && !hasUnsavedEdit && loaded.source.width === 2 * loaded.source.height ? async () => {
+    panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio} onProjectionChange={setProjectionType}
+    onSavePanoramaSource={loaded && !hasUnsavedEdit && hasPanoramaRatio ? async () => {
       const ext = loaded.source.mime === 'image/jpeg' ? 'jpg' : loaded.source.mime === 'image/webp' ? 'webp' : 'png';
       await saveFile(new File([loaded.blob], `${name.replace(/\.[^.]+$/, '') || 'panorama'}.${ext}`, { type: loaded.source.mime }), 'equirectangular');
     } : undefined}

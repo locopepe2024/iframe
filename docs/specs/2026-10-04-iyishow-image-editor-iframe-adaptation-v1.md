@@ -10,14 +10,14 @@
 
 - The editor may use one current base image and up to nine ordered references. Uploads enter owner-scoped Playground storage. Library selections use stable scope, container, asset and variant IDs resolved on the backend; arbitrary URLs never become server fetch targets.
 - The image editor keeps references in its current browser session. A generated result is an ordinary Playground generation with source and prompt lineage, not a local edit. A selected output may become the next editable base.
-- Panorama generation is an explicitly requested image generation task with a 360-degree equirectangular prompt. Its output is a candidate only. The user must inspect it, produce an exact 2:1 image if needed, and explicitly save it with `equirectangular` projection before director admission.
+- Panorama generation is an explicitly requested image generation task with a 360-degree equirectangular prompt. Its output opens in the 360 viewer as an unverified candidate. The user must inspect it, produce an exact 2:1 image if needed, and explicitly save it with `equirectangular` projection before director admission.
 - Model choices come from the active UniArt catalog and are filtered by actual `t2i` / `i2i` capability. Reference limits are enforced against the selected model. No unsupported mask operation is shown as executable.
 
 ## Acceptance
 
 1. Multi-file upload and library selection can build, reorder and remove a bounded ordered reference list; each library item is resolved using current owner visibility.
 2. Generation sends the ordered base and references through Playground; status and output are visible in the editor, with failure and retry states.
-3. The panorama entry creates a labeled candidate, opens the 360 viewer only for declared 2:1 saved outputs, and never treats a generated candidate as a verified spatial panorama.
+3. The panorama entry opens generated candidates in the 360 viewer, flags non-2:1 distortion, and never treats a generated candidate as a verified spatial panorama.
 4. Local editing and source hash checks remain unchanged. Existing image edits and director imports continue working.
 5. Tests cover owner rejection, invalid variant, reference order, generation payload and panorama gate; typecheck and production build pass.
 

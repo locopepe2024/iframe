@@ -11,6 +11,7 @@ import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferenceProm
 
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
+export type GeneratedResultOptions = { panoramaCandidate: true };
 
 export function generationInputMedia(references: EditorReference[]): string[] {
   return references.map(reference => reference.path);
@@ -21,7 +22,7 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
   onAdd: (reference: EditorReference) => void;
   onRemove: (path: string) => void;
   onMove: (path: string, direction: -1 | 1) => void;
-  onUseResult: (path: string, title: string) => void;
+  onUseResult: (path: string, title: string, options?: GeneratedResultOptions) => void;
   onGenerationChange?: (generation: PlaygroundGenerationResponse | null) => void;
 }) {
   const t = useTranslations('imageEditor');
@@ -33,12 +34,17 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
   const [models, setModels] = useState<UniArtCatalogModelResponse[]>([]);
   const [modelId, setModelId] = useState('');
   const [mode, setMode] = useState<GenerationMode>('reference');
+  const [submittedMode, setSubmittedMode] = useState<GenerationMode>('reference');
   const [prompt, setPrompt] = useState('');
   const [generation, setGeneration] = useState<PlaygroundGenerationResponse | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
   const handledOutput = useRef('');
+  const showGenerated = (path: string) => {
+    if (submittedMode === 'panorama') onUseResult(path, t('generatedImage'), { panoramaCandidate: true });
+    else onUseResult(path, t('generatedImage'));
+  };
   useEffect(() => {
     let active = true;
     playgroundApi.getUniArtModels().then(catalog => {
@@ -60,8 +66,8 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
     const output = generation?.status === 'completed' ? generation.outputs.find(item => item.media_type === 'image') : null;
     if (!generation || !output || handledOutput.current === generation.id) return;
     handledOutput.current = generation.id;
-    onUseResult(output.media_path, t('generatedImage'));
-  }, [generation, onUseResult, t]);
+    showGenerated(output.media_path);
+  }, [generation, onUseResult, submittedMode, t]);
   const inputMedia = generationInputMedia(references);
   const taskMode = inputMedia.length ? 'i2i' : 't2i';
   const availableModels = useMemo(() => models.filter(model => model.capabilities.includes(taskMode)), [models, taskMode]);
@@ -104,7 +110,7 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
   const generate = async () => {
     if (!selectedModel || !prompt.trim() || busy || generation?.status === 'processing' || generation?.status === 'pending') return;
     if (references.length > referenceLimit) { setError(t('modelReferenceLimit')); return; }
-    setBusy(true); setError(''); setGeneration(null); onGenerationChange?.(null); setPollFailed(false);
+    setBusy(true); setError(''); setGeneration(null); onGenerationChange?.(null); setPollFailed(false); setSubmittedMode(mode);
     const instruction = mode === 'panorama'
       ? `Create a seamless 360-degree equirectangular panorama with a level horizon and a 2:1 composition. The left and right edges must join continuously. ${prompt.trim()}`
       : prompt.trim();
@@ -177,7 +183,7 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
         {pollFailed && <button type="button" className="min-h-9 rounded border border-glass-border px-2" onClick={() => { setError(''); setPollFailed(false); }}>{t('retryStatus')}</button>}
         {generation.error && <p role="alert">{generation.error}</p>}
         {generation.status === 'completed' && !generation.outputs.some(output => output.media_type === 'image') && <p role="alert" className="text-status-failed-fg">{t('noGeneratedImage')}</p>}
-        {generation.status === 'completed' && generation.outputs.filter(output => output.media_type === 'image').map(output => <button key={output.id} type="button" onClick={() => onUseResult(output.media_path, t('generatedImage'))} className="min-h-9 w-full rounded border border-glass-border px-2 text-left hover:bg-hover-bg">{t('showGenerated')}</button>)}
+        {generation.status === 'completed' && generation.outputs.filter(output => output.media_type === 'image').map(output => <button key={output.id} type="button" onClick={() => showGenerated(output.media_path)} className="min-h-9 w-full rounded border border-glass-border px-2 text-left hover:bg-hover-bg">{submittedMode === 'panorama' ? t('browsePanorama') : t('showGenerated')}</button>)}
       </div>}
       {error && <p role="alert" className="text-status-failed-fg">{error}</p>}
     </section>

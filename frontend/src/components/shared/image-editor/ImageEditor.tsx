@@ -107,18 +107,20 @@ export interface ImageEditorProps {
   leftPanel?: ReactNode;
   toolPanel?: ReactNode;
   canvasStatus?: ReactNode;
-  initialView?: 'preview' | 'edit';
+  initialView?: 'preview' | 'edit' | 'panorama';
   onModified?: () => void;
   onDiscard?: () => void;
   onSavePanoramaSource?: () => Promise<void>;
   projectionType?: ImageProjectionType;
   panoramaEligible?: boolean;
+  panoramaSaveEligible?: boolean;
+  panoramaCandidate?: boolean;
   onProjectionChange?: (projection: ImageProjectionType) => void;
   onSave: (file: File, projectionType?: ImageProjectionType) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, comparisonSource, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, comparisonSource, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -128,6 +130,7 @@ export default function ImageEditor({ source, comparisonSource, title, emptyStat
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [view, setView] = useState<'preview' | 'edit' | 'panorama'>(initialView);
+  const canSavePanorama = panoramaSaveEligible ?? panoramaEligible;
   useEffect(() => { setView(initialView); dirty.current = false; }, [source, initialView]);
   const close = () => {
     if (inFlight.current) return;
@@ -195,11 +198,14 @@ export default function ImageEditor({ source, comparisonSource, title, emptyStat
           <label className="flex items-center gap-2">{t('projection')}
             <select value={projectionType} onChange={event => onProjectionChange?.(event.target.value as ImageProjectionType)} disabled={saving} className="min-h-9 rounded border border-glass-border bg-surface px-2">
               <option value="perspective_plane">{t('perspective')}</option>
-              <option value="equirectangular" disabled={!panoramaEligible}>{t('equirectangular')}</option>
+              <option value="equirectangular" disabled={!canSavePanorama}>{t('equirectangular')}</option>
             </select>
           </label>
           {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
         </div>}
+        {panoramaCandidate && <p role="status" className={`border-b border-glass-border px-4 py-2 text-xs ${canSavePanorama ? 'text-text-secondary' : 'text-status-failed-fg'}`}>
+          {t(canSavePanorama ? 'panoramaCandidatePreview' : 'panoramaCandidateRatioWarning')}
+        </p>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}
         <div className="flex min-h-0 flex-1 flex-col overflow-auto lg:flex-row">

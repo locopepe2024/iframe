@@ -84,3 +84,18 @@ it('can generate a panorama candidate from a blank editor', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 't2i', model_id: 'text-image-model', input_media: undefined })));
 });
+
+it('opens a completed panorama in the viewer even after switching generation mode', async () => {
+  const onUseResult = vi.fn();
+  mocks.models.mockResolvedValue({ models: [{ id: 'text-image-model', display_name: 'Text Image Model', capabilities: ['t2i'] }] });
+  mocks.generate.mockResolvedValue({ id: 'panorama-generation', status: 'completed', outputs: [{ id: 'image', media_type: 'image', media_path: '/playground/media/panorama/image' }] });
+  render(<ImageEditorReferenceTools references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={onUseResult}/>);
+  await screen.findByRole('option', { name: 'Text Image Model' });
+  fireEvent.click(screen.getByRole('button', { name: 'panoramaGeneration' }));
+  writePrompt('A mountain lake');
+  fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
+  fireEvent.click(screen.getByRole('button', { name: 'referenceGeneration' }));
+  await waitFor(() => expect(onUseResult).toHaveBeenCalledWith('/playground/media/panorama/image', 'generatedImage', { panoramaCandidate: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'browsePanorama' }));
+  expect(onUseResult).toHaveBeenLastCalledWith('/playground/media/panorama/image', 'generatedImage', { panoramaCandidate: true });
+});

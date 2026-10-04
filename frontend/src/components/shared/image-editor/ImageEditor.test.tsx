@@ -56,6 +56,13 @@ it('saves an untouched 2:1 source after explicit panorama selection', async () =
   await waitFor(() => expect(saveOriginal).toHaveBeenCalledTimes(1));
 });
 
+it('allows a non-2:1 candidate to browse but blocks panorama projection', () => {
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:candidate" title="candidate.png" panoramaCandidate panoramaEligible panoramaSaveEligible={false} initialView="panorama" onProjectionChange={vi.fn()} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  expect(screen.getByRole('button', { name: 'Browse panorama' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('status')).toHaveTextContent('not exactly 2:1');
+  expect(screen.getByRole('option', { name: 'Equirectangular panorama (2:1)' })).toBeDisabled();
+});
+
 it('shows original and generated images together in canvas preview', () => {
   render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:result" comparisonSource="blob:original" initialView="preview" title="result.png" onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
   expect(screen.getByRole('img', { name: 'Original' })).toHaveAttribute('src', 'blob:original');
