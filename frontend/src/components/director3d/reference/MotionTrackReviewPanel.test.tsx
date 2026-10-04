@@ -27,5 +27,11 @@ it("shows cumulative review edits and restores them on undo without changing evi
   fireEvent.click(screen.getByRole("button", { name: "撤销本次标注" }));
   expect(screen.getByLabelText("状态")).toHaveValue("manual_recovered");
   expect(screen.getByLabelText("备注")).toHaveValue("corrected");
+  useWorkbenchStore.getState().setMotionTrackJointOverride(1, "left_shoulder", [0.4, 0.3, -0.1]);
+  useWorkbenchStore.getState().setMotionTrackJointOverride(1, "right_shoulder", [0.6, 0.3, -0.2]);
+  const edited = useWorkbenchStore.getState().motionTrackReview.editedFrames[1];
+  expect(edited.jointOverrides.left_shoulder).toEqual([0.4, 0.3, -0.1]);
+  expect(edited.jointOverrides.right_shoulder).toEqual([0.6, 0.3, -0.2]);
+  expect(edited.reviewerNote).toBe("corrected");
   expect(useWorkbenchStore.getState().motionTrackReview.manifest?.frames[0].reviewerNote).toBe("original");
 });
