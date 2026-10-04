@@ -101,7 +101,7 @@ it.each(['completed', 'failed', 'pending', 'processing'] as const)('keeps the %s
   expect(media).toHaveStyle({ aspectRatio: '9 / 16' });
 });
 
-it('loads video preview media only when its card approaches the viewport', () => {
+it('loads only a video cover when its card approaches the viewport', () => {
   let reveal: ((entry: { isIntersecting: boolean }) => void) | undefined;
   const disconnect = vi.fn();
   const previousObserver = globalThis.IntersectionObserver;
@@ -118,14 +118,13 @@ it('loads video preview media only when its card approaches the viewport', () =>
     const { container } = render(<ResultCard generation={{
       id: 'lazy-video', mode: 't2v', model_id: 'model', prompt: 'video', input_media: [],
       parameters: {}, batch_size: 1, status: 'completed', created_at: '2026-09-15T08:00:00Z',
-      outputs: [{ id: 'out', media_path: '/generated.mp4', media_type: 'video', saved_to_library: false }],
+      outputs: [{ id: 'out', media_path: '/generated.mp4', thumbnail_path: '/generated-cover.jpg', media_type: 'video', saved_to_library: false }],
     }} />);
-    const video = container.querySelector('video')!;
-    expect(video.getAttribute('src')).toBeNull();
-    expect(video).toHaveAttribute('preload', 'none');
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
     act(() => reveal?.({ isIntersecting: true }));
-    expect(video).toHaveAttribute('src', 'https://garage.uniart.fun/files/generated.mp4');
-    expect(video).toHaveAttribute('preload', 'metadata');
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://garage.uniart.fun/files/generated-cover.jpg');
+    expect(container.querySelector('video')).toBeNull();
     expect(disconnect).toHaveBeenCalled();
   } finally {
     globalThis.IntersectionObserver = previousObserver;
