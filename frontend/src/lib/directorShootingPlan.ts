@@ -143,6 +143,46 @@ export interface DirectorShootingPlanState {
     source_chunks: DirectorShootingPlanSourceChunk[];
 }
 
+export interface EpisodeAssetBinding {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    scene_ids: string[];
+    shot_ids: string[];
+    selected_variant_id?: string | null;
+    source_plan_revision: number;
+    source_plan_hash: string;
+    context_status: "complete" | "partial";
+    status: "suggested" | "accepted" | "stale";
+}
+
+export interface EpisodeVisualContext {
+    schema_version: 1;
+    source_revision: number;
+    source_revision_id: string;
+    director_profile_revision: number;
+    shooting_plan_revision: number;
+    shooting_plan_hash: string;
+    context_status: "complete" | "partial";
+    scenes: Array<{ scene_id: string; scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; prop_ids: string[] }>;
+    characters: Array<{ person_id: string; character_asset_ids: string[]; era_variant_id?: string | null; scene_look_id?: string | null; continuity_state: Record<string, unknown>; scene_ids: string[]; shot_ids: string[] }>;
+    props: Array<{ prop_id: string; state: string; scene_ids: string[]; shot_ids: string[] }>;
+    shots: Array<{ scene_id: string; beat_id: string; shot_id: string; character_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;
+}
+
+export interface EpisodeVisualContextState {
+    context: EpisodeVisualContext | null;
+    bindings: EpisodeAssetBinding[];
+}
+
+export interface EpisodeAssetSyncDiff extends EpisodeVisualContextState {
+    project_id: string;
+    new_bindings: EpisodeAssetBinding[];
+    reusable_bindings: EpisodeAssetBinding[];
+    changed_bindings: EpisodeAssetBinding[];
+    stale_bindings: EpisodeAssetBinding[];
+    unresolved_bindings: Array<Record<string, unknown>>;
+}
+
 export interface DirectorShootingPlanJob {
     id: string;
     status: string;
@@ -218,6 +258,25 @@ export async function getDirectorShootingPlan(baseUrl: string, projectId: string
         `${baseUrl}/projects/${projectId}/director-shooting-plan`,
     );
     return response.data;
+}
+
+export async function getEpisodeVisualContext(baseUrl: string, projectId: string) {
+    const response = await axios.get<EpisodeVisualContextState>(
+        `${baseUrl}/projects/${projectId}/episode-visual-context`,
+    );
+    return response.data;
+}
+
+export async function syncEpisodeAssetsFromShootingPlan(baseUrl: string, projectId: string) {
+    const response = await axios.post<EpisodeAssetSyncDiff>(
+        `${baseUrl}/projects/${projectId}/episode-visual-context/sync`,
+    );
+    return response.data;
+}
+
+export async function getStoryboardAssetContext(baseUrl: string, projectId: string, frameId: string) {
+    const response = await axios.get(`${baseUrl}/projects/${projectId}/storyboard/${frameId}/asset-context`);
+    return response.data as { frame_id: string; scene_id: string; shot_id?: string | null; context_status: string; assets: Array<Record<string, unknown>> };
 }
 
 export async function saveDirectorShootingPlanDraft(

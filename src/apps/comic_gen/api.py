@@ -5128,6 +5128,36 @@ def get_director_shooting_plan(
     }
 
 
+@app.get("/projects/{script_id}/episode-visual-context")
+def get_episode_visual_context(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.get_episode_visual_context(script_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Script not found" else 409
+        raise HTTPException(status, str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/episode-visual-context/sync")
+def sync_episode_visual_context(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.sync_episode_assets_from_shooting_plan(script_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Script not found" else 409
+        raise HTTPException(status, str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/storyboard/{frame_id}/asset-context")
+def get_storyboard_asset_context(script_id: str, frame_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.resolve_storyboard_asset_selection(script_id, frame_id)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(404 if message in {"Script not found", "Frame not found"} else 409, message) from exc
+
+
 @app.get("/projects/{script_id}/director-shooting-plan/revisions")
 def list_director_shooting_plan_revisions(
     script_id: str,
