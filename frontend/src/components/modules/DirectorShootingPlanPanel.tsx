@@ -180,6 +180,32 @@ function MultiSelect({
     );
 }
 
+function AssetSelect({
+    label,
+    value,
+    options,
+    onChange,
+    hint,
+}: {
+    label: string;
+    value: string;
+    options: { id: string; label: string }[];
+    onChange: (value: string) => void;
+    hint?: string;
+}) {
+    const id = useId();
+    return (
+        <div className="min-w-0">
+            <label htmlFor={id} className="mb-1 block text-xs font-medium text-text-secondary">{label}</label>
+            <select id={id} value={value} onChange={event => onChange(event.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30">
+                <option value="">未绑定</option>
+                {options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+            {hint && <p className="mt-1 text-xs leading-5 text-text-muted">{hint}</p>}
+        </div>
+    );
+}
+
 function moveItem<T>(items: T[], index: number, delta: number): T[] {
     const target = index + delta;
     if (target < 0 || target >= items.length) return items;
@@ -293,7 +319,8 @@ export default function DirectorShootingPlanPanel() {
         phase.events.map(event => ({ id: event.event_id, label: `${phase.label} · ${event.title || event.description.slice(0, 48)}` })),
     ) ?? [];
     const characterOptions = (currentProject?.characters ?? []).map(item => ({ id: item.id, label: `${item.name}${item.persona ? ` · ${item.persona}` : ""}` }));
-    const propOptions = (currentProject?.props ?? []).map(item => ({ id: item.id, label: item.name }));
+    const sceneOptions = (currentProject?.scenes ?? []).map(item => ({ id: item.id, label: item.name }));
+    const propOptions = (currentProject?.props ?? []).map(item => ({ id: item.id, label: `${item.name}${item.description ? ` · ${item.description.slice(0, 48)}` : ""}` }));
 
     const load = useCallback(async (preserveLocal = false) => {
         if (!projectId) return;
@@ -690,7 +717,8 @@ export default function DirectorShootingPlanPanel() {
                                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                         <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
                                         <Field label={t("fields.heading")} value={scene.heading} placeholder={t("fields.headingPlaceholder")} hint={t("fields.headingHint")} onChange={value => updateScene(sceneIndex, { heading: value })} />
-                                        <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
+                                        <AssetSelect label="场景资产" value={scene.scene_asset_id || ""} options={sceneOptions} hint="场景资产承载本场的季节、室内外、天气和空间布置。" onChange={value => updateScene(sceneIndex, { scene_asset_id: value || null })} />
+                                        <Field label={t("fields.location")} value={sceneOptions.find(option => option.id === scene.location)?.label || scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
                                         <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
                                     </div>
@@ -704,7 +732,7 @@ export default function DirectorShootingPlanPanel() {
                                     </label>
                                     <Field label={t("fields.environmentAtmosphere")} value={scene.environment_atmosphere} multiline onChange={value => updateScene(sceneIndex, { environment_atmosphere: value })} />
                                     <div className="grid gap-4 lg:grid-cols-2">
-                                        <MultiSelect label={t("fields.sceneProps")} values={scene.prop_ids} options={propOptions} onChange={values => updateScene(sceneIndex, { prop_ids: values })} />
+                                        <MultiSelect label="关键道具（非全部道具）" values={scene.prop_ids} options={propOptions} onChange={values => updateScene(sceneIndex, { prop_ids: values })} />
                                         <fieldset className="min-w-0 rounded-md border border-border p-3">
                                             <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.sourceChunks")}</legend>
                                             <p className="mb-2 text-xs leading-5 text-text-muted">{t("sourceChunkCaveat")}</p>
@@ -851,9 +879,11 @@ export default function DirectorShootingPlanPanel() {
                                                                             onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { cast_bindings: parseCastBindings(value) })}
                                                                         />
                                                                     </div>
-                                                                    <Field
-                                                                        label="场景资产 ID"
-                                                                        value={shot.scene_binding?.scene_asset_id || ""}
+                                                                    <AssetSelect
+                                                                        label="镜头场景资产"
+                                                                        value={shot.scene_binding?.scene_asset_id || scene.scene_asset_id || ""}
+                                                                        options={sceneOptions}
+                                                                        hint="默认继承本场场景资产，可在镜头中覆盖。"
                                                                         onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
                                                                             scene_binding: { ...(shot.scene_binding || { binding_status: "selected" as const }), scene_asset_id: value || null },
                                                                         })}

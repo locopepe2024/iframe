@@ -1723,7 +1723,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         if not isinstance(root_questions, list) or any(not isinstance(item, str) for item in root_questions):
             return "unresolved_questions 必须是字符串数组"
         scene_keys = {
-            "scene_ref", "heading", "location", "time_anchor",
+            "scene_ref", "heading", "scene_asset_id", "location", "time_anchor",
             "environment_atmosphere", "prop_ids", "unresolved_questions",
             "continues_previous_scene", "continuity_in", "continuity_out",
             "duration_seconds", "beats",
@@ -1743,7 +1743,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         for scene_index, scene in enumerate(scenes):
             if not isinstance(scene, dict) or set(scene) - scene_keys:
                 return f"scene {scene_index + 1} 字段不符合结构"
-            if any(key in scene and not isinstance(scene[key], str) for key in ("heading", "location", "time_anchor")):
+            if any(key in scene and not isinstance(scene[key], str) for key in ("heading", "scene_asset_id", "location", "time_anchor")):
                 return f"scene {scene_index + 1} 的场景标记、地点和时间必须是字符串"
             if "continues_previous_scene" in scene and not isinstance(scene["continues_previous_scene"], bool):
                 return f"scene {scene_index + 1} continues_previous_scene 必须是布尔值"
@@ -1846,11 +1846,11 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
 规划要求：
 1. 先判断场景，再组织每场戏的戏剧 beat，最后根据叙事目的决定 shots。不要把每个动作或每句对白机械拆成一个 shot；连续动作可以放在同一镜头，只有视线/情绪/空间/信息变化值得剪切时才增加镜头。
-2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。
+2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、scene_asset_id、location、time_anchor、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。scene_asset_id 只能使用实体表中已有的场景 ID；location 必须写给用户看的地点名称，不能写场景 ID。prop_ids 只列对剧情、人物身份、时代季节或连续性有明确作用的关键道具（例如学生书包、冬季外套、关键文件），不要把场景中所有可能存在的物件全部列出。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。
    已确认 Director profile 中的地点、城市、时代或地域要求属于导演视觉约束。它们应影响 location、environment_atmosphere 和相关镜头的 visual_intent；当剧本没有明确写出对应地标、饮食或生活细节时，可以提出“可选导演视觉锚点”（例如城市地标、地方饮食环境或街巷质感）作为可供用户修改的拍摄计划建议。此类建议必须明确是可选导演补充，不得伪装成已发生的剧本事实，不得凭空增加人物行为、对白或剧情事件；没有合适的剧情承载位置时，写入 unresolved_questions 供用户决定是否增加建立镜头。
 3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
-5. lighting 必须严格包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。镜头内环境光应符合场景与风格。
+5. lighting 必须严格包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。镜头内环境光应符合场景与风格。场景资产中的季节、室内外、天气和布置是执行约束；角色造型资产中的时代/阶段和服装是人物执行约束，拍摄计划通过 ID 和状态引用它们，不复制整段资产提示词。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 

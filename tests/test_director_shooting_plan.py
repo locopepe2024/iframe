@@ -140,7 +140,7 @@ def valid_chunk(scene=None):
     return {"scenes": [scene or raw_scene()], "unresolved_questions": []}
 
 
-def make_plan(pipeline):
+def make_plan(pipeline, scene_override=None):
     lineage = pipeline.director_shooting_plan_lineage("film")
     chunk = split_director_source(
         pipeline.scripts["film"].original_text,
@@ -148,7 +148,7 @@ def make_plan(pipeline):
         target_chars=4000,
         max_chars=4500,
     )[0]
-    scene = raw_scene()
+    scene = scene_override or raw_scene()
     scene.update({
         "scene_id": "scene-cinema",
         "order": 0,
@@ -218,6 +218,26 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "unresolved_questions" in prompt
     assert '<stage_preset name="shooting-plan-handoff">' in prompt
     assert "视觉风格摘要约束镜头的可见表达" in prompt
+
+
+def test_shooting_plan_keeps_scene_asset_binding_and_important_prop_scope():
+    scene = raw_scene(scene_asset_id="cinema")
+    plan = make_plan(make_pipeline()[0], json.loads(json.dumps(scene)))
+    assert plan.scenes[0].scene_asset_id == "cinema"
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(valid_chunk(scene), ensure_ascii=False)
+    processor.plan_director_shooting_chunk(
+        "电影院入口，两人牵手走向入口。",
+        {"scenes": [{"id": "cinema", "name": "电影院入口"}], "characters": [], "props": []},
+        {"story_map": {"phases": []}},
+        {"style": "生活化电影"},
+        source_ref="source:chars-0-20",
+    )
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "关键道具" in prompt
+    assert "location 必须写给用户看的地点名称" in prompt
 
 
 def test_plan_lineage_ignores_style_changes_but_rejects_director_changes_and_unknown_references():

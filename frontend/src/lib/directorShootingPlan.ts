@@ -79,6 +79,7 @@ export interface DirectorPlanScene {
     order: number;
     scene_ref: string;
     heading: string;
+    scene_asset_id?: string | null;
     location: string;
     time_anchor: string;
     continues_previous_scene: boolean;

@@ -3059,6 +3059,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         resolved = self.resolve_episode_assets(script)
         available_character_ids = {item.id for item in resolved["characters"]}
         available_scene_ids = {item.id for item in resolved["scenes"]}
+        scene_names_by_id = {item.id: item.name for item in resolved["scenes"]}
         available_prop_ids = {item.id for item in resolved["props"]}
         unbound_entity_refs: set[str] = set()
         entities = {
@@ -3157,8 +3158,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                     target["source_chunk_refs"] = list(dict.fromkeys(target["source_chunk_refs"]))
                     if not target["heading"]:
                         target["heading"] = str(raw_scene.get("heading", ""))[:240]
+                    if not target.get("scene_asset_id") and raw_scene.get("scene_asset_id") in available_scene_ids:
+                        target["scene_asset_id"] = raw_scene["scene_asset_id"]
                     if not target["location"]:
-                        target["location"] = str(raw_scene.get("location", ""))[:240]
+                        raw_location = str(raw_scene.get("location", ""))
+                        target["location"] = scene_names_by_id.get(raw_location, raw_location)[:240]
                     if not target["time_anchor"]:
                         target["time_anchor"] = str(raw_scene.get("time_anchor", ""))[:160]
                     if not target["environment_atmosphere"]:
@@ -3176,7 +3180,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "order": len(scenes),
                         "scene_ref": str(raw_scene.get("scene_ref", ""))[:240],
                         "heading": str(raw_scene.get("heading", ""))[:240],
-                        "location": str(raw_scene.get("location", ""))[:240],
+                        "scene_asset_id": raw_scene.get("scene_asset_id") if raw_scene.get("scene_asset_id") in available_scene_ids else None,
+                        "location": scene_names_by_id.get(str(raw_scene.get("location", "")), str(raw_scene.get("location", "")))[:240],
                         "time_anchor": str(raw_scene.get("time_anchor", ""))[:160],
                         "environment_atmosphere": str(raw_scene.get("environment_atmosphere", ""))[:1600],
                         "continues_previous_scene": continuation,

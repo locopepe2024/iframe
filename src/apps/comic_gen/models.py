@@ -1134,6 +1134,7 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
     order: int = Field(..., ge=0)
     scene_ref: str = Field("", max_length=240)
     heading: str = Field("", max_length=240)
+    scene_asset_id: Optional[str] = Field(None, max_length=120)
     location: str = Field("", max_length=240)
     time_anchor: str = Field("", max_length=160)
     continues_previous_scene: bool = False
