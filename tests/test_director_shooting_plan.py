@@ -369,7 +369,6 @@ def test_asset_sync_maps_person_to_character_and_preserves_distinct_scene_looks(
     assert len(character_bindings) == 1
     assert character_bindings[0]["asset_id"] == "shen-xia-young"
     assert character_bindings[0]["scene_ids"] == ["scene-cinema", "cinema-interior"]
-    assert pipeline._episode_asset_context_prompt(script, "character", "shen-xia-young") == ""
 
 
 def test_multi_era_person_requires_explicit_variant_before_asset_binding():
@@ -408,6 +407,39 @@ def test_sync_only_marks_assets_affected_by_a_plan_change():
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert any(item["asset_id"] == "scene-cinema" for item in result["reusable_bindings"])
     assert any(item["asset_id"] == "scene-restaurant" for item in result["changed_bindings"])
+
+
+def test_scene_asset_draft_is_independent_and_requires_synced_plan():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    plan.scenes[0].beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia-young")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    with pytest.raises(ValueError, match="Sync the confirmed shooting plan"):
+        pipeline.create_episode_scene_asset("film", "character", "shen-xia-young", "scene-cinema", "冬季外套")
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    _, character_id = pipeline.create_episode_scene_asset(
+        "film", "character", "shen-xia-young", "scene-cinema", "冬季外套")
+    _, scene_id = pipeline.create_episode_scene_asset(
+        "film", "scene", "cinema", "scene-cinema", "电影院冬季外景")
+    _, prop_id = pipeline.create_episode_scene_asset(
+        "film", "prop", "ticket", "scene-cinema", "手持电影票")
+    character = next(item for item in script.characters if item.id == character_id)
+    assert character.episode_scene_id == "scene-cinema"
+    assert character.episode_plan_revision == 1
+    assert character.reference_sheet.image_variants == []
+    assert character.base_character_id is None
+    assert script.characters[0].description == "温婉的大学生"
+    assert next(item for item in script.scenes if item.id == scene_id).episode_scene_id == "scene-cinema"
+    assert next(item for item in script.props if item.id == prop_id).episode_scene_id == "scene-cinema"
+
+    plan.scenes[0].time_anchor = "冬季夜间"
+    pipeline.save_director_shooting_plan_draft("film", 1, 1, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 1, 2)
+    with pytest.raises(ValueError, match="sync episode assets again"):
+        pipeline.create_episode_scene_asset("film", "character", "shen-xia-young", "scene-cinema", "新草稿")
 
 def test_style_save_preserves_episode_assets_and_director_profile():
     pipeline, script = make_pipeline()

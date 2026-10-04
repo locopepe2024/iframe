@@ -262,7 +262,7 @@ class AssetGenerator:
                         )
                         character.reference_sheet.image_variants.append(variant)
 
-                        if not character.reference_sheet.selected_image_id:
+                        if not character.episode_scene_id and not character.reference_sheet.selected_image_id:
                             character.reference_sheet.selected_image_id = variant_id
                             character.image_url = rel_path
 
@@ -418,7 +418,7 @@ class AssetGenerator:
                         cleanup_old_variants(character.full_body_asset)
                         
                         # Auto-select if it's the first one or we want to update the view
-                        if not character.full_body_asset.selected_id or batch_size == 1:
+                        if not character.episode_scene_id and (not character.full_body_asset.selected_id or batch_size == 1):
                             character.full_body_asset.selected_id = variant_id
                             character.full_body_image_url = rel_fullbody_path # Legacy sync
                         
@@ -599,7 +599,7 @@ class AssetGenerator:
                         # Cleanup old variants (keep max 10 non-favorited)
                         cleanup_old_variants(character.three_view_asset)
                         
-                        if not character.three_view_asset.selected_id or batch_size == 1:
+                        if not character.episode_scene_id and (not character.three_view_asset.selected_id or batch_size == 1):
                             character.three_view_asset.selected_id = variant_id
                             character.three_view_image_url = rel_sheet_path # Legacy sync
                             character.image_url = rel_sheet_path # Legacy mapping
@@ -686,7 +686,7 @@ class AssetGenerator:
                         # Cleanup old variants (keep max 10 non-favorited)
                         cleanup_old_variants(character.headshot_asset)
                         
-                        if not character.headshot_asset.selected_id or batch_size == 1:
+                        if not character.episode_scene_id and (not character.headshot_asset.selected_id or batch_size == 1):
                             character.headshot_asset.selected_id = variant_id
                             character.headshot_image_url = rel_avatar_path # Legacy sync
                             character.avatar_url = rel_avatar_path # Legacy mapping
@@ -812,7 +812,7 @@ class AssetGenerator:
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
-                if not scene.image_asset.selected_id or batch_size == 1:
+                if not scene.episode_scene_id and (not scene.image_asset.selected_id or batch_size == 1):
                     scene.image_asset.selected_id = variant_id
                     scene.image_url = rel_path # Legacy sync
 
@@ -907,7 +907,7 @@ class AssetGenerator:
                 )
                 prop.image_asset.variants.insert(0, variant)
                 
-                if not prop.image_asset.selected_id or batch_size == 1:
+                if not prop.episode_scene_id and (not prop.image_asset.selected_id or batch_size == 1):
                     prop.image_asset.selected_id = variant_id
                     prop.image_url = rel_path # Legacy sync
 
