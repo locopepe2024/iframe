@@ -60,6 +60,8 @@ export default function ConsistencyVault() {
     const [episodeAssetState, setEpisodeAssetState] = useState<EpisodeVisualContextState>({ context: null, bindings: [] });
     const [episodeAssetSync, setEpisodeAssetSync] = useState<EpisodeAssetSyncDiff | null>(null);
     const [syncingPlan, setSyncingPlan] = useState(false);
+    const [creatingSceneAsset, setCreatingSceneAsset] = useState(false);
+    const creatingSceneAssetRef = useRef(false);
 
     useEffect(() => {
         if (!currentProject?.id) {
@@ -273,6 +275,30 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleCreateSceneAsset = async (entry: AssetPlanEntry) => {
+        if (!currentProject || !selectedAsset || !selectedAssetId || !selectedAssetType || creatingSceneAssetRef.current) return;
+        creatingSceneAssetRef.current = true;
+        setCreatingSceneAsset(true);
+        try {
+            const result = await api.createEpisodeSceneAsset(currentProject.id, {
+                asset_type: selectedAssetType as "character" | "scene" | "prop",
+                source_asset_id: selectedAssetId,
+                scene_id: entry.sceneId,
+                description: entry.prompt,
+            });
+            const updatedProject = await api.getProject(currentProject.id);
+            updateProject(currentProject.id, updatedProject);
+            setActiveTab(result.asset_type);
+            setSelectedAssetId(result.asset_id);
+            setSelectedAssetType(result.asset_type);
+        } catch (error: any) {
+            alert(error?.response?.data?.detail || error?.message || "创建场景资产失败");
+        } finally {
+            creatingSceneAssetRef.current = false;
+            setCreatingSceneAsset(false);
+        }
+    };
+
     // Video Handlers
     const handleGenerateVideo = async (assetId: string, type: string, prompt: string, duration: number, assetSubType: string = "full_body") => {
         if (!currentProject) return;
@@ -428,8 +454,9 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
+    const sceneNames = Object.fromEntries((currentProject?.scenes || []).map((scene: any) => [scene.id, scene.name]));
     const selectedPlanEntries = selectedAssetId && selectedAssetType
-        ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
+        ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId, sceneNames)
         : [];
 
     return (
@@ -521,7 +548,6 @@ export default function ConsistencyVault() {
                                 asset={asset}
                                 type={activeTab}
                                 isGenerating={isAssetGenerating(asset.id)}
-                                onGenerate={() => handleGenerate(asset.id, activeTab)}
                                 onToggleLock={() => api.toggleAssetLock(currentProject.id, asset.id, activeTab).then(updated => updateProject(currentProject.id, updated))}
                                 onClick={() => {
                                     setSelectedAssetId(asset.id);
@@ -530,7 +556,7 @@ export default function ConsistencyVault() {
                                 onDelete={() => handleDeleteAsset(asset.id, activeTab)}
                                 onUpload={() => handleOpenUploadModal(asset, activeTab)}
                                 onClearGenerationState={() => handleClearGenerationState(asset.id, activeTab)}
-                                planCount={getAssetPlanEntries(episodeAssetState.context, activeTab, asset.id).length}
+                                planCount={getAssetPlanEntries(episodeAssetState.context, activeTab, asset.id, sceneNames).length}
                             />
                         ))}
                         {/* Create New Asset Button */}
@@ -568,6 +594,8 @@ export default function ConsistencyVault() {
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
                             planEntries={selectedPlanEntries}
+                            onCreateSceneAsset={handleCreateSceneAsset}
+                            creatingSceneAsset={creatingSceneAsset}
                             onGenerateVideo={(prompt: string, duration: number, subType?: string) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, subType || "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                         />
@@ -586,6 +614,8 @@ export default function ConsistencyVault() {
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
                             planEntries={selectedPlanEntries}
+                            onCreateSceneAsset={handleCreateSceneAsset}
+                            creatingSceneAsset={creatingSceneAsset}
                             onGenerateVideo={(prompt: string, duration: number) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                             isGeneratingVideo={getAssetGeneratingTypes(selectedAssetId).some((t: any) => t.type.startsWith("video"))}
@@ -627,7 +657,7 @@ export default function ConsistencyVault() {
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -814,7 +844,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                         </button>
                     </div>
 
-                    <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => setImagePrompt((previous: string) => `${previous.trim()}\n${text}`.trim())} />
+                    <EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} />
 
                     {/* Content */}
                     <div className="flex-1 p-6 overflow-y-auto space-y-6">
@@ -1066,7 +1096,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
+export function AssetCard({ asset, type, isGenerating, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -1132,6 +1162,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 </div>
             )}
             {planCount > 0 && <div className="absolute top-2 left-2 z-30 rounded bg-surface/85 px-2 py-1 text-xs text-foreground">拍摄计划 · {planCount} 条</div>}
+            {asset.episode_scene_id && <div className="absolute top-2 left-2 z-30 rounded bg-surface/85 px-2 py-1 text-xs text-foreground">场景资产</div>}
 
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1183,16 +1214,14 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                     <WorkflowActionButton
                         onClick={(e) => {
                             e.stopPropagation();
-                            onGenerate();
+                            onClick();
                         }}
-                        disabled={isLocked || isGenerating}
-                        loading={isGenerating}
-                        leftIcon={!isGenerating ? <RefreshCw /> : undefined}
+                        leftIcon={<Settings />}
                         variant="primary"
                         size="sm"
                         className="flex-1"
                     >
-                        {isGenerating ? "Generating..." : "Generate"}
+                        设计
                     </WorkflowActionButton>
                     <button
                         onClick={(e) => {

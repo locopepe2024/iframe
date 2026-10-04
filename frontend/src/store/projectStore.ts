@@ -79,6 +79,9 @@ export interface Character {
     id: string;
     name: string;
     description?: string;
+    episode_scene_id?: string | null;
+    episode_plan_revision?: number | null;
+    episode_plan_hash?: string | null;
     age?: string;
     gender?: string;
     clothing?: string;
@@ -136,6 +139,9 @@ export interface Scene {
     id: string;
     name: string;
     description: string;
+    episode_scene_id?: string | null;
+    episode_plan_revision?: number | null;
+    episode_plan_hash?: string | null;
     image_url?: string;
     image_asset?: ImageAsset;
     video_assets?: VideoTask[];
@@ -155,6 +161,9 @@ export interface Prop {
     id: string;
     name: string;
     description: string;
+    episode_scene_id?: string | null;
+    episode_plan_revision?: number | null;
+    episode_plan_hash?: string | null;
     image_url?: string;
     image_asset?: ImageAsset;
     video_assets?: VideoTask[];

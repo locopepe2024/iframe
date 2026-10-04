@@ -3,13 +3,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { Box, ImagePlus, Plus } from 'lucide-react';
-import type { PlaygroundGenerationResponse } from '@/lib/api';
+import { Box, ImagePlus, Plus, RefreshCw } from 'lucide-react';
+import { playgroundApi, type PlaygroundGenerationResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
-import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
-import ImageEditorReferenceTools, { type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
+import ImageEditorReferenceTools, { PANORAMA_PROMPT_PREFIX, type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -30,16 +29,36 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const copiesRef = useRef<SavedImageEdit[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [projectionType, setProjectionType] = useState<ImageProjectionType>('perspective_plane');
   const [references, setReferences] = useState<EditorReference[]>(reference ? [{ path: reference, title }] : []);
   const [generation, setGeneration] = useState<PlaygroundGenerationResponse | null>(null);
-  const generationRef = useRef<PlaygroundGenerationResponse | null>(null);
-  const updateGeneration = useCallback((next: PlaygroundGenerationResponse | null) => { generationRef.current = next; setGeneration(next); }, []);
-  const [comparisonPath, setComparisonPath] = useState<string | null>(null);
+  const [history, setHistory] = useState<PlaygroundGenerationResponse[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const loadHistory = useCallback(async (offset: number) => {
+    setHistoryLoading(true); setHistoryError(false);
+    try {
+      const records = await playgroundApi.getHistory(100, offset);
+      const images = records.filter(item => (item.mode === 't2i' || item.mode === 'i2i') && item.status === 'completed' && item.outputs.some(output => output.media_type === 'image'));
+      setHistory(current => offset === 0 ? images : [...current, ...images]);
+      setHistoryOffset(offset + records.length);
+      setHasMoreHistory(records.length === 100);
+    } catch { setHistoryError(true); }
+    finally { setHistoryLoading(false); }
+  }, []);
+  const refreshHistory = useCallback(async () => {
+    await loadHistory(0);
+  }, [loadHistory]);
+  const updateGeneration = useCallback((next: PlaygroundGenerationResponse | null) => {
+    setGeneration(next);
+    if (next?.status === 'completed') void refreshHistory();
+  }, [refreshHistory]);
   const [panoramaCandidatePath, setPanoramaCandidatePath] = useState<string | null>(null);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const retry = useRef<{ hash: string; key: string }>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
+  useEffect(() => { void refreshHistory(); }, [refreshHistory]);
   useEffect(() => {
     if (!selected) return;
     const abort = new AbortController(); let objectUrl: string | undefined;
@@ -47,7 +66,6 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     imageEditorApi.load(selected, abort.signal).then(({ source, blob }) => {
       if (abort.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob); setLoaded({ source, url: objectUrl, blob });
-      setProjectionType(source.width === 2 * source.height && copiesRef.current.find(copy => copy.path === selected)?.projection_type === 'equirectangular' ? 'equirectangular' : 'perspective_plane');
     }).catch(() => { if (!abort.signal.aborted) setError(t('loadFailed')); })
       .finally(() => { if (!abort.signal.aborted) setBusy(false); });
     return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
@@ -80,40 +98,52 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     return next;
   });
   const useResult = (path: string, resultTitle: string, options?: GeneratedResultOptions) => {
-    if (path === selected) return;
+    if (path === selected) { setPanoramaCandidatePath(options?.panoramaCandidate ? path : null); return; }
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
-    setComparisonPath(generationRef.current?.outputs.some(output => output.media_path === path) ? selected ?? null : null);
     setPanoramaCandidatePath(options?.panoramaCandidate ? path : null);
     setName(resultTitle); setSelected(path);
   };
   const referenceTools = <ImageEditorReferenceTools references={references}
     onAdd={addReference} onRemove={path => setReferences(current => current.filter(item => item.path !== path))}
     onMove={moveReference} onUseResult={useResult} onGenerationChange={updateGeneration}/>;
-  const saveFile = async (file: File, projection?: ImageProjectionType) => {
+  const saveFile = async (file: File, projection: ImageProjectionType = 'perspective_plane') => {
     if (!loaded) throw new Error('No source');
     const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
+    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + projection;
     if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
-    const selectedProjection = projection ?? projectionType;
-    const saved = selectedProjection === 'perspective_plane'
+    const saved = projection === 'perspective_plane'
       ? await imageEditorApi.save(loaded.source, file, retry.current.key)
-      : await imageEditorApi.save(loaded.source, file, retry.current.key, selectedProjection);
+      : await imageEditorApi.save(loaded.source, file, retry.current.key, projection);
     append(saved); copiesRef.current = [saved, ...copiesRef.current.filter(copy => copy.id !== saved.id)]; setCopies(copiesRef.current);
-    toast.success(t('saved')); setComparisonPath(null); setPanoramaCandidatePath(null); setName(saved.title); setSelected(saved.path);
+    toast.success(t('saved')); setPanoramaCandidatePath(null); setName(saved.title); setSelected(saved.path);
   };
   const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
   const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
-  return <ImageEditor source={loaded?.url} comparisonSource={comparisonPath ? getAssetUrl(comparisonPath) : undefined} title={name} onClose={onClose} projectionType={projectionType} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
+  const queuedOutputs = history.flatMap(item => item.outputs
+    .filter(output => output.media_type === 'image' && output.media_path !== selected)
+    .map(output => ({ generation: item, output })));
+  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
     onModified={() => setHasUnsavedEdit(true)}
     onDiscard={() => setHasUnsavedEdit(false)}
-    panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio} onProjectionChange={setProjectionType}
+    panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio}
     onSavePanoramaSource={loaded && !hasUnsavedEdit && hasPanoramaRatio ? async () => {
       const ext = loaded.source.mime === 'image/jpeg' ? 'jpg' : loaded.source.mime === 'image/webp' ? 'webp' : 'png';
       await saveFile(new File([loaded.blob], `${name.replace(/\.[^.]+$/, '') || 'panorama'}.${ext}`, { type: loaded.source.mime }), 'equirectangular');
     } : undefined}
     leftPanel={<div className="space-y-1 text-xs">
-      {selected && <button type="button" disabled={references.length >= 9 || references.some(item => item.path === selected)} onClick={() => addReference({ path: selected, title: name })} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/>{t('addCurrentReference')}</button>}
-      <h3 className="px-2 pt-2 font-semibold text-text-muted">{t('copies')}</h3>
+      <div className="flex items-center justify-between px-2 pt-2"><h3 className="font-semibold text-text-muted">{t('generationHistory')}</h3><button type="button" title={t('refreshHistory')} aria-label={t('refreshHistory')} disabled={historyLoading} onClick={() => void refreshHistory()} className="grid h-9 w-9 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><RefreshCw size={15}/></button></div>
+      {historyError && <p role="alert" className="px-2 text-status-failed-fg">{t('generationHistoryFailed')}</p>}
+      {!historyLoading && !historyError && queuedOutputs.length === 0 && <p className="px-2 text-text-muted">{t('generationHistoryEmpty')}</p>}
+      {queuedOutputs.map(({ generation: item, output }) => {
+        const candidate = item.prompt.startsWith(PANORAMA_PROMPT_PREFIX);
+        const label = candidate ? t('panoramaGeneration') : item.prompt || t('generatedImage');
+        return <div key={`${item.id}:${output.id}`} className="flex min-w-0 items-center gap-1">
+          <button type="button" onClick={() => useResult(output.media_path, label, candidate ? { panoramaCandidate: true } : undefined)} title={label} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{label}</button>
+          <button type="button" title={t('addReference')} aria-label={`${t('addReference')} ${label}`} disabled={references.length >= 9 || references.some(reference => reference.path === output.media_path)} onClick={() => addReference({ path: output.media_path, title: label })} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/></button>
+        </div>;
+      })}
+      {hasMoreHistory && <button type="button" disabled={historyLoading} onClick={() => void loadHistory(historyOffset)} className="min-h-10 w-full rounded px-2 text-left text-primary hover:bg-hover-bg disabled:opacity-40">{t('moreHistory')}</button>}
+      <h3 className="border-t border-glass-border px-2 pt-3 font-semibold text-text-muted">{t('copies')}</h3>
       {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
         <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
         {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}

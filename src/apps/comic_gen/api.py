@@ -5148,6 +5148,29 @@ def sync_episode_visual_context(script_id: str, user: UserContext = Depends(requ
         raise HTTPException(status, str(exc)) from exc
 
 
+class EpisodeSceneAssetCreateRequest(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    source_asset_id: str
+    scene_id: str
+    description: str
+
+
+@app.post("/projects/{script_id}/episode-scene-assets")
+def create_episode_scene_asset(
+    script_id: str, request: EpisodeSceneAssetCreateRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    del user
+    try:
+        _, asset_id = pipeline.create_episode_scene_asset(
+            script_id, request.asset_type, request.source_asset_id,
+            request.scene_id, request.description,
+        )
+        return {"asset_id": asset_id, "asset_type": request.asset_type}
+    except ValueError as exc:
+        raise HTTPException(404 if str(exc) in {"Script not found", "Source asset not found"} else 409, str(exc)) from exc
+
+
 @app.get("/projects/{script_id}/storyboard/{frame_id}/asset-context")
 def get_storyboard_asset_context(script_id: str, frame_id: str, user: UserContext = Depends(require_studio_user)):
     del user

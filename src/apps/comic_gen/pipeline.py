@@ -15,6 +15,7 @@ from .models import (
     VideoTask,
     Character,
     Scene,
+    Prop,
     StoryboardFrame,
     LightingData,
     Series,
@@ -1001,11 +1002,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 effective_positive_prompt = ". ".join(filter(None, [
                     effective_positive_prompt, director_context,
                 ]))
-        episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
-        if episode_context_prompt:
-            effective_positive_prompt = ". ".join(filter(None, [
-                effective_positive_prompt, episode_context_prompt,
-            ]))
         generation_lineage = self.generation_lineage(
             script, director_profile, director_execution,
         )
@@ -1545,6 +1541,64 @@ class ComicGenPipeline(StudioOwnerMixin):
         script.characters.append(new_char)
         self._save_data()
         return script
+
+    def create_episode_scene_asset(
+        self, script_id: str, asset_type: str, source_asset_id: str,
+        scene_id: str, description: str,
+    ) -> Tuple[Script, str]:
+        """Create an independent episode asset draft for one confirmed-plan scene."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            context = script.episode_visual_context
+            if not context or not script.director_shooting_plan_revisions:
+                raise ValueError("Sync the confirmed shooting plan before creating scene assets")
+            latest = script.director_shooting_plan_revisions[-1]
+            if context.shooting_plan_hash != latest.content_hash:
+                raise ValueError("Shooting plan changed; sync episode assets again")
+            scene = next((item for item in context.scenes if item.scene_id == scene_id), None)
+            if not scene:
+                raise ValueError("Scene is not in the synced shooting plan")
+            source, _ = self._find_asset_with_source(script, source_asset_id, asset_type)
+            if source is None:
+                raise ValueError("Source asset not found")
+            allowed = (
+                asset_type == "character" and any(
+                    source_asset_id in item.character_asset_ids and scene_id in item.scene_ids
+                    for item in context.characters
+                ) or asset_type == "scene" and (scene.scene_asset_id == source_asset_id or scene.scene_id == source_asset_id)
+                or asset_type == "prop" and any(
+                    item.prop_id == source_asset_id and scene_id in item.scene_ids
+                    for item in context.props
+                )
+            )
+            if not allowed:
+                raise ValueError("Asset is not bound to this shooting-plan scene")
+            if not description.strip():
+                raise ValueError("Scene asset description is required")
+            label = scene.scene_ref or scene.location or scene.scene_id
+            fields = dict(
+                name=f"{source.name} · {label}", description=description.strip(),
+                episode_scene_id=scene_id,
+                episode_plan_revision=context.shooting_plan_revision,
+                episode_plan_hash=context.shooting_plan_hash,
+            )
+            if asset_type == "character":
+                asset = Character(id=f"char_{uuid.uuid4().hex[:8]}", persona=source.persona,
+                                  age=source.age, gender=source.gender, **fields)
+                script.characters.append(asset)
+            elif asset_type == "scene":
+                asset = Scene(id=f"scene_{uuid.uuid4().hex[:8]}", **fields)
+                script.scenes.append(asset)
+            elif asset_type == "prop":
+                asset = Prop(id=f"prop_{uuid.uuid4().hex[:8]}", **fields)
+                script.props.append(asset)
+            else:
+                raise ValueError("Invalid asset type")
+            script.updated_at = time.time()
+            self._save_data()
+            return script, asset.id
 
     def delete_character(self, script_id: str, char_id: str) -> Script:
         script = self.scripts.get(script_id)
@@ -3670,26 +3724,6 @@ class ComicGenPipeline(StudioOwnerMixin):
         return {"frame_id": frame_id, "scene_id": frame.scene_id, "shot_id": frame.shot_id,
                 "context_status": script.episode_visual_context.context_status if script.episode_visual_context else "missing",
                 "assets": result}
-
-    @staticmethod
-    def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
-        context = script.episode_visual_context
-        if not context:
-            return ""
-        if asset_type == "character":
-            matches = [item.model_dump(exclude_none=True) for item in context.characters
-                       if asset_id in item.character_asset_ids]
-        elif asset_type == "prop":
-            matches = [item.model_dump(exclude_none=True) for item in context.props if item.prop_id == asset_id]
-        else:
-            matches = [item.model_dump(exclude_none=True) for item in context.scenes if item.scene_id == asset_id or item.scene_asset_id == asset_id]
-        if not matches:
-            return ""
-        # A generic asset generation has no scene selection. Mixing distinct looks
-        # or prop states would produce contradictory instructions.
-        if len(matches) > 1:
-            return ""
-        return "本集拍摄计划视觉约束（仅用于本集资产变体，不改变全局底座）：" + json.dumps(matches, ensure_ascii=False, separators=(",", ":"))[:4000]
 
     def save_director_profile_draft(
         self,

@@ -49,31 +49,25 @@ it('confirms before leaving local editing and clears the discarded state', () =>
   expect(onDiscard).toHaveBeenCalledTimes(1);
 });
 
-it('saves an untouched 2:1 source after explicit panorama selection', async () => {
+it('saves an untouched 2:1 source through an explicit panorama action without a projection selector', async () => {
   const saveOriginal = vi.fn().mockResolvedValue(undefined);
-  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:panorama" title="room.png" panoramaEligible projectionType="equirectangular" onSavePanoramaSource={saveOriginal} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
-  fireEvent.click(screen.getByRole('button', { name: 'Save original as panorama' }));
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:panorama" title="room.png" panoramaEligible onSavePanoramaSource={saveOriginal} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  expect(screen.queryByRole('combobox', { name: 'Projection' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save as panorama' }));
   await waitFor(() => expect(saveOriginal).toHaveBeenCalledTimes(1));
 });
 
-it('allows a non-2:1 candidate to browse but blocks panorama projection', () => {
-  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:candidate" title="candidate.png" panoramaCandidate panoramaEligible panoramaSaveEligible={false} initialView="panorama" onProjectionChange={vi.fn()} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+it('allows a non-2:1 candidate to browse but blocks panorama saving', () => {
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:candidate" title="candidate.png" panoramaCandidate panoramaEligible panoramaSaveEligible={false} initialView="panorama" onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
   expect(screen.getByRole('button', { name: 'Browse panorama' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('status')).toHaveTextContent('not exactly 2:1');
-  expect(screen.getByRole('option', { name: 'Equirectangular panorama (2:1)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Save as panorama' })).not.toBeInTheDocument();
 });
 
-it('shows original and generated images together in canvas preview', () => {
-  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:result" comparisonSource="blob:original" initialView="preview" title="result.png" onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
-  expect(screen.getByRole('img', { name: 'Original' })).toHaveAttribute('src', 'blob:original');
-  expect(screen.getByRole('img', { name: 'Generated result' })).toHaveAttribute('src', 'blob:result');
-});
-
-it('saves an untouched 2:1 source after explicit panorama selection', async () => {
-  const saveOriginal = vi.fn().mockResolvedValue(undefined);
-  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:panorama" title="room.png" panoramaEligible projectionType="equirectangular" onSavePanoramaSource={saveOriginal} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
-  fireEvent.click(screen.getByRole('button', { name: 'Save original as panorama' }));
-  await waitFor(() => expect(saveOriginal).toHaveBeenCalledTimes(1));
+it('shows only the selected image in the canvas preview', () => {
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:result" initialView="preview" title="result.png" onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  expect(screen.getAllByRole('img')).toHaveLength(1);
+  expect(screen.getByRole('img', { name: 'result.png' })).toHaveAttribute('src', 'blob:result');
 });
 
 it('isolates the background and restores focus without trapping engine portals in a native modal', () => {

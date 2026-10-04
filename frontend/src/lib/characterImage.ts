@@ -18,13 +18,13 @@ import type { Character, ImageAsset, ImageVariant, AssetUnit } from "@/store/pro
  */
 
 /** Selected (or first) variant URL from EITHER container shape. */
-export function selectedVariantUrl(asset?: ImageAsset | AssetUnit | null): string | undefined {
+export function selectedVariantUrl(asset?: ImageAsset | AssetUnit | null, requireSelection = false): string | undefined {
   if (!asset) return undefined;
   const variants = "image_variants" in asset ? asset.image_variants : asset.variants;
   if (!variants?.length) return undefined;
   const selectedId = "image_variants" in asset ? asset.selected_image_id : asset.selected_id;
   const selected = variants.find((v) => v.id === selectedId);
-  return selected?.url || variants[0]?.url;
+  return selected?.url || (requireSelection ? undefined : variants[0]?.url);
 }
 
 /** Resolve a character's primary image container to a normalized ImageAsset
@@ -51,8 +51,9 @@ export function characterReferenceVariants(c: Character): ImageVariant[] {
 
 /** A character's best display image, preferring the current containers over older compatibility fields. */
 export function characterImageUrl(c: Character): string | undefined {
-  return selectedVariantUrl(characterImageAsset(c))
-    || selectedVariantUrl(c.full_body)
+  const requireSelection = Boolean(c.episode_scene_id);
+  return selectedVariantUrl(characterImageAsset(c), requireSelection)
+    || selectedVariantUrl(c.full_body, requireSelection)
     || c.image_url
     || c.full_body_image_url;
 }

@@ -400,6 +400,9 @@ class Character(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the character")
     description: str = Field(..., description="Physical appearance and personality description")
+    episode_scene_id: Optional[str] = None
+    episode_plan_revision: Optional[int] = None
+    episode_plan_hash: Optional[str] = None
 
     # R2V v2 Phase 4 — persona grouping. The character.id is the *visual
     # unit* (e.g. "young Zhang San" vs "adult Zhang San" are two ids).
@@ -506,6 +509,9 @@ class Scene(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the location/scene")
     description: str = Field(..., description="Visual description of the environment")
+    episode_scene_id: Optional[str] = None
+    episode_plan_revision: Optional[int] = None
+    episode_plan_hash: Optional[str] = None
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
     time_of_day: Optional[str] = Field(None, description="Time of day (e.g. Night, Day)")
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
@@ -534,6 +540,9 @@ class Prop(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the object")
     description: str = Field(..., description="Visual description of the object")
+    episode_scene_id: Optional[str] = None
+    episode_plan_revision: Optional[int] = None
+    episode_plan_hash: Optional[str] = None
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     sfx_url: Optional[str] = None
