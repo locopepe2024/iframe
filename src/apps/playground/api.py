@@ -454,7 +454,8 @@ def image_edits(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=
 @router.post("/image-edits", status_code=201)
 def save_image_edit(file: UploadFile = File(...), reference: str = Form(max_length=2000),
                     source_sha256: str = Form(pattern=r"^[0-9a-f]{64}$"), operation_key: str = Form(min_length=8, max_length=200),
+                    projection_type: str = Form(default="perspective_plane"),
                     identity: UserContext = Depends(require_user_context)):
     from .image_editor import ImageEditStore, MAX_IMAGE_BYTES
     return ImageEditStore(_storage_for(identity)).save(reference, source_sha256,
-        file.file.read(MAX_IMAGE_BYTES + 1), file.filename or "edited.png", operation_key)
+        file.file.read(MAX_IMAGE_BYTES + 1), file.filename or "edited.png", operation_key, projection_type)

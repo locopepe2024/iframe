@@ -11,6 +11,10 @@ def png(color='red'):
     out = BytesIO(); Image.new('RGB', (32, 24), color).save(out, format='PNG'); return out.getvalue()
 
 
+def panorama_png():
+    out = BytesIO(); Image.new('RGB', (64, 32), 'teal').save(out, format='PNG'); return out.getvalue()
+
+
 @pytest.fixture
 def editor(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -85,3 +89,19 @@ def test_bounds_and_cross_owner_generated_source(editor):
     with pytest.raises(HTTPException) as exc:
         other.source('/playground/media/someone-elses-generation/output')
     assert exc.value.status_code==404
+
+
+def test_panorama_projection_requires_explicit_declaration_and_exact_ratio(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    flat = store.save(source['reference'], source['sha256'], panorama_png(), 'flat.png', 'flat-key-1')
+    assert flat['projection_type'] == 'perspective_plane'
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], png(), 'bad.png', 'panorama-key-1', 'equirectangular')
+    assert exc.value.status_code == 422
+    panorama = store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'equirectangular')
+    assert panorama['projection_type'] == 'equirectangular'
+    assert ImageEditStore(store.storage).list()[0] == panorama
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'perspective_plane')
+    assert exc.value.status_code == 409

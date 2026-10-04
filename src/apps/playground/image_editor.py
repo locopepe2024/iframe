@@ -73,14 +73,18 @@ class ImageEditStore:
             return [json.loads(row[0]) for row in db.execute(
                 'SELECT data FROM edits ORDER BY created DESC, id DESC LIMIT ? OFFSET ?', (limit, offset))]
 
-    def save(self, reference, source_sha256, data, title, operation_key):
+    def save(self, reference, source_sha256, data, title, operation_key, projection_type='perspective_plane'):
         source = self.source(reference)
         if source['sha256'] != source_sha256:
             raise HTTPException(409, 'Source changed; reopen the editor')
         width, height, fmt = inspect_image(data)
+        if projection_type not in ('perspective_plane', 'equirectangular'):
+            raise HTTPException(422, 'Unsupported projection type')
+        if projection_type == 'equirectangular' and width != 2 * height:
+            raise HTTPException(422, 'Equirectangular panorama must have an exact 2:1 pixel ratio')
         digest = hashlib.sha256(data).hexdigest()
         title = Path(title).name[:200] or 'edited.png'
-        intent = json.dumps([source['reference'], source_sha256, digest, title])
+        intent = json.dumps([source['reference'], source_sha256, digest, title, projection_type])
         target = None
         try:
             with self.db() as db:
@@ -98,7 +102,8 @@ class ImageEditStore:
                     stream.write(data)
                 record = {'id': media_id, 'path': f'/playground/input-media/{filename}', 'title': title,
                           'source_reference': source['reference'], 'source_sha256': source_sha256,
-                          'sha256': digest, 'width': width, 'height': height, 'created_at': time.time(),
+                          'sha256': digest, 'width': width, 'height': height, 'projection_type': projection_type,
+                          'created_at': time.time(),
                           'operation': 'local_image_edit', 'editor_user_id': self.storage.owner_user_id}
                 db.execute('INSERT INTO edits VALUES (?, ?, ?, ?, ?)',
                            (media_id, operation_key, intent, record['created_at'], json.dumps(record)))
