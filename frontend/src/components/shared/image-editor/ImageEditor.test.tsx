@@ -14,6 +14,7 @@ const mount = (onSave: (file: File) => Promise<void>, onClose = vi.fn()) => {
 };
 it('retains editing on save failure and exports a new filename', async () => {
   const save = vi.fn().mockRejectedValue(new Error('offline')); const close = mount(save);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit image' }));
   fireEvent.click(screen.getByText('Modify')); fireEvent.click(screen.getByText('Save copy'));
   expect(await screen.findByRole('alert')).toHaveTextContent('Your edits are retained');
   expect(save.mock.calls[0][0].name).toBe('product-edited.png');
@@ -22,6 +23,7 @@ it('retains editing on save failure and exports a new filename', async () => {
 it('blocks repeated saves and closing while a save is pending', async () => {
   let complete!: () => void;
   const save=vi.fn(() => new Promise<void>(resolve => { complete=resolve; })); const close=mount(save);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit image' }));
   fireEvent.click(screen.getByText('Save copy')); await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
   fireEvent.click(screen.getByText('Save copy')); fireEvent.click(screen.getByLabelText('Close image editor'));
   expect(save).toHaveBeenCalledTimes(1); expect(close).not.toHaveBeenCalled();
@@ -29,9 +31,22 @@ it('blocks repeated saves and closing while a save is pending', async () => {
 });
 it('requires confirmation before discarding unsaved edits', () => {
   const confirm=vi.spyOn(window,'confirm').mockReturnValue(false); const close=mount(vi.fn());
+  fireEvent.click(screen.getByRole('button', { name: 'Edit image' }));
   fireEvent.click(screen.getByText('Modify')); fireEvent.click(screen.getByLabelText('Close image editor'));
   expect(confirm).toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
   confirm.mockReturnValue(true); fireEvent.click(screen.getByLabelText('Close image editor')); expect(close).toHaveBeenCalledTimes(1);
+});
+it('confirms before leaving local editing and clears the discarded state', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const onDiscard = vi.fn();
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:owned-source" title="product.png" onSave={vi.fn()} onClose={vi.fn()} onDiscard={onDiscard}/></NextIntlClientProvider>);
+  fireEvent.click(screen.getByText('Modify'));
+  fireEvent.click(screen.getByRole('button', { name: 'Canvas preview' }));
+  expect(screen.getByText('Modify')).toBeInTheDocument();
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Canvas preview' }));
+  expect(screen.queryByText('Modify')).not.toBeInTheDocument();
+  expect(onDiscard).toHaveBeenCalledTimes(1);
 });
 
 it('saves an untouched 2:1 source after explicit panorama selection', async () => {
@@ -39,6 +54,12 @@ it('saves an untouched 2:1 source after explicit panorama selection', async () =
   render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:panorama" title="room.png" panoramaEligible projectionType="equirectangular" onSavePanoramaSource={saveOriginal} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Save original as panorama' }));
   await waitFor(() => expect(saveOriginal).toHaveBeenCalledTimes(1));
+});
+
+it('shows original and generated images together in canvas preview', () => {
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:result" comparisonSource="blob:original" initialView="preview" title="result.png" onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  expect(screen.getByRole('img', { name: 'Original' })).toHaveAttribute('src', 'blob:original');
+  expect(screen.getByRole('img', { name: 'Generated result' })).toHaveAttribute('src', 'blob:result');
 });
 
 it('isolates the background and restores focus without trapping engine portals in a native modal', () => {

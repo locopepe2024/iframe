@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
-import { X, Rotate3D, Pencil, Save } from 'lucide-react';
+import { X, Rotate3D, Pencil, Save, Image as ImageIcon } from 'lucide-react';
 import type { FilerobotImageEditorConfig } from 'react-filerobot-image-editor';
 import type { ImageProjectionType } from '@/lib/imageEditor';
 
@@ -101,10 +101,15 @@ const IMAGE_EDITOR_THEME: NonNullable<FilerobotImageEditorConfig["theme"]> = {
 
 export interface ImageEditorProps {
   source?: string;
+  comparisonSource?: string;
   title: string;
   emptyState?: ReactNode;
+  leftPanel?: ReactNode;
   toolPanel?: ReactNode;
+  canvasStatus?: ReactNode;
+  initialView?: 'preview' | 'edit';
   onModified?: () => void;
+  onDiscard?: () => void;
   onSavePanoramaSource?: () => Promise<void>;
   projectionType?: ImageProjectionType;
   panoramaEligible?: boolean;
@@ -113,7 +118,7 @@ export interface ImageEditorProps {
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, toolPanel, onModified, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, comparisonSource, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -122,12 +127,21 @@ export default function ImageEditor({ source, title, emptyState, toolPanel, onMo
   const inFlight = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [viewingPanorama, setViewingPanorama] = useState(false);
-  useEffect(() => { setViewingPanorama(false); }, [source]);
+  const [view, setView] = useState<'preview' | 'edit' | 'panorama'>(initialView);
+  useEffect(() => { setView(initialView); dirty.current = false; }, [source, initialView]);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
     onClose();
+  };
+  const changeView = (next: 'preview' | 'edit' | 'panorama') => {
+    if (inFlight.current || next === view) return;
+    if (view === 'edit' && dirty.current) {
+      if (!window.confirm(t('discard'))) return;
+      dirty.current = false;
+      onDiscard?.();
+    }
+    setView(next);
   };
   const savePanoramaSource = async () => {
     if (inFlight.current || !onSavePanoramaSource) return;
@@ -184,17 +198,23 @@ export default function ImageEditor({ source, title, emptyState, toolPanel, onMo
               <option value="equirectangular" disabled={!panoramaEligible}>{t('equirectangular')}</option>
             </select>
           </label>
-          {panoramaEligible && <button type="button" onClick={() => setViewingPanorama(value => !value)} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg">
-            {viewingPanorama ? <Pencil size={16} /> : <Rotate3D size={16} />}{viewingPanorama ? t('edit') : t('browsePanorama')}
-          </button>}
           {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
         </div>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto md:flex-row">
-          <div className={`min-h-[280px] min-w-0 flex-1 ${source ? 'overflow-hidden' : 'overflow-auto'}`}>
-          {source && viewingPanorama ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
-            <Engine theme={IMAGE_EDITOR_THEME} source={source} language={locale === 'zh' ? 'zh-CN' : 'en'} useBackendTranslations={false}
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto lg:flex-row">
+          <nav className="flex shrink-0 gap-1 overflow-auto border-b border-glass-border bg-surface px-2 py-2 text-sm lg:w-44 lg:flex-col lg:border-b-0 lg:border-r" aria-label={t('editorFunctions')}>
+            <button type="button" aria-current={view === 'preview' ? 'page' : undefined} onClick={() => changeView('preview')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left ${view === 'preview' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><ImageIcon size={16}/>{t('canvasPreview')}</button>
+            <button type="button" disabled={!source} aria-current={view === 'edit' ? 'page' : undefined} onClick={() => changeView('edit')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'edit' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Pencil size={16}/>{t('edit')}</button>
+            <button type="button" disabled={!source || !panoramaEligible} aria-current={view === 'panorama' ? 'page' : undefined} onClick={() => changeView('panorama')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'panorama' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Rotate3D size={16}/>{t('browsePanorama')}</button>
+            {leftPanel && <>
+              <details className="min-w-32 lg:hidden"><summary className="flex min-h-10 cursor-pointer items-center px-3">{t('copies')}</summary><div className="max-h-40 overflow-auto border-t border-glass-border pt-2">{leftPanel}</div></details>
+              <div className="hidden min-h-0 overflow-auto border-t border-glass-border pt-3 lg:block">{leftPanel}</div>
+            </>}
+          </nav>
+          <main className={`relative min-h-[280px] min-w-0 flex-1 bg-[#101418] ${source ? 'overflow-hidden' : 'overflow-auto'}`} aria-label={t('canvasPreview')}>
+          {source && view === 'panorama' ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source && view === 'edit' ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
+            <Engine key={source} theme={IMAGE_EDITOR_THEME} source={source} language={locale === 'zh' ? 'zh-CN' : 'en'} useBackendTranslations={false}
               translations={locale === 'zh' ? EDITOR_ZH_TRANSLATIONS : { save: 'Save copy' }}
               onModify={() => { dirty.current = true; onModified?.(); }}
               onSave={async image => {
@@ -208,9 +228,22 @@ export default function ImageEditor({ source, title, emptyState, toolPanel, onMo
               avoidChangesNotSavedAlertOnLeave disableSaveIfNoChanges savingPixelRatio={1} previewPixelRatio={1}
               tabsIds={['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize']}
               defaultTabId="Adjust" defaultToolId="Rotate" observePluginContainerSize />
-          </fieldset> : emptyState}
-          </div>
-          {source && toolPanel && <aside className="max-h-[35vh] w-full shrink-0 overflow-auto border-t border-glass-border bg-surface px-3 py-3 md:max-h-none md:w-[280px] md:border-l md:border-t-0" aria-label={t('tools')}>{toolPanel}</aside>}
+          </fieldset> : source ? <div className={`grid h-full min-h-[280px] gap-2 p-3 ${comparisonSource ? 'grid-cols-1 md:grid-cols-2' : 'place-items-center'}`}>
+            {comparisonSource && <div className="flex min-h-0 min-w-0 flex-col border border-white/10 bg-black/20">
+              <span className="px-2 py-1 text-xs text-white/80">{t('sourceImage')}</span>
+              <div className="grid min-h-[150px] flex-1 place-items-center overflow-hidden p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={comparisonSource} alt={t('sourceImage')} className="max-h-full max-w-full object-contain" />
+              </div>
+            </div>}
+            <div className="grid min-h-0 min-w-0 place-items-center overflow-hidden p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={source} alt={comparisonSource ? t('resultImage') : title} className="max-h-full max-w-full object-contain" />
+            </div>
+          </div> : emptyState}
+          {canvasStatus && <div className="absolute bottom-3 left-3 right-3 rounded bg-black/75 px-3 py-2 text-sm text-white" role="status">{canvasStatus}</div>}
+          </main>
+          {toolPanel && <aside className="max-h-[38vh] w-full shrink-0 overflow-auto border-t border-glass-border bg-surface px-3 py-3 lg:max-h-none lg:w-[300px] lg:border-l lg:border-t-0" aria-label={t('tools')}>{toolPanel}</aside>}
         </div>
         <p className="shrink-0 border-t border-glass-border px-4 py-2 text-xs text-text-muted">{t('hint')}</p>
       </div>

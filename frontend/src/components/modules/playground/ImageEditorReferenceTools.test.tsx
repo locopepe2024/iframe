@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import ImageEditorReferenceTools, { generationInputMedia } from './ImageEditorReferenceTools';
 
@@ -7,8 +7,11 @@ vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', api: { getAssetLibraryIndex: mocks.library }, playgroundApi: { getUniArtModels: mocks.models, generate: mocks.generate, getGenerationStatus: mocks.status, uploadMedia: mocks.upload } }));
 vi.mock('@/lib/imageEditor', () => ({ imageEditorApi: { importLibraryVariant: mocks.importVariant } }));
 
-const source = { reference: '/playground/input-media/base.png', sha256: 'a'.repeat(64), width: 512, height: 512, mime: 'image/png' };
 const references = [{ path: '/playground/input-media/one.png', title: 'One' }, { path: '/playground/input-media/two.png', title: 'Two' }];
+function writePrompt(value: string) {
+  const editor = (screen.getByRole('textbox', { name: 'prompt' }) as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+  act(() => { editor.commands.setContent(`<p>${value}</p>`); });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -17,13 +20,26 @@ beforeEach(() => {
   mocks.generate.mockResolvedValue({ id: 'generation-1', status: 'completed', outputs: [] });
 });
 
-it('preserves ordered base and reference inputs in a generation request', async () => {
-  expect(generationInputMedia(source, references)).toEqual([source.reference, references[0].path, references[1].path]);
-  render(<ImageEditorReferenceTools source={source} references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+it('binds named mentions to ordered reference inputs in a generation request', async () => {
+  expect(generationInputMedia(references)).toEqual([references[0].path, references[1].path]);
+  render(<ImageEditorReferenceTools references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Image Model' });
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A quiet room' } });
+  writePrompt('将@One的背包替换成@Two');
   fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
-  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'i2i', model_id: 'image-model', input_media: [source.reference, references[0].path, references[1].path] })));
+  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'i2i', model_id: 'image-model', prompt: '将@One的背包替换成@Two', input_media: [references[0].path, references[1].path], media_names: { [references[0].path]: 'One', [references[1].path]: 'Two' } })));
+});
+
+it('offers selected reference images when typing @ and opens a completed result on the canvas', async () => {
+  const onUseResult = vi.fn();
+  mocks.generate.mockResolvedValue({ id: 'generation-2', status: 'completed', outputs: [{ id: 'output', media_type: 'image', media_path: '/playground/media/generation-2/output' }] });
+  render(<ImageEditorReferenceTools references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={onUseResult}/>);
+  await screen.findByRole('option', { name: 'Image Model' });
+  writePrompt('@');
+  expect(screen.getAllByRole('option', { name: /@/ })).toHaveLength(2);
+  fireEvent.click(screen.getByRole('option', { name: '@One' }));
+  expect(screen.getByRole('textbox', { name: 'prompt' })).toHaveTextContent('@One');
+  fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
+  await waitFor(() => expect(onUseResult).toHaveBeenCalledWith('/playground/media/generation-2/output', 'generatedImage'));
 });
 
 it('imports a selected owner library variant as an ordered reference', async () => {
@@ -31,7 +47,7 @@ it('imports a selected owner library variant as an ordered reference', async () 
   mocks.library.mockResolvedValue({ assets: [entry] });
   mocks.importVariant.mockResolvedValue({ path: '/playground/input-media/library-room.png', title: 'Room', sha256: 'b'.repeat(64) });
   const onAdd = vi.fn();
-  render(<ImageEditorReferenceTools source={source} references={[]} onAdd={onAdd} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  render(<ImageEditorReferenceTools references={[]} onAdd={onAdd} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   fireEvent.click(screen.getByRole('button', { name: 'libraryReferences' }));
   fireEvent.change(await screen.findByRole('combobox', { name: 'Room variant' }), { target: { value: 'v2' } });
   expect(screen.getByRole('presentation').getAttribute('src')).toContain('/studio/media/two');
@@ -41,18 +57,19 @@ it('imports a selected owner library variant as an ordered reference', async () 
 });
 
 it('reports a completed generation without an image output', async () => {
-  render(<ImageEditorReferenceTools source={source} references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
-  await screen.findByRole('option', { name: 'Image Model' });
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A quiet room' } });
+  mocks.models.mockResolvedValue({ models: [{ id: 'text-image-model', display_name: 'Text Image Model', capabilities: ['t2i'] }] });
+  render(<ImageEditorReferenceTools references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  await screen.findByRole('option', { name: 'Text Image Model' });
+  writePrompt('A quiet room');
   fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('noGeneratedImage');
 });
 
 it('marks panorama generation as a candidate in the prompt', async () => {
-  render(<ImageEditorReferenceTools source={source} references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  render(<ImageEditorReferenceTools references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Image Model' });
   fireEvent.click(screen.getByRole('button', { name: 'panoramaGeneration' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A city square' } });
+  writePrompt('A city square');
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('equirectangular panorama') })));
   expect(screen.getByText('panoramaCandidateNote')).toBeInTheDocument();
@@ -60,10 +77,10 @@ it('marks panorama generation as a candidate in the prompt', async () => {
 
 it('can generate a panorama candidate from a blank editor', async () => {
   mocks.models.mockResolvedValue({ models: [{ id: 'text-image-model', display_name: 'Text Image Model', capabilities: ['t2i'] }] });
-  render(<ImageEditorReferenceTools source={null} references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  render(<ImageEditorReferenceTools references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Text Image Model' });
   fireEvent.click(screen.getByRole('button', { name: 'panoramaGeneration' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A mountain lake' } });
+  writePrompt('A mountain lake');
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 't2i', model_id: 'text-image-model', input_media: undefined })));
 });
