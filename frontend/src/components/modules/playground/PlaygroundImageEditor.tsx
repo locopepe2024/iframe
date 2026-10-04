@@ -119,10 +119,11 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   };
   const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
   const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
+  const panoramaQualityStatus = loaded?.source.panorama_quality?.status;
   const queuedOutputs = history.flatMap(item => item.outputs
     .filter(output => output.media_type === 'image' && output.media_path !== selected)
     .map(output => ({ generation: item, output })));
-  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
+  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate} panoramaQualityStatus={isPanoramaCandidate ? panoramaQualityStatus : undefined}
     onModified={() => setHasUnsavedEdit(true)}
     onDiscard={() => setHasUnsavedEdit(false)}
     panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio}

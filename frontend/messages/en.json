@@ -3159,6 +3159,7 @@
     "panoramaCandidateNote": "Inspect seams and horizon. Save an exact 2:1 panorama before importing into the director.",
     "panoramaCandidatePreview": "360° candidate preview. Check projection, seams, and horizon before saving.",
     "panoramaCandidateRatioWarning": "This candidate is not exactly 2:1. Its 360° preview is distorted; resize or regenerate before saving it as a panorama.",
+    "panoramaQualityWarning": "A panorama seam or zenith/nadir gap was detected. This image is preview-only and cannot enter the 3D director. Repair it or regenerate it before saving.",
     "panoramaLoading": "Loading panorama…",
     "panoramaLoadFailed": "Could not load the panorama image.",
     "panoramaZoomIn": "Zoom in",

@@ -112,11 +112,12 @@ export interface ImageEditorProps {
   panoramaEligible?: boolean;
   panoramaSaveEligible?: boolean;
   panoramaCandidate?: boolean;
+  panoramaQualityStatus?: 'pass' | 'review' | 'fail';
   onSave: (file: File) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, panoramaQualityStatus, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -126,7 +127,7 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [view, setView] = useState<'preview' | 'edit' | 'panorama'>(initialView);
-  const canSavePanorama = panoramaSaveEligible ?? panoramaEligible;
+  const canSavePanorama = (panoramaSaveEligible ?? panoramaEligible) && panoramaQualityStatus !== 'review' && panoramaQualityStatus !== 'fail';
   useEffect(() => { setView(initialView); dirty.current = false; }, [source, initialView]);
   const close = () => {
     if (inFlight.current) return;
@@ -194,7 +195,9 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
           <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-10 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>
         </div>}
         {panoramaCandidate && <p role="status" className={`border-b border-glass-border px-4 py-2 text-xs ${canSavePanorama ? 'text-text-secondary' : 'text-status-failed-fg'}`}>
-          {t(canSavePanorama ? 'panoramaCandidatePreview' : 'panoramaCandidateRatioWarning')}
+          {panoramaQualityStatus === 'review' || panoramaQualityStatus === 'fail'
+            ? t('panoramaQualityWarning')
+            : t(canSavePanorama ? 'panoramaCandidatePreview' : 'panoramaCandidateRatioWarning')}
         </p>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}

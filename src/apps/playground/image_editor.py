@@ -17,6 +17,39 @@ from PIL import Image, UnidentifiedImageError
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 
+def analyze_panorama(data):
+    """Return conservative seam and pole diagnostics for equirectangular admission."""
+    try:
+        with Image.open(BytesIO(data)) as image:
+            rgba = image.convert('RGBA').resize((256, 128))
+            pixels = list(rgba.getdata())
+    except (OSError, ValueError, UnidentifiedImageError):
+        return {'status': 'fail', 'blocking_codes': ['decode_failed']}
+    width, height = rgba.size
+    seam_error = sum(
+        sum(abs(pixels[y * width + 0][channel] - pixels[y * width + width - 1][channel]) for channel in range(3)) / 765
+        for y in range(height)
+    ) / height
+    pole_rows = max(1, round(height * 0.04))
+    pole = pixels[:width * pole_rows] + pixels[-width * pole_rows:]
+    transparent_fraction = sum(pixel[3] < 16 for pixel in pole) / len(pole)
+    black_fraction = sum(max(pixel[:3]) < 12 for pixel in pole) / len(pole)
+    blocking_codes = []
+    if seam_error > 0.18:
+        blocking_codes.append('horizontal_seam_discontinuity')
+    if transparent_fraction > 0.02:
+        blocking_codes.append('transparent_pole_gap')
+    if black_fraction > 0.45:
+        blocking_codes.append('black_pole_gap')
+    return {
+        'status': 'pass' if not blocking_codes else 'review',
+        'blocking_codes': blocking_codes,
+        'seam_error': round(seam_error, 4),
+        'transparent_pole_fraction': round(transparent_fraction, 4),
+        'black_pole_fraction': round(black_fraction, 4),
+    }
+
+
 def inspect_image(data):
     if not data or len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(413, 'Image exceeds 25 MiB or is empty')
@@ -63,9 +96,12 @@ class ImageEditStore:
         except (ValueError, OSError) as exc:
             raise HTTPException(404, 'Image not found') from exc
         width, height, fmt = inspect_image(data)
-        return data, {'reference': self.storage.browser_media_reference(reference),
+        source = {'reference': self.storage.browser_media_reference(reference),
                       'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height,
                       'mime': Image.MIME[fmt]}
+        if width == 2 * height:
+            source['panorama_quality'] = analyze_panorama(data)
+        return data, source
 
     def source(self, reference):
         return self.source_bytes(reference)[1]
@@ -112,8 +148,16 @@ class ImageEditStore:
 
     def list(self, limit=50, offset=0):
         with self.db() as db:
-            return [json.loads(row[0]) for row in db.execute(
+            records = [json.loads(row[0]) for row in db.execute(
                 'SELECT data FROM edits ORDER BY created DESC, id DESC LIMIT ? OFFSET ?', (limit, offset))]
+        for record in records:
+            if record.get('projection_type') == 'equirectangular' and 'panorama_quality' not in record:
+                try:
+                    data, _ = self.source_bytes(record['path'])
+                    record['panorama_quality'] = analyze_panorama(data)
+                except HTTPException:
+                    record['panorama_quality'] = {'status': 'fail', 'blocking_codes': ['source_unavailable']}
+        return records
 
     def save(self, reference, source_sha256, data, title, operation_key, projection_type='perspective_plane'):
         if projection_type not in ('perspective_plane', 'equirectangular'):
@@ -124,6 +168,10 @@ class ImageEditStore:
         width, height, fmt = inspect_image(data)
         if projection_type == 'equirectangular' and width != 2 * height:
             raise HTTPException(422, 'Equirectangular projection requires an exact 2:1 image')
+        if projection_type == 'equirectangular':
+            quality = analyze_panorama(data)
+            if quality['status'] != 'pass':
+                raise HTTPException(422, 'Panorama has a seam or zenith/nadir gap; repair or regenerate it before saving')
         digest = hashlib.sha256(data).hexdigest()
         title = Path(title).name[:200] or 'edited.png'
         intent = json.dumps([source['reference'], source_sha256, digest, title, projection_type])
@@ -150,6 +198,8 @@ class ImageEditStore:
                           'sha256': digest, 'width': width, 'height': height, 'created_at': time.time(),
                           'projection_type': projection_type,
                           'operation': 'local_image_edit', 'editor_user_id': self.storage.owner_user_id}
+                if projection_type == 'equirectangular':
+                    record['panorama_quality'] = quality
                 db.execute('INSERT INTO edits VALUES (?, ?, ?, ?, ?)',
                            (media_id, operation_key, intent, record['created_at'], json.dumps(record)))
             return record
