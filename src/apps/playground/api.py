@@ -3,6 +3,7 @@
 import os
 import hashlib
 import hmac
+import subprocess
 import threading
 import time
 import uuid
@@ -124,9 +125,32 @@ def _public_generation(generation, identity: UserContext):
     _public_reference_fields(payload, identity)
     for output in payload.get("outputs", []):
         output["media_path"] = _media_url(identity, generation.id, output["id"])
-        if output.get("thumbnail_path"):
+        if output.get("thumbnail_path") or output.get("media_type") == "video":
             output["thumbnail_path"] = _media_url(identity, generation.id, output["id"], 1)
     return payload
+
+
+def _video_cover_path(video_path: str) -> str:
+    cover_path = f"{video_path}.cover.jpg"
+    if os.path.isfile(cover_path):
+        return cover_path
+    temporary_path = f"{cover_path}.{uuid.uuid4().hex}.jpg"
+    try:
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-loglevel", "error", "-threads", "1", "-ss", "0.1",
+             "-i", video_path, "-frames:v", "1", "-q:v", "3", "-f", "image2", temporary_path],
+            check=True, capture_output=True, timeout=20,
+        )
+        if not os.path.isfile(temporary_path) or os.path.getsize(temporary_path) == 0:
+            raise ValueError("Video cover is empty")
+        os.replace(temporary_path, cover_path)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        logger.warning("Could not create video cover for %s: %s", video_path, exc)
+        raise HTTPException(status_code=404, detail="Video cover unavailable") from exc
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+    return cover_path
 
 # ---------------------------------------------------------------------------
 # Generation
@@ -258,7 +282,10 @@ def get_generation_media(
     output = next((item for item in generation.outputs if item.id == output_id), None)
     if not output:
         raise HTTPException(status_code=404, detail="Media not found")
-    path = output.thumbnail_path if thumbnail and output.thumbnail_path else output.media_path
+    if thumbnail and output.media_type == "video":
+        path = output.thumbnail_path if output.thumbnail_path and os.path.isfile(output.thumbnail_path) else _video_cover_path(output.media_path)
+    else:
+        path = output.thumbnail_path if thumbnail and output.thumbnail_path else output.media_path
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
     return FileResponse(path)

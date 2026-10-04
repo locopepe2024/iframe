@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -61,3 +63,32 @@ def test_invalid_bearer_is_not_rescued_by_cookie(client, monkeypatch):
     client.cookies.set(identity.BROWSER_PROFILE_COOKIE, 'owner')
     monkeypatch.setattr(identity.UniArtIdentityClient, 'me', Mock(side_effect=HTTPException(401, 'expired')))
     assert client.get('/playground/media/generation/output', headers={'Authorization': 'Bearer invalid'}).status_code == 401
+
+
+@pytest.mark.skipif(shutil.which('ffmpeg') is None, reason='ffmpeg is required for video covers')
+def test_video_cover_is_cached_and_original_remains_downloadable(tmp_path, monkeypatch):
+    video = tmp_path / 'media.mp4'
+    subprocess.run([
+        'ffmpeg', '-nostdin', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:r=2',
+        '-t', '1', '-pix_fmt', 'yuv420p', str(video),
+    ], check=True)
+    output = SimpleNamespace(id='output', media_path=str(video), media_type='video', thumbnail_path=None)
+    generation = SimpleNamespace(outputs=[output])
+    monkeypatch.setattr(api, '_storage_for', lambda owner: SimpleNamespace(get_generation=lambda gid: generation))
+    app = FastAPI()
+    app.include_router(api.router, prefix='/playground')
+    with TestClient(app) as session:
+        session.cookies.set(identity.BROWSER_PROFILE_COOKIE, 'owner')
+        first = session.get('/playground/media/generation/output?thumbnail=1')
+        cover = tmp_path / 'media.mp4.cover.jpg'
+        assert first.status_code == 200
+        assert first.headers['content-type'] == 'image/jpeg'
+        assert first.content.startswith(b'\xff\xd8')
+        cached_mtime = cover.stat().st_mtime_ns
+        second = session.get('/playground/media/generation/output?thumbnail=1')
+        assert second.content == first.content
+        assert cover.stat().st_mtime_ns == cached_mtime
+        original = session.get('/playground/media/generation/output')
+        assert original.status_code == 200
+        assert original.headers['content-type'] == 'video/mp4'
+        assert original.content == video.read_bytes()
