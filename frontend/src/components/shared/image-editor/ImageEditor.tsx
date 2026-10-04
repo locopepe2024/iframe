@@ -4,12 +4,31 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
-import { X } from 'lucide-react';
+import { X, Rotate3D, Pencil, Save } from 'lucide-react';
 import type { FilerobotImageEditorConfig } from 'react-filerobot-image-editor';
+import type { ImageProjectionType } from '@/lib/imageEditor';
 
 // Adapted from iyishow's Filerobot workbench; no canvas, API or store dependency.
 const Engine = dynamic(() => import('react-filerobot-image-editor').then(m => m.default), { ssr: false });
+const PanoramaViewer = dynamic(() => import('./PanoramaViewer'), { ssr: false });
 type SavedImage = Parameters<NonNullable<FilerobotImageEditorConfig['onSave']>>[0];
+
+const EDITOR_ZH_TRANSLATIONS = {
+  save: '保存副本', saveAs: '另存为', cancel: '取消', apply: '应用', confirm: '确认',
+  adjustTab: '调整', finetuneTab: '调色', filtersTab: '滤镜', annotateTabLabel: '标注', watermarkTab: '水印',
+  resize: '尺寸', cropTool: '裁剪', rotateTool: '旋转', flipX: '水平翻转', flipY: '垂直翻转',
+  undoTitle: '撤销', redoTitle: '重做', zoomInTitle: '放大', zoomOutTitle: '缩小', fitTitle: '适应画布',
+  original: '原始比例', custom: '自定义', square: '正方形', landscape: '横向', portrait: '纵向',
+  arrowTool: '箭头', blurTool: '模糊', brightnessTool: '亮度', contrastTool: '对比度',
+  ellipseTool: '椭圆', hue: '色相', saturation: '饱和度', imageTool: '图片',
+  lineTool: '直线', penTool: '画笔', polygonTool: '多边形', rectangleTool: '矩形',
+  text: '文字', textTool: '文字', fontFamily: '字体', size: '大小', letterSpacing: '字间距', lineHeight: '行高',
+  addWatermark: '添加水印', addTextWatermark: '添加文字水印', uploadWatermark: '上传水印',
+  opacity: '不透明度', position: '位置', stroke: '描边', width: '宽度', height: '高度',
+  resizeWidthTitle: '宽度（像素）', resizeHeightTitle: '高度（像素）',
+  toggleRatioLockTitle: '锁定或解锁宽高比', resetSize: '恢复原始图片尺寸',
+  format: '格式', quality: '质量', actualSize: '实际大小（100%）', fitSize: '适应大小',
+};
 
 export async function exportedImageFile(image: SavedImage, title: string): Promise<File> {
   const mime = image.mimeType || 'image/png';
@@ -84,11 +103,17 @@ export interface ImageEditorProps {
   source?: string;
   title: string;
   emptyState?: ReactNode;
-  onSave: (file: File) => Promise<void>;
+  toolPanel?: ReactNode;
+  onModified?: () => void;
+  onSavePanoramaSource?: () => Promise<void>;
+  projectionType?: ImageProjectionType;
+  panoramaEligible?: boolean;
+  onProjectionChange?: (projection: ImageProjectionType) => void;
+  onSave: (file: File, projectionType?: ImageProjectionType) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, toolPanel, onModified, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -97,10 +122,19 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
   const inFlight = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [viewingPanorama, setViewingPanorama] = useState(false);
+  useEffect(() => { setViewingPanorama(false); }, [source]);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
     onClose();
+  };
+  const savePanoramaSource = async () => {
+    if (inFlight.current || !onSavePanoramaSource) return;
+    inFlight.current = true; setSaving(true); setError('');
+    try { await onSavePanoramaSource(); dirty.current = false; }
+    catch { setError(t('saveFailed')); }
+    finally { inFlight.current = false; setSaving(false); }
   };
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -143,17 +177,30 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
           <div className="min-w-0"><h2 id="image-editor-title" className="font-semibold">{t('title')}</h2><p className="truncate text-sm text-text-muted">{title}</p></div>
           <button ref={closeButton} type="button" disabled={saving} onClick={close} aria-label={t('close')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={20} /></button>
         </header>
+        {source && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-4 py-2 text-sm">
+          <label className="flex items-center gap-2">{t('projection')}
+            <select value={projectionType} onChange={event => onProjectionChange?.(event.target.value as ImageProjectionType)} disabled={saving} className="min-h-9 rounded border border-glass-border bg-surface px-2">
+              <option value="perspective_plane">{t('perspective')}</option>
+              <option value="equirectangular" disabled={!panoramaEligible}>{t('equirectangular')}</option>
+            </select>
+          </label>
+          {panoramaEligible && <button type="button" onClick={() => setViewingPanorama(value => !value)} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg">
+            {viewingPanorama ? <Pencil size={16} /> : <Rotate3D size={16} />}{viewingPanorama ? t('edit') : t('browsePanorama')}
+          </button>}
+          {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
+        </div>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {source ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto md:flex-row">
+          <div className={`min-h-[280px] min-w-0 flex-1 ${source ? 'overflow-hidden' : 'overflow-auto'}`}>
+          {source && viewingPanorama ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
             <Engine theme={IMAGE_EDITOR_THEME} source={source} language={locale === 'zh' ? 'zh-CN' : 'en'} useBackendTranslations={false}
-              translations={locale === 'zh' ? { save: '保存副本', saveAs: '另存为', cancel: '取消', apply: '应用', adjustTab: '调整', finetuneTab: '调色', filtersTab: '滤镜', annotateTabLabel: '标注', watermarkTab: '水印', resize: '尺寸', cropTool: '裁剪', rotateTool: '旋转', flipX: '水平翻转', flipY: '垂直翻转', text: '文字', pen: '画笔', undoTitle: '撤销', redoTitle: '重做' } : { save: 'Save copy' }}
-              onModify={() => { dirty.current = true; }}
+              translations={locale === 'zh' ? EDITOR_ZH_TRANSLATIONS : { save: 'Save copy' }}
+              onModify={() => { dirty.current = true; onModified?.(); }}
               onSave={async image => {
                 if (inFlight.current) return;
                 inFlight.current = true; setSaving(true); setError('');
-                try { await onSave(await exportedImageFile(image, title)); dirty.current = false; }
+                try { await onSave(await exportedImageFile(image, title), projectionType); dirty.current = false; }
                 catch { setError(t('saveFailed')); }
                 finally { inFlight.current = false; setSaving(false); }
               }}
@@ -162,6 +209,8 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
               tabsIds={['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize']}
               defaultTabId="Adjust" defaultToolId="Rotate" observePluginContainerSize />
           </fieldset> : emptyState}
+          </div>
+          {source && toolPanel && <aside className="max-h-[35vh] w-full shrink-0 overflow-auto border-t border-glass-border bg-surface px-3 py-3 md:max-h-none md:w-[280px] md:border-l md:border-t-0" aria-label={t('tools')}>{toolPanel}</aside>}
         </div>
         <p className="shrink-0 border-t border-glass-border px-4 py-2 text-xs text-text-muted">{t('hint')}</p>
       </div>
