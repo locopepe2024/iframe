@@ -428,6 +428,20 @@ router.add_api_route("/input-media/{filename}", get_input_media, methods=["GET"]
 
 
 # Local image editing is separate from paid generation.
+@router.post("/image-editor/library-import")
+def image_editor_library_import(source_scope: str = Form(...), source_container_id: str = Form(default=""),
+                                asset_type: str = Form(...), asset_id: str = Form(...), variant_id: str = Form(...),
+                                identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore
+    from ..comic_gen.api import pipeline
+    if source_scope not in ("episode", "project", "series", "global") or asset_type not in ("character", "scene", "prop"):
+        raise HTTPException(422, "Invalid library selection")
+    index = pipeline.get_asset_library_reference_index(identity.owner_profile_id)
+    return ImageEditStore(_storage_for(identity)).import_library_variant(
+        index, source_scope, source_container_id, asset_type, asset_id, variant_id,
+        pipeline._resolve_stored_reference_value)
+
+
 @router.get("/image-editor/source")
 def image_editor_source(reference: str = Query(max_length=2000), identity: UserContext = Depends(require_user_context)):
     from .image_editor import ImageEditStore

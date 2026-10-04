@@ -8,6 +8,8 @@ import sqlite3
 import time
 from uuid import uuid4
 import warnings
+from urllib.parse import unquote, urlparse
+from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
@@ -67,6 +69,46 @@ class ImageEditStore:
 
     def source(self, reference):
         return self.source_bytes(reference)[1]
+
+    def import_library_variant(self, index, scope, container_id, asset_type, asset_id, variant_id, resolver):
+        entry = next((item for item in index.assets
+                      if item.source_scope == scope
+                      and (item.source_container_id or '') == container_id
+                      and item.asset_type == asset_type and item.asset_id == asset_id), None)
+        if entry is None:
+            raise HTTPException(404, 'Asset is not visible in this library')
+        variant = next((item for item in entry.variants if item.id == variant_id), None)
+        if variant is None:
+            raise HTTPException(404, 'Variant does not belong to this asset')
+        resolved = resolver(variant.url, self.storage.owner_profile_id)
+        if Path(resolved).is_file():
+            with open(resolved, 'rb') as stream:
+                data = stream.read(MAX_IMAGE_BYTES + 1)
+        else:
+            from ...utils.oss_utils import OSSImageUploader, is_object_key
+            uploader = OSSImageUploader()
+            fetch_url = uploader.sign_url_for_api(resolved) if is_object_key(resolved) else ''
+            if resolved.startswith(('http://', 'https://')) and uploader.is_configured:
+                probe = urlparse(uploader.sign_url_for_api('__iframe_editor_probe__'))
+                candidate = urlparse(resolved)
+                if candidate.hostname and candidate.hostname == probe.hostname:
+                    fetch_url = uploader.sign_url_for_api(unquote(candidate.path.lstrip('/')))
+            if not fetch_url:
+                raise HTTPException(422, 'Library variant storage is not editable')
+            try:
+                with urlopen(UrlRequest(fetch_url, headers={'User-Agent': 'iFrame-Studio/1.0'}), timeout=30) as remote:
+                    data = remote.read(MAX_IMAGE_BYTES + 1)
+            except OSError as exc:
+                raise HTTPException(502, 'Could not read library image') from exc
+        width, height, fmt = inspect_image(data)
+        filename = f'library-{uuid4().hex}.{ {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[fmt] }'
+        target = self.root / 'uploads' / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('xb') as stream:
+            stream.write(data)
+        return {'path': f'/playground/input-media/{filename}', 'title': entry.name,
+                'width': width, 'height': height, 'sha256': hashlib.sha256(data).hexdigest(),
+                'asset_type': asset_type, 'asset_id': asset_id, 'variant_id': variant_id}
 
     def list(self, limit=50, offset=0):
         with self.db() as db:

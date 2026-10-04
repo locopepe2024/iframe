@@ -1,5 +1,6 @@
 from io import BytesIO
 import json
+from types import SimpleNamespace
 from pathlib import Path
 import pytest
 from PIL import Image
@@ -119,3 +120,23 @@ def test_pre_projection_save_key_still_replays_a_standard_edit(editor):
     with pytest.raises(HTTPException) as exc:
         store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1', 'equirectangular')
     assert exc.value.status_code == 422
+
+
+def test_library_import_uses_owner_index_and_variant_id(editor):
+    store, path = editor
+    variant = SimpleNamespace(id='variant-1', url=str(path))
+    entry = SimpleNamespace(source_scope='project', source_container_id='project-1',
+                            asset_type='scene', asset_id='scene-1', name='Room', variants=[variant])
+    index = SimpleNamespace(assets=[entry])
+    def resolve(value, owner):
+        assert owner == store.storage.owner_profile_id
+        assert value == str(path)
+        return value
+    imported = store.import_library_variant(index, 'project', 'project-1', 'scene', 'scene-1', 'variant-1', resolve)
+    assert imported['path'].startswith('/playground/input-media/library-')
+    assert store.source(imported['path'])['sha256'] == imported['sha256']
+    assert path.read_bytes() == png()
+    for scope, variant_id in [('series', 'variant-1'), ('project', 'other')]:
+        with pytest.raises(HTTPException) as exc:
+            store.import_library_variant(index, scope, 'project-1', 'scene', 'scene-1', variant_id, resolve)
+        assert exc.value.status_code == 404
