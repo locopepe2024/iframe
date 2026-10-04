@@ -1,14 +1,15 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { ImagePlus } from 'lucide-react';
-import { playgroundApi } from '@/lib/api';
+import { Box, ImagePlus, Plus } from 'lucide-react';
+import type { PlaygroundGenerationResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
+import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
-import ImageEditorReferenceTools, { type EditorReference } from './ImageEditorReferenceTools';
+import ImageEditorReferenceTools, { type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -30,10 +31,13 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [projectionType, setProjectionType] = useState<ImageProjectionType>('perspective_plane');
-  const [references, setReferences] = useState<EditorReference[]>([]);
+  const [references, setReferences] = useState<EditorReference[]>(reference ? [{ path: reference, title }] : []);
+  const [generation, setGeneration] = useState<PlaygroundGenerationResponse | null>(null);
+  const generationRef = useRef<PlaygroundGenerationResponse | null>(null);
+  const updateGeneration = useCallback((next: PlaygroundGenerationResponse | null) => { generationRef.current = next; setGeneration(next); }, []);
+  const [comparisonPath, setComparisonPath] = useState<string | null>(null);
+  const [panoramaCandidatePath, setPanoramaCandidatePath] = useState<string | null>(null);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const retry = useRef<{ hash: string; key: string }>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
   useEffect(() => {
@@ -57,7 +61,16 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     }
     return false;
   };
-  const addReference = (candidate: EditorReference) => setReferences(current => current.length >= 9 || current.some(item => item.path === candidate.path) ? current : [...current, candidate]);
+  const addReference = (candidate: EditorReference) => {
+    if (!selected) { setSelected(candidate.path); setName(candidate.title); }
+    setReferences(current => {
+      if (current.length >= 9 || current.some(item => item.path === candidate.path)) return current;
+      let title = candidate.title;
+      let suffix = 2;
+      while (current.some(item => item.title === title)) title = `${candidate.title} (${suffix++})`;
+      return [...current, { ...candidate, title }];
+    });
+  };
   const moveReference = (path: string, direction: -1 | 1) => setReferences(current => {
     const index = current.findIndex(item => item.path === path);
     const target = index + direction;
@@ -66,13 +79,16 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     [next[index], next[target]] = [next[target], next[index]];
     return next;
   });
-  const useResult = (path: string, resultTitle: string) => {
+  const useResult = (path: string, resultTitle: string, options?: GeneratedResultOptions) => {
+    if (path === selected) return;
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
+    setComparisonPath(generationRef.current?.outputs.some(output => output.media_path === path) ? selected ?? null : null);
+    setPanoramaCandidatePath(options?.panoramaCandidate ? path : null);
     setName(resultTitle); setSelected(path);
   };
-  const referenceTools = <ImageEditorReferenceTools source={loaded?.source ?? null} references={references}
+  const referenceTools = <ImageEditorReferenceTools references={references}
     onAdd={addReference} onRemove={path => setReferences(current => current.filter(item => item.path !== path))}
-    onMove={moveReference} onUseResult={useResult}/>;
+    onMove={moveReference} onUseResult={useResult} onGenerationChange={updateGeneration}/>;
   const saveFile = async (file: File, projection?: ImageProjectionType) => {
     if (!loaded) throw new Error('No source');
     const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
@@ -82,41 +98,32 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     const saved = selectedProjection === 'perspective_plane'
       ? await imageEditorApi.save(loaded.source, file, retry.current.key)
       : await imageEditorApi.save(loaded.source, file, retry.current.key, selectedProjection);
-    append(saved); toast.success(t('saved')); onClose();
+    append(saved); copiesRef.current = [saved, ...copiesRef.current.filter(copy => copy.id !== saved.id)]; setCopies(copiesRef.current);
+    toast.success(t('saved')); setComparisonPath(null); setPanoramaCandidatePath(null); setName(saved.title); setSelected(saved.path);
   };
-  return <ImageEditor key={selected || 'empty'} source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
+  const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
+  const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
+  return <ImageEditor source={loaded?.url} comparisonSource={comparisonPath ? getAssetUrl(comparisonPath) : undefined} title={name} onClose={onClose} projectionType={projectionType} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
     onModified={() => setHasUnsavedEdit(true)}
-    panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
-    onSavePanoramaSource={loaded && !hasUnsavedEdit && loaded.source.width === 2 * loaded.source.height ? async () => {
+    onDiscard={() => setHasUnsavedEdit(false)}
+    panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio} onProjectionChange={setProjectionType}
+    onSavePanoramaSource={loaded && !hasUnsavedEdit && hasPanoramaRatio ? async () => {
       const ext = loaded.source.mime === 'image/jpeg' ? 'jpg' : loaded.source.mime === 'image/webp' ? 'webp' : 'png';
       await saveFile(new File([loaded.blob], `${name.replace(/\.[^.]+$/, '') || 'panorama'}.${ext}`, { type: loaded.source.mime }), 'equirectangular');
     } : undefined}
-    toolPanel={loaded && referenceTools}
-    onSave={saveFile}
-    emptyState={<div className="mx-auto flex max-w-2xl flex-col gap-4 p-5">
-      <p className="text-text-secondary">{t('choose')}</p>
-      <label className="flex min-h-11 items-center gap-3 rounded-lg border border-glass-border p-3">{t('upload')}
-        <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="min-w-0 text-sm" onChange={async event => {
-          const file = event.target.files?.[0]; if (!file) return;
-          if (file.size > 25 * 1024 * 1024) { setError(t('tooLarge')); return; }
-          setBusy(true); setError('');
-          try { const result = await playgroundApi.uploadMedia(file); if (!mounted.current) return; setName(file.name); setSelected(result.path); }
-          catch { if (!mounted.current) return; setError(t('loadFailed')); setBusy(false); }
-          event.target.value = '';
-        }} />
-      </label>
-      {busy && <p role="status">{t('loading')}</p>}
-      {error && <p role="alert" className="text-status-failed-fg">{error}</p>}
-      <h3 className="font-semibold">{t('copies')}</h3>
-      {copies.length === 0 && <p className="text-sm text-text-muted">{t('empty')}</p>}
-      {copies.map(copy => <div key={copy.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-glass-border p-3">
-        <span className="min-w-0 flex-1 break-words">{copy.title}</span>
-        <button type="button" disabled={busy} className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { setName(copy.title); setSelected(copy.path); }}>{t('edit')}</button>
-        <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); onClose(); }}>{t('use')}</button>
-        {copy.projection_type === 'equirectangular' && <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { onClose(); window.location.hash = '#/director'; }}>{t('openDirector')}</button>}
+    leftPanel={<div className="space-y-1 text-xs">
+      {selected && <button type="button" disabled={references.length >= 9 || references.some(item => item.path === selected)} onClick={() => addReference({ path: selected, title: name })} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/>{t('addCurrentReference')}</button>}
+      <h3 className="px-2 pt-2 font-semibold text-text-muted">{t('copies')}</h3>
+      {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
+        <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
+        {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
+        {copy.projection_type === 'equirectangular' && <button type="button" title={t('openDirector')} aria-label={`${t('openDirector')} ${copy.title}`} onClick={() => { onClose(); window.location.hash = '#/director'; }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Box size={15}/></button>}
       </div>)}
-      <div className="border-t border-glass-border pt-4">{referenceTools}</div>
-    </div>} />;
+    </div>}
+    toolPanel={referenceTools}
+    canvasStatus={busy ? t('loading') : generation?.status === 'pending' || generation?.status === 'processing' ? t('generating') : undefined}
+    onSave={saveFile}
+    emptyState={<div className="grid h-full min-h-[280px] place-items-center p-6 text-center text-sm text-text-muted">{error || t('canvasEmpty')}</div>} />;
 }
 
 export default function PlaygroundImageEditor({ children }: { children: ReactNode }) {
@@ -131,22 +138,5 @@ export default function PlaygroundImageEditor({ children }: { children: ReactNod
 /** Standalone image editing workbench, independent of a generation session. */
 export function StandaloneImageEditorPage() {
   const t = useTranslations('imageEditor');
-  const [editor, setEditor] = useState<{ reference?: string; title: string; sessionId: string | null } | null>(null);
-  return (
-    <section className="h-full overflow-auto p-6">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        <header>
-          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">iFrame Atelier</p>
-          <h1 className="mt-2 text-2xl font-display font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">{t('standaloneDescription')}</p>
-        </header>
-        <div className="rounded-xl border border-glass-border bg-surface/50 p-5">
-          <button type="button" onClick={() => setEditor({ title: t('title'), sessionId: null })} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            <ImagePlus size={18} />{t('open')}
-          </button>
-        </div>
-      </div>
-      {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
-    </section>
-  );
+  return <EditorSession title={t('title')} sessionId={null} onClose={() => { window.location.hash = '#/playground'; }} />;
 }

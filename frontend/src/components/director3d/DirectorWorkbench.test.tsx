@@ -11,12 +11,61 @@ import { parseLocalAnimationManifest } from "./state/local-animation-import";
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid";
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
+import { admittedPanoramaEntries } from "./scene/PanoramaEnvironmentPanel";
+import { imageEditorApi } from "@/lib/imageEditor";
+
+vi.mock("@/lib/imageEditor", () => ({ imageEditorApi: { list: vi.fn().mockResolvedValue([]) } }));
 
 vi.mock("./scene/HumanoidStage", () => ({
   HumanoidStage: () => <div id="director-viewport" role="tabpanel" aria-label="mock 3D stage" />,
 }));
 
 const initialState = useWorkbenchStore.getState();
+
+it("admits only explicitly declared owned 2:1 panorama edits", () => {
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200 };
+  expect(admittedPanoramaEntries([{ ...record, projection_type: "perspective_plane" }])).toHaveLength(0);
+  expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", height: 201 }])).toHaveLength(0);
+  expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", path: "https://example.test/pano.png" }])).toHaveLength(0);
+  const [entry] = admittedPanoramaEntries([{ ...record, projection_type: "equirectangular" }]);
+  expect(entry).toMatchObject({ inputId: record.path, projection: "equirectangular", environmentAllowed: true, admissionChecksum: record.sha256 });
+});
+
+it("loads an edited panorama and assigns it to the director stage", async () => {
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const };
+  vi.mocked(imageEditorApi.list).mockResolvedValueOnce([record]);
+  render(<App />);
+  const select = await screen.findByRole("combobox", { name: "选择全景素材" });
+  await waitFor(() => expect(screen.getByRole("option", { name: record.title })).toBeInTheDocument());
+  fireEvent.change(select, { target: { value: record.path } });
+  expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBe(record.path);
+  fireEvent.click(screen.getByRole("button", { name: "移除全景" }));
+  expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
+});
+
+it("stages a camera path without replacing its easing and supports undo", () => {
+  const cameraId = useWorkbenchStore.getState().selectedCameraId;
+  act(() => {
+    useWorkbenchStore.getState().applyCameraPathPreset(cameraId, "push_in", "replace", 4, "ease_in_out");
+    useWorkbenchStore.getState().stageCameraPathOnTimeline(cameraId);
+  });
+  const state = useWorkbenchStore.getState();
+  const track = state.dialogueTimeline.tracks.find(item => item.trackKind === "camera_path_progress" && item.target.targetId === `path-${cameraId}-motion`);
+  expect(track?.keyframes).toEqual([]);
+  expect(state.cameraPaths[`path-${cameraId}-motion`].easing).toBe("ease_in_out");
+  const at = (frame: number) => evaluateDirectorFrame({
+    frame, durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
+    tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
+    selectedCameraId: cameraId, characters: state.characters, cameras: state.cameras,
+    sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
+  }).activeCameraPositionM;
+  expect(at(1)).not.toEqual(at(1 + 2 * state.dialogueTimeline.fps));
+  expect(state.viewMode).toBe("camera");
+  act(() => useWorkbenchStore.getState().stageCameraPathOnTimeline(cameraId));
+  expect(useWorkbenchStore.getState().dialogueTimeline.tracks.filter(item => item.trackKind === "camera_path_progress" && item.target.targetId === `path-${cameraId}-motion`)).toHaveLength(1);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().dialogueTimeline.tracks.some(item => item.trackId === track?.trackId)).toBe(false);
+});
 
 beforeEach(() => {
   useWorkbenchStore.setState(initialState, true);

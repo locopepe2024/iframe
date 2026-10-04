@@ -1,27 +1,29 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Images, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { api, playgroundApi, type AssetReferenceIndexEntry, type PlaygroundGenerationResponse, type UniArtCatalogModelResponse } from '@/lib/api';
-import { imageEditorApi, type EditSource } from '@/lib/imageEditor';
+import { imageEditorApi } from '@/lib/imageEditor';
 import { getAssetUrl } from '@/lib/utils';
+import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferencePromptEditor';
 
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
+export type GeneratedResultOptions = { panoramaCandidate: true };
 
-export function generationInputMedia(source: EditSource | null, references: EditorReference[]): string[] {
-  return [...(source ? [source.reference] : []), ...references.map(reference => reference.path)];
+export function generationInputMedia(references: EditorReference[]): string[] {
+  return references.map(reference => reference.path);
 }
 
-export default function ImageEditorReferenceTools({ source, references, onAdd, onRemove, onMove, onUseResult }: {
-  source: EditSource | null;
+export default function ImageEditorReferenceTools({ references, onAdd, onRemove, onMove, onUseResult, onGenerationChange }: {
   references: EditorReference[];
   onAdd: (reference: EditorReference) => void;
   onRemove: (path: string) => void;
   onMove: (path: string, direction: -1 | 1) => void;
-  onUseResult: (path: string, title: string) => void;
+  onUseResult: (path: string, title: string, options?: GeneratedResultOptions) => void;
+  onGenerationChange?: (generation: PlaygroundGenerationResponse | null) => void;
 }) {
   const t = useTranslations('imageEditor');
   const [library, setLibrary] = useState<AssetReferenceIndexEntry[] | null>(null);
@@ -32,10 +34,17 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
   const [models, setModels] = useState<UniArtCatalogModelResponse[]>([]);
   const [modelId, setModelId] = useState('');
   const [mode, setMode] = useState<GenerationMode>('reference');
+  const [submittedMode, setSubmittedMode] = useState<GenerationMode>('reference');
   const [prompt, setPrompt] = useState('');
   const [generation, setGeneration] = useState<PlaygroundGenerationResponse | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+  const handledOutput = useRef('');
+  const showGenerated = (path: string) => {
+    if (submittedMode === 'panorama') onUseResult(path, t('generatedImage'), { panoramaCandidate: true });
+    else onUseResult(path, t('generatedImage'));
+  };
   useEffect(() => {
     let active = true;
     playgroundApi.getUniArtModels().then(catalog => {
@@ -48,17 +57,23 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
     if (!generation || pollFailed || ['completed', 'failed'].includes(generation.status)) return;
     let active = true;
     const timer = window.setInterval(() => {
-      playgroundApi.getGenerationStatus(generation.id).then(result => { if (active) setGeneration(result); })
+      playgroundApi.getGenerationStatus(generation.id).then(result => { if (active) { setGeneration(result); onGenerationChange?.(result); } })
         .catch(() => { if (active) { setPollFailed(true); setError(t('generationStatusFailed')); } });
     }, 2000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [generation?.id, generation?.status, pollFailed, t]);
-  const inputMedia = generationInputMedia(source, references);
+  }, [generation?.id, generation?.status, pollFailed, t, onGenerationChange]);
+  useEffect(() => {
+    const output = generation?.status === 'completed' ? generation.outputs.find(item => item.media_type === 'image') : null;
+    if (!generation || !output || handledOutput.current === generation.id) return;
+    handledOutput.current = generation.id;
+    showGenerated(output.media_path);
+  }, [generation, onUseResult, submittedMode, t]);
+  const inputMedia = generationInputMedia(references);
   const taskMode = inputMedia.length ? 'i2i' : 't2i';
   const availableModels = useMemo(() => models.filter(model => model.capabilities.includes(taskMode)), [models, taskMode]);
   useEffect(() => setModelId(current => current && availableModels.some(model => model.id === current) ? current : availableModels[0]?.id ?? ''), [availableModels]);
   const selectedModel = availableModels.find(model => model.id === modelId);
-  const referenceLimit = Math.min(9, Math.max(0, (selectedModel?.inputs?.reference_images?.max ?? 10) - Number(Boolean(source))));
+  const referenceLimit = Math.min(9, Math.max(0, selectedModel?.inputs?.reference_images?.max ?? 9));
   const filteredLibrary = useMemo(() => (library ?? []).filter(entry => entry.variants.length > 0 && `${entry.name} ${entry.source_name ?? ''}`.toLowerCase().includes(librarySearch.toLowerCase())), [library, librarySearch]);
   const entryKey = (entry: AssetReferenceIndexEntry) => `${entry.source_scope}:${entry.source_container_id ?? ''}:${entry.asset_type}:${entry.asset_id}`;
   const addUploads = async (files: FileList | null) => {
@@ -95,15 +110,16 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
   const generate = async () => {
     if (!selectedModel || !prompt.trim() || busy || generation?.status === 'processing' || generation?.status === 'pending') return;
     if (references.length > referenceLimit) { setError(t('modelReferenceLimit')); return; }
-    setBusy(true); setError(''); setGeneration(null); setPollFailed(false);
+    setBusy(true); setError(''); setGeneration(null); onGenerationChange?.(null); setPollFailed(false); setSubmittedMode(mode);
     const instruction = mode === 'panorama'
       ? `Create a seamless 360-degree equirectangular panorama with a level horizon and a 2:1 composition. The left and right edges must join continuously. ${prompt.trim()}`
       : prompt.trim();
     try {
-      setGeneration(await playgroundApi.generate({ mode: taskMode, model_id: modelId, prompt: instruction,
+      const result = await playgroundApi.generate({ mode: taskMode, model_id: modelId, prompt: instruction,
         input_media: inputMedia.length ? inputMedia : undefined,
         media_names: Object.fromEntries(references.map(reference => [reference.path, reference.title])),
-        batch_size: 1 }));
+        batch_size: 1 });
+      setGeneration(result); onGenerationChange?.(result);
     } catch { setError(t('generationFailed')); }
     finally { setBusy(false); }
   };
@@ -129,9 +145,11 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
         </div>
       </div>}
       <ol className="space-y-1">{references.map((reference, index) => <li key={reference.path} className="flex min-w-0 items-center gap-1 border-b border-glass-border py-1">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={getAssetUrl(reference.path)} alt="" className="h-9 w-9 shrink-0 object-cover"/>
-        <span className="min-w-0 flex-1 truncate text-xs">{index + 1}. {reference.title}</span>
+        <button type="button" title={t('canvasPreview')} aria-label={`${t('canvasPreview')} ${reference.title}`} onClick={() => onUseResult(reference.path, reference.title)} className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-primary">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={getAssetUrl(reference.path)} alt="" className="h-9 w-9 shrink-0 object-cover"/>
+          <span className="min-w-0 truncate text-xs">{index + 1}. {reference.title}</span>
+        </button>
         <button type="button" disabled={index === 0} title={t('moveUp')} aria-label={`${t('moveUp')} ${reference.title}`} onClick={() => onMove(reference.path, -1)}><ArrowUp size={15}/></button>
         <button type="button" disabled={index === references.length - 1} title={t('moveDown')} aria-label={`${t('moveDown')} ${reference.title}`} onClick={() => onMove(reference.path, 1)}><ArrowDown size={15}/></button>
         <button type="button" title={t('removeReference')} aria-label={`${t('removeReference')} ${reference.title}`} onClick={() => onRemove(reference.path)}><Trash2 size={15}/></button>
@@ -146,18 +164,26 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
       <label className="block">{t('model')}<select value={modelId} onChange={event => setModelId(event.target.value)} className="mt-1 min-h-9 w-full rounded border border-glass-border bg-surface px-2">{availableModels.map(model => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label>
       {availableModels.length === 0 && <p role="status" className="text-xs text-text-muted">{t('noImageModel')}</p>}
       {references.length > referenceLimit && <p role="status" className="text-xs text-status-failed-fg">{t('modelReferenceLimit')}</p>}
-      <label className="block">{t('prompt')}<textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} className="mt-1 w-full rounded border border-glass-border bg-surface p-2"/></label>
+      <div className="relative"><label className="mb-1 block" id="image-editor-prompt-label">{t('prompt')}</label>
+        <div className="rounded border border-glass-border bg-surface p-2" aria-labelledby="image-editor-prompt-label">
+          <ReferencePromptEditor value={prompt} labels={references.map(reference => reference.title)} placeholder={t('prompt')} onChange={setPrompt} onMentionChange={setMention}/>
+        </div>
+        {mention && <div role="listbox" aria-label={t('selectReference')} className="absolute bottom-full z-20 mb-1 max-h-48 w-full overflow-auto rounded border border-glass-border bg-elevated p-1 shadow-lg">
+          {references.filter(reference => reference.title.toLocaleLowerCase().includes(mention.query.toLocaleLowerCase())).map(reference =>
+            <button key={reference.path} type="button" role="option" onMouseDown={event => event.preventDefault()} onClick={() => { mention.choose(reference.title); setMention(null); }} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={getAssetUrl(reference.path)} alt="" className="h-8 w-8 shrink-0 object-cover"/><span className="min-w-0 truncate">@{reference.title}</span>
+            </button>)}
+          {references.length === 0 && <p className="p-2 text-text-muted">{t('addReferenceFirst')}</p>}
+        </div>}
+      </div>
       <button type="button" disabled={!modelId || !prompt.trim() || busy || (generation && ['pending', 'processing'].includes(generation.status)) || references.length > referenceLimit} onClick={() => void generate()} className="min-h-10 w-full rounded bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50">{mode === 'panorama' ? t('generatePanoramaCandidate') : t('generateImage')}</button>
       {mode === 'panorama' && <p className="text-xs text-text-muted">{t('panoramaCandidateNote')}</p>}
       {generation && <div role="status" className="space-y-2 border-t border-glass-border pt-2"><strong>{generation.status === 'completed' ? t('generationReady') : generation.status === 'failed' ? t('generationFailed') : t('generating')}</strong>
         {pollFailed && <button type="button" className="min-h-9 rounded border border-glass-border px-2" onClick={() => { setError(''); setPollFailed(false); }}>{t('retryStatus')}</button>}
         {generation.error && <p role="alert">{generation.error}</p>}
         {generation.status === 'completed' && !generation.outputs.some(output => output.media_type === 'image') && <p role="alert" className="text-status-failed-fg">{t('noGeneratedImage')}</p>}
-        {generation.status === 'completed' && generation.outputs.filter(output => output.media_type === 'image').map(output => <div key={output.id} className="space-y-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getAssetUrl(output.media_path)} alt={t('generatedImage')} className="max-h-40 w-full object-contain"/>
-          <button type="button" onClick={() => onUseResult(output.media_path, t('generatedImage'))} className="min-h-9 w-full rounded border border-glass-border">{t('editGenerated')}</button>
-        </div>)}
+        {generation.status === 'completed' && generation.outputs.filter(output => output.media_type === 'image').map(output => <button key={output.id} type="button" onClick={() => showGenerated(output.media_path)} className="min-h-9 w-full rounded border border-glass-border px-2 text-left hover:bg-hover-bg">{submittedMode === 'panorama' ? t('browsePanorama') : t('showGenerated')}</button>)}
       </div>}
       {error && <p role="alert" className="text-status-failed-fg">{error}</p>}
     </section>
