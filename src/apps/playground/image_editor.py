@@ -91,7 +91,8 @@ class ImageEditStore:
                 db.execute('BEGIN IMMEDIATE')
                 prior = db.execute('SELECT intent, data FROM edits WHERE operation_key=?', (operation_key,)).fetchone()
                 if prior:
-                    if prior[0] != intent:
+                    legacy_intent = json.dumps([source['reference'], source_sha256, digest, title])
+                    if prior[0] != intent and not (projection_type == 'perspective_plane' and prior[0] == legacy_intent):
                         raise HTTPException(409, 'Save key already used for another edit')
                     return json.loads(prior[1])
                 media_id = uuid4().hex
