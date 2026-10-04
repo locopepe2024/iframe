@@ -427,3 +427,83 @@ Script
 - 用户可接受、继续编辑或删除 AI 候选，不被模型结果强制覆盖。
 
 验证范围：目标文件级单元测试、工作流 API 测试、前端 typecheck、生产 build、3D 导演台专项测试、部署后真实 commit/静态资源/API 核验。浏览器自动化和本地 3D 视觉验收需在用户明确授权相应本地 URL 后执行。
+
+## 11. 并行任务拆分与责任边界
+
+后续实现拆成两个独立工作流。两条工作流都基于当前发布基线开发，不整树互相合并，不改变对方的事实源。
+
+### Workstream A：3D 导演台与视觉制作能力
+
+负责：3D 导演台团队/模块。
+
+范围：
+
+- 图片编辑入口和局部视觉编辑能力；
+- 场景 blockout、场景预置、全景和深度参考；
+- 预置机位、焦段、画幅、景别和镜头语言；
+- 人物/道具占位、站位、朝向、路径和屏幕方向；
+- 运镜预演、白模视频、motion-track 和动作参考；
+- 3D scene snapshot、camera snapshot、blocking revision；
+- 将视觉和空间候选导出为可被 Storyboard 引用的媒体/快照。
+
+不负责：
+
+- 全剧或分集导演理解；
+- 剧本事实和人物关系账本；
+- 场景/beat/shot 的剧情拆分；
+- 全局/分集资产的长期管理；
+- 修改 DirectorInterpretation、DirectorShootingPlan 或 Storyboard 的确认版本；
+- 把本地图片副本变成 Avatar 身份权威。
+
+### Workstream B：导演理解与剧集过程管理
+
+负责：管理层和 Director/Assets/Storyboard 工作流。
+
+范围：
+
+- 剧本导入、分集、原文来源和事实提取；
+- 全剧导演理解和分集导演理解；
+- 人物关系、时间线、场景线、剧情线和全剧一致性；
+- 拍摄计划的 scene/beat/shot 拆分和确认；
+- 从已确认拍摄计划生成 `EpisodeVisualContext`；
+- 分集视觉变体同步、适用场景和角色继承；
+- Storyboard 的 shot 绑定、视觉变体选择和缺失项提示；
+- 项目/系列/分集版本、任务状态、历史恢复、复制、删除和冲突管理；
+- 用户接受、继续编辑、删除和重新绑定 AI 候选。
+
+不负责：
+
+- 3D 网格、骨骼、相机渲染或白模动画实现；
+- 具体图片编辑算法和 Motion provider 适配；
+- 把 3D 导演台内部状态复制成另一套项目或资产数据库；
+- 静默修改 3D 场景、机位或用户已确认的空间快照。
+
+### 唯一交汇接口
+
+Workstream A 向 Workstream B 提供只读、版本化的：
+
+- `scene_snapshot_id + scene_snapshot_revision`；
+- `camera_preset_id + camera_preset_revision`；
+- `blocking_revision`；
+- panorama/depth media IDs；
+- motion reference IDs 和 preview metadata；
+- 资产引用的 `asset_id + variant_id`，不提供本地副本作为身份依据。
+
+Workstream B 向 Workstream A 提供只读、版本化的：
+
+- `scene_id`、`beat_id`、`shot_id`；
+- 场景地点、时间、季节、天气和布置约束；
+- 人物 `person_id`、`era_variant_id`、`look_revision`；
+- 关键道具及其状态；
+- shot 的构图、景别、表演和导演效果；
+- 当前允许引用的 `EpisodeVisualContext` revision。
+
+任何一方的版本发生变化，另一方只标记引用 stale 并提示用户重新绑定；不得自动覆盖对方的草稿或确认结果。
+
+### 发布与验收规则
+
+1. 两条工作流分别测试、构建和记录 commit。
+2. 组合发布只允许目标文件和已声明的交汇契约进入，不整分支合并长期漂移内容。
+3. 发布前检查真实运行分支、后端镜像、前端静态资源 commit 和接口路径。
+4. 3D 能力可以先独立发布为可选 Storyboard reference，不阻塞导演理解和普通分镜流程。
+5. 管理层可以在没有 3D 快照时保存分镜草稿，但必须显示 `spatial_review: pending`。
