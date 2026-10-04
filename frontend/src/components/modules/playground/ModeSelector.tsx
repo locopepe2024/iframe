@@ -38,7 +38,15 @@ export function OutputTypeSelector({ agentActive = false, onAgentChange }: { age
               onAgentChange?.(false);
               const nextMode = getDefaultModeForOutput(output);
               setMode(nextMode);
-              if (outputType !== output) usePlaygroundStore.getState().setParameters({});
+              if (output === 'video') {
+                usePlaygroundStore.getState().setParameters({
+                  resolution: '720p', duration: 4, aspect_ratio: '16:9', audio: false,
+                });
+              } else {
+                usePlaygroundStore.getState().setParameters({
+                  size: '1024x1024', quality: 'medium',
+                });
+              }
               const nextModel = usePlaygroundStore.getState().modelId;
               if (!getModelCapabilities(nextModel).includes(nextMode)) {
                 setModelId(getDefaultModelForMode(nextMode));

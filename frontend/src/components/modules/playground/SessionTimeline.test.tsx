@@ -20,7 +20,7 @@ it('restores prompt and reference names and exposes message deletion', () => {
   fireEvent.click(screen.getByRole('button', { name: '填入输入框' }));
   expect(usePlaygroundStore.getState().prompt).toBe('让 @reference.png 跳舞');
   expect(usePlaygroundStore.getState().inputMedia).toEqual(['/playground/input-media/a.png']);
-  expect(usePlaygroundStore.getState().mode).toBe('i2v');
+  expect(usePlaygroundStore.getState().mode).toBe('t2v');
   fireEvent.click(screen.getByRole('button', { name: '消息操作' }));
   fireEvent.click(screen.getByRole('menuitem', { name: '删除' }));
   expect(remove).toHaveBeenCalledWith('reply');

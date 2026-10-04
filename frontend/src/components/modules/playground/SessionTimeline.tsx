@@ -15,12 +15,6 @@ const MODE_LABELS: Record<string, string> = {
   t2i: 'T2I', i2i: 'I2I', t2v: 'T2V', i2v: 'I2V', r2v: 'R2V', f2v: 'F2V', v2v: 'V2V',
 };
 
-function restoreReferenceMode(paths: string[], current: string): 'i2v' | 'r2v' | string {
-  if (current !== 't2v' || !paths.length) return current;
-  const imageOnly = paths.every(path => /\.(?:png|jpe?g|webp|gif)(?:$|[?#])/i.test(path));
-  return paths.length === 1 && imageOnly ? 'i2v' : 'r2v';
-}
-
 function parameterSummary(parameters: Record<string, any>): string {
   return Object.entries(parameters)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -154,8 +148,6 @@ function ChatCard({ message, onDelete }: { message: ChatMessage; onDelete: (id: 
     state.setPrompt(message.content);
     if (message.input_media) {
       state.setInputMedia(message.input_media);
-      const restoredMode = restoreReferenceMode(message.input_media, state.mode);
-      if (restoredMode !== state.mode) state.setMode(restoredMode as typeof state.mode);
       usePlaygroundStore.setState({ mediaNames: { ...state.mediaNames, ...Object.fromEntries(message.input_media.map((path, i) => [path, message.asset_names?.[i] || path])) } });
     }
   };

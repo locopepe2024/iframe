@@ -139,22 +139,9 @@ def test_h3_video_submission_uses_canonical_prompt_without_model_name_error(tmp_
     assert generation.provider_tasks == {"0": "upstream-task"}
 
 
-def test_h3_agent_prompt_with_t2v_history_keeps_material_slots(tmp_path, monkeypatch):
+def test_t2v_with_attachments_requires_explicit_reference_mode(tmp_path):
     storage = make_storage(tmp_path)
     service = PlaygroundService(storage)
-    service._load_provider_config = lambda: {"base_url": "https://uniart.test", "api_key": "test"}
-    captured = {}
-
-    class FakeUniArtVideoModel:
-        def __init__(self, _config):
-            pass
-
-        def generate(self, prompt, output_path, **kwargs):
-            captured.update(prompt=prompt, kwargs=kwargs)
-            return output_path, 0.0
-
-    monkeypatch.setattr("src.models.uniart.UniArtVideoModel", FakeUniArtVideoModel)
-    monkeypatch.setattr("src.models.mulerouter.MuleRouterVideoModel", FakeUniArtVideoModel)
     generation = PlaygroundGeneration(
         id="h3-agent-t2v",
         owner_user_id="user-a",
@@ -168,11 +155,8 @@ def test_h3_agent_prompt_with_t2v_history_keeps_material_slots(tmp_path, monkeyp
         created_at="2026-10-04T00:00:00+00:00",
     )
 
-    service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
-
-    assert captured["prompt"].startswith("<Picture 1>")
-    assert captured["kwargs"]["mode"] == "reference2video"
-    assert captured["kwargs"]["ref_image_urls"] == ["/tmp/identity.jpg"]
+    with pytest.raises(ValueError, match="请切换到图生视频或全能视频"):
+        service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
 
 
 def test_h3_i2v_keeps_product_mode_but_uses_reference_material_transport(tmp_path, monkeypatch):

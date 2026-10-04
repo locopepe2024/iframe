@@ -388,13 +388,13 @@ class PlaygroundService:
             "watermark": params.get("watermark", False),
         }
 
-        # H3 IR returns canonical <Picture N>/<Video N> labels. Agent history
-        # can retain T2V as the UI mode even when the original message had
-        # attachments; in that case the provider request must still carry the
-        # referenced materials, otherwise H3 sees zero material slots.
-        h3_with_t2v_references = "h3" in model_lower and gen.mode == PlaygroundMode.T2V and bool(gen.input_media)
+        if gen.mode == PlaygroundMode.T2V and gen.input_media:
+            raise ValueError("当前是文生视频模式，附件不会自动改变模式；请切换到图生视频或全能视频后再提交")
+
+        # H3 IR returns canonical <Picture N>/<Video N> labels. Product mode
+        # remains I2V; only H3's provider transport needs reference slots.
         h3_i2v_reference_transport = "h3" in model_lower and gen.mode == PlaygroundMode.I2V and bool(gen.input_media)
-        reference_mode = gen.mode == PlaygroundMode.R2V or h3_with_t2v_references or h3_i2v_reference_transport
+        reference_mode = gen.mode == PlaygroundMode.R2V or h3_i2v_reference_transport
 
         # r2v: reference images (including H3 prompts restored from Agent)
         if reference_mode and gen.input_media:
@@ -412,7 +412,7 @@ class PlaygroundService:
             kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
             references = list(gen.input_media)
-            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V) or h3_with_t2v_references or h3_i2v_reference_transport:
+            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V) or h3_i2v_reference_transport:
                 grouped = {kind: [ref for ref in references if media_kind(ref) == kind] for kind in ("image", "video", "audio")}
                 references = grouped["image"] + grouped["video"] + grouped["audio"]
                 kwargs["ref_image_urls"] = grouped["image"]
@@ -435,7 +435,7 @@ class PlaygroundService:
                     gen.prompt, gen.input_media, references, gen.media_names,
                 )
             kwargs["generate_audio"] = params.get("audio")
-            effective_mode = PlaygroundMode.R2V if h3_with_t2v_references or h3_i2v_reference_transport else gen.mode
+            effective_mode = PlaygroundMode.R2V if h3_i2v_reference_transport else gen.mode
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",
                 PlaygroundMode.I2V: "image2video",

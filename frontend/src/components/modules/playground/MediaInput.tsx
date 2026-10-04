@@ -183,8 +183,6 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
           failed.push(toUpload[index].name);
         }
       });
-      if (!agentMode && mode === 't2v' && newPaths.length) usePlaygroundStore.getState().setMode('i2v');
-      if (!agentMode && mode === 't2i' && newPaths.length) usePlaygroundStore.getState().setMode('i2i');
       setInputMedia([...usePlaygroundStore.getState().inputMedia, ...newPaths].slice(0, config.maxFiles));
       if (failed.length) setUploadError(`${t('media.uploadFailed')}: ${failed.join(', ')}`);
     } catch {
@@ -237,8 +235,6 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   );
 
   const handleAssetSelect = (path: string) => {
-    if (!agentMode && mode === 't2v') usePlaygroundStore.getState().setMode('i2v');
-    if (!agentMode && mode === 't2i') usePlaygroundStore.getState().setMode('i2i');
     setInputMedia([...usePlaygroundStore.getState().inputMedia, path].slice(0, config.maxFiles));
   };
 
