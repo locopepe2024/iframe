@@ -78,7 +78,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
     if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
-    const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
+    const selectedProjection = projection ?? projectionType;
+    const saved = selectedProjection === 'perspective_plane'
+      ? await imageEditorApi.save(loaded.source, file, retry.current.key)
+      : await imageEditorApi.save(loaded.source, file, retry.current.key, selectedProjection);
     append(saved); toast.success(t('saved')); onClose();
   };
   return <ImageEditor key={selected || 'empty'} source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
