@@ -3132,6 +3132,7 @@
     "perspective": "普通图片",
     "equirectangular": "等距柱状全景 (2:1)",
     "browsePanorama": "全景浏览",
+    "openDirector": "进入 3D 导演台",
     "title": "图片编辑",
     "close": "关闭图片编辑器",
     "discard": "放弃未保存的修改？",

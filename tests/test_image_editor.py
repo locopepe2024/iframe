@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 from pathlib import Path
 import pytest
 from PIL import Image
@@ -105,3 +106,16 @@ def test_panorama_projection_requires_explicit_declaration_and_exact_ratio(edito
     with pytest.raises(HTTPException) as exc:
         store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'perspective_plane')
     assert exc.value.status_code == 409
+
+
+def test_pre_projection_save_key_still_replays_a_standard_edit(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    saved = store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1')
+    old_intent = json.dumps([source['reference'], source['sha256'], saved['sha256'], 'old.png'])
+    with store.db() as db:
+        db.execute('UPDATE edits SET intent=? WHERE operation_key=?', (old_intent, 'legacy-key-1'))
+    assert store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1') == saved
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], png('blue'), 'old.png', 'legacy-key-1', 'equirectangular')
+    assert exc.value.status_code == 422

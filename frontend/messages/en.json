@@ -3132,6 +3132,7 @@
     "perspective": "Standard image",
     "equirectangular": "Equirectangular panorama (2:1)",
     "browsePanorama": "Browse panorama",
+    "openDirector": "Open in 3D director",
     "title": "Image editor",
     "close": "Close image editor",
     "discard": "Discard unsaved changes?",

@@ -84,6 +84,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
         <span className="min-w-0 flex-1 break-words">{copy.title}</span>
         <button type="button" disabled={busy} className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { setName(copy.title); setSelected(copy.path); }}>{t('edit')}</button>
         <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); onClose(); }}>{t('use')}</button>
+        {copy.projection_type === 'equirectangular' && <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { onClose(); window.location.hash = '#/director'; }}>{t('openDirector')}</button>}
       </div>)}
     </div>} />;
 }

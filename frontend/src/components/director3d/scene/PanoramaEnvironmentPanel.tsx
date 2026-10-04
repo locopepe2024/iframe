@@ -41,7 +41,12 @@ export function PanoramaEnvironmentPanel() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const records = await imageEditorApi.list();
+      const records = [] as Awaited<ReturnType<typeof imageEditorApi.list>>;
+      let page: Awaited<ReturnType<typeof imageEditorApi.list>>;
+      do {
+        page = await imageEditorApi.list(100, records.length);
+        records.push(...page);
+      } while (page.length === 100);
       setCatalog({ status: 'ready', message: '已读取图片编辑副本', entries: admittedPanoramaEntries(records) });
     } catch {
       setCatalog({ status: 'error', message: '全景素材读取失败，请重试。', entries: [] });

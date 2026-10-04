@@ -13,8 +13,8 @@ export const imageEditorApi = {
     });
     return { source, blob };
   },
-  async list(): Promise<SavedImageEdit[]> {
-    const { data } = await axios.get(`${API_URL}/playground/image-edits`);
+  async list(limit = 50, offset = 0): Promise<SavedImageEdit[]> {
+    const { data } = await axios.get(`${API_URL}/playground/image-edits`, { params: { limit, offset } });
     if (!Array.isArray(data)) throw new Error('Invalid image edit list');
     return data;
   },

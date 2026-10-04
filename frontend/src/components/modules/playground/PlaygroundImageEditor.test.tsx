@@ -27,7 +27,7 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn();
   usePlaygroundStore.setState({ activeSessionId: 'original', mode: 'i2v', inputMedia: ['/first.png', '/second.png'] });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); window.location.hash = ''; vi.unstubAllGlobals(); });
 it('appends a saved edit without replacing ordered references or changing mode', async () => {
   render(<PlaygroundImageEditor><OpenSource /></PlaygroundImageEditor>);
   fireEvent.click(screen.getByText('Open source'));
@@ -55,4 +55,12 @@ it('does not insert a delayed save into a different session', async () => {
   finish(saved);
   await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('saved'));
   expect(usePlaygroundStore.getState().inputMedia).toEqual(['/other.png']);
+});
+
+it('opens a declared panorama copy in the director workbench', async () => {
+  mocks.list.mockResolvedValue([{ ...saved, projection_type: 'equirectangular' }]);
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByText('openDirector'));
+  expect(window.location.hash).toBe('#/director');
 });
