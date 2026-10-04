@@ -3128,6 +3128,10 @@
     }
   },
   "imageEditor": {
+    "projection": "投影类型",
+    "perspective": "普通图片",
+    "equirectangular": "等距柱状全景 (2:1)",
+    "browsePanorama": "全景浏览",
     "title": "图片编辑",
     "close": "关闭图片编辑器",
     "discard": "放弃未保存的修改？",

@@ -3128,6 +3128,10 @@
     }
   },
   "imageEditor": {
+    "projection": "Projection",
+    "perspective": "Standard image",
+    "equirectangular": "Equirectangular panorama (2:1)",
+    "browsePanorama": "Browse panorama",
     "title": "Image editor",
     "close": "Close image editor",
     "discard": "Discard unsaved changes?",

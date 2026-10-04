@@ -34,7 +34,7 @@ it('appends a saved edit without replacing ordered references or changing mode',
   fireEvent.click(await screen.findByText('Save'));
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/first.png', '/second.png', saved.path]));
   expect(usePlaygroundStore.getState().mode).toBe('i2v');
-  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ sha256: 'a'.repeat(64) }), expect.any(File), 'operation-key');
+  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ sha256: 'a'.repeat(64) }), expect.any(File), 'operation-key', 'perspective_plane');
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
 });
 it('keeps saved copies available after reopening and appends at the end', async () => {

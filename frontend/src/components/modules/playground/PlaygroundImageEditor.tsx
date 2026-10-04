@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { ImagePlus } from 'lucide-react';
 import { playgroundApi } from '@/lib/api';
-import { imageEditorApi, type EditSource, type SavedImageEdit } from '@/lib/imageEditor';
+import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
 
@@ -25,12 +25,14 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const [name, setName] = useState(title);
   const [loaded, setLoaded] = useState<{ source: EditSource; url: string } | null>(null);
   const [copies, setCopies] = useState<SavedImageEdit[]>([]);
+  const copiesRef = useRef<SavedImageEdit[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [projectionType, setProjectionType] = useState<ImageProjectionType>('perspective_plane');
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const retry = useRef<{ hash: string; key: string }>();
-  useEffect(() => { imageEditorApi.list().then(setCopies).catch(() => setError(t('historyFailed'))); }, [t]);
+  useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
   useEffect(() => {
     if (!selected) return;
     const abort = new AbortController(); let objectUrl: string | undefined;
@@ -38,6 +40,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     imageEditorApi.load(selected, abort.signal).then(({ source, blob }) => {
       if (abort.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob); setLoaded({ source, url: objectUrl });
+      setProjectionType(source.width === 2 * source.height && copiesRef.current.find(copy => copy.path === selected)?.projection_type === 'equirectangular' ? 'equirectangular' : 'perspective_plane');
     }).catch(() => { if (!abort.signal.aborted) setError(t('loadFailed')); })
       .finally(() => { if (!abort.signal.aborted) setBusy(false); });
     return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
@@ -51,13 +54,14 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     }
     return false;
   };
-  return <ImageEditor source={loaded?.url} title={name} onClose={onClose}
-    onSave={async file => {
+  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
+    panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
+    onSave={async (file, projection) => {
       if (!loaded) throw new Error('No source');
       const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
       const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name;
       if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
-      const saved = await imageEditorApi.save(loaded.source, file, retry.current.key);
+      const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
       append(saved); toast.success(t('saved')); onClose();
     }}
     emptyState={<div className="mx-auto flex max-w-2xl flex-col gap-4 p-5">

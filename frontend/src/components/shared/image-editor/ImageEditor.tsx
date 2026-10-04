@@ -4,11 +4,13 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
-import { X } from 'lucide-react';
+import { X, Rotate3D, Pencil } from 'lucide-react';
 import type { FilerobotImageEditorConfig } from 'react-filerobot-image-editor';
+import type { ImageProjectionType } from '@/lib/imageEditor';
 
 // Adapted from iyishow's Filerobot workbench; no canvas, API or store dependency.
 const Engine = dynamic(() => import('react-filerobot-image-editor').then(m => m.default), { ssr: false });
+const PanoramaViewer = dynamic(() => import('./PanoramaViewer'), { ssr: false });
 type SavedImage = Parameters<NonNullable<FilerobotImageEditorConfig['onSave']>>[0];
 
 export async function exportedImageFile(image: SavedImage, title: string): Promise<File> {
@@ -84,11 +86,14 @@ export interface ImageEditorProps {
   source?: string;
   title: string;
   emptyState?: ReactNode;
-  onSave: (file: File) => Promise<void>;
+  projectionType?: ImageProjectionType;
+  panoramaEligible?: boolean;
+  onProjectionChange?: (projection: ImageProjectionType) => void;
+  onSave: (file: File, projectionType?: ImageProjectionType) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -97,6 +102,7 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
   const inFlight = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [viewingPanorama, setViewingPanorama] = useState(false);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
@@ -143,17 +149,28 @@ export default function ImageEditor({ source, title, emptyState, onSave, onClose
           <div className="min-w-0"><h2 id="image-editor-title" className="font-semibold">{t('title')}</h2><p className="truncate text-sm text-text-muted">{title}</p></div>
           <button ref={closeButton} type="button" disabled={saving} onClick={close} aria-label={t('close')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={20} /></button>
         </header>
+        {source && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-4 py-2 text-sm">
+          <label className="flex items-center gap-2">{t('projection')}
+            <select value={projectionType} onChange={event => onProjectionChange?.(event.target.value as ImageProjectionType)} disabled={saving} className="min-h-9 rounded border border-glass-border bg-surface px-2">
+              <option value="perspective_plane">{t('perspective')}</option>
+              <option value="equirectangular" disabled={!panoramaEligible}>{t('equirectangular')}</option>
+            </select>
+          </label>
+          {panoramaEligible && <button type="button" onClick={() => setViewingPanorama(value => !value)} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg">
+            {viewingPanorama ? <Pencil size={16} /> : <Rotate3D size={16} />}{viewingPanorama ? t('edit') : t('browsePanorama')}
+          </button>}
+        </div>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}
         <div className="min-h-0 flex-1 overflow-auto">
-          {source ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
+          {source && viewingPanorama ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
             <Engine theme={IMAGE_EDITOR_THEME} source={source} language={locale === 'zh' ? 'zh-CN' : 'en'} useBackendTranslations={false}
               translations={locale === 'zh' ? { save: '保存副本', saveAs: '另存为', cancel: '取消', apply: '应用', adjustTab: '调整', finetuneTab: '调色', filtersTab: '滤镜', annotateTabLabel: '标注', watermarkTab: '水印', resize: '尺寸', cropTool: '裁剪', rotateTool: '旋转', flipX: '水平翻转', flipY: '垂直翻转', text: '文字', pen: '画笔', undoTitle: '撤销', redoTitle: '重做' } : { save: 'Save copy' }}
               onModify={() => { dirty.current = true; }}
               onSave={async image => {
                 if (inFlight.current) return;
                 inFlight.current = true; setSaving(true); setError('');
-                try { await onSave(await exportedImageFile(image, title)); dirty.current = false; }
+                try { await onSave(await exportedImageFile(image, title), projectionType); dirty.current = false; }
                 catch { setError(t('saveFailed')); }
                 finally { inFlight.current = false; setSaving(false); }
               }}
