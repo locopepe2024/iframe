@@ -9,6 +9,7 @@ const translate = (key: string) => key;
 vi.mock('@/lib/imageEditor', () => ({ imageEditorApi: mocks }));
 vi.mock('@/lib/api', () => ({ playgroundApi: { uploadMedia: mocks.upload } }));
 vi.mock('@/store/toastStore', () => ({ toast: { success: mocks.toast } }));
+vi.mock('./ImageEditorReferenceTools', () => ({ default: () => null }));
 vi.mock('next/dynamic', () => ({ default: () => function Editor(props: ImageEditorProps) {
   return <div>{props.source ? <button onClick={() => {
     const file = new File(['edited'], 'edited.png');

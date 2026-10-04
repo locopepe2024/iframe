@@ -1,10 +1,22 @@
 import axios from 'axios';
-import { API_URL } from './api';
+import { API_URL, type AssetReferenceIndexEntry } from './api';
 
 export interface EditSource { reference: string; sha256: string; width: number; height: number; mime: string }
 export type ImageProjectionType = 'perspective_plane' | 'equirectangular';
 export interface SavedImageEdit { id: string; path: string; title: string; source_reference: string; source_sha256: string; sha256: string; width: number; height: number; projection_type?: ImageProjectionType }
+export interface ImportedLibraryImage { path: string; title: string; width: number; height: number; sha256: string; asset_type: string; asset_id: string; variant_id: string }
 export const imageEditorApi = {
+  async importLibraryVariant(entry: AssetReferenceIndexEntry, variantId: string): Promise<ImportedLibraryImage> {
+    const body = new FormData();
+    body.append('source_scope', entry.source_scope);
+    body.append('source_container_id', entry.source_container_id || '');
+    body.append('asset_type', entry.asset_type);
+    body.append('asset_id', entry.asset_id);
+    body.append('variant_id', variantId);
+    const { data } = await axios.post<ImportedLibraryImage>(`${API_URL}/playground/image-editor/library-import`, body);
+    if (!data.path?.startsWith('/playground/input-media/') || !/^[a-f0-9]{64}$/.test(data.sha256)) throw new Error('Invalid library import');
+    return data;
+  },
   async load(reference: string, signal?: AbortSignal): Promise<{ source: EditSource; blob: Blob }> {
     const { data: source } = await axios.get<EditSource>(`${API_URL}/playground/image-editor/source`, { params: { reference }, signal });
     if (!source || !/^[a-f0-9]{64}$/.test(source.sha256)) throw new Error('Invalid image source');

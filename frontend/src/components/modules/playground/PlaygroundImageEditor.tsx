@@ -8,6 +8,7 @@ import { playgroundApi } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
+import ImageEditorReferenceTools, { type EditorReference } from './ImageEditorReferenceTools';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -23,12 +24,14 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const t = useTranslations('imageEditor');
   const [selected, setSelected] = useState(reference);
   const [name, setName] = useState(title);
-  const [loaded, setLoaded] = useState<{ source: EditSource; url: string } | null>(null);
+  const [loaded, setLoaded] = useState<{ source: EditSource; url: string; blob: Blob } | null>(null);
   const [copies, setCopies] = useState<SavedImageEdit[]>([]);
   const copiesRef = useRef<SavedImageEdit[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [projectionType, setProjectionType] = useState<ImageProjectionType>('perspective_plane');
+  const [references, setReferences] = useState<EditorReference[]>([]);
+  const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const retry = useRef<{ hash: string; key: string }>();
@@ -36,10 +39,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   useEffect(() => {
     if (!selected) return;
     const abort = new AbortController(); let objectUrl: string | undefined;
-    setError(''); setBusy(true);
+    setError(''); setBusy(true); setLoaded(null); setHasUnsavedEdit(false);
     imageEditorApi.load(selected, abort.signal).then(({ source, blob }) => {
       if (abort.signal.aborted) return;
-      objectUrl = URL.createObjectURL(blob); setLoaded({ source, url: objectUrl });
+      objectUrl = URL.createObjectURL(blob); setLoaded({ source, url: objectUrl, blob });
       setProjectionType(source.width === 2 * source.height && copiesRef.current.find(copy => copy.path === selected)?.projection_type === 'equirectangular' ? 'equirectangular' : 'perspective_plane');
     }).catch(() => { if (!abort.signal.aborted) setError(t('loadFailed')); })
       .finally(() => { if (!abort.signal.aborted) setBusy(false); });
@@ -54,16 +57,39 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     }
     return false;
   };
-  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
+  const addReference = (candidate: EditorReference) => setReferences(current => current.length >= 9 || current.some(item => item.path === candidate.path) ? current : [...current, candidate]);
+  const moveReference = (path: string, direction: -1 | 1) => setReferences(current => {
+    const index = current.findIndex(item => item.path === path);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return current;
+    const next = [...current];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
+  const useResult = (path: string, resultTitle: string) => {
+    if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
+    setName(resultTitle); setSelected(path);
+  };
+  const referenceTools = <ImageEditorReferenceTools source={loaded?.source ?? null} references={references}
+    onAdd={addReference} onRemove={path => setReferences(current => current.filter(item => item.path !== path))}
+    onMove={moveReference} onUseResult={useResult}/>;
+  const saveFile = async (file: File, projection?: ImageProjectionType) => {
+    if (!loaded) throw new Error('No source');
+    const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
+    if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
+    const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
+    append(saved); toast.success(t('saved')); onClose();
+  };
+  return <ImageEditor key={selected || 'empty'} source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
+    onModified={() => setHasUnsavedEdit(true)}
     panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
-    onSave={async (file, projection) => {
-      if (!loaded) throw new Error('No source');
-      const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-      const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name;
-      if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
-      const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
-      append(saved); toast.success(t('saved')); onClose();
-    }}
+    onSavePanoramaSource={loaded && !hasUnsavedEdit && loaded.source.width === 2 * loaded.source.height ? async () => {
+      const ext = loaded.source.mime === 'image/jpeg' ? 'jpg' : loaded.source.mime === 'image/webp' ? 'webp' : 'png';
+      await saveFile(new File([loaded.blob], `${name.replace(/\.[^.]+$/, '') || 'panorama'}.${ext}`, { type: loaded.source.mime }), 'equirectangular');
+    } : undefined}
+    toolPanel={loaded && referenceTools}
+    onSave={saveFile}
     emptyState={<div className="mx-auto flex max-w-2xl flex-col gap-4 p-5">
       <p className="text-text-secondary">{t('choose')}</p>
       <label className="flex min-h-11 items-center gap-3 rounded-lg border border-glass-border p-3">{t('upload')}
@@ -86,6 +112,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
         <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); onClose(); }}>{t('use')}</button>
         {copy.projection_type === 'equirectangular' && <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { onClose(); window.location.hash = '#/director'; }}>{t('openDirector')}</button>}
       </div>)}
+      <div className="border-t border-glass-border pt-4">{referenceTools}</div>
     </div>} />;
 }
 
