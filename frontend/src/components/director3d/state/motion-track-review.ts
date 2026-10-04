@@ -29,17 +29,33 @@ function mergedFrame(source: MotionTrackFrame, review: MotionTrackFrameReview | 
   const selected = review.selectedPoseIndex === null ? null : review.candidates.find((candidate) => candidate.poseIndex === review.selectedPoseIndex);
   const semanticJoints = { ...source.semanticJoints, ...(selected?.semanticJoints ?? {}), ...review.jointOverrides };
   const safeStatus = review.status === "pending" ? source.selectionStatus : review.status;
-  return { ...structuredClone(source), selectionStatus: safeStatus, selectionReason: `director_review:${review.status}`, occlusionEvidence: review.status === "real_occlusion", semanticJoints: review.status === "real_occlusion" || review.status === "out_of_frame" ? {} : semanticJoints };
+  const missing = review.status === "real_occlusion" || review.status === "out_of_frame";
+  const joints = missing ? {} : semanticJoints;
+  const center = (a: string, b: string): MotionTrackVector3 | null => joints[a] && joints[b] ? joints[a].map((v, i) => (v + joints[b][i]) / 2) as MotionTrackVector3 : null;
+  const axis = (a: string, b: string): MotionTrackVector3 | null => joints[a] && joints[b] ? joints[b].map((v, i) => v - joints[a][i]) as MotionTrackVector3 : null;
+  const hips = center("left_hip", "right_hip"); const shoulders = center("left_shoulder", "right_shoulder");
+  const torso = hips && shoulders ? shoulders.map((v, i) => v - hips[i]) as MotionTrackVector3 : null;
+  return { ...structuredClone(source), selectionStatus: safeStatus, selectionReason: `director_review:${review.status}`, occlusionEvidence: review.status === "real_occlusion", semanticJoints: joints,
+    bodyCenters: { hips, shoulders, pelvisAxis: axis("left_hip", "right_hip"), shoulderAxis: axis("left_shoulder", "right_shoulder"), torsoDirection: torso, torsoLength: torso ? Math.hypot(...torso) : null },
+    footTargets: { left: { ankle: joints.left_ankle ?? null, heel: joints.left_heel ?? null, toe: joints.left_foot_index ?? null }, right: { ankle: joints.right_ankle ?? null, heel: joints.right_heel ?? null, toe: joints.right_foot_index ?? null } },
+    // Corrections invalidate automatic contact evidence until recomputed.
+    footContactCandidates: { left: { candidate: false, confidence: 0 }, right: { candidate: false, confidence: 0 } },
+  };
 }
 
 export function compileReviewedMotionTrack(source: MotionTrackImportState["manifest"], review: MotionTrackReviewState): { manifest: MotionTrackImportState["manifest"]; report: MotionTrackReviewReport } {
   if (!source) throw new Error("尚未导入原始 motion-track。");
   if (!review.manifest) throw new Error("尚未导入 annotation review manifest。");
-  if (review.manifest.sourceTrackRevision !== source.sourceRevision) throw new Error("review source revision 与原始 motion-track 不匹配。");
+  if (!source.sourceRevision || review.manifest.sourceTrackRevision !== source.sourceRevision) throw new Error("review source revision 与原始 motion-track 不匹配。");
   if (review.status !== "approved") throw new Error("review 必须先 approved 才能编译。");
+  if (review.manifest.frames.some((frame) => (review.editedFrames[frame.frame] ?? frame).status === "pending")) throw new Error("仍有待审核帧。");
   const byFrame = new Map(review.manifest.frames.map((frame) => [frame.frame, review.editedFrames[frame.frame] ?? frame])); const frames = source.frames.map((frame) => mergedFrame(frame, byFrame.get(frame.frame)));
   const missingFrames = frames.flatMap((frame) => { const reviewFrame = byFrame.get(frame.frame); const missingJoints = JOINTS.filter((joint) => !frame.semanticJoints[joint]); return missingJoints.length && reviewFrame?.status !== "real_occlusion" && reviewFrame?.status !== "out_of_frame" ? [{ frame: frame.frame, missingJoints, status: reviewFrame?.status ?? "pending", reason: reviewFrame ? "missing semantic joints after review" : "frame not reviewed" }] : []; });
   const counts = Object.fromEntries(( ["tracked", "manual_recovered", "detector_missed", "real_occlusion", "out_of_frame", "pending"] as MotionTrackReviewStatus[]).map((status) => [status, review.manifest!.frames.filter((frame) => (review.editedFrames[frame.frame] ?? frame).status === status).length])) as Record<MotionTrackReviewStatus, number>;
-  const outputRevision = `${source.sourceRevision ?? "unknown"}:review:${review.manifest.sourceTrackRevision ?? "unknown"}:${review.manifest.frames.length}`;
+  // Content fingerprint distinguishes successive manual corrections with the
+  // same frame count. This is provenance identification, not a security hash.
+  let fingerprint = 2166136261;
+  for (const char of JSON.stringify(Array.from(byFrame.values()))) fingerprint = Math.imul(fingerprint ^ char.charCodeAt(0), 16777619) >>> 0;
+  const outputRevision = `${source.sourceRevision}:review:${review.manifest.frames.length}:${fingerprint.toString(16)}`;
   return { manifest: { ...structuredClone(source), sourceRevision: outputRevision, frames }, report: { sourceRevision: source.sourceRevision, outputRevision, totalFrames: frames.length, counts, missingFrames, errors: [] } };
 }

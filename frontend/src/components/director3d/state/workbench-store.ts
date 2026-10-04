@@ -1683,22 +1683,22 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   loadMotionTrackReviewManifest: (manifest) => set((state) => ({ motionTrackReview: { ...createIdleMotionTrackReviewState(), status: manifest ? "ready" : "idle", manifest: structuredClone(manifest) }, motionTrackReviewUndo: [], unsavedChanges: Boolean(manifest) || state.unsavedChanges })),
   selectMotionTrackReviewFrame: (frame) => set((state) => ({ motionTrackReview: { ...state.motionTrackReview, status: frame === null ? state.motionTrackReview.status : "reviewing", selectedFrame: frame } })),
   setMotionTrackReviewStatus: (frame, status) => set((state) => {
-    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const current = state.motionTrackReview.editedFrames[frame] ?? state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame); if (!current) return state;
     const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), status } };
     return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
   }),
   setMotionTrackReviewCandidate: (frame, poseIndex) => set((state) => {
-    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const current = state.motionTrackReview.editedFrames[frame] ?? state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame); if (!current) return state;
     const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), selectedPoseIndex: poseIndex, status: poseIndex === null ? current.status : "manual_recovered" } };
     return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
   }),
   setMotionTrackJointOverride: (frame, jointId, value) => set((state) => {
-    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current || !jointId.trim()) return state;
+    const current = state.motionTrackReview.editedFrames[frame] ?? state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame); if (!current || !jointId.trim()) return state;
     const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), jointOverrides: { ...current.jointOverrides, [jointId.trim()]: value }, status: current.status === "pending" ? "detector_missed" : current.status } };
     return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
   }),
   setMotionTrackReviewerNote: (frame, note) => set((state) => {
-    const current = state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame) ?? state.motionTrackReview.editedFrames[frame]; if (!current) return state;
+    const current = state.motionTrackReview.editedFrames[frame] ?? state.motionTrackReview.manifest?.frames.find((item) => item.frame === frame); if (!current) return state;
     const before = structuredClone(state.motionTrackReview); const editedFrames = { ...state.motionTrackReview.editedFrames, [frame]: { ...structuredClone(current), reviewerNote: note.slice(0, 1000) } };
     return { motionTrackReview: { ...state.motionTrackReview, status: "reviewing", editedFrames, dirty: true }, motionTrackReviewUndo: [...state.motionTrackReviewUndo, before].slice(-100), unsavedChanges: true };
   }),
