@@ -54,3 +54,22 @@ def test_generation_status_is_complete_and_caps_large_errors(tmp_path, monkeypat
     assert payload['mode'] == 't2i'
     assert payload['prompt'] == 'test'
     assert len(payload['error']) == 2003
+
+
+def test_legacy_video_history_advertises_cover_url(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    identity = UserContext(user_id='user', owner_profile_id='profile', display_name='', access_token='')
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    monkeypatch.setattr(api, '_storage_for', lambda _: storage)
+    video = Path(storage.output_dir) / 'videos' / 'old.mp4'
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b'old-video')
+    generation = PlaygroundGeneration(
+        id='g', mode='t2v', model_id='test', prompt='test', created_at='2026-09-15',
+        owner_user_id='user', owner_profile_id='profile',
+        outputs=[PlaygroundOutput(id='o', media_path=str(video), media_type='video')],
+    )
+    payload = api._public_generation(generation, identity)
+    assert payload['outputs'][0]['media_path'].startswith('/playground/media/g/o?thumbnail=0')
+    assert payload['outputs'][0]['thumbnail_path'].startswith('/playground/media/g/o?thumbnail=1')
