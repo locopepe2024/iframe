@@ -223,8 +223,19 @@ def get_generation_media(
     # Original downloads use the same browser identity as history and uploads.
     # Signed previews still validate their signature; invalid bearer credentials
     # must not silently fall back to a different browser owner.
-    if authorization or (browser_profile and not signature and not expires):
+    if authorization:
         identity, _ = _resolve_request_context(authorization, browser_profile)
+    elif browser_profile:
+        # Signed URLs are commonly fetched by a different worker than the one
+        # that created them. Resolve the browser owner from the shared cookie
+        # instead of relying on the process-local `_storages` registry.
+        identity, _ = _resolve_request_context(None, browser_profile)
+        if signature or expires:
+            if expires < int(time.time()):
+                raise HTTPException(status_code=401, detail="Media URL expired")
+            expected = _media_signature(identity.owner_profile_id, generation_id, output_id, thumbnail, expires)
+            if not hmac.compare_digest(expected, signature):
+                raise HTTPException(status_code=401, detail="Invalid media signature")
     else:
         if expires < int(time.time()):
             raise HTTPException(status_code=401, detail="Media URL expired")

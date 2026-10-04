@@ -31,6 +31,18 @@ def test_browser_owner_can_download_original_without_signed_preview(client):
     assert response.content == b'owned-image'
 
 
+def test_signed_preview_uses_browser_cookie_across_workers(client, monkeypatch):
+    client.cookies.set(identity.BROWSER_PROFILE_COOKIE, 'owner')
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    expires = 4_000_000_000
+    signature = api._media_signature('browser-owner', 'generation', 'output', 0, expires)
+    response = client.get(
+        f'/playground/media/generation/output?expires={expires}&signature={signature}'
+    )
+    assert response.status_code == 200
+    assert response.content == b'owned-image'
+
+
 def test_browser_owner_cannot_download_another_owners_file(client):
     client.cookies.set(identity.BROWSER_PROFILE_COOKIE, 'other')
     assert client.get('/playground/media/generation/output').status_code == 404
