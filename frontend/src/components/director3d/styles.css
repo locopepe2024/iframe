@@ -561,6 +561,17 @@
 .director3d-root .environment-input-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
 .director3d-root .environment-input-actions button:disabled { cursor: not-allowed; opacity: .46; }
 .director3d-root .environment-input-actions .secondary { color: var(--muted); background: rgba(255,255,255,.018); }
+.director3d-root .panorama-environment-panel { display: grid; gap: 7px; padding: 10px; border-block: 1px solid var(--border); }
+.director3d-root .panorama-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.director3d-root .panorama-panel-heading strong { font-size: 11px; color: var(--text); }
+.director3d-root .panorama-environment-panel button, .director3d-root .panorama-environment-panel select { min-height: 36px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--surface); }
+.director3d-root .panorama-panel-heading button, .director3d-root .panorama-controls button:last-child { display: grid; place-items: center; min-width: 36px; }
+.director3d-root .panorama-environment-panel select { width: 100%; min-width: 0; padding: 6px; font-size: 11px; }
+.director3d-root .panorama-controls { display: flex; align-items: center; gap: 6px; }
+.director3d-root .panorama-controls label { min-width: 0; flex: 1; display: flex; align-items: center; gap: 5px; font-size: 10px; }
+.director3d-root .panorama-controls input { min-width: 0; flex: 1; }
+.director3d-root .panorama-controls button { padding: 0 7px; font-size: 10px; }
+.director3d-root .panorama-environment-panel p { margin: 0; color: var(--subtle); font-size: 10px; line-height: 1.4; }
 .director3d-root .scene-plate-calibration { display: grid; gap: 9px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.07); }
 .director3d-root .calibration-quality { padding: 4px 7px; border: 1px solid rgba(52,211,153,.28); border-radius: 999px; color: #d1fae5; background: rgba(52,211,153,.06); font: 9px/1.3 var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
 .director3d-root .calibration-quality.usable { border-color: rgba(52,211,153,.3); color: #d1fae5; background: rgba(52,211,153,.07); }

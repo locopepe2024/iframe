@@ -12,6 +12,7 @@ import { type ActorPathVectorField, type CharacterAuthoringState, useWorkbenchSt
 import type { ActorPathState, CameraCompositionState, CameraPathState, JointDefinition, PerspectiveScenePlateCalibrationState, SceneObjectAuthoringState, TransformMode, ViewMode } from "../types";
 import { reconnectControls } from "./control-lifecycle";
 import { aspectRatioValue, cameraForwardTarget, cameraProjection, cameraRuntimePosition, cameraTargetPosition, evaluateDirectorFrame, stateTargetPosition } from "../timeline/timeline-evaluation";
+import { getAssetUrl } from "@/lib/utils";
 
 interface RigRuntime {
   bones: Map<string, THREE.Bone>;
@@ -22,6 +23,36 @@ function CanvasClearAlpha({ transparent }: { transparent: boolean }) {
   const { gl } = useThree();
   useEffect(() => { gl.setClearAlpha(transparent ? 0 : 1); }, [gl, transparent]);
   return null;
+}
+
+function PanoramaBackground({ inputId, checksum, rotationDeg }: { inputId: string; checksum: string; rotationDeg: [number, number, number] }) {
+  const { camera } = useThree();
+  const sphereGroup = useRef<THREE.Group>(null);
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const setStatus = useWorkbenchStore(state => state.setPanoramaPreviewStatus);
+  useEffect(() => {
+    let active = true;
+    setTexture(null);
+    setStatus({ state: 'loading', message: '正在加载球面环境…' });
+    const url = `${getAssetUrl(inputId)}?sha256=${checksum}`;
+    const loader = new THREE.TextureLoader();
+    loader.load(url, loaded => {
+      if (!active) { loaded.dispose(); return; }
+      loaded.colorSpace = THREE.SRGBColorSpace;
+      setTexture(loaded);
+      setStatus({ state: 'ready', message: '球面环境已载入，可调整人物、道具与机位。' });
+    }, undefined, () => { if (active) setStatus({ state: 'error', message: '全景纹理加载失败；请检查素材并重试。' }); });
+    return () => { active = false; };
+  }, [checksum, inputId, setStatus]);
+  useEffect(() => () => texture?.dispose(), [texture]);
+  useFrame(() => { if (sphereGroup.current) sphereGroup.current.position.copy(camera.position); });
+  if (!texture) return null;
+  return <group ref={sphereGroup} rotation={[0, 0, THREE.MathUtils.degToRad(rotationDeg[2])]}>
+    <mesh rotation={[Math.PI / 2 + THREE.MathUtils.degToRad(rotationDeg[0]), THREE.MathUtils.degToRad(rotationDeg[1]), 0]}>
+      <sphereGeometry args={[50, 64, 32]} />
+      <meshBasicMaterial map={texture} side={THREE.BackSide} depthWrite={false} toneMapped={false}/>
+    </mesh>
+  </group>;
 }
 
 function PathEventMarkers() {
@@ -476,6 +507,8 @@ export function HumanoidStage() {
   const sceneRootTransform = useWorkbenchStore((state) => state.renderScene.sceneRootTransform);
   const ground = useWorkbenchStore((state) => state.renderScene.ground);
   const skyColor = useWorkbenchStore((state) => state.renderScene.skyColor);
+  const panorama = useWorkbenchStore((state) => state.renderScene.panorama);
+  const panoramaEntry = useWorkbenchStore((state) => state.environmentInputCatalog.entries.find(entry => entry.inputId === state.renderScene.panorama.inputId));
   const cameraComposition = cameras[evaluated.activeCameraId] ?? cameras[selectedCameraId] ?? Object.values(cameras)[0];
   const selectedCharacter = charactersRecord[selectedCharacterId];
   const lightDirection: [number, number, number] = [0.6, -0.8, 1];
@@ -503,6 +536,7 @@ export function HumanoidStage() {
       >
         <CanvasClearAlpha transparent={false}/>
         <color attach="background" args={[skyColor]} />
+        {panoramaEntry && panoramaEntry.environmentAllowed && panoramaEntry.admissionChecksum === panoramaEntry.checksum && <PanoramaBackground inputId={panoramaEntry.inputId} checksum={panoramaEntry.checksum} rotationDeg={panorama.rotationDeg}/>}
         <hemisphereLight args={["#ffffff", "#263247", 2.2]} />
         <directionalLight position={lightDirection.map((value) => value * 5) as [number, number, number]} intensity={3.2} castShadow />
         <group position={sceneRootTransform.position} rotation={sceneRootTransform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={sceneRootTransform.scale}>

@@ -103,6 +103,7 @@ export default function ImageEditor({ source, title, emptyState, projectionType 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [viewingPanorama, setViewingPanorama] = useState(false);
+  useEffect(() => { setViewingPanorama(false); }, [source]);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
