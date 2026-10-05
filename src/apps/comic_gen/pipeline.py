@@ -8,6 +8,7 @@ import uuid
 import subprocess
 import threading
 import platform
+import tempfile
 from urllib.parse import quote
 from .models import (
     Script,
@@ -181,6 +182,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         self.series_data_file = "output/series.json"
         self.library_data_file = "output/library_assets.json"
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
+        self._unloaded_scripts: Dict[str, Any] = {}
+        self._project_load_error = False
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
         # Project-independent global asset library (lowest resolver layer).
@@ -580,6 +583,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         return export_url
 
     def _load_data(self) -> Dict[str, Script]:
+        self._unloaded_scripts = {}
+        self._project_load_error = False
         if not os.path.exists(self.data_file):
             return {}
         try:
@@ -587,6 +592,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 data = json.load(f)
         except Exception as e:
             logger.error(f"Failed to load data: {e}")
+            self._project_load_error = True
             return {}
         scripts = {}
         for script_id, payload in data.items():
@@ -594,17 +600,31 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scripts[script_id] = Script(**payload)
             except Exception:
                 logger.exception("Failed to load project %s", script_id)
+                self._unloaded_scripts[script_id] = payload
         return scripts
 
     def _save_data(self):
         """Save data with thread lock to prevent concurrent write issues."""
         with self._save_lock:
+            temp_path = None
             try:
+                if getattr(self, "_project_load_error", False):
+                    raise RuntimeError("Project store failed to load; refusing to overwrite it")
                 os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
-                with open(self.data_file, 'w') as f:
-                    json.dump({k: v.dict() for k, v in self.scripts.items()}, f, indent=2)
+                payload = {**getattr(self, "_unloaded_scripts", {}),
+                           **{k: v.dict() for k, v in self.scripts.items()}}
+                with tempfile.NamedTemporaryFile('w', dir=os.path.dirname(self.data_file),
+                                                 prefix='.projects-', delete=False) as f:
+                    temp_path = f.name
+                    json.dump(payload, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, self.data_file)
             except Exception as e:
                 logger.error(f"Failed to save data: {e}")
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
 
     def _repair_series_bindings(self):
         """Repair episodes listed in series.episode_ids that have series_id=None."""

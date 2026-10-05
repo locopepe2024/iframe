@@ -201,6 +201,20 @@ def test_invalid_project_does_not_hide_other_projects(tmp_path):
     loaded = pipeline._load_data()
 
     assert list(loaded) == ["film"]
+    pipeline.scripts = loaded
+    pipeline._save_data()
+    assert json.loads(path.read_text())["invalid"] == {"unexpected": True}
+
+
+def test_malformed_project_store_cannot_be_overwritten(tmp_path):
+    pipeline, _ = make_pipeline()
+    path = tmp_path / "projects.json"
+    path.write_text("{broken")
+    pipeline.data_file = str(path)
+
+    assert pipeline._load_data() == {}
+    pipeline._save_data()
+    assert path.read_text() == "{broken"
 
 
 def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
