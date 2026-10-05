@@ -161,7 +161,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
       {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
         <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
         {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
-        {copy.projection_type === 'equirectangular' && copy.panorama_quality?.status === 'pass' && <span className="shrink-0 text-[10px] text-text-muted">{t('panoramaGeneration')}</span>}
+        {copy.projection_type === 'equirectangular' && (copy.panorama_quality?.status === 'pass' || !copy.panorama_quality) && <span className="shrink-0 text-[10px] text-text-muted">{t('panoramaGeneration')}</span>}
       </div>)}
     </div>}
     toolPanel={referenceTools}
