@@ -489,6 +489,18 @@ export default function ConsistencyVault() {
                 </div>
             )}
 
+            {(episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 && currentProject && (
+                <ShootingPlanAssetRequirements
+                    bindings={episodeAssetSync?.bindings || episodeAssetState.bindings}
+                    project={currentProject}
+                    onOpenAsset={(assetType, assetId) => {
+                        setActiveTab(assetType);
+                        setSelectedAssetType(assetType);
+                        setSelectedAssetId(assetId);
+                    }}
+                />
+            )}
+
             {/* Content Grid */}
             {currentProject?.workflow_mode !== "i2v_legacy" && (
                 <div className="mx-6 mt-4 px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 flex items-start gap-3">
@@ -624,6 +636,66 @@ export default function ConsistencyVault() {
                 />
             )}
         </div >
+    );
+}
+
+function ShootingPlanAssetRequirements({
+    bindings,
+    project,
+    onOpenAsset,
+}: {
+    bindings: EpisodeVisualContextState["bindings"];
+    project: any;
+    onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
+}) {
+    const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
+        { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character") },
+        { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
+        { type: "prop", label: "道具", items: bindings.filter(item => item.asset_type === "prop") },
+    ];
+    const getAsset = (type: "character" | "scene" | "prop", id: string) => {
+        const list = type === "character" ? project.characters : type === "scene" ? project.scenes : project.props;
+        return list?.find((asset: any) => asset.id === id);
+    };
+    const statusLabel = (status: string) => status === "accepted" ? "已采纳" : status === "stale" ? "需复核" : "待生成";
+
+    return (
+        <section className="mx-6 mt-3 rounded-lg border border-glass-border bg-surface px-4 py-3" aria-label="拍摄计划资产需求">
+            <div className="flex items-baseline justify-between gap-3">
+                <div>
+                    <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
+                    <p className="mt-1 text-xs text-text-secondary">这里展示分镜前置需求。打开已有基础资产后再生成场景变体，系统不会自动生成图片。</p>
+                </div>
+                <span className="shrink-0 text-xs text-text-muted">{bindings.length} 条绑定</span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {groups.map(group => (
+                    <div key={group.type} className="min-w-0 rounded-md border border-glass-border bg-glass/40 p-3">
+                        <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
+                            <span>{group.label}</span><span>{group.items.length}</span>
+                        </div>
+                        {group.items.length === 0 ? (
+                            <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
+                        ) : (
+                            <div className="mt-2 max-h-32 space-y-2 overflow-y-auto">
+                                {group.items.map(binding => {
+                                    const asset = getAsset(group.type, binding.asset_id);
+                                    return (
+                                        <div key={`${binding.asset_type}:${binding.asset_id}`} className="flex items-start justify-between gap-2 rounded border border-glass-border/70 px-2 py-1.5">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-xs text-foreground">{asset?.name || "计划需求（尚无基础资产）"}</p>
+                                                <p className="text-[0.6875rem] text-text-muted">{binding.scene_ids.length} 个场景 · {binding.shot_ids.length} 个镜头 · {statusLabel(binding.status)}</p>
+                                            </div>
+                                            {asset && <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset(group.type, asset.id)}>打开资产</button>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </section>
     );
 }
 
