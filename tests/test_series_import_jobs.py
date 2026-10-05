@@ -71,6 +71,30 @@ def test_import_preview_is_durable_deduplicated_and_owner_scoped(tmp_path, monke
             jobs.get("owner", "series-import", first["id"])
 
 
+def test_import_preview_accepts_sixty_episodes(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    owner = UserContext("user", "owner", "", "")
+    calls = Mock(return_value=[{"episode_number": number, "title": f"第{number}集"}
+                               for number in range(1, 61)])
+    pipeline = SimpleNamespace(
+        script_processor=SimpleNamespace(
+            llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
+        ),
+        import_file_and_split=calls,
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+        monkeypatch.setattr(api, "pipeline", pipeline)
+        monkeypatch.setattr(api, "extraction_jobs", jobs)
+        monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+        job = asyncio.run(api.import_file_preview(upload("第1集\n剧本正文"), 60, owner))
+        result = wait_done(jobs, "owner", job)
+        assert result["status"] == "completed"
+        assert len(result["result"]["episodes"]) == 60
+        calls.assert_called_once()
+
+
 def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_path, monkeypatch):
     from src.apps.comic_gen import api
 
