@@ -375,6 +375,7 @@ Script
 | `2026-09-26-director-plan-storyboard-handoff-v1.md` | 确认计划到 Storyboard 的确定性 apply；继续有效。 |
 | `2026-10-04-asset-library-foundation-and-production-variant-v1.md` | 底座、分集视觉变体和同步细节；继续有效，本文件提供总层级。 |
 | `2026-10-04-shooting-plan-storyboard-and-director3d-roadmap-v1.md` | 当前下一阶段路线和 3D 汇合；继续有效。 |
+| `2026-10-06-style-assets-shot-template-roadmap-v1.md` | 已确认拍摄计划之后的风格扩展、Assets 生产与分镜模板实施顺序；作为下一阶段专项计划。 |
 | `2026-10-03-digital-avatar-character-design-board-v1.md` | Avatar 外部权威、角色工作台和 3D 引用边界；继续有效。 |
 | `2026-09-19-character-local-image-edit-v1.md` | 图片编辑专项 slice；仅描述入口实现，不代表完整资产设计职责。 |
 | `2026-09-19-iframe-3d-director-browser-core-v1.md` | 3D 浏览器导演台 V1；明确本地草稿边界，继续有效。 |
