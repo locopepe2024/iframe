@@ -1396,6 +1396,15 @@
       },
       "legacySettingTitle": "Legacy/model fields ({count})",
       "legacySettingHint": "Original draft fields remain editable. Review their meaning before consolidating director decisions.",
+      "domains": {
+        "navigation": "Director interpretation domains",
+        "understanding": "Director understanding",
+        "understandingHint": "Confirm the original, timeline, relationships and source basis",
+        "intent": "Director intent",
+        "intentHint": "Shape visual, performance, sound and continuity treatment",
+        "questions": "Director questions / open decisions",
+        "questionsHint": "Answer open questions or request a local/full revision; answers enter the next Director revision"
+      },
       "field": {
         "emotional_arc": "Emotional arc",
         "pacing": "Pacing and editing",
@@ -1783,15 +1792,6 @@
         "purpose": "Purpose",
         "focus": "Directing focus",
         "asset_need": "Asset needs"
-      },
-      "domains": {
-        "navigation": "Director interpretation domains",
-        "understanding": "Director understanding",
-        "understandingHint": "Confirm the original, timeline, relationships and source basis",
-        "intent": "Director intent",
-        "intentHint": "Shape visual, performance, sound and continuity treatment",
-        "questions": "Director questions / open decisions",
-        "questionsHint": "Answer open questions or request a local/full revision; answers enter the next Director revision"
       },
       "flow": {
         "scene": "Scene",

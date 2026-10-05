@@ -1397,6 +1397,15 @@
       },
       "legacySettingTitle": "历史/模型附加字段（{count}）",
       "legacySettingHint": "旧草稿的原始字段仍可编辑；确认含义后再整理，避免误删导演决定。",
+      "domains": {
+        "navigation": "导演理解功能域",
+        "understanding": "导演理解",
+        "understandingHint": "确认原作、时间线、人物关系和原文依据",
+        "intent": "导演意图",
+        "intentHint": "对修订后剧本进行视觉、表演、声音和连续性加工",
+        "questions": "导演问题 / 待确认",
+        "questionsHint": "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"
+      },
       "field": {
         "emotional_arc": "情绪曲线",
         "pacing": "节奏与剪辑",
@@ -1784,15 +1793,6 @@
         "purpose": "目的",
         "focus": "导演重点",
         "asset_need": "所需资产"
-      },
-      "domains": {
-        "navigation": "导演理解功能域",
-        "understanding": "导演理解",
-        "understandingHint": "确认原作、时间线、人物关系和原文依据",
-        "intent": "导演意图",
-        "intentHint": "对修订后剧本进行视觉、表演、声音和连续性加工",
-        "questions": "导演问题 / 待确认",
-        "questionsHint": "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"
       },
       "flow": {
         "scene": "场景",

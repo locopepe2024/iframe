@@ -392,7 +392,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
     const saveDraft = async () => {
         if (!currentProject || !draftText) return;
         const requestedName = window.prompt(t("directorDraftNamePrompt"), draftName || t("directorDraftNameDefault"));
-        if (requestedName === null) return;
+        if (typeof requestedName !== "string") return;
         const trimmedName = requestedName.trim();
         if (!trimmedName) {
             toast.info(t("directorDraftNameRequired"));

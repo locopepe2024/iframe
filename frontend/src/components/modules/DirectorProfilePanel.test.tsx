@@ -22,6 +22,8 @@ const profile = {
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
+    vi.spyOn(window, "prompt").mockReturnValue("Test Director draft");
     vi.spyOn(api, "getDirectorOverviewTemplate").mockResolvedValue({ source: "default", template: { revision: 1, fields: [
         { key: "format_genre", label: "Format and genre", purpose: "Genre", enabled: true },
         { key: "locations", label: "Locations", purpose: "Places", enabled: true },
@@ -35,6 +37,9 @@ beforeEach(() => {
     });
     vi.spyOn(api, "listDirectorProfileRevisions").mockResolvedValue([]);
     vi.spyOn(api, "listScriptFactLedgerRevisions").mockResolvedValue([]);
+    vi.spyOn(api, "getScriptFactLedgerDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 0, source_revision: null, facts: [],
+    });
     vi.spyOn(api, "saveDirectorProfileDraft").mockImplementation(async (_projectId, sourceRevision, expectedDraftRevision, draft) => ({
         project_id: "film",
         draft_revision: expectedDraftRevision + 1,
@@ -135,7 +140,6 @@ it("loads the story map's pinned fact revision and displays exact source evidenc
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     fireEvent.click(await screen.findByRole("button", { name: /First/ }));
-    fireEvent.click(await screen.findByText(/Script evidence/));
 
     await waitFor(() => expect(getLedger).toHaveBeenCalledWith("film", 1, 2, 0, 100));
     expect(await screen.findByText(/They meet in the university library/)).toBeInTheDocument();
@@ -182,7 +186,7 @@ it("restores a saved Director draft independently from the confirmed profile", a
     );
 
     expect(await screen.findByText("Saved draft v3")).toBeInTheDocument();
-    expect(screen.getByLabelText("Geography (legacy field)")).toHaveValue("User-edited geography");
+    await waitFor(() => expect(screen.getByLabelText("Geography (legacy field)")).toHaveValue("User-edited geography"));
 });
 
 it("restores a browser draft when the previous server save failed", async () => {
@@ -201,7 +205,9 @@ it("restores a browser draft when the previous server save failed", async () => 
         </NextIntlClientProvider>,
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: /Director questions \/ open decisions/ }));
     expect(await screen.findByDisplayValue("2014 or 2020?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Director intent/ }));
     expect(screen.getByDisplayValue("Keep the haircut by era")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
 });
@@ -219,6 +225,7 @@ it("retries a draft save against the latest server revision without losing edits
         }));
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
     await screen.findByText("Saved draft v4");
+    fireEvent.click(screen.getByRole("button", { name: /Director intent/ }));
     fireEvent.click(screen.getAllByRole("button", { name: "Add item" })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
