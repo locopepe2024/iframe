@@ -54,6 +54,7 @@ interface SeriesSidebarProps {
   onOpenModelSettings: () => void;
   onOpenPromptConfig: () => void;
   onOpenImportAssets: () => void;
+  onOpenImportLibraryAssets: () => void;
 }
 
 // ── Asset nav config ──
@@ -88,6 +89,7 @@ export default function SeriesSidebar({
   onOpenModelSettings,
   onOpenPromptConfig,
   onOpenImportAssets,
+  onOpenImportLibraryAssets,
 }: SeriesSidebarProps) {
   const t = useTranslations("series");
   const tc = useTranslations("common");
@@ -436,6 +438,13 @@ export default function SeriesSidebar({
         >
           <Download size={16} className="group-hover:text-green-400 transition-colors" />
           <span className="text-sm">{t("importAssets")}</span>
+        </button>
+        <button
+          onClick={onOpenImportLibraryAssets}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-foreground hover:bg-hover-bg transition-colors group"
+        >
+          <Download size={16} className="group-hover:text-primary transition-colors" />
+          <span className="text-sm">{t("importGlobalAssets")}</span>
         </button>
         <button
           onClick={onOpenPromptConfig}

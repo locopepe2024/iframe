@@ -274,9 +274,9 @@ def test_empty_library_is_byte_for_byte_noop():
 
 
 # --------------------------------------------------------------------------
-# integration: GET /projects/{id} tags global-only assets source="global"
+# integration: GET /projects/{id} does not implicitly include global assets
 # --------------------------------------------------------------------------
-def test_get_project_merges_global_source():
+def test_get_project_does_not_merge_global_source():
     try:
         from fastapi.testclient import TestClient
         from src.apps.comic_gen import api
@@ -291,6 +291,10 @@ def test_get_project_merges_global_source():
     # Inject in-memory only; get_project performs no disk writes. Snapshot
     # and restore the singleton's state so other tests are unaffected.
     pipeline.scripts[sid] = script
+    # This direct endpoint test has no authenticated request context.
+    pipeline._requested_owner_profile_id = lambda owner=None: None
+    prev_get_script = pipeline.get_script
+    pipeline.get_script = lambda script_id, owner_profile_id=None: pipeline.scripts.get(script_id)
     prev_library = pipeline.library_store
     pipeline.library_store = GlobalAssetLibrary(
         characters=[_char("gc", "glob-char")],
@@ -298,18 +302,17 @@ def test_get_project_merges_global_source():
         props=[_prop("gp", "glob-prop")],
     )
     try:
-        client = TestClient(api.app)
-        resp = client.get(f"/projects/{sid}")
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
+        resp = api.get_project(sid)
+        body = json.loads(resp.body)
 
         chars = {c["id"]: c for c in body["characters"]}
         assert chars["epc"]["source"] == "episode"   # episode-local
-        assert chars["gc"]["source"] == "global"      # folded from library
+        assert "gc" not in chars
         scenes = {s["id"]: s for s in body["scenes"]}
-        assert scenes["gs"]["source"] == "global"
+        assert "gs" not in scenes
         props = {pr["id"]: pr for pr in body["props"]}
-        assert props["gp"]["source"] == "global"
+        assert "gp" not in props
     finally:
         pipeline.library_store = prev_library
+        pipeline.get_script = prev_get_script
         pipeline.scripts.pop(sid, None)

@@ -2054,31 +2054,9 @@ def get_project(script_id: str):
                     d["source"] = "series"
                     payload["props"].append(d)
 
-    # Merge the project-independent global asset library underneath as
-    # the lowest layer. Any id not already present from the episode or
-    # series layers is appended with source="global" (read-time only —
-    # never written back to projects.json). When the library is empty
-    # this is a no-op and the response is byte-identical to before.
-    lib = pipeline.library_store
-    if lib.characters or lib.scenes or lib.props:
-        seen_char_ids = {c["id"] for c in payload["characters"]}
-        seen_scene_ids = {s["id"] for s in payload["scenes"]}
-        seen_prop_ids = {p["id"] for p in payload["props"]}
-        for ch in pipeline._library_list_for_type("character", script.owner_profile_id):
-            if ch.id not in seen_char_ids:
-                d = ch.model_dump()
-                d["source"] = "global"
-                payload["characters"].append(d)
-        for sc in pipeline._library_list_for_type("scene", script.owner_profile_id):
-            if sc.id not in seen_scene_ids:
-                d = sc.model_dump()
-                d["source"] = "global"
-                payload["scenes"].append(d)
-        for pr in pipeline._library_list_for_type("prop", script.owner_profile_id):
-            if pr.id not in seen_prop_ids:
-                d = pr.model_dump()
-                d["source"] = "global"
-                payload["props"].append(d)
+    # Global assets are intentionally opt-in. They enter a series only through
+    # the explicit /series/{id}/assets/import-from-library action; merely
+    # reading an episode must not make every global asset appear in it.
     return signed_response(payload)
 
 
