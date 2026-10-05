@@ -62,6 +62,8 @@ from .models import (
     ArtifactLineage,
     DirectorProfile,
     DirectorProfileRevision,
+    DirectorOverviewTemplate,
+    default_director_overview_template,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
     ScriptSourceRevision,
@@ -4794,8 +4796,10 @@ def _validated_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def _director_profile_fingerprint(script_id: str, draft=None, instructions=None) -> str:
+def _director_profile_fingerprint(script_id: str, draft=None, instructions=None, overview_template=None) -> str:
     script, entities, style = pipeline.director_analysis_context(script_id)
+    if overview_template is not None:
+        entities["_director_overview_template"] = overview_template
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
         script.original_text, entities, style, draft, instructions,
@@ -4805,16 +4809,71 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
+@app.get("/projects/{script_id}/director-overview-template")
+def get_director_overview_template(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    series = pipeline.get_series(script.series_id) if script.series_id else None
+    source = "project" if script.director_overview_template else "series" if series and series.director_overview_template else "default"
+    return {"source": source, "template": pipeline.effective_director_overview_template(script).model_dump()}
+
+
+@app.put("/projects/{script_id}/director-overview-template")
+def put_director_overview_template(script_id: str, template: DirectorOverviewTemplate, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        saved = pipeline.save_director_overview_template(script_id, template)
+    except ValueError as exc:
+        raise HTTPException(409 if "revision changed" in str(exc) else 404, str(exc)) from exc
+    return {"source": "project", "template": saved.model_dump()}
+
+
+@app.delete("/projects/{script_id}/director-overview-template")
+def delete_director_overview_template(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    template = pipeline.inherit_director_overview_template(script_id)
+    series = pipeline.get_series(script.series_id) if script.series_id else None
+    return {"source": "series" if series and series.director_overview_template else "default", "template": template.model_dump()}
+
+
+@app.get("/series/{series_id}/director-overview-template")
+def get_series_director_overview_template(series_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    series = pipeline.get_series(series_id)
+    if not series:
+        raise HTTPException(404, "Series not found")
+    return {"source": "series" if series.director_overview_template else "default", "template": (series.director_overview_template or default_director_overview_template()).model_dump()}
+
+
+@app.put("/series/{series_id}/director-overview-template")
+def put_series_director_overview_template(series_id: str, template: DirectorOverviewTemplate, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        saved = pipeline.save_series_director_overview_template(series_id, template)
+    except ValueError as exc:
+        raise HTTPException(409 if "revision changed" in str(exc) else 404, str(exc)) from exc
+    return {"source": "series", "template": saved.model_dump()}
+
+
 @app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
 def start_director_profile_analysis(
     script_id: str,
     user: UserContext = Depends(require_studio_user),
 ):
-    fingerprint = _director_profile_fingerprint(script_id)
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    overview_template = pipeline.effective_director_overview_template(script).model_dump()
+    fingerprint = _director_profile_fingerprint(script_id, overview_template=overview_template)
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {
-            "profile": pipeline.preview_director_profile(script_id),
+            "profile": pipeline.preview_director_profile(script_id, overview_template),
             "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
         },
         queue_group="director",
@@ -4831,11 +4890,15 @@ def start_director_profile_refinement(
     if not instructions or any(len(item) > 2000 for item in instructions):
         raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
     draft = _validated_director_profile_draft(request.draft)
-    fingerprint = _director_profile_fingerprint(script_id, draft, instructions)
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(404, "Project not found")
+    overview_template = pipeline.effective_director_overview_template(script).model_dump()
+    fingerprint = _director_profile_fingerprint(script_id, draft, instructions, overview_template)
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {"profile": pipeline.refine_director_profile(
-            script_id, draft, instructions
+            script_id, draft, instructions, overview_template
         )},
         queue_policy="lifo",
         queue_group="director",
@@ -4959,14 +5022,16 @@ def start_series_director_profile_analysis(
     series = pipeline.get_series(series_id)
     if not series:
         raise HTTPException(404, "Series not found")
+    overview_template = (series.director_overview_template or default_director_overview_template()).model_dump()
     fingerprint = hashlib.sha256(json.dumps([
         series.source_context,
         [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
         series.characters, series.scenes, series.props,
+        overview_template,
     ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
-        lambda: pipeline.preview_series_director_profile(series_id),
+        lambda: pipeline.preview_series_director_profile(series_id, overview_template),
         queue_group="series-director",
     )
 

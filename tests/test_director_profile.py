@@ -12,6 +12,8 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    DirectorOverviewField,
+    DirectorOverviewTemplate,
     DirectorStoryMap,
     DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
@@ -206,6 +208,59 @@ def make_pipeline():
     pipeline._save_data = Mock()
     pipeline.script_processor = Mock()
     return pipeline, script
+
+
+def test_director_overview_template_inherits_series_and_preserves_confirmed_profile():
+    pipeline, script = make_pipeline()
+    script.series_id = "wulin"
+    original = DirectorProfile(**normalize_director_profile_draft(profile_payload()))
+    script.art_direction.director_profile = original
+    series = Series(id="wulin", title="武林传·苍桐", created_at=1, updated_at=1)
+    pipeline.series_store = {"wulin": series}
+    template = DirectorOverviewTemplate(fields=[
+        DirectorOverviewField(key="jianghu_rules", label="江湖秩序", purpose="区分朝堂与江湖规则"),
+        DirectorOverviewField(key="time_period", label="时代范围", purpose="只记录原文明确的年代"),
+    ])
+
+    assert pipeline.effective_director_overview_template(script).fields[0].key == "format_genre"
+    pipeline._save_series_data_unlocked = Mock()
+    pipeline.save_series_director_overview_template("wulin", template)
+    assert pipeline.effective_director_overview_template(script).fields[0].key == "jianghu_rules"
+    pipeline.save_director_overview_template("film", DirectorOverviewTemplate(revision=2, fields=[
+        DirectorOverviewField(key="character_contrast", label="人物对照", purpose="只记录有依据的关系对照"),
+    ]))
+    assert pipeline.effective_director_overview_template(script).fields[0].key == "character_contrast"
+    with pytest.raises(ValueError, match="revision changed"):
+        pipeline.save_director_overview_template("film", template)
+    assert script.art_direction.director_profile is original
+
+
+def test_current_wulin_script_director_prompt_uses_custom_overview_without_making_style_a_fact():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    source = (
+        "第1集 寒痕初现，赤焰逢锋\n"
+        "大靖年间，江湖风雨飘摇，各派林立，正邪交错。"
+        "暮秋时节，残阳如血，铺洒在青溪镇的青石板长街上。"
+        "苏砚在粮铺前制服悍匪，江灼随后与他交手。"
+    )
+    template = DirectorOverviewTemplate(fields=[
+        DirectorOverviewField(key="jianghu_rules", label="江湖秩序", purpose="仅依据原文区分朝堂与江湖规则"),
+        DirectorOverviewField(key="dramatic_contrast", label="人物对照", purpose="比较苏砚和江灼的行动及误解"),
+        DirectorOverviewField(key="spatial_motif", label="空间意象", purpose="无反复出现的空间时留空", enabled=False),
+    ])
+    processor.analyze_director_profile(source, {
+        "characters": [{"name": "苏砚"}, {"name": "江灼"}],
+        "_director_overview_template": template.model_dump(),
+    }, {"name_zh": "中式武侠动漫", "positive_prompt": "Chinese wuxia animation"})
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert source in prompt
+    assert '"key":"jianghu_rules"' in prompt
+    assert '"enabled":false' in prompt
+    assert "中式武侠动漫" in prompt
+    assert "视觉风格只描述摄影、表演、色彩、材质和声音语言" in prompt
+    assert '"_director_overview_template"' not in prompt.split("<entities>", 1)[1].split("</entities>", 1)[0]
 
 
 def test_director_refinement_prompt_contains_source_entities_style_draft_and_history():
@@ -1633,12 +1688,14 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
     captured = {}
     pipeline = SimpleNamespace(
         scripts={"film": source},
+        get_script=lambda project: source,
+        effective_director_overview_template=lambda script: DirectorOverviewTemplate(fields=[DirectorOverviewField(key="time_period", label="时代", purpose="原文时代")]),
         script_processor=SimpleNamespace(llm=SimpleNamespace(
             provider="openai", _get_default_model=lambda: "test",
         )),
         director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
-        preview_director_profile=lambda project: profile_payload(),
-        refine_director_profile=lambda project, draft, instructions: (
+        preview_director_profile=lambda project, overview_template: profile_payload(),
+        refine_director_profile=lambda project, draft, instructions, overview_template: (
             captured.update(draft=draft, instructions=instructions) or profile_payload()
         ),
     )
@@ -1690,11 +1747,13 @@ def test_director_refinement_accepts_structured_text_fields_and_returns_normaliz
                     owner_profile_id="owner")
     pipeline = SimpleNamespace(
         scripts={"film": source},
+        get_script=lambda project: source,
+        effective_director_overview_template=lambda script: DirectorOverviewTemplate(fields=[DirectorOverviewField(key="time_period", label="时代", purpose="原文时代")]),
         script_processor=SimpleNamespace(llm=SimpleNamespace(
             provider="openai", _get_default_model=lambda: "test",
         )),
         director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
-        refine_director_profile=lambda project, draft, instructions: normalize_director_profile_draft(
+        refine_director_profile=lambda project, draft, instructions, overview_template: normalize_director_profile_draft(
             structured_profile_payload()
         ),
     )

@@ -970,9 +970,42 @@ class DirectorStoryMap(_DirectorStoryMapModel):
         return self
 
 
+class DirectorOverviewField(BaseModel):
+    key: str = Field(..., pattern=r"^[a-z][a-z0-9_]{1,39}$")
+    label: str = Field(..., min_length=1, max_length=80)
+    purpose: str = Field(..., min_length=1, max_length=300)
+    enabled: bool = True
+
+
+class DirectorOverviewTemplate(BaseModel):
+    revision: int = Field(1, ge=1)
+    fields: List[DirectorOverviewField] = Field(..., min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def unique_fields(self):
+        keys = [field.key for field in self.fields]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Director overview field keys must be unique")
+        if not any(field.enabled for field in self.fields):
+            raise ValueError("At least one Director overview field must be enabled")
+        return self
+
+
+def default_director_overview_template() -> DirectorOverviewTemplate:
+    return DirectorOverviewTemplate(fields=[
+        DirectorOverviewField(key="format_genre", label="作品类型与题材", purpose="作品类型与叙事题材，不是视觉风格"),
+        DirectorOverviewField(key="locations", label="地域与主要地点", purpose="故事所在地域与主要地点，不逐场列出房间"),
+        DirectorOverviewField(key="time_period", label="故事时间范围", purpose="故事时代与时间跨度；未知时明确说明"),
+        DirectorOverviewField(key="social_context", label="社会与世界规则", purpose="影响人物行为的社会、文化或江湖规则"),
+        DirectorOverviewField(key="dramatic_contrast", label="人物与剧情对照", purpose="有原文依据的对照及叙事作用，没有就留空"),
+        DirectorOverviewField(key="spatial_motif", label="反复出现的空间", purpose="反复出现且承担叙事作用的空间，不重复地点清单"),
+    ])
+
+
 class DirectorProfile(BaseModel):
     """Confirmed narrative direction carried into downstream generation."""
     setting: Dict[str, Any] = Field(default_factory=dict)
+    overview_template_snapshot: Optional[DirectorOverviewTemplate] = None
     timeline: List[Dict[str, Any]] = Field(default_factory=list)
     relationships: List[Dict[str, Any]] = Field(default_factory=list)
     key_events: List[Dict[str, Any]] = Field(default_factory=list)
@@ -2003,7 +2036,7 @@ def _normalize_director_string_list(value: Any) -> Any:
 def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize an AI/user draft at the Director profile boundary.
 
-    The model prompt asks for six natural-language fields, but some model
+    The model prompt asks for natural-language fields, but some model
     responses express those fields as nested JSON objects or arrays.  Keeping
     their JSON representation in the string fields makes the draft valid for
     the existing schema without discarding details.  Incompatible top-level
@@ -2559,6 +2592,7 @@ class Script(BaseModel):
     director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
     director_profile_draft_updated_at: Optional[float] = None
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_overview_template: Optional[DirectorOverviewTemplate] = None
     director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)
@@ -2660,6 +2694,7 @@ class Series(BaseModel):
     director_profile_draft: Optional[DirectorProfile] = None
     director_profile_draft_revision: int = Field(0, ge=0)
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_overview_template: Optional[DirectorOverviewTemplate] = None
 
     # Shared asset library
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")

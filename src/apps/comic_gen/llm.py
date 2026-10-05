@@ -24,6 +24,7 @@ from .models import (
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
+    default_director_overview_template,
 )
 
 
@@ -1574,6 +1575,8 @@ class ScriptProcessor:
             else "原始剧本"
         )
         analysis_scope = str(entities_json.get("scope", "episode") or "episode")
+        overview_template = entities_json.get("_director_overview_template") or default_director_overview_template().model_dump()
+        story_entities = {key: value for key, value in entities_json.items() if key != "_director_overview_template"}
         scope_guidance = (
             "本次是 Series 全剧导演理解。投稿资料与全部分集是不同来源：投稿梗概描述全剧走向，"
             "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
@@ -1600,7 +1603,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json(story_entities)}</entities>
+
+用户配置的导演总览模板（字段 key、标签、分析目的及启用状态）：
+<director_overview_template>{_prompt_json(overview_template)}</director_overview_template>
 
 如果 entities 中包含 series_context 或 series_director_understanding，它们是系列级只读 handoff：
 用于约束全剧背景、人物关系和跨集连续性，不等于本集已经发生的事件。Episode 输出只能把本集原文
@@ -1620,14 +1626,11 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
 execution_summary, scene_summaries, canon_state。
-setting 只使用 format_genre、locations、time_period、social_context、dramatic_contrast、spatial_motif 六个字符串字段；
-format_genre 是作品类型和叙事题材，不是视觉风格；locations 是全剧/本集的地域及主要地点，不逐场列出房间；
-time_period 是故事覆盖的时代或时间跨度，不能再添加 era、session_time 等同义字段；
-social_context 记录影响人物行为的社会、文化或世界规则；dramatic_contrast 只记录有原文依据的
-人物、关系或事件对照及其叙事作用，没有就留空；spatial_motif 只记录反复出现且承担叙事作用的空间。
+setting 仅使用 director_overview_template 中 enabled=true 的字段 key，值为字符串，按字段的 label 和 purpose 分析。
+模板是分析要求，不是剧本事实；原文缺乏依据时明确写未知或留空，不得编造。
 具体场景的内外、时段、季节、天气、道具和人物状态交由 scene_summaries 与后续拍摄计划处理。
 视觉风格写入 visual_language，事实是否确定写入 unresolved_questions 或带证据状态的事实结构；
-不要在 setting 中另加 style、status、primary_location、sub_location 等重复键。
+不要在 setting 中另加模板未启用的 style、status、primary_location、sub_location 等重复键。
 timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
 phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
@@ -1707,6 +1710,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             else "原始剧本"
         )
         style_summary = build_visual_style_summary(style_config)
+        overview_template = entities_json.get("_director_overview_template") or default_director_overview_template().model_dump()
+        story_entities = {key: value for key, value in entities_json.items() if key != "_director_overview_template"}
         # The visible draft already contains the effects of earlier revisions.
         # Keep the newest instructions within a small budget for callers that
         # still submit accumulated history (the UI now submits only one).
@@ -1738,7 +1743,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
 当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
 tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json(story_entities)}</entities>
+<director_overview_template>{_prompt_json(overview_template)}</director_overview_template>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>
 <current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
@@ -1749,10 +1755,8 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 保留未要求改变的正确内容，并同步刷新受影响的 execution_summary 或 scene_summaries。
-如果本次修改 setting，只更新已有语义对应的字段：format_genre、locations、time_period、
-social_context、dramatic_contrast、spatial_motif。时代与故事跨度合写在 time_period；
-地域和主要地点合写在 locations；视觉风格写在 visual_language；场景时段写在 scene_summaries。
-不要新增 era、session_time、primary_location、sub_location、style、status 等同义键。
+如果本次修改 setting，只更新 director_overview_template 中启用且与用户要求相关的字段。
+旧草稿中未在模板里的字段须保留，不主动扩写；视觉风格写在 visual_language，场景时段写在 scene_summaries。
 这是“变更补丁”协议：只返回因本次 revision_instructions 发生变化的顶层字段；没有变化时返回 {{}}。
 不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
