@@ -1301,6 +1301,11 @@ class ImportAssetsRequest(BaseModel):
     asset_ids: List[str]
 
 
+class ForkFromLibraryRequest(BaseModel):
+    asset_type: str          # "character" | "scene" | "prop"
+    library_asset_id: str    # id of the source asset in the global library
+
+
 # R2V v2 Phase 5 — quick-create CRUD for series-shared assets.
 # Used by Cast step's "+ 新角色 / 新场景 / 新道具" modal. Optional
 # `image_url` lets the user attach a pre-uploaded master sheet so the
@@ -1404,6 +1409,18 @@ def import_series_assets(series_id: str, request: ImportAssetsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/series/{series_id}/assets/import-from-library")
+def import_series_assets_from_library(series_id: str, request: ForkFromLibraryRequest):
+    """Copy one global library asset into the series shared asset pool."""
+    try:
+        asset = pipeline.fork_library_asset_to_series(series_id, request.asset_type, request.library_asset_id)
+        return signed_response(asset.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================
 # Global Asset Library (project-independent shared pool) — CRUD + promote
 # ============================================================
@@ -1442,11 +1459,6 @@ class PromoteAssetRequest(BaseModel):
     source_id: str
     asset_type: str    # "character" | "scene" | "prop"
     asset_id: str
-
-
-class ForkFromLibraryRequest(BaseModel):
-    asset_type: str          # "character" | "scene" | "prop"
-    library_asset_id: str    # id of the source asset in the global library
 
 
 def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext) -> Dict[str, Any]:
@@ -5126,6 +5138,36 @@ def get_director_shooting_plan(
             "char_end": item["char_end"],
         } for item in source_chunks],
     }
+
+
+@app.get("/projects/{script_id}/episode-visual-context")
+def get_episode_visual_context(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.get_episode_visual_context(script_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Script not found" else 409
+        raise HTTPException(status, str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/episode-visual-context/sync")
+def sync_episode_visual_context(script_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.sync_episode_assets_from_shooting_plan(script_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Script not found" else 409
+        raise HTTPException(status, str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/storyboard/{frame_id}/asset-context")
+def get_storyboard_asset_context(script_id: str, frame_id: str, user: UserContext = Depends(require_studio_user)):
+    del user
+    try:
+        return pipeline.resolve_storyboard_asset_selection(script_id, frame_id)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(404 if message in {"Script not found", "Frame not found"} else 409, message) from exc
 
 
 @app.get("/projects/{script_id}/director-shooting-plan/revisions")
