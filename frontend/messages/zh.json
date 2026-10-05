@@ -1382,11 +1382,21 @@
       "setting": {
         "format_genre": "作品类型与题材",
         "locations": "地点",
-        "time_period": "时代与时间范围",
+        "time_period": "故事时间范围",
         "social_context": "社会背景",
-        "dramatic_contrast": "戏剧对照",
-        "spatial_motif": "空间意象"
+        "dramatic_contrast": "人物与剧情对照",
+        "spatial_motif": "反复出现的空间"
       },
+      "settingHint": {
+        "format_genre": "作品类型与叙事题材；不在这里定义画面风格。",
+        "locations": "故事所在地域及主要地点；具体房间、街道由拍摄计划确定。",
+        "time_period": "故事跨越的年代或时间跨度；未知时明确写未交代。",
+        "social_context": "影响人物行为的社会、文化或江湖规则。",
+        "dramatic_contrast": "不同人物、关系或事件之间的对照及其叙事作用；没有明确对照可留空。",
+        "spatial_motif": "反复出现并承担叙事作用的空间；普通地点不要重复填写。"
+      },
+      "legacySettingTitle": "历史/模型附加字段（{count}）",
+      "legacySettingHint": "旧草稿的原始字段仍可编辑；确认含义后再整理，避免误删导演决定。",
       "field": {
         "emotional_arc": "情绪曲线",
         "pacing": "节奏与剪辑",

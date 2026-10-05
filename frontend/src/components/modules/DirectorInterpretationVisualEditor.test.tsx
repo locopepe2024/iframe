@@ -157,6 +157,20 @@ it("requires an explicit user action to build a map from legacy phases and keeps
     }));
 });
 
+it("keeps legacy setting fields editable without mixing them into the canonical overview", () => {
+    const onChange = vi.fn();
+    renderEditor({ ...profile, setting: { time_period: "Three years", era: "Late Qing", locations: "Qingxi", primary_location: "Qingxi" } }, onChange);
+
+    expect(screen.getByLabelText("Story time span")).toHaveValue("Three years");
+    expect(screen.getByLabelText("Historical era (legacy field)")).not.toBeVisible();
+    fireEvent.click(screen.getByText("Legacy/model fields (2)"));
+    fireEvent.change(screen.getByLabelText("Historical era (legacy field)"), { target: { value: "Ming dynasty" } });
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        setting: { time_period: "Three years", era: "Ming dynasty", locations: "Qingxi", primary_location: "Qingxi" },
+    }));
+});
+
 it("builds an explicit story map from a legacy timeline without inventing phase relationship states", () => {
     const result = createDirectorStoryMapFromLegacy(profile, 4, characters);
     expect(result.source_revision).toBe(4);

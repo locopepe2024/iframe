@@ -1381,11 +1381,21 @@
       "setting": {
         "format_genre": "Format and genre",
         "locations": "Locations",
-        "time_period": "Time period",
+        "time_period": "Story time span",
         "social_context": "Social context",
-        "dramatic_contrast": "Dramatic contrast",
-        "spatial_motif": "Spatial motif"
+        "dramatic_contrast": "Character and plot contrasts",
+        "spatial_motif": "Recurring spaces"
       },
+      "settingHint": {
+        "format_genre": "Format and story genre; visual style is defined separately.",
+        "locations": "Geographic setting and major places; the shooting plan defines specific spaces.",
+        "time_period": "Era or span covered by the story; state when the source leaves it unknown.",
+        "social_context": "Social, cultural or world rules that affect the characters.",
+        "dramatic_contrast": "A contrast between people, relationships or events and its narrative role; leave blank if unsupported.",
+        "spatial_motif": "Spaces that recur with a narrative role; do not repeat ordinary locations."
+      },
+      "legacySettingTitle": "Legacy/model fields ({count})",
+      "legacySettingHint": "Original draft fields remain editable. Review their meaning before consolidating director decisions.",
       "field": {
         "emotional_arc": "Emotional arc",
         "pacing": "Pacing and editing",

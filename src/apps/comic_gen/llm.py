@@ -1620,7 +1620,15 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
 execution_summary, scene_summaries, canon_state。
-setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+setting 只使用 format_genre、locations、time_period、social_context、dramatic_contrast、spatial_motif 六个字符串字段；
+format_genre 是作品类型和叙事题材，不是视觉风格；locations 是全剧/本集的地域及主要地点，不逐场列出房间；
+time_period 是故事覆盖的时代或时间跨度，不能再添加 era、session_time 等同义字段；
+social_context 记录影响人物行为的社会、文化或世界规则；dramatic_contrast 只记录有原文依据的
+人物、关系或事件对照及其叙事作用，没有就留空；spatial_motif 只记录反复出现且承担叙事作用的空间。
+具体场景的内外、时段、季节、天气、道具和人物状态交由 scene_summaries 与后续拍摄计划处理。
+视觉风格写入 visual_language，事实是否确定写入 unresolved_questions 或带证据状态的事实结构；
+不要在 setting 中另加 style、status、primary_location、sub_location 等重复键。
+timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
 phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
 event 使用 event_id/order/title/description/character_refs/character_ids/unresolved_character_refs/dramatic_function/source_fact_ids/evidence_status。
@@ -1741,6 +1749,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 保留未要求改变的正确内容，并同步刷新受影响的 execution_summary 或 scene_summaries。
+如果本次修改 setting，只更新已有语义对应的字段：format_genre、locations、time_period、
+social_context、dramatic_contrast、spatial_motif。时代与故事跨度合写在 time_period；
+地域和主要地点合写在 locations；视觉风格写在 visual_language；场景时段写在 scene_summaries。
+不要新增 era、session_time、primary_location、sub_location、style、status 等同义键。
 这是“变更补丁”协议：只返回因本次 revision_instructions 发生变化的顶层字段；没有变化时返回 {{}}。
 不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
