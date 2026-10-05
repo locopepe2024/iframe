@@ -1132,6 +1132,7 @@ class DirectorPlanBeat(_DirectorShootingPlanModel):
 
 class DirectorPlanScene(_DirectorShootingPlanModel):
     scene_id: str = Field(..., min_length=1, max_length=120)
+    scene_asset_id: Optional[str] = Field(None, max_length=120)
     order: int = Field(..., ge=0)
     scene_ref: str = Field("", max_length=240)
     heading: str = Field("", max_length=240)

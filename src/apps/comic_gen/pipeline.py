@@ -585,10 +585,16 @@ class ComicGenPipeline(StudioOwnerMixin):
         try:
             with open(self.data_file, 'r') as f:
                 data = json.load(f)
-                return {k: Script(**v) for k, v in data.items()}
         except Exception as e:
             logger.error(f"Failed to load data: {e}")
             return {}
+        scripts = {}
+        for script_id, payload in data.items():
+            try:
+                scripts[script_id] = Script(**payload)
+            except Exception:
+                logger.exception("Failed to load project %s", script_id)
+        return scripts
 
     def _save_data(self):
         """Save data with thread lock to prevent concurrent write issues."""
@@ -991,16 +997,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 subject_ids=[asset_id],
                 director_profile=director_profile,
             )
-            director_context = self.director_prompt_context(
-                script,
-                subject_ids=[asset_id],
-                director_profile=director_profile,
-                execution_context=director_execution,
-            )
-            if director_context:
-                effective_positive_prompt = ". ".join(filter(None, [
-                    effective_positive_prompt, director_context,
-                ]))
         episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
         if episode_context_prompt:
             effective_positive_prompt = ". ".join(filter(None, [

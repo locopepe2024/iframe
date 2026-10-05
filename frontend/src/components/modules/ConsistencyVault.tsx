@@ -22,6 +22,9 @@ import {
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { toast } from "@/store/toastStore";
+import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
+import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
+import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -54,6 +57,23 @@ export default function ConsistencyVault() {
     // Upload modal state
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [uploadTarget, setUploadTarget] = useState<{ id: string; type: string; name: string; description: string } | null>(null);
+    const [episodeAssetState, setEpisodeAssetState] = useState<EpisodeVisualContextState>({ context: null, bindings: [] });
+    const [episodeAssetSync, setEpisodeAssetSync] = useState<EpisodeAssetSyncDiff | null>(null);
+    const [syncingPlan, setSyncingPlan] = useState(false);
+
+    useEffect(() => {
+        if (!currentProject?.id) {
+            setEpisodeAssetState({ context: null, bindings: [] });
+            return;
+        }
+        let active = true;
+        setEpisodeAssetState({ context: null, bindings: [] });
+        setEpisodeAssetSync(null);
+        void api.getEpisodeVisualContext(currentProject.id).then(state => {
+            if (active) setEpisodeAssetState(state);
+        }).catch(error => console.error("Failed to load episode asset context:", error));
+        return () => { active = false; };
+    }, [currentProject?.id]);
 
     // Derive selected asset from currentProject
     const selectedAsset = currentProject ? (() => {
@@ -372,23 +392,17 @@ export default function ConsistencyVault() {
         }
     };
 
-    // Sync descriptions from Script module to Assets
-    const handleSyncDescriptions = async () => {
+    const handleSyncShootingPlan = async () => {
         if (!currentProject) return;
-
-        const confirmed = confirm(
-            tv("syncDescription")
-        );
-
-        if (!confirmed) return;
-
+        setSyncingPlan(true);
         try {
-            const updatedProject = await api.syncDescriptions(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-            alert(tv("syncSuccess"));
+            const diff = await api.syncEpisodeAssetsFromShootingPlan(currentProject.id);
+            setEpisodeAssetSync(diff);
+            setEpisodeAssetState({ context: diff.context, bindings: diff.bindings });
         } catch (error: any) {
-            console.error("Failed to sync descriptions:", error);
-            alert(tv('syncFailed', { error: error.message }));
+            alert(error?.response?.data?.detail || error?.message || "请先确认拍摄计划");
+        } finally {
+            setSyncingPlan(false);
         }
     };
 
@@ -414,6 +428,9 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
+    const selectedPlanEntries = selectedAssetId && selectedAssetType
+        ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
+        : [];
 
     return (
         <div className="flex flex-col h-full text-foreground">
@@ -455,12 +472,22 @@ export default function ConsistencyVault() {
                     variant="secondary"
                     size="sm"
                     leftIcon={<RefreshCw />}
-                    onClick={handleSyncDescriptions}
-                    title={tv("syncDescHint")}
+                    onClick={handleSyncShootingPlan}
+                    disabled={syncingPlan}
+                    title="将已确认拍摄计划的场景、角色、道具和镜头约束同步到本集资产"
                 >
-                    {tv("syncDesc")}
+                    {syncingPlan ? "同步中" : "从拍摄计划同步"}
                 </WorkflowActionButton>
             </div>
+            {episodeAssetSync && (
+                <div className="mx-6 mt-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-text-secondary">
+                    <span className="font-medium text-foreground">拍摄计划上下文已同步：</span>{" "}
+                    新增 {episodeAssetSync.new_bindings?.length || 0} · 可复用 {episodeAssetSync.reusable_bindings?.length || 0} ·
+                    变更 {episodeAssetSync.changed_bindings?.length || 0} · 过期 {episodeAssetSync.stale_bindings?.length || 0}。
+                    资产不会被自动生成或覆盖。
+                    {!!episodeAssetSync.unresolved_bindings.length && <span> 待绑定 {episodeAssetSync.unresolved_bindings.length}，请在拍摄计划中检查资产引用。</span>}
+                </div>
+            )}
 
             {/* Content Grid */}
             {currentProject?.workflow_mode !== "i2v_legacy" && (
@@ -503,6 +530,7 @@ export default function ConsistencyVault() {
                                 onDelete={() => handleDeleteAsset(asset.id, activeTab)}
                                 onUpload={() => handleOpenUploadModal(asset, activeTab)}
                                 onClearGenerationState={() => handleClearGenerationState(asset.id, activeTab)}
+                                planCount={getAssetPlanEntries(episodeAssetState.context, activeTab, asset.id).length}
                             />
                         ))}
                         {/* Create New Asset Button */}
@@ -539,6 +567,7 @@ export default function ConsistencyVault() {
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
+                            planEntries={selectedPlanEntries}
                             onGenerateVideo={(prompt: string, duration: number, subType?: string) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, subType || "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                         />
@@ -556,6 +585,7 @@ export default function ConsistencyVault() {
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
+                            planEntries={selectedPlanEntries}
                             onGenerateVideo={(prompt: string, duration: number) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                             isGeneratingVideo={getAssetGeneratingTypes(selectedAssetId).some((t: any) => t.type.startsWith("video"))}
@@ -597,7 +627,7 @@ export default function ConsistencyVault() {
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -783,6 +813,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                             <X size={24} />
                         </button>
                     </div>
+
+                    <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => setImagePrompt((previous: string) => `${previous.trim()}\n${text}`.trim())} />
 
                     {/* Content */}
                     <div className="flex-1 p-6 overflow-y-auto space-y-6">
@@ -1034,7 +1066,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState }: any) {
+function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -1099,6 +1131,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                     Generation failed
                 </div>
             )}
+            {planCount > 0 && <div className="absolute top-2 left-2 z-30 rounded bg-surface/85 px-2 py-1 text-xs text-foreground">拍摄计划 · {planCount} 条</div>}
 
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

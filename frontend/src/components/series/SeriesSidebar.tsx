@@ -14,6 +14,7 @@ import {
   Palette,
   Clapperboard,
   BrainCircuit,
+  ImagePlus,
 } from "lucide-react";
 import clsx from "clsx";
 import type { Series, Project } from "@/store/projectStore";
@@ -121,6 +122,15 @@ export default function SeriesSidebar({
               <ChevronLeft size={16} />
             </button>
             <span className="text-xs text-text-secondary truncate">iFrame</span>
+            <button
+              type="button"
+              onClick={() => { window.location.hash = "#/image-editor"; }}
+              className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-hover-bg hover:text-foreground"
+              title="图片编辑"
+              aria-label="图片编辑"
+            >
+              <ImagePlus size={16} />
+            </button>
           </div>
 
           {/* Editable title */}

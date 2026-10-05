@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard } from "lucide-react";
+import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import PipelineSidebar from "@/components/layout/PipelineSidebar";
@@ -187,6 +187,14 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
 
     const settingsActions = (
         <>
+            <button
+                onClick={() => { window.location.hash = "#/image-editor"; }}
+                className="p-2 hover:bg-hover-bg rounded-lg transition-colors group"
+                title="图片编辑"
+                aria-label="图片编辑"
+            >
+                <ImagePlus size={16} className="text-text-secondary group-hover:text-foreground transition-colors" />
+            </button>
             <button
                 onClick={() => setEnvDialogOpen(true)}
                 className="p-2 hover:bg-hover-bg rounded-lg transition-colors group"

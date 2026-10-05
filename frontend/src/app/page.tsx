@@ -500,7 +500,16 @@ export default function Home() {
     };
     syncWorkspaceData();
     window.addEventListener("hashchange", syncWorkspaceData);
-    return () => window.removeEventListener("hashchange", syncWorkspaceData);
+    const refreshForIdentity = () => {
+      setSeriesEpisodes({});
+      void syncProjects();
+      void fetchSeriesList();
+    };
+    window.addEventListener("iframe:workspace-identity-changed", refreshForIdentity);
+    return () => {
+      window.removeEventListener("hashchange", syncWorkspaceData);
+      window.removeEventListener("iframe:workspace-identity-changed", refreshForIdentity);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -550,9 +559,7 @@ export default function Home() {
     setIsSyncing(true);
     try {
       const backendProjects = await api.getProjects();
-      if (backendProjects && backendProjects.length > 0) {
-        setProjects(backendProjects);
-      }
+      setProjects(backendProjects ?? []);
     } catch (error) {
       console.error("Failed to sync projects from backend:", error);
       toast.error(t("toastProjectsSyncFailed"), {

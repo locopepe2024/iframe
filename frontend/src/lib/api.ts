@@ -21,6 +21,9 @@ import {
     confirmDirectorShootingPlan,
     generateDirectorShootingPlan,
     getDirectorShootingPlan,
+    getEpisodeVisualContext,
+    syncEpisodeAssetsFromShootingPlan,
+    getStoryboardAssetContext,
     getDirectorShootingPlanRevision,
     listDirectorShootingPlanRevisions,
     restoreDirectorShootingPlanRevision,
@@ -158,6 +161,7 @@ export const setApiKeyIdentity = async (apiKey: string): Promise<string | null> 
     }
     const identity = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     window.localStorage.setItem(API_KEY_IDENTITY_KEY, identity);
+    window.dispatchEvent(new Event("iframe:workspace-identity-changed"));
     return identity;
 };
 
@@ -1182,6 +1186,15 @@ export const api = {
 
     getDirectorShootingPlan: (scriptId: string) =>
         getDirectorShootingPlan(API_URL, scriptId),
+
+    getEpisodeVisualContext: (scriptId: string) =>
+        getEpisodeVisualContext(API_URL, scriptId),
+
+    syncEpisodeAssetsFromShootingPlan: (scriptId: string) =>
+        syncEpisodeAssetsFromShootingPlan(API_URL, scriptId),
+
+    getStoryboardAssetContext: (scriptId: string, frameId: string) =>
+        getStoryboardAssetContext(API_URL, scriptId, frameId),
 
     saveDirectorShootingPlanDraft: (
         scriptId: string,

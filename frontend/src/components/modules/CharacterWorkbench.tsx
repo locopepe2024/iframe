@@ -25,6 +25,8 @@ import ReferencePromptEditor, {
 } from "./playground/ReferencePromptEditor";
 
 import { CHARACTER_IDENTITY_FACETS_FALLBACK } from "./cast/characterIdentityFacets";
+import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
+import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 
 type CharacterEditUploadType = "reference_sheet" | "full_body" | "three_views" | "head_shot";
 
@@ -73,9 +75,10 @@ interface CharacterWorkbenchProps {
     onGenerateVideo?: (prompt: string, duration: number, subType?: string) => void;
     onDeleteVideo?: (videoId: string) => void;
     isGeneratingVideo?: boolean;
+    planEntries?: AssetPlanEntry[];
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
@@ -542,6 +545,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         <X size={24} />
                     </button>
                 </div>
+
+                <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => {
+                    if (activePanel === "three_view") setThreeViewPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                    else if (activePanel === "headshot") setHeadshotPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                    else setFullBodyPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                }} />
 
                 {/* Main Content - 3 Columns */}
                 <div className="flex-1 flex overflow-hidden">
