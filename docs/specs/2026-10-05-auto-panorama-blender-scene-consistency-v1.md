@@ -116,6 +116,10 @@ Required anchor classes:
 
 The package must preserve source checksum and estimator version. A stale depth package cannot be applied to a different panorama.
 
+### Manual layout before depth estimation
+
+The first executable slice permits a `panorama_verified` package with `depth: null` and `estimatorVersion: "manual-layout.v1"`. The director can set ground height and metric semantic anchors while using the existing white-model, pose, and camera controls. This is a spatial layout draft, not a depth estimate. It cannot claim `production_ready`, depth occlusion, or parallax correctness. A later estimator may attach a checksum-bound depth input; it must retain the panorama checksum and require director review. The active director panorama must match the package input path and checksum. Switching or removing the panorama invalidates the active package.
+
 ### 4. Blender scene assembly on media host
 
 Blender receives:

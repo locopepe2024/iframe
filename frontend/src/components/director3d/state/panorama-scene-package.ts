@@ -6,7 +6,7 @@ export interface PanoramaScenePackage {
   panoramaChecksum: string;
   coordinateSystem: "blender_x_right_y_depth_z_up";
   horizonYNormalized: number;
-  depth: { inputId: string; checksum?: string; nearM: number; farM: number; quality: "draft" | "reviewed" | "verified" };
+  depth: { inputId: string; checksum: string; nearM: number; farM: number; quality: "draft" | "reviewed" | "verified" } | null;
   semanticAnchors: Array<{ anchorId: string; kind: string; positionM: [number, number, number]; confidence: number }>;
   ground: { heightM: number; quality: "draft" | "reviewed" | "verified" };
   blockingCodes: string[];
@@ -39,7 +39,7 @@ export function parsePanoramaScenePackage(input: unknown): { ok: true; package: 
   if (!value || value.coordinateSystem !== "blender_x_right_y_depth_z_up") errors.push("coordinateSystem 不受支持。");
   if (!value || !bounded(value.horizonYNormalized, 0, 1)) errors.push("horizonYNormalized 必须在 0 到 1 之间。");
   const depth = record(value?.depth);
-  if (!depth || typeof depth.inputId !== "string" || !depth.inputId || (depth.checksum !== undefined && (typeof depth.checksum !== "string" || !SHA256.test(depth.checksum))) || !bounded(depth.nearM, 0.001, 9999) || !bounded(depth.farM, 0.002, 10000) || Number(depth.farM) <= Number(depth.nearM) || !["draft", "reviewed", "verified"].includes(String(depth.quality))) errors.push("depth 契约无效，必须声明输入、范围和质量状态。");
+  if (value?.depth !== null && (!depth || typeof depth.inputId !== "string" || !PANORAMA_PATH.test(depth.inputId) || typeof depth.checksum !== "string" || !SHA256.test(depth.checksum) || !bounded(depth.nearM, 0.001, 9999) || !bounded(depth.farM, 0.002, 10000) || Number(depth.farM) <= Number(depth.nearM) || !["draft", "reviewed", "verified"].includes(String(depth.quality)))) errors.push("depth 契约无效，必须声明已校验输入、范围和质量状态，或明确为 null。");
   const ground = record(value?.ground);
   if (!ground || !bounded(ground.heightM, -10000, 10000) || !["draft", "reviewed", "verified"].includes(String(ground.quality))) errors.push("ground 契约无效。");
   if (!Array.isArray(value?.blockingCodes) || !value.blockingCodes.every(item => typeof item === "string" && item.length > 0)) errors.push("blockingCodes 必须是字符串数组。");
@@ -49,11 +49,23 @@ export function parsePanoramaScenePackage(input: unknown): { ok: true; package: 
     const anchor = record(item);
     if (!anchor || typeof anchor.anchorId !== "string" || typeof anchor.kind !== "string" || !tuple3(anchor.positionM) || !bounded(anchor.confidence, 0, 1)) errors.push(`semanticAnchors[${index}] 无效。`);
   });
+  if (new Set(anchors.map(item => record(item)?.anchorId)).size !== anchors.length) errors.push("semanticAnchors 的 anchorId 必须唯一。");
   const statuses: PanoramaSceneReviewStatus[] = ["candidate", "panorama_verified", "depth_draft", "needs_director_review", "production_ready"];
   if (!value || !statuses.includes(value.reviewStatus as PanoramaSceneReviewStatus)) errors.push("reviewStatus 无效。");
+  if (value?.depth === null && value.reviewStatus === "production_ready") errors.push("未提供深度输入的人工草稿不能标记 production_ready。");
+  if (value?.reviewStatus === "production_ready" && (depth?.quality !== "verified" || ground?.quality !== "verified" || (Array.isArray(value.blockingCodes) && value.blockingCodes.length > 0))) errors.push("production_ready 要求深度、地面均已验证且无阻断项。");
   if (!value || typeof value.estimatorVersion !== "string" || !value.estimatorVersion.trim()) errors.push("estimatorVersion 必须存在。");
   if (errors.length) return { ok: false, errors };
   return { ok: true, package: value as unknown as PanoramaScenePackage };
+}
+
+export function createManualPanoramaScenePackage(inputId: string, checksum: string, groundHeightM: number): PanoramaScenePackage {
+  return {
+    schema: "director-panorama-scene-package.v1", panoramaInputId: inputId, panoramaChecksum: checksum,
+    coordinateSystem: "blender_x_right_y_depth_z_up", horizonYNormalized: 0.5,
+    depth: null, semanticAnchors: [], ground: { heightM: groundHeightM, quality: "draft" },
+    blockingCodes: ["depth_unverified"], reviewStatus: "panorama_verified", estimatorVersion: "manual-layout.v1",
+  };
 }
 
 export function assertPanoramaScenePackage(input: unknown): PanoramaScenePackage {
