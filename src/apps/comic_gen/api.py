@@ -1613,9 +1613,14 @@ def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
     if not re.fullmatch(r"[a-f0-9]{32}", import_id or ""):
         raise ValueError("Import preview not found")
     owner_key = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()
-    root = Path(get_user_data_dir()) / "imports" / owner_key
+    root = Path(os.environ.get("IFRAME_IMPORT_DIR") or "output/imports") / owner_key
     root.mkdir(parents=True, exist_ok=True)
     return root / f"{import_id}.txt"
+
+
+def _legacy_import_text_path(owner_profile_id: str, import_id: str) -> Path:
+    owner_key = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()
+    return Path(get_user_data_dir()) / "imports" / owner_key / f"{import_id}.txt"
 
 
 def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
@@ -1628,16 +1633,19 @@ def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None
 def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
     path = _import_text_path(owner_profile_id, import_id)
     if not path.is_file():
-        return None
+        path = _legacy_import_text_path(owner_profile_id, import_id)
+        if not path.is_file():
+            return None
     return path.read_bytes().decode("utf-8")
 
 
 def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
-    path = _import_text_path(owner_profile_id, import_id)
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
+    for path in (_import_text_path(owner_profile_id, import_id),
+                 _legacy_import_text_path(owner_profile_id, import_id)):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _run_import_preview(owner_profile_id: str, filename: str, text: str,

@@ -1139,6 +1139,7 @@
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Enter series description...",
     "suggestedEpisodes": "Suggested Episodes",
+    "suggestedEpisodesRange": "Enter 1 to 100 episodes.",
     "analyzing": "Analyzing...",
     "startAnalysis": "Parse and preview episodes",
     "previewHint": "Import parsing and episode splitting are already complete. Confirm the boundaries; after creation, Director interpretation will process each episode body without repeating the import split.",

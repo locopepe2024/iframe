@@ -1139,6 +1139,7 @@
     "descriptionOptional": "描述（可选）",
     "descriptionPlaceholder": "输入系列描述...",
     "suggestedEpisodes": "建议集数",
+    "suggestedEpisodesRange": "请输入 1 至 100 集。",
     "analyzing": "分析中...",
     "startAnalysis": "解析并预览分集",
     "previewHint": "导入阶段已经完成一次解析与分集建议。请确认分集结果；创建后将复用这些边界，Director 解读只处理对应集正文。",
