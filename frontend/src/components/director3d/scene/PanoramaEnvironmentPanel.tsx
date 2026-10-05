@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FileJson, LockKeyhole, RefreshCw, UnlockKeyhole, X } from 'lucide-react';
 
-import { imageEditorApi } from '@/lib/imageEditor';
+import { panoramaAssetApi } from '@/lib/panoramaAssets';
 import { downloadMotionJson } from '../state/motion-review-export';
-import { takePanoramaHandoff } from '../state/panorama-handoff';
 import { useWorkbenchStore } from '../state/workbench-store';
 import type { EnvironmentInputEntry } from '../types';
 
-export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof imageEditorApi.list>>): EnvironmentInputEntry[] {
+export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof panoramaAssetApi.list>>): EnvironmentInputEntry[] {
   return records.filter(record => record.projection_type === 'equirectangular'
     && record.panorama_quality?.status === 'pass'
     && record.width === record.height * 2 && record.height > 0
@@ -31,12 +30,6 @@ export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof image
     }));
 }
 
-export function rejectedPanoramaCount(records: Awaited<ReturnType<typeof imageEditorApi.list>>): number {
-  return records.filter(record => record.projection_type === 'equirectangular'
-    && record.width === record.height * 2 && record.height > 0
-    && record.panorama_quality?.status !== 'pass').length;
-}
-
 export function PanoramaEnvironmentPanel() {
   const catalog = useWorkbenchStore(state => state.environmentInputCatalog);
   const panorama = useWorkbenchStore(state => state.renderScene.panorama);
@@ -56,27 +49,22 @@ export function PanoramaEnvironmentPanel() {
   const setYaw = useWorkbenchStore(state => state.setPanoramaRotationAxis);
   const confirm = useWorkbenchStore(state => state.confirmPanoramaCalibration);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState('');
   const [packageMessage, setPackageMessage] = useState('');
   const [anchorKind, setAnchorKind] = useState('entrance');
   const [anchorPosition, setAnchorPosition] = useState<[number, number, number]>([0, 2, 0]);
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const records = [] as Awaited<ReturnType<typeof imageEditorApi.list>>;
-      let page: Awaited<ReturnType<typeof imageEditorApi.list>>;
+      const records = [] as Awaited<ReturnType<typeof panoramaAssetApi.list>>;
+      let page: Awaited<ReturnType<typeof panoramaAssetApi.list>>;
       do {
-        page = await imageEditorApi.list(100, records.length);
+        page = await panoramaAssetApi.list(100, records.length);
         records.push(...page);
       } while (page.length === 100);
-      const rejected = rejectedPanoramaCount(records);
       const entries = admittedPanoramaEntries(records);
-      setCatalog({ status: 'ready', message: rejected ? `已读取图片编辑副本；${rejected} 张全景因接缝或天顶/地面缺口未通过检查。` : '已读取图片编辑副本', entries });
-      const handoff = takePanoramaHandoff(window.sessionStorage);
-      if (handoff) {
-        const matched = entries.find(entry => entry.inputId === handoff.inputId && entry.checksum === handoff.checksum);
-        if (matched) useWorkbenchStore.getState().assignPanoramaInput(matched.inputId);
-        else setPackageMessage('全景导入失败：素材未通过质量检查或校验值已变化。');
-      }
+      setCatalog({ status: 'ready', message: entries.length ? `已读取 ${entries.length} 张全景素材` : '没有已保存且通过检查的全景素材。', entries });
+      setSelectedAssetId(current => entries.some(entry => entry.inputId === current) ? current : '');
     } catch {
       setCatalog({ status: 'error', message: '全景素材读取失败，请重试。', entries: [] });
     } finally { setRefreshing(false); }
@@ -95,10 +83,11 @@ export function PanoramaEnvironmentPanel() {
   };
   return <section className="panorama-environment-panel" aria-label="全景环境">
     <div className="panorama-panel-heading"><strong>全景环境</strong><button type="button" title="刷新全景素材" aria-label="刷新全景素材" disabled={refreshing} onClick={() => void refresh()}><RefreshCw size={16}/></button></div>
-    <select aria-label="选择全景素材" value={panorama.inputId ?? ''} onChange={event => assign(event.target.value || null)} disabled={catalog.status === 'error'}>
-      <option value="">无全景环境</option>
+    <select aria-label="选择全景素材" value={selectedAssetId} onChange={event => setSelectedAssetId(event.target.value)} disabled={catalog.status === 'error'}>
+      <option value="">选择已保存的全景素材</option>
       {catalog.entries.map(entry => <option key={entry.inputId} value={entry.inputId}>{entry.label}</option>)}
     </select>
+    <button type="button" disabled={!selectedAssetId || selectedAssetId === panorama.inputId || catalog.status !== 'ready'} onClick={() => assign(selectedAssetId)}>导入全景素材</button>
     {panorama.inputId && <div className="panorama-controls">
       <label>方向 <input type="range" min={-180} max={180} value={panorama.rotationDeg[2]} onChange={event => setYaw(2, Number(event.target.value))}/><output>{Math.round(panorama.rotationDeg[2])}°</output></label>
       <button type="button" disabled={!activeCalibrationId} onClick={() => activeCalibrationId && confirm(activeCalibrationId)}>确认方向</button>
