@@ -95,6 +95,19 @@ def test_import_preview_accepts_sixty_episodes(tmp_path, monkeypatch):
         calls.assert_called_once()
 
 
+def test_import_failure_uses_import_error_label(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+
+        def fail():
+            raise ValueError("分集标题无法识别")
+
+        job = jobs.start("owner", "series-import", "series-import:sample", fail)
+        result = wait_done(jobs, "owner", job)
+        assert result["status"] == "failed"
+        assert result["error"] == "分集导入分析失败：分集标题无法识别"
+
+
 def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_path, monkeypatch):
     from src.apps.comic_gen import api
 
