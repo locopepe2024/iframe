@@ -4,6 +4,7 @@ import hashlib
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 import sqlite3
 import time
 from uuid import uuid4
@@ -114,6 +115,32 @@ class ImageEditStore:
         with self.db() as db:
             return [json.loads(row[0]) for row in db.execute(
                 'SELECT data FROM edits ORDER BY created DESC, id DESC LIMIT ? OFFSET ?', (limit, offset))]
+
+    def list_panorama_assets(self, limit=50, offset=0):
+        with self.db() as db:
+            records = [json.loads(row[0]) for row in db.execute(
+                "SELECT data FROM edits WHERE json_extract(data, '$.projection_type') = 'equirectangular' ORDER BY created DESC, id DESC")]
+        admitted = []
+        for record in records:
+            height = record.get('height')
+            if not isinstance(height, int) or height <= 0 or record.get('width') != 2 * height:
+                continue
+            if not isinstance(record.get('path'), str) or not re.fullmatch(r'/playground/input-media/[^/]+', record['path']):
+                continue
+            if not isinstance(record.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', record['sha256']):
+                continue
+            if not isinstance(record.get('id'), str) or not isinstance(record.get('title'), str):
+                continue
+            if not isinstance(record.get('panorama_quality'), dict):
+                try:
+                    data, _ = self.source_bytes(record['path'])
+                    record['panorama_quality'] = analyze_panorama(data)
+                except HTTPException:
+                    continue
+            if record['panorama_quality'].get('status') != 'pass':
+                continue
+            admitted.append({key: record[key] for key in ('id', 'path', 'title', 'sha256', 'width', 'height', 'projection_type', 'panorama_quality')})
+        return admitted[offset:offset + limit]
 
     def save(self, reference, source_sha256, data, title, operation_key, projection_type='perspective_plane'):
         source = self.source(reference)

@@ -12,9 +12,9 @@ import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid"
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
 import { admittedPanoramaEntries } from "./scene/PanoramaEnvironmentPanel";
-import { imageEditorApi } from "@/lib/imageEditor";
+import { panoramaAssetApi } from "@/lib/panoramaAssets";
 
-vi.mock("@/lib/imageEditor", () => ({ imageEditorApi: { list: vi.fn().mockResolvedValue([]) } }));
+vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
 
 vi.mock("./scene/HumanoidStage", () => ({
   HumanoidStage: () => <div id="director-viewport" role="tabpanel" aria-label="mock 3D stage" />,
@@ -22,22 +22,24 @@ vi.mock("./scene/HumanoidStage", () => ({
 
 const initialState = useWorkbenchStore.getState();
 
-it("admits only explicitly declared owned 2:1 panorama edits", () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200 };
-  expect(admittedPanoramaEntries([{ ...record, projection_type: "perspective_plane" }])).toHaveLength(0);
+it("admits only explicitly declared owned 2:1 panorama assets", () => {
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", height: 201 }])).toHaveLength(0);
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", path: "https://example.test/pano.png" }])).toHaveLength(0);
-  const [entry] = admittedPanoramaEntries([{ ...record, projection_type: "equirectangular" }]);
+  expect(admittedPanoramaEntries([{ ...record, panorama_quality: { status: "review", blocking_codes: ["black_pole_gap"] } }])).toHaveLength(0);
+  const [entry] = admittedPanoramaEntries([record]);
   expect(entry).toMatchObject({ inputId: record.path, projection: "equirectangular", environmentAllowed: true, admissionChecksum: record.sha256 });
 });
 
 it("loads an edited panorama and assigns it to the director stage", async () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const };
-  vi.mocked(imageEditorApi.list).mockResolvedValueOnce([record]);
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
+  vi.mocked(panoramaAssetApi.list).mockResolvedValueOnce([record]);
   render(<App />);
   const select = await screen.findByRole("combobox", { name: "选择全景素材" });
   await waitFor(() => expect(screen.getByRole("option", { name: record.title })).toBeInTheDocument());
   fireEvent.change(select, { target: { value: record.path } });
+  expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "导入全景素材" }));
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBe(record.path);
   fireEvent.click(screen.getByRole("button", { name: "移除全景" }));
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
