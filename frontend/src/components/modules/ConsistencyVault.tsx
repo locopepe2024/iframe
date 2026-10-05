@@ -23,8 +23,6 @@ import {
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
-import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
-import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -428,10 +426,6 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
-    const selectedPlanEntries = selectedAssetId && selectedAssetType
-        ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
-        : [];
-
     return (
         <div className="flex flex-col h-full text-foreground">
             <StepHeader
@@ -542,7 +536,6 @@ export default function ConsistencyVault() {
                                 onDelete={() => handleDeleteAsset(asset.id, activeTab)}
                                 onUpload={() => handleOpenUploadModal(asset, activeTab)}
                                 onClearGenerationState={() => handleClearGenerationState(asset.id, activeTab)}
-                                planCount={getAssetPlanEntries(episodeAssetState.context, activeTab, asset.id).length}
                             />
                         ))}
                         {/* Create New Asset Button */}
@@ -579,7 +572,6 @@ export default function ConsistencyVault() {
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
-                            planEntries={selectedPlanEntries}
                             onGenerateVideo={(prompt: string, duration: number, subType?: string) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, subType || "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                         />
@@ -597,7 +589,6 @@ export default function ConsistencyVault() {
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
-                            planEntries={selectedPlanEntries}
                             onGenerateVideo={(prompt: string, duration: number) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, "video")}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                             isGeneratingVideo={getAssetGeneratingTypes(selectedAssetId).some((t: any) => t.type.startsWith("video"))}
@@ -686,7 +677,7 @@ function ShootingPlanAssetRequirements({
                                                 <p className="truncate text-xs text-foreground">{asset?.name || "计划需求（尚无基础资产）"}</p>
                                                 <p className="text-[0.6875rem] text-text-muted">{binding.scene_ids.length} 个场景 · {binding.shot_ids.length} 个镜头 · {statusLabel(binding.status)}</p>
                                             </div>
-                                            {asset && <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset(group.type, asset.id)}>打开资产</button>}
+                                            {asset && <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset(group.type, asset.id)}>进入生产</button>}
                                         </div>
                                     );
                                 })}
@@ -699,7 +690,7 @@ function ShootingPlanAssetRequirements({
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -885,8 +876,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                             <X size={24} />
                         </button>
                     </div>
-
-                    <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => setImagePrompt((previous: string) => `${previous.trim()}\n${text}`.trim())} />
 
                     {/* Content */}
                     <div className="flex-1 p-6 overflow-y-auto space-y-6">
@@ -1138,7 +1127,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
+function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -1203,8 +1192,6 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                     Generation failed
                 </div>
             )}
-            {planCount > 0 && <div className="absolute top-2 left-2 z-30 rounded bg-surface/85 px-2 py-1 text-xs text-foreground">拍摄计划 · {planCount} 条</div>}
-
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
