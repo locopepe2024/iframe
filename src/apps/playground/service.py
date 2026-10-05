@@ -58,6 +58,28 @@ class PlaygroundService:
             self.storage.resolve_media_reference(value)
             for value in (request.input_media or [])
         ]
+        parameters = dict(request.parameters or {})
+        if parameters.get("mask") is not None:
+            from fastapi import HTTPException
+            from .image_editor import inspect_image
+            from pathlib import Path
+            mask_ref = parameters["mask"]
+            if not request.model_id.startswith("uniart/") or request.mode != PlaygroundMode.I2I or not input_media or not isinstance(mask_ref, str) or not mask_ref.startswith("/playground/input-media/"):
+                raise HTTPException(422, "Mask requires an owned image and a UniArt image edit")
+            try:
+                mask_path = Path(self.storage.resolve_media_reference(mask_ref)).resolve()
+                source_path = Path(input_media[0]).resolve()
+                root = Path(self.storage.output_dir).resolve()
+                if not mask_path.is_relative_to(root) or not source_path.is_relative_to(root):
+                    raise ValueError("Unowned mask or source")
+                from PIL import Image
+                with Image.open(mask_path) as mask_image, Image.open(source_path) as source_image:
+                    if mask_image.format != "PNG" or mask_image.mode != "RGBA" or mask_image.size != source_image.size:
+                        raise ValueError("Mask must be an RGBA PNG matching the source dimensions")
+                inspect_image(mask_path.read_bytes())
+            except (OSError, ValueError) as exc:
+                raise HTTPException(422, "Mask must match the owned source image") from exc
+            parameters["mask"] = mask_ref
         session = self.storage.ensure_session(request.session_id, request.prompt[:32])
         media_names = {}
         for reference, resolved in zip(request.input_media or [], input_media):
@@ -72,7 +94,7 @@ class PlaygroundService:
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
             input_media=list(request.input_media or []),
-            parameters=request.parameters or {},
+            parameters=parameters,
             batch_size=request.batch_size or 1,
             parent_generation_id=request.parent_generation_id,
         )
@@ -84,7 +106,7 @@ class PlaygroundService:
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
             input_media=input_media,
-            parameters=request.parameters or {},
+            parameters=parameters,
             batch_size=request.batch_size or 1,
             outputs=[],
             status="pending",
@@ -262,6 +284,8 @@ class PlaygroundService:
         # i2i: attach reference images
         if use_uniart and params.get("aspect_ratio"):
             kwargs["aspect_ratio"] = params["aspect_ratio"]
+        if use_uniart and params.get("mask"):
+            kwargs["mask"] = self.storage.resolve_media_reference(params["mask"])
         if gen.mode == PlaygroundMode.I2I and gen.input_media:
             if use_uniart and any(media_kind(ref) != "image" for ref in gen.input_media):
                 raise ValueError("Image editing accepts image references only")
