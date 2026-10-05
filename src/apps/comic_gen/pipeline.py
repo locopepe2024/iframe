@@ -8305,10 +8305,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             preamble = text[:first].strip()
             if not preamble:
                 return {}, text[first:]
+            synopsis_match = re.search(
+                r"剧本梗概\s*[：:]\s*(.*?)(?=人物小传\s*[：:]|五、|$)",
+                preamble,
+                re.S,
+            )
             return {
                 "schema_version": 1,
                 "kind": "series_submission_context",
                 "preamble": preamble,
+                "synopsis": synopsis_match.group(1).strip() if synopsis_match else "",
                 "body_char_count": len(text) - first,
             }, text[first:]
 

@@ -28,6 +28,7 @@ def test_numbered_sixty_episode_import_keeps_exact_source():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     context, screenplay = pipeline._split_import_series_context(text)
     assert context["preamble"] == "剧本梗概：一部武侠漫剧。"
+    assert context["synopsis"] == "一部武侠漫剧。"
     chunks = pipeline._split_text_by_markers(screenplay, preview)
     assert "".join(chunks) == screenplay
     assert len(chunks) == 60
