@@ -2,9 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { FileJson, LockKeyhole, RefreshCw, UnlockKeyhole, X } from 'lucide-react';
 
 import { panoramaAssetApi } from '@/lib/panoramaAssets';
-import { downloadMotionJson } from '../state/motion-review-export';
 import { useWorkbenchStore } from '../state/workbench-store';
 import type { EnvironmentInputEntry } from '../types';
+
+function downloadJson(name: string, value: unknown) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) + '\n'], { type: 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function admittedPanoramaEntries(records: Awaited<ReturnType<typeof panoramaAssetApi.list>>): EnvironmentInputEntry[] {
   return records.filter(record => record.projection_type === 'equirectangular'
@@ -99,7 +107,7 @@ export function PanoramaEnvironmentPanel() {
         <FileJson size={15} /> 导入场景包
         <input type="file" accept="application/json,.json" onChange={(event) => void importScenePackage(event)} />
       </label>
-      {scenePackage && <button type="button" onClick={() => downloadMotionJson('director-panorama-scene-package.v1.json', scenePackage)}>导出场景包</button>}
+      {scenePackage && <button type="button" onClick={() => downloadJson('director-panorama-scene-package.v1.json', scenePackage)}>导出场景包</button>}
       <span className="panorama-scene-package-status" role="status">{scenePackage ? `${scenePackage.depth ? '深度草稿' : '人工布局，深度未验证'} · ${scenePackage.semanticAnchors.length} 个锚点` : '未建立空间布局'}</span>
       {packageMessage && <span className="panorama-scene-package-status" role="alert">{packageMessage}</span>}
     </div>
