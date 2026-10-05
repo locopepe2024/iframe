@@ -1,15 +1,16 @@
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 
-export default function EpisodeAssetPlanPanel({ entries, onUse, busy = false }: {
+export default function EpisodeAssetPlanPanel({ entries, onUse, busy = false, compact = false }: {
     entries: AssetPlanEntry[];
     onUse?: (entry: AssetPlanEntry) => void;
     busy?: boolean;
+    compact?: boolean;
 }) {
     if (!entries.length) return null;
     return (
-        <section className="border-b border-glass-border px-6 py-3 text-sm" aria-label="拍摄计划约束">
-            <h3 className="font-medium text-foreground">拍摄计划约束</h3>
-            <div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
+        <section className="px-6 py-3 text-sm" aria-label="拍摄计划约束">
+            {!compact && <h3 className="font-medium text-foreground">拍摄计划约束</h3>}
+            <div className={`${compact ? "" : "mt-2 max-h-36 overflow-y-auto"} space-y-2`}>
                 {entries.map(entry => (
                     <div key={entry.key} className="flex items-start justify-between gap-3 border-l-2 border-primary/50 pl-3">
                         <div className="min-w-0">

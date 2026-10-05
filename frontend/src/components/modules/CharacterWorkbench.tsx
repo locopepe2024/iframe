@@ -83,6 +83,7 @@ interface CharacterWorkbenchProps {
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
+    const [activeGuidanceTab, setActiveGuidanceTab] = useState<"constraints" | "facets" | "plan">("constraints");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
@@ -550,10 +551,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </button>
                 </div>
 
-                <EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} />
-
                 {/* Main Content - 3 Columns */}
-                <div className="flex-1 flex overflow-hidden">
+                <div className="min-h-0 flex-1 flex overflow-hidden">
 
                     {/* Panel 1: Full Body (Master) */}
                     <WorkbenchPanel
@@ -688,14 +687,45 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                 </div>
 
+                <div className="shrink-0 border-t border-glass-border bg-surface">
+                    <div role="tablist" aria-label={tc("guidanceTabsLabel")} className="flex overflow-x-auto border-b border-glass-border px-4 sm:px-6">
+                        {([
+                            ["constraints", tc("workbenchConstraints")],
+                            ["facets", tc("characterFacetSuggestions")],
+                            ["plan", `${tc("shootingPlanConstraints")}${planEntries.length ? ` (${planEntries.length})` : ""}`],
+                        ] as const).map(([id, label]) => (
+                            <button
+                                key={id}
+                                type="button"
+                                role="tab"
+                                id={`character-guidance-tab-${id}`}
+                                aria-controls={`character-guidance-panel-${id}`}
+                                aria-selected={activeGuidanceTab === id}
+                                tabIndex={activeGuidanceTab === id ? 0 : -1}
+                                onClick={() => setActiveGuidanceTab(id)}
+                                onKeyDown={(event) => {
+                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                    event.preventDefault();
+                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                    next?.click();
+                                    next?.focus();
+                                }}
+                                className={`shrink-0 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeGuidanceTab === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}
+                            >{label}</button>
+                        ))}
+                    </div>
+                    <div className="h-44 overflow-y-auto">
+                        <div role="tabpanel" id="character-guidance-panel-constraints" aria-labelledby="character-guidance-tab-constraints" hidden={activeGuidanceTab !== "constraints"}>
                 {/* Footer: Negative Prompt & Art Direction Settings */}
-                <div className="border-t border-glass-border bg-surface flex flex-col">
+                <div className="flex flex-col">
                     {/* Top Row: User's Negative Prompt + Apply Style Toggle */}
                     <div className="px-6 py-3 flex items-start gap-4">
                         {/* User's Negative Prompt (Editable) */}
                         <div className="flex-1">
-                            <label className="text-xs font-bold text-text-muted uppercase mb-2 block">{tc("workbench")}</label>
+                            <label htmlFor="character-negative-prompt" className="text-xs font-bold text-text-muted uppercase mb-2 block">{tc("negativePromptLabel")}</label>
                             <textarea
+                                id="character-negative-prompt"
                                 value={negativePrompt}
                                 onChange={(e) => setNegativePrompt(e.target.value)}
                                 className="w-full h-16 bg-input-bg border border-glass-border rounded-lg p-3 text-xs text-text-secondary resize-none focus:outline-none focus:border-primary/50 font-mono"
@@ -714,7 +744,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary w-4 h-4"
                                 />
                                 <label htmlFor="applyStyleFooter" className="text-xs font-bold text-text-secondary cursor-pointer select-none whitespace-nowrap">
-                                    {tc("workbench")}
+                                    {tc("applyStyle")}
                                 </label>
                             </div>
                         </div>
@@ -769,10 +799,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     )}
                 </div>
-
-                <section className="shrink-0 max-h-44 overflow-y-auto border-t border-glass-border bg-surface px-6 py-3" aria-label="角色特征建议">
-                    <div className="text-xs font-medium text-primary">角色特征建议</div>
-                    <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">建议位于 Prompt 编辑器下方；点击后才会加入当前图像提示词。</p>
+                        </div>
+                        <section role="tabpanel" id="character-guidance-panel-facets" aria-labelledby="character-guidance-tab-facets" hidden={activeGuidanceTab !== "facets"} className="px-6 py-3">
                     {(["identity", "look", "continuity"] as const).map((section) => {
                         const facets = CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === section);
                         const title = section === "identity" ? "永久角色身份" : section === "look" ? "本集造型变体" : "连续性锁";
@@ -792,7 +820,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             </div>
                         </div>;
                     })}
-                </section>
+                        </section>
+                        <div role="tabpanel" id="character-guidance-panel-plan" aria-labelledby="character-guidance-tab-plan" hidden={activeGuidanceTab !== "plan"}>
+                            {planEntries.length ? <EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} compact /> : <p className="px-6 py-4 text-sm text-text-muted">{tc("noShootingPlanConstraints")}</p>}
+                        </div>
+                    </div>
+                </div>
             </motion.div>
         </div>
     );

@@ -209,6 +209,7 @@ it("persists accepted identity facets separately from the provider prompt", asyn
         />,
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "characterFacetSuggestions" }));
     const facet = screen.getByRole("button", { name: /眼神/ });
     fireEvent.click(facet);
     expect(facet).toHaveAttribute("aria-pressed", "true");
@@ -224,6 +225,43 @@ it("persists accepted identity facets separately from the provider prompt", asyn
     expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
         digital_avatar: expect.objectContaining({ identity_facet_ids: [] }),
     }));
+});
+
+it("keeps shooting plan actions below the asset panels in a separate tab", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const createSceneAsset = vi.fn();
+    const entry = {
+        key: "scene-1:character:0",
+        sceneId: "scene-1",
+        sceneLabel: "电影院出入口",
+        details: ["2018年秋天", "室外"],
+        prompt: "拍摄计划场景「电影院出入口」：2018年秋天；室外",
+    };
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-1", name: "周涵", description: "大学时期" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+            planEntries={[entry]}
+            onCreateSceneAsset={createSceneAsset}
+        />,
+    );
+
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map(tab => tab.textContent)).toEqual([
+        "workbenchConstraints", "characterFacetSuggestions", "shootingPlanConstraints (1)",
+    ]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("button", { name: "新建场景资产" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(tabs[2]);
+    expect(screen.getByRole("button", { name: "新建场景资产" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新建场景资产" }));
+    expect(createSceneAsset).toHaveBeenCalledWith(entry);
 });
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
