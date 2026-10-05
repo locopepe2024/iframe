@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { FileJson, RefreshCw, X } from 'lucide-react';
 
 import { imageEditorApi } from '@/lib/imageEditor';
 import { useWorkbenchStore } from '../state/workbench-store';
@@ -41,10 +41,13 @@ export function PanoramaEnvironmentPanel() {
   const activeCalibrationId = useWorkbenchStore(state => state.renderScene.activePanoramaCalibrationId);
   const preview = useWorkbenchStore(state => state.panoramaPreviewStatus);
   const setCatalog = useWorkbenchStore(state => state.setEnvironmentInputCatalog);
+  const scenePackage = useWorkbenchStore(state => state.panoramaScenePackage);
+  const applyScenePackage = useWorkbenchStore(state => state.applyPanoramaScenePackage);
   const assign = useWorkbenchStore(state => state.assignPanoramaInput);
   const setYaw = useWorkbenchStore(state => state.setPanoramaRotationAxis);
   const confirm = useWorkbenchStore(state => state.confirmPanoramaCalibration);
   const [refreshing, setRefreshing] = useState(false);
+  const [packageMessage, setPackageMessage] = useState('');
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -61,6 +64,17 @@ export function PanoramaEnvironmentPanel() {
     } finally { setRefreshing(false); }
   }, [setCatalog]);
   useEffect(() => { void refresh(); }, [refresh]);
+  const importScenePackage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const result = applyScenePackage(JSON.parse(await file.text()));
+      setPackageMessage(result.ok ? '场景包已绑定；深度与语义锚点等待导演审核。' : result.errors.join(' '));
+    } catch {
+      setPackageMessage('场景包不是有效 JSON。');
+    }
+  };
   return <section className="panorama-environment-panel" aria-label="全景环境">
     <div className="panorama-panel-heading"><strong>全景环境</strong><button type="button" title="刷新全景素材" aria-label="刷新全景素材" disabled={refreshing} onClick={() => void refresh()}><RefreshCw size={16}/></button></div>
     <select aria-label="选择全景素材" value={panorama.inputId ?? ''} onChange={event => assign(event.target.value || null)} disabled={catalog.status === 'error'}>
@@ -72,6 +86,13 @@ export function PanoramaEnvironmentPanel() {
       <button type="button" disabled={!activeCalibrationId} onClick={() => activeCalibrationId && confirm(activeCalibrationId)}>确认方向</button>
       <button type="button" title="移除全景" aria-label="移除全景" onClick={() => assign(null)}><X size={16}/></button>
     </div>}
+    <div className="panorama-scene-package-actions">
+      <label className="director-file-button" title="导入全景场景包">
+        <FileJson size={15} /> 导入场景包
+        <input type="file" accept="application/json,.json" onChange={(event) => void importScenePackage(event)} />
+      </label>
+      <span className="panorama-scene-package-status" role="status">{scenePackage ? `${scenePackage.reviewStatus} · ${scenePackage.semanticAnchors.length} 个锚点` : packageMessage || '未绑定深度场景包'}</span>
+    </div>
     <p role="status">{catalog.status === 'error' ? catalog.message : panorama.inputId ? preview.message : catalog.message || (catalog.entries.length ? `${catalog.entries.length} 个已声明全景可用` : '没有通过质量检查的全景；请在图片编辑中修复接缝、天顶和地面后保存。')}</p>
   </section>;
 }
