@@ -566,6 +566,7 @@ class StoryboardFrame(BaseModel):
     director_profile_hash: Optional[str] = None
     generation_lineage: Optional[ArtifactLineage] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
+    shot_id: Optional[str] = Field(None, description="Optional confirmed shooting-plan shot ID")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
     
@@ -1196,6 +1197,79 @@ class DirectorShootingPlanRevision(BaseModel):
     user_title: str = Field("", max_length=160)
     summary: str = Field("", max_length=1000)
     confirmed_at: float = Field(..., ge=0)
+
+
+class EpisodeVisualSceneContext(BaseModel):
+    scene_id: str
+    scene_asset_id: Optional[str] = None
+    scene_ref: str = ""
+    location: str = ""
+    time_anchor: str = ""
+    interior_exterior: Optional[str] = None
+    time_of_day: Optional[str] = None
+    season: Optional[str] = None
+    weather: Optional[str] = None
+    atmosphere: str = ""
+    prop_ids: List[str] = Field(default_factory=list)
+
+
+class EpisodeVisualCharacterContext(BaseModel):
+    person_id: str
+    character_asset_ids: List[str] = Field(default_factory=list)
+    era_variant_id: Optional[str] = None
+    scene_look_id: Optional[str] = None
+    continuity_state: Dict[str, Any] = Field(default_factory=dict)
+    scene_ids: List[str] = Field(default_factory=list)
+    shot_ids: List[str] = Field(default_factory=list)
+
+
+class EpisodeVisualPropContext(BaseModel):
+    prop_id: str
+    state: str = "present"
+    scene_ids: List[str] = Field(default_factory=list)
+    shot_ids: List[str] = Field(default_factory=list)
+
+
+class EpisodeVisualShotContext(BaseModel):
+    scene_id: str
+    beat_id: str
+    shot_id: str
+    character_ids: List[str] = Field(default_factory=list)
+    prop_ids: List[str] = Field(default_factory=list)
+    visual_intent: str = ""
+    performance_action: str = ""
+    composition: str = ""
+    camera_movement: str = ""
+    lighting: Dict[str, Any] = Field(default_factory=dict)
+
+
+class EpisodeVisualContext(BaseModel):
+    """Bounded, server-projected visual handoff from a confirmed shooting plan."""
+    schema_version: Literal[1] = 1
+    source_revision: int
+    source_revision_id: str = ""
+    director_profile_revision: int
+    shooting_plan_revision: int
+    shooting_plan_hash: str
+    context_status: Literal["complete", "partial"] = "complete"
+    scenes: List[EpisodeVisualSceneContext] = Field(default_factory=list)
+    characters: List[EpisodeVisualCharacterContext] = Field(default_factory=list)
+    props: List[EpisodeVisualPropContext] = Field(default_factory=list)
+    shots: List[EpisodeVisualShotContext] = Field(default_factory=list)
+    created_at: float = Field(default_factory=time.time)
+
+
+class EpisodeAssetBinding(BaseModel):
+    """Reviewable episode asset handoff; it never contains provider media URLs."""
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    scene_ids: List[str] = Field(default_factory=list)
+    shot_ids: List[str] = Field(default_factory=list)
+    selected_variant_id: Optional[str] = None
+    source_plan_revision: int
+    source_plan_hash: str
+    context_status: Literal["complete", "partial"] = "complete"
+    status: Literal["suggested", "accepted", "stale"] = "suggested"
 
 
 class ScriptSourceRevision(BaseModel):
@@ -2479,6 +2553,12 @@ class Script(BaseModel):
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)
     director_shooting_plan_draft_updated_at: Optional[float] = None
+    episode_visual_context: Optional[EpisodeVisualContext] = Field(
+        None, description="Server-projected context from the confirmed shooting plan"
+    )
+    episode_asset_bindings: List[EpisodeAssetBinding] = Field(
+        default_factory=list, description="Reviewable scene/shot asset handoff bindings"
+    )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage
