@@ -13,6 +13,7 @@ import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
 import { admittedPanoramaEntries, rejectedPanoramaCount } from "./scene/PanoramaEnvironmentPanel";
 import { imageEditorApi } from "@/lib/imageEditor";
+import { stagePanoramaHandoff } from "./state/panorama-handoff";
 
 vi.mock("@/lib/imageEditor", () => ({ imageEditorApi: { list: vi.fn().mockResolvedValue([]) } }));
 
@@ -44,6 +45,15 @@ it("loads an edited panorama and assigns it to the director stage", async () => 
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
 });
 
+it("selects the verified panorama handed off from image editing", async () => {
+  const record = { id: "pano", path: "/playground/input-media/handoff.png", title: "Handoff", source_reference: "", source_sha256: "", sha256: "b".repeat(64), width: 800, height: 400, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
+  vi.mocked(imageEditorApi.list).mockResolvedValueOnce([record]);
+  stagePanoramaHandoff(record, window.sessionStorage);
+  render(<App />);
+  await waitFor(() => expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBe(record.path));
+  expect(window.sessionStorage.getItem("iframe.director3d.panorama-handoff.v1")).toBeNull();
+});
+
 it("stages a camera path without replacing its easing and supports undo", () => {
   const cameraId = useWorkbenchStore.getState().selectedCameraId;
   act(() => {
@@ -72,6 +82,7 @@ beforeEach(() => {
   useWorkbenchStore.setState(initialState, true);
   vi.stubGlobal("fetch", vi.fn());
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 afterEach(() => {

@@ -9,6 +9,7 @@ import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedIm
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
 import ImageEditorReferenceTools, { PANORAMA_PROMPT_PREFIX, type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
+import { eligiblePanoramaHandoff, stagePanoramaHandoff } from '@/components/director3d/state/panorama-handoff';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -148,7 +149,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
       {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
         <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
         {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
-        {copy.projection_type === 'equirectangular' && <button type="button" title={t('openDirector')} aria-label={`${t('openDirector')} ${copy.title}`} onClick={() => { onClose(); window.location.hash = '#/director'; }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Box size={15}/></button>}
+        {eligiblePanoramaHandoff(copy) && <button type="button" title={t('openDirector')} aria-label={`${t('openDirector')} ${copy.title}`} onClick={() => { if (!stagePanoramaHandoff(copy, window.sessionStorage)) return; onClose(); window.location.hash = '#/director'; }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Box size={15}/></button>}
       </div>)}
     </div>}
     toolPanel={referenceTools}

@@ -78,7 +78,7 @@ it('marks panorama generation as a candidate in the prompt', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'panoramaGeneration' }));
   writePrompt('A city square');
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
-  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('equirectangular panorama') })));
+  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('equirectangular panorama'), parameters: { size: '4k', aspect_ratio: '2:1' } })));
   expect(screen.getByText('panoramaCandidateNote')).toBeInTheDocument();
 });
 

@@ -3,6 +3,7 @@ import { FileJson, LockKeyhole, RefreshCw, UnlockKeyhole, X } from 'lucide-react
 
 import { imageEditorApi } from '@/lib/imageEditor';
 import { downloadMotionJson } from '../state/motion-review-export';
+import { takePanoramaHandoff } from '../state/panorama-handoff';
 import { useWorkbenchStore } from '../state/workbench-store';
 import type { EnvironmentInputEntry } from '../types';
 
@@ -68,7 +69,14 @@ export function PanoramaEnvironmentPanel() {
         records.push(...page);
       } while (page.length === 100);
       const rejected = rejectedPanoramaCount(records);
-      setCatalog({ status: 'ready', message: rejected ? `已读取图片编辑副本；${rejected} 张全景因接缝或天顶/地面缺口未通过检查。` : '已读取图片编辑副本', entries: admittedPanoramaEntries(records) });
+      const entries = admittedPanoramaEntries(records);
+      setCatalog({ status: 'ready', message: rejected ? `已读取图片编辑副本；${rejected} 张全景因接缝或天顶/地面缺口未通过检查。` : '已读取图片编辑副本', entries });
+      const handoff = takePanoramaHandoff(window.sessionStorage);
+      if (handoff) {
+        const matched = entries.find(entry => entry.inputId === handoff.inputId && entry.checksum === handoff.checksum);
+        if (matched) useWorkbenchStore.getState().assignPanoramaInput(matched.inputId);
+        else setPackageMessage('全景导入失败：素材未通过质量检查或校验值已变化。');
+      }
     } catch {
       setCatalog({ status: 'error', message: '全景素材读取失败，请重试。', entries: [] });
     } finally { setRefreshing(false); }
