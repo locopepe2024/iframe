@@ -1,4 +1,4 @@
-import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os
+import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os, shutil
 from media_signing_config import media_signing_env
 
 
@@ -39,6 +39,9 @@ frontend_container = existing_container('iframe-frontend', 'lumenx-frontend')
 old = json.loads(run(['docker', 'inspect', backend_container]))[0]
 network_name = next(iter(old['NetworkSettings']['Networks']))
 backup = backend_container + '-before-' + rev[:12]
+output_mounts = [m for m in old['Mounts'] if m['Destination'] == '/app/output' and m['Type'] == 'bind']
+assert len(output_mounts) == 1, 'Expected one bind mount for /app/output'
+output_path = pathlib.Path(output_mounts[0]['Source'])
 # Docker inspection contains credentials. Keep it in memory; never persist it.
 args = ['docker','create','--name',backend_container,'--network',network_name,'--network-alias','backend','--restart','unless-stopped']
 fd, envfile = tempfile.mkstemp(prefix='iframe-env-', dir=root)
@@ -65,14 +68,21 @@ maintenance = '''
     # Drain existing Chat requests; refuse new submissions during deployment.
     location ^~ /projects/ {
         default_type application/json;
-        if ($request_method = POST) { return 503 '{"detail":"服务正在更新，请稍后重试；后台分析继续运行"}'; }
+        if ($request_method ~ ^(POST|PUT|PATCH|DELETE)$) { return 503 '{"detail":"服务正在更新，请稍后重试；后台分析继续运行"}'; }
+        proxy_pass http://backend:17177;
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+    location ^~ /series/ {
+        default_type application/json;
+        if ($request_method ~ ^(POST|PUT|PATCH|DELETE)$) { return 503 '{"detail":"服务正在更新，请稍后重试"}'; }
         proxy_pass http://backend:17177;
         proxy_set_header Host $host;
         proxy_read_timeout 3600s;
     }
     location ^~ /agent/ {
         default_type application/json;
-        if ($request_method = POST) { return 503 '{"detail":"Chat 正在更新，请稍后重试；当前输入已保留"}'; }
+        if ($request_method ~ ^(POST|PUT|PATCH|DELETE)$) { return 503 '{"detail":"Chat 正在更新，请稍后重试；当前输入已保留"}'; }
         proxy_pass http://backend:17177;
         proxy_set_header Host $host;
         proxy_read_timeout 3600s;
@@ -94,6 +104,20 @@ try:
         time.sleep(10)
     else:
         raise RuntimeError('Active Chat/analysis requests did not drain; deployment aborted')
+    # The old process is still live, but new writes are blocked by maintenance.
+    preflight_counts = json.loads(run([
+        'docker', 'run', '--rm', '-v', str(output_path)+':/app/output:ro', image,
+        'python', 'scripts/check_project_store_compatibility.py',
+    ]))
+    print('Store preflight:', json.dumps(preflight_counts, sort_keys=True))
+    data_backup = root / 'data-before-switch'
+    data_backup.mkdir(exist_ok=True)
+    for filename in ('projects.json', 'series.json'):
+        destination = data_backup / filename
+        with (output_path / filename).open('rb') as source_stream, destination.open('wb') as backup_stream:
+            shutil.copyfileobj(source_stream, backup_stream)
+            backup_stream.flush()
+            os.fsync(backup_stream.fileno())
     run(['docker', 'stop', '--time', '210', backend_container])
     run(['docker', 'rename', backend_container, backup])
     renamed = True
@@ -107,6 +131,10 @@ try:
         except Exception:
             if attempt == 29: raise
             time.sleep(1)
+    post_switch_counts = json.loads(run([
+        'docker', 'exec', backend_container, 'python', 'scripts/check_project_store_compatibility.py',
+    ]))
+    assert post_switch_counts == preflight_counts, 'Project/series counts changed during release'
     run(['docker','exec',frontend_container,'nginx','-t'])
     run(['docker','exec',frontend_container,'nginx','-s','reload'])
     with urllib.request.urlopen('http://127.0.0.1:3000/openapi.json', timeout=5) as r:
