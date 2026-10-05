@@ -2,7 +2,7 @@ import pytest
 from src.models import uniart
 
 
-@pytest.mark.parametrize('ratio,tier,size', [('16:9', '1k', '1024x576'), ('9:16', '2k', '1152x2048'), ('1:1', '4k', '4096x4096')])
+@pytest.mark.parametrize('ratio,tier,size', [('16:9', '1k', '1024x576'), ('9:16', '2k', '1152x2048'), ('1:1', '4k', '4096x4096'), ('2:1', '4k', '4096x2048')])
 @pytest.mark.parametrize('quality', ['low', 'medium', 'high'])
 def test_image_ratio_quality_outbound(monkeypatch, ratio, tier, size, quality):
     captured = {}
