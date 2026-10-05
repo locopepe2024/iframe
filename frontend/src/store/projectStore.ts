@@ -207,6 +207,8 @@ export interface StylePresetCategory {
 export interface StylePreset {
     id: string;
     category: string;
+    visual_family?: string;
+    genre_tags?: string[];
     name: string;
     name_zh: string;
     subtitle_zh?: string;

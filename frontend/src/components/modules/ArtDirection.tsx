@@ -1064,8 +1064,9 @@ function StylePresetCardV2({ style, isSelected, onClick }: {
                         style={{ objectPosition: style.object_position || "center" }}
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-glass-border to-glass-border">
-                        <ImageIcon size={24} className="text-text-muted/40" />
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-elevated text-text-muted">
+                        <ImageIcon size={24} aria-hidden="true" />
+                        <span className="text-xs">预览图待制作</span>
                     </div>
                 )}
                 {isSelected && (
