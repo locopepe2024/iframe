@@ -106,7 +106,7 @@ try:
         raise RuntimeError('Active Chat/analysis requests did not drain; deployment aborted')
     # The old process is still live, but new writes are blocked by maintenance.
     preflight_counts = json.loads(run([
-        'docker', 'run', '--rm', '-v', str(output_path)+':/app/output:ro', image,
+        'docker', 'run', '--rm', '-e', 'PYTHONPATH=/app', '-v', str(output_path)+':/app/output:ro', image,
         'python', 'scripts/check_project_store_compatibility.py',
     ]))
     print('Store preflight:', json.dumps(preflight_counts, sort_keys=True))
@@ -132,7 +132,7 @@ try:
             if attempt == 29: raise
             time.sleep(1)
     post_switch_counts = json.loads(run([
-        'docker', 'exec', backend_container, 'python', 'scripts/check_project_store_compatibility.py',
+        'docker', 'exec', '-e', 'PYTHONPATH=/app', backend_container, 'python', 'scripts/check_project_store_compatibility.py',
     ]))
     assert post_switch_counts == preflight_counts, 'Project/series counts changed during release'
     run(['docker','exec',frontend_container,'nginx','-t'])
