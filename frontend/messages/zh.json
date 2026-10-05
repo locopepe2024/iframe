@@ -781,7 +781,7 @@
     "description": "描述（可选）",
     "descriptionPlaceholder": "简要描述这个系列...",
     "creating": "创建中...",
-    "confirmDeleteSeries": "确定要删除系列\"{title}\"吗？这不会删除其中的项目。",
+    "confirmDeleteSeries": "确定要删除系列“{title}”及其全部分集项目吗？此操作无法撤销。",
     "rename": "重命名",
     "renameSeriesPrompt": "重命名系列",
     "seriesActions": "更多操作",

@@ -340,8 +340,7 @@ class TestEpisodeLifecycleIntegration:
         assert ep.title == "My Episode"  # data preserved
         assert ep.original_text == "important text"
 
-    def test_delete_series_orphans_episodes(self, pipeline):
-        """Deleting a series should orphan episodes, not delete them."""
+    def test_delete_series_removes_episodes(self, pipeline):
         s = pipeline.create_series("S")
         ep1 = _make_script(title="Ep1")
         ep2 = _make_script(title="Ep2")
@@ -352,12 +351,8 @@ class TestEpisodeLifecycleIntegration:
 
         pipeline.delete_series(s.id)
 
-        # Episodes should still exist but be orphaned
-        assert ep1.id in pipeline.scripts
-        assert ep2.id in pipeline.scripts
-        assert ep1.series_id is None
-        assert ep2.series_id is None
-        assert ep1.episode_number is None
+        assert ep1.id not in pipeline.scripts
+        assert ep2.id not in pipeline.scripts
 
     def test_episode_numbering_sequential(self, pipeline):
         """Episodes added sequentially should get correct numbers."""

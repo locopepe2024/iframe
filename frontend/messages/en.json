@@ -781,7 +781,7 @@
     "description": "Description (optional)",
     "descriptionPlaceholder": "Briefly describe this series...",
     "creating": "Creating...",
-    "confirmDeleteSeries": "Are you sure you want to delete series \"{title}\"? This will not delete its projects.",
+    "confirmDeleteSeries": "Delete series \"{title}\" and all its episode projects? This cannot be undone.",
     "rename": "Rename",
     "renameSeriesPrompt": "Rename series",
     "seriesActions": "More actions",

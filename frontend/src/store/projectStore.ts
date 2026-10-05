@@ -958,10 +958,17 @@ export const useProjectStore = create<ProjectStore>()(
             deleteSeries: async (id: string) => {
                 try {
                     await api.deleteSeries(id);
-                    set((state) => ({
-                        seriesList: state.seriesList.filter((s) => s.id !== id),
-                        currentSeries: state.currentSeries?.id === id ? null : state.currentSeries,
-                    }));
+                    set((state) => {
+                        const episodeIds = new Set(state.seriesList.find((s) => s.id === id)?.episode_ids ?? []);
+                        const isDeletedEpisode = (project: Project) =>
+                            project.series_id === id || episodeIds.has(project.id);
+                        return {
+                            projects: state.projects.filter((p) => !isDeletedEpisode(p)),
+                            currentProject: state.currentProject && isDeletedEpisode(state.currentProject) ? null : state.currentProject,
+                            seriesList: state.seriesList.filter((s) => s.id !== id),
+                            currentSeries: state.currentSeries?.id === id ? null : state.currentSeries,
+                        };
+                    });
                 } catch (error) {
                     console.error('Failed to delete series:', error);
                     throw error;
