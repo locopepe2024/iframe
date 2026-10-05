@@ -20,7 +20,9 @@ export default function BottomTabBar({
 }) {
   const t = useTranslations("nav");
   const [moreOpen, setMoreOpen] = useState(false);
-  const primaryIds: GlobalTab[] = ["workspace", "playground", "recreation", "director3d"];
+  // Keep the two creation entry points visible in narrow embeds. Library,
+  // script editor, recreation and settings remain available from More.
+  const primaryIds: GlobalTab[] = ["workspace", "playground", "imageEditor", "director3d"];
   const primaryItems = GLOBAL_NAV_ITEMS.filter((item) => primaryIds.includes(item.id));
   const moreItems = GLOBAL_NAV_ITEMS.filter((item) => !primaryIds.includes(item.id));
   const moreActive = moreItems.some((item) => item.id === activeTab);
