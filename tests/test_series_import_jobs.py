@@ -95,6 +95,17 @@ def test_import_preview_accepts_sixty_episodes(tmp_path, monkeypatch):
         calls.assert_called_once()
 
 
+def test_persisted_import_text_preserves_crlf_for_preview_offsets(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+    text = "剧本梗概：武侠故事。\r\n第1集 开篇\r\n正文一\r\n第2集 续篇\r\n正文二\r\n"
+    import_id = "b" * 32
+    api._store_import_text("owner", import_id, text)
+
+    assert api._load_import_text("owner", import_id) == text
+
+
 def test_import_failure_uses_import_error_label(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)

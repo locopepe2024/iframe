@@ -1621,7 +1621,7 @@ def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
 def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
     target = _import_text_path(owner_profile_id, import_id)
     temporary = target.with_suffix(".tmp")
-    temporary.write_text(text, encoding="utf-8")
+    temporary.write_bytes(text.encode("utf-8"))
     os.replace(temporary, target)
 
 
@@ -1629,7 +1629,7 @@ def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
     path = _import_text_path(owner_profile_id, import_id)
     if not path.is_file():
         return None
-    return path.read_text(encoding="utf-8")
+    return path.read_bytes().decode("utf-8")
 
 
 def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
