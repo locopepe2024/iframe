@@ -1,6 +1,13 @@
 import axios from 'axios';
 import { API_URL } from './api';
-import type { PanoramaQuality } from './imageEditor';
+
+export interface PanoramaQuality {
+  status: 'pass' | 'review' | 'fail';
+  blocking_codes: string[];
+  seam_error?: number;
+  transparent_pole_fraction?: number;
+  black_pole_fraction?: number;
+}
 
 export interface PanoramaAsset {
   id: string;

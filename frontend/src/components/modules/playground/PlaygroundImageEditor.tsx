@@ -1,14 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { ImagePlus, Plus, RefreshCw } from 'lucide-react';
-import { playgroundApi, type PlaygroundGenerationResponse } from '@/lib/api';
+import { ImagePlus } from 'lucide-react';
+import { playgroundApi } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { toast } from '@/store/toastStore';
-import ImageEditorReferenceTools, { PANORAMA_PROMPT_PREFIX, type EditorReference, type GeneratedResultOptions } from './ImageEditorReferenceTools';
+import ImageEditorReferenceTools, { type EditorReference } from './ImageEditorReferenceTools';
 
 const ImageEditor = dynamic(() => import('@/components/shared/image-editor/ImageEditor'), { ssr: false });
 const EditorContext = createContext<((reference?: string, title?: string) => void) | null>(null);
@@ -29,36 +29,13 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const copiesRef = useRef<SavedImageEdit[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [references, setReferences] = useState<EditorReference[]>(reference ? [{ path: reference, title }] : []);
-  const [generation, setGeneration] = useState<PlaygroundGenerationResponse | null>(null);
-  const [history, setHistory] = useState<PlaygroundGenerationResponse[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState(false);
-  const [historyOffset, setHistoryOffset] = useState(0);
-  const [hasMoreHistory, setHasMoreHistory] = useState(false);
-  const loadHistory = useCallback(async (offset: number) => {
-    setHistoryLoading(true); setHistoryError(false);
-    try {
-      const records = await playgroundApi.getHistory(100, offset);
-      const images = records.filter(item => (item.mode === 't2i' || item.mode === 'i2i') && item.status === 'completed' && item.outputs.some(output => output.media_type === 'image'));
-      setHistory(current => offset === 0 ? images : [...current, ...images]);
-      setHistoryOffset(offset + records.length);
-      setHasMoreHistory(records.length === 100);
-    } catch { setHistoryError(true); }
-    finally { setHistoryLoading(false); }
-  }, []);
-  const refreshHistory = useCallback(async () => {
-    await loadHistory(0);
-  }, [loadHistory]);
-  const updateGeneration = useCallback((next: PlaygroundGenerationResponse | null) => {
-    setGeneration(next);
-    if (next?.status === 'completed') void refreshHistory();
-  }, [refreshHistory]);
-  const [panoramaCandidatePath, setPanoramaCandidatePath] = useState<string | null>(null);
+  const [projectionType, setProjectionType] = useState<ImageProjectionType>('perspective_plane');
+  const [references, setReferences] = useState<EditorReference[]>([]);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const retry = useRef<{ hash: string; key: string }>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
-  useEffect(() => { void refreshHistory(); }, [refreshHistory]);
   useEffect(() => {
     if (!selected) return;
     const abort = new AbortController(); let objectUrl: string | undefined;
@@ -66,6 +43,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     imageEditorApi.load(selected, abort.signal).then(({ source, blob }) => {
       if (abort.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob); setLoaded({ source, url: objectUrl, blob });
+      setProjectionType(source.width === 2 * source.height && copiesRef.current.find(copy => copy.path === selected)?.projection_type === 'equirectangular' ? 'equirectangular' : 'perspective_plane');
     }).catch(() => { if (!abort.signal.aborted) setError(t('loadFailed')); })
       .finally(() => { if (!abort.signal.aborted) setBusy(false); });
     return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
@@ -79,16 +57,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     }
     return false;
   };
-  const addReference = (candidate: EditorReference) => {
-    if (!selected) { setSelected(candidate.path); setName(candidate.title); }
-    setReferences(current => {
-      if (current.length >= 9 || current.some(item => item.path === candidate.path)) return current;
-      let title = candidate.title;
-      let suffix = 2;
-      while (current.some(item => item.title === title)) title = `${candidate.title} (${suffix++})`;
-      return [...current, { ...candidate, title }];
-    });
-  };
+  const addReference = (candidate: EditorReference) => setReferences(current => current.length >= 9 || current.some(item => item.path === candidate.path) ? current : [...current, candidate]);
   const moveReference = (path: string, direction: -1 | 1) => setReferences(current => {
     const index = current.findIndex(item => item.path === path);
     const target = index + direction;
@@ -97,64 +66,53 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     [next[index], next[target]] = [next[target], next[index]];
     return next;
   });
-  const useResult = (path: string, resultTitle: string, options?: GeneratedResultOptions) => {
-    if (path === selected) { setPanoramaCandidatePath(options?.panoramaCandidate ? path : null); return; }
+  const useResult = (path: string, resultTitle: string) => {
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
-    setPanoramaCandidatePath(options?.panoramaCandidate ? path : null);
     setName(resultTitle); setSelected(path);
   };
-  const referenceTools = <ImageEditorReferenceTools references={references}
+  const referenceTools = <ImageEditorReferenceTools source={loaded?.source ?? null} references={references}
     onAdd={addReference} onRemove={path => setReferences(current => current.filter(item => item.path !== path))}
-    onMove={moveReference} onUseResult={useResult} onGenerationChange={updateGeneration}/>;
-  const saveFile = async (file: File, projection: ImageProjectionType = 'perspective_plane') => {
+    onMove={moveReference} onUseResult={useResult}/>;
+  const saveFile = async (file: File, projection?: ImageProjectionType) => {
     if (!loaded) throw new Error('No source');
     const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + projection;
+    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
     if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
-    const saved = projection === 'perspective_plane'
-      ? await imageEditorApi.save(loaded.source, file, retry.current.key)
-      : await imageEditorApi.save(loaded.source, file, retry.current.key, projection);
-    append(saved); copiesRef.current = [saved, ...copiesRef.current.filter(copy => copy.id !== saved.id)]; setCopies(copiesRef.current);
-    toast.success(t('saved')); setPanoramaCandidatePath(null); setName(saved.title); setSelected(saved.path);
+    const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
+    append(saved); toast.success(t('saved')); onClose();
   };
-  const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
-  const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
-  const panoramaQualityStatus = loaded?.source.panorama_quality?.status;
-  const queuedOutputs = history.flatMap(item => item.outputs
-    .filter(output => output.media_type === 'image' && output.media_path !== selected)
-    .map(output => ({ generation: item, output })));
-  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate} panoramaQualityStatus={isPanoramaCandidate ? panoramaQualityStatus : undefined}
+  return <ImageEditor key={selected || 'empty'} source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
     onModified={() => setHasUnsavedEdit(true)}
-    onDiscard={() => setHasUnsavedEdit(false)}
-    panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio}
-    onSavePanoramaSource={loaded && !hasUnsavedEdit && hasPanoramaRatio ? async () => {
+    panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
+    onSavePanoramaSource={loaded && !hasUnsavedEdit && loaded.source.width === 2 * loaded.source.height ? async () => {
       const ext = loaded.source.mime === 'image/jpeg' ? 'jpg' : loaded.source.mime === 'image/webp' ? 'webp' : 'png';
       await saveFile(new File([loaded.blob], `${name.replace(/\.[^.]+$/, '') || 'panorama'}.${ext}`, { type: loaded.source.mime }), 'equirectangular');
     } : undefined}
-    leftPanel={<div className="space-y-1 text-xs">
-      <div className="flex items-center justify-between px-2 pt-2"><h3 className="font-semibold text-text-muted">{t('generationHistory')}</h3><button type="button" title={t('refreshHistory')} aria-label={t('refreshHistory')} disabled={historyLoading} onClick={() => void refreshHistory()} className="grid h-9 w-9 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><RefreshCw size={15}/></button></div>
-      {historyError && <p role="alert" className="px-2 text-status-failed-fg">{t('generationHistoryFailed')}</p>}
-      {!historyLoading && !historyError && queuedOutputs.length === 0 && <p className="px-2 text-text-muted">{t('generationHistoryEmpty')}</p>}
-      {queuedOutputs.map(({ generation: item, output }) => {
-        const candidate = item.prompt.startsWith(PANORAMA_PROMPT_PREFIX);
-        const label = candidate ? t('panoramaGeneration') : item.prompt || t('generatedImage');
-        return <div key={`${item.id}:${output.id}`} className="flex min-w-0 items-center gap-1">
-          <button type="button" onClick={() => useResult(output.media_path, label, candidate ? { panoramaCandidate: true } : undefined)} title={label} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{label}</button>
-          <button type="button" title={t('addReference')} aria-label={`${t('addReference')} ${label}`} disabled={references.length >= 9 || references.some(reference => reference.path === output.media_path)} onClick={() => addReference({ path: output.media_path, title: label })} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg disabled:opacity-40"><Plus size={15}/></button>
-        </div>;
-      })}
-      {hasMoreHistory && <button type="button" disabled={historyLoading} onClick={() => void loadHistory(historyOffset)} className="min-h-10 w-full rounded px-2 text-left text-primary hover:bg-hover-bg disabled:opacity-40">{t('moreHistory')}</button>}
-      <h3 className="border-t border-glass-border px-2 pt-3 font-semibold text-text-muted">{t('copies')}</h3>
-      {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
-        <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
-        {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
-        {copy.projection_type === 'equirectangular' && copy.panorama_quality?.status === 'pass' && <span className="shrink-0 text-[10px] text-text-muted">{t('panoramaGeneration')}</span>}
-      </div>)}
-    </div>}
-    toolPanel={referenceTools}
-    canvasStatus={busy ? t('loading') : generation?.status === 'pending' || generation?.status === 'processing' ? t('generating') : undefined}
+    toolPanel={loaded && referenceTools}
     onSave={saveFile}
-    emptyState={<div className="grid h-full min-h-[280px] place-items-center p-6 text-center text-sm text-text-muted">{error || t('canvasEmpty')}</div>} />;
+    emptyState={<div className="mx-auto flex max-w-2xl flex-col gap-4 p-5">
+      <p className="text-text-secondary">{t('choose')}</p>
+      <label className="flex min-h-11 items-center gap-3 rounded-lg border border-glass-border p-3">{t('upload')}
+        <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="min-w-0 text-sm" onChange={async event => {
+          const file = event.target.files?.[0]; if (!file) return;
+          if (file.size > 25 * 1024 * 1024) { setError(t('tooLarge')); return; }
+          setBusy(true); setError('');
+          try { const result = await playgroundApi.uploadMedia(file); if (!mounted.current) return; setName(file.name); setSelected(result.path); }
+          catch { if (!mounted.current) return; setError(t('loadFailed')); setBusy(false); }
+          event.target.value = '';
+        }} />
+      </label>
+      {busy && <p role="status">{t('loading')}</p>}
+      {error && <p role="alert" className="text-status-failed-fg">{error}</p>}
+      <h3 className="font-semibold">{t('copies')}</h3>
+      {copies.length === 0 && <p className="text-sm text-text-muted">{t('empty')}</p>}
+      {copies.map(copy => <div key={copy.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-glass-border p-3">
+        <span className="min-w-0 flex-1 break-words">{copy.title}</span>
+        <button type="button" disabled={busy} className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { setName(copy.title); setSelected(copy.path); }}>{t('edit')}</button>
+        <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); onClose(); }}>{t('use')}</button>
+      </div>)}
+      <div className="border-t border-glass-border pt-4">{referenceTools}</div>
+    </div>} />;
 }
 
 export default function PlaygroundImageEditor({ children }: { children: ReactNode }) {
@@ -169,5 +127,22 @@ export default function PlaygroundImageEditor({ children }: { children: ReactNod
 /** Standalone image editing workbench, independent of a generation session. */
 export function StandaloneImageEditorPage() {
   const t = useTranslations('imageEditor');
-  return <EditorSession title={t('title')} sessionId={null} onClose={() => { window.location.hash = '#/playground'; }} />;
+  const [editor, setEditor] = useState<{ reference?: string; title: string; sessionId: string | null } | null>(null);
+  return (
+    <section className="h-full overflow-auto p-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <header>
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">iFrame Atelier</p>
+          <h1 className="mt-2 text-2xl font-display font-semibold text-foreground">{t('title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">{t('standaloneDescription')}</p>
+        </header>
+        <div className="rounded-xl border border-glass-border bg-surface/50 p-5">
+          <button type="button" onClick={() => setEditor({ title: t('title'), sessionId: null })} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            <ImagePlus size={18} />{t('open')}
+          </button>
+        </div>
+      </div>
+      {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
+    </section>
+  );
 }
