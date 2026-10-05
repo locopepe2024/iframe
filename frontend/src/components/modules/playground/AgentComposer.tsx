@@ -128,7 +128,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
 
   return (
     <div className="shrink-0 border-t border-border-subtle bg-background/80 px-3 pb-3 pt-3 backdrop-blur-xl md:px-6 md:pb-5">
-      <div ref={composerRef} className="relative z-40 mx-auto max-w-5xl rounded-[22px] border border-glass-border bg-elevated/95 shadow-2xl">
+      <div ref={composerRef} data-agent-composer className="relative z-40 mx-auto max-w-5xl rounded-[22px] border border-glass-border bg-elevated/95 shadow-2xl">
         {activePanel && (
           <div
             role="dialog"

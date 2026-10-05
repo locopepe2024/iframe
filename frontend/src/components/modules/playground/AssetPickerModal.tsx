@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, Image, Film, Loader2 } from 'lucide-react';
+import { X, Check, Image, Film, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { api, playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
@@ -18,6 +19,7 @@ interface AssetPickerModalProps {
   onClose: () => void;
   onSelect: (path: string) => void;
   accept: 'image' | 'video' | 'all';
+  triggerRef?: RefObject<HTMLElement>;
 }
 
 interface AssetItem {
@@ -30,6 +32,7 @@ interface AssetItem {
 }
 
 type FilterTab = 'all' | 'image' | 'video';
+const PAGE_SIZE = 36;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,12 +72,16 @@ export default function AssetPickerModal({
   onClose,
   onSelect,
   accept,
+  triggerRef,
 }: AssetPickerModalProps) {
   const t = useTranslations('playground');
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [bottomOffset, setBottomOffset] = useState(12);
   const [activeTab, setActiveTab] = useState<FilterTab>(
     accept === 'all' ? 'all' : accept
   );
@@ -171,6 +178,8 @@ export default function AssetPickerModal({
   useEffect(() => {
     if (isOpen) {
       setSelected(null);
+      setSearch('');
+      setPage(0);
       fetchAssets();
     }
   }, [isOpen, fetchAssets]);
@@ -179,6 +188,18 @@ export default function AssetPickerModal({
   useEffect(() => {
     setActiveTab(accept === 'all' ? 'all' : accept);
   }, [accept]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const position = () => {
+      const composer = triggerRef?.current?.closest('[data-agent-composer]');
+      const desired = composer ? window.innerHeight - composer.getBoundingClientRect().top + 10 : 12;
+      setBottomOffset(Math.min(Math.max(12, desired), Math.max(12, window.innerHeight - 240)));
+    };
+    position();
+    window.addEventListener('resize', position);
+    return () => window.removeEventListener('resize', position);
+  }, [isOpen, triggerRef]);
 
   // -------------------------------------------------------------------------
   // Filter
@@ -194,8 +215,13 @@ export default function AssetPickerModal({
     if (activeTab !== 'all') {
       pool = pool.filter((a) => a.type === activeTab);
     }
+    const query = search.trim().toLocaleLowerCase();
+    if (query) pool = pool.filter((a) => a.label.toLocaleLowerCase().includes(query));
     return pool;
-  }, [assets, accept, activeTab]);
+  }, [assets, accept, activeTab, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredAssets.length / PAGE_SIZE));
+  const pageAssets = filteredAssets.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -255,11 +281,14 @@ export default function AssetPickerModal({
   // Render
   // -------------------------------------------------------------------------
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 px-3 pt-3 backdrop-blur-sm"
+          style={{ paddingBottom: bottomOffset }}
           variants={overlayVariants}
           initial="hidden"
           animate="visible"
@@ -269,11 +298,12 @@ export default function AssetPickerModal({
         >
           <motion.div
             className="
-              w-[640px] max-h-[80vh]
+              w-full max-w-[960px]
               bg-elevated border border-glass-border
-              rounded-2xl shadow-2xl
+              rounded-lg shadow-2xl
               flex flex-col overflow-hidden
             "
+            style={{ height: `min(700px, calc(100dvh - ${bottomOffset + 12}px))` }}
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -284,7 +314,7 @@ export default function AssetPickerModal({
             {/* -------------------------------------------------------------- */}
             {/* Header                                                          */}
             {/* -------------------------------------------------------------- */}
-            <div className="px-6 py-5 border-b border-glass-border flex items-center justify-between shrink-0">
+            <div className="px-4 py-3 border-b border-glass-border flex items-center justify-between shrink-0 sm:px-5">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
                   <Image size={16} className="text-primary" />
@@ -295,20 +325,21 @@ export default function AssetPickerModal({
               <button
                 type="button"
                 onClick={onClose}
+                aria-label={t('assetPicker.cancel')}
                 className="grid h-8 w-8 place-items-center rounded-lg text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
               >
                 <X size={16} />
               </button>
             </div>
 
-            {/* Filter tabs */}
-            {visibleTabs.length > 1 && (
-              <div className="flex items-center gap-1.5 px-6 pt-4 pb-2 shrink-0">
+            <div className="flex shrink-0 flex-col gap-2 border-b border-glass-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              {visibleTabs.length > 1 && (
+              <div className="flex items-center gap-1.5">
                 {visibleTabs.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => { setActiveTab(tab.key); setPage(0); setSelected(null); }}
                     className={[
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[0.6875rem] font-medium transition-all border",
                       activeTab === tab.key
@@ -321,12 +352,24 @@ export default function AssetPickerModal({
                   </button>
                 ))}
               </div>
-            )}
+              )}
+              <label className="relative block w-full sm:ml-auto sm:max-w-[280px]">
+                <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="search"
+                  aria-label={t('assetPicker.search')}
+                  placeholder={t('assetPicker.search')}
+                  value={search}
+                  onChange={(event) => { setSearch(event.target.value); setPage(0); setSelected(null); }}
+                  className="h-10 w-full rounded-md border border-glass-border bg-input-bg pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary"
+                />
+              </label>
+            </div>
 
             {/* -------------------------------------------------------------- */}
             {/* Grid                                                            */}
             {/* -------------------------------------------------------------- */}
-            <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
               {loading && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
                   <Loader2 className="w-6 h-6 text-text-muted animate-spin" />
@@ -360,8 +403,8 @@ export default function AssetPickerModal({
               )}
 
               {!loading && !error && filteredAssets.length > 0 && (
-                <div className="grid grid-cols-4 gap-3">
-                  {filteredAssets.map((asset) => {
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                  {pageAssets.map((asset) => {
                     const isSelected = selected === asset.path;
                     const thumbUrl = asset.thumbnail
                       ? toFileUrl(asset.thumbnail)
@@ -374,6 +417,8 @@ export default function AssetPickerModal({
                         onClick={() =>
                           setSelected(isSelected ? null : asset.path)
                         }
+                        aria-label={asset.label}
+                        aria-pressed={isSelected}
                         className={`
                           relative aspect-square rounded-lg overflow-hidden
                           bg-glass cursor-pointer
@@ -386,13 +431,8 @@ export default function AssetPickerModal({
                         `}
                       >
                         {/* Thumbnail */}
-                        {asset.type === 'audio' || asset.type === 'text' ? <span className="flex h-full items-center justify-center text-xs text-text-muted">{asset.type === 'audio' ? '音频' : '文本'}</span> : asset.type === 'video' ? (
-                          <video
-                            src={thumbUrl}
-                            className="w-full h-full object-cover"
-                            muted
-                            preload="metadata"
-                          />
+                        {asset.type === 'audio' || asset.type === 'text' ? <span className="flex h-full items-center justify-center text-xs text-text-muted">{asset.type === 'audio' ? '音频' : '文本'}</span> : asset.type === 'video' && !asset.thumbnail ? (
+                          <span className="flex h-full items-center justify-center"><Film className="h-7 w-7 text-text-muted" /></span>
                         ) : (
                           <img
                             src={thumbUrl}
@@ -435,7 +475,13 @@ export default function AssetPickerModal({
             {/* -------------------------------------------------------------- */}
             {/* Footer                                                          */}
             {/* -------------------------------------------------------------- */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-glass-border">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-glass-border px-4 py-3 sm:px-5">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <button type="button" aria-label={t('assetPicker.previousPage')} title={t('assetPicker.previousPage')} disabled={page === 0} onClick={() => setPage((current) => current - 1)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-hover-bg disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft size={16} /></button>
+                <span>{t('assetPicker.page', { page: page + 1, total: pageCount })}</span>
+                <button type="button" aria-label={t('assetPicker.nextPage')} title={t('assetPicker.nextPage')} disabled={page >= pageCount - 1} onClick={() => setPage((current) => current + 1)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-hover-bg disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={16} /></button>
+              </div>
+              <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
@@ -462,10 +508,11 @@ export default function AssetPickerModal({
                 <Check className="w-3.5 h-3.5" />
                 {t('assetPicker.select')}
               </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
-  );
+  , document.body);
 }

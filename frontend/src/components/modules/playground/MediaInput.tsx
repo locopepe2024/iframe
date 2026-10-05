@@ -97,6 +97,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   const t = useTranslations('playground');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerButtonRef = useRef<HTMLButtonElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -316,6 +317,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
             {t('media.localUpload')}
           </button>
           <button
+            ref={pickerButtonRef}
             type="button"
             onClick={() => setShowAssetPicker(true)}
             disabled={uploading || atLimit}
@@ -333,6 +335,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
           onClose={() => setShowAssetPicker(false)}
           onSelect={handleAssetSelect}
           accept={acceptType}
+          triggerRef={pickerButtonRef}
         />
       </div>
     );
