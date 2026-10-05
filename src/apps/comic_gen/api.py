@@ -1080,7 +1080,7 @@ def update_series(series_id: str, request: UpdateSeriesRequest):
 
 @app.delete("/series/{series_id}")
 def delete_series(series_id: str):
-    """Delete a Series and disassociate its episodes."""
+    """Delete a Series and all of its episode projects."""
     try:
         pipeline.delete_series(series_id)
         return {"status": "deleted"}

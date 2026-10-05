@@ -550,7 +550,7 @@ export default function Home() {
     setIsSyncing(true);
     try {
       const backendProjects = await api.getProjects();
-      if (backendProjects && backendProjects.length > 0) {
+      if (backendProjects) {
         setProjects(backendProjects);
       }
     } catch (error) {

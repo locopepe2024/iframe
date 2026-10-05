@@ -150,17 +150,42 @@ class TestSeriesCRUD:
         with pytest.raises(ValueError, match="Series not found"):
             pipeline.update_series("missing", {"title": "X"})
 
-    def test_delete_series_clears_episodes(self, pipeline):
+    def test_delete_series_deletes_episodes_and_keeps_unrelated_projects(self, pipeline):
         s = pipeline.create_series("ToDelete")
         ep = _make_script(title="Ep1")
+        unrelated = _make_script(title="Independent")
         pipeline.scripts[ep.id] = ep
+        pipeline.scripts[unrelated.id] = unrelated
         pipeline.add_episode_to_series(s.id, ep.id)
         assert ep.series_id == s.id
 
         pipeline.delete_series(s.id)
         assert s.id not in pipeline.series_store
-        assert ep.series_id is None
-        assert ep.episode_number is None
+        assert ep.id not in pipeline.scripts
+        assert unrelated.id in pipeline.scripts
+        assert ep.id not in pipeline._load_data()
+
+    def test_delete_series_catches_unlisted_episode_binding(self, pipeline):
+        s = pipeline.create_series("ToDelete")
+        ep = _make_script(title="Unlisted", series_id=s.id)
+        pipeline.scripts[ep.id] = ep
+
+        pipeline.delete_series(s.id)
+
+        assert ep.id not in pipeline.scripts
+
+    def test_delete_series_rejects_conflicting_episode_owner(self, pipeline):
+        s = pipeline.create_series("ToDelete")
+        other = pipeline.create_series("Other")
+        ep = _make_script(title="Other Episode", series_id=other.id)
+        pipeline.scripts[ep.id] = ep
+        s.episode_ids.append(ep.id)
+
+        with pytest.raises(ValueError, match="belongs to another series"):
+            pipeline.delete_series(s.id)
+
+        assert ep.id in pipeline.scripts
+        assert s.id in pipeline.series_store
 
     def test_delete_series_not_found(self, pipeline):
         with pytest.raises(ValueError, match="Series not found"):

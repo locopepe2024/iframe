@@ -7857,17 +7857,24 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series
 
     def delete_series(self, series_id: str) -> None:
-        """Delete a Series and disassociate its episodes."""
+        """Delete a Series and its episode projects."""
         with self._save_lock:
             series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
-            # Disassociate episodes
-            for ep_id in series.episode_ids:
-                script = self.get_script(ep_id)
-                if script:
-                    script.series_id = None
-                    script.episode_number = None
+            episode_ids = set(series.episode_ids)
+            episode_ids.update(
+                script_id for script_id, script in self.scripts.items()
+                if script.series_id == series_id
+            )
+            conflicting_ids = [
+                ep_id for ep_id in series.episode_ids
+                if ep_id in self.scripts and self.scripts[ep_id].series_id not in (None, series_id)
+            ]
+            if conflicting_ids:
+                raise ValueError("Series episode belongs to another series")
+            for ep_id in episode_ids:
+                self.scripts.pop(ep_id, None)
             self._save_data()
             del self.series_store[series_id]
             self._save_series_data_unlocked()
