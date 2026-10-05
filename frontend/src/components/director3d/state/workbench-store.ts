@@ -14,7 +14,7 @@ import { createIdleMotionTrackImportState } from "./motion-track-import";
 import { compileReviewedMotionTrack as compileReviewedMotionTrackPure, createIdleMotionTrackReviewState } from "./motion-track-review";
 import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
-import { parsePanoramaScenePackage, type PanoramaScenePackage } from "./panorama-scene-package";
+import { createManualPanoramaScenePackage, parsePanoramaScenePackage, type PanoramaScenePackage } from "./panorama-scene-package";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
 const jointById = new Map(rigProfile.joints.map((joint) => [joint.joint_id, joint]));
@@ -40,6 +40,7 @@ export interface AuthoringSnapshot {
   actorMappings: Record<string, ActorMappingState>;
   sceneObjects: Record<string, SceneObjectAuthoringState>;
   renderScene: RenderSceneState;
+  panoramaScenePackage: PanoramaScenePackage | null;
   dialogueTimeline: DialogueTimelineState;
   cameras: Record<string, CameraCompositionState>;
   actorPaths: Record<string, ActorPathState>;
@@ -796,6 +797,10 @@ export interface WorkbenchState {
   insertAdmittedObjectAsset: (assetId: string) => void;
   setEnvironmentInputCatalog: (catalog: EnvironmentInputCatalogState) => void;
   applyPanoramaScenePackage: (input: unknown) => { ok: true } | { ok: false; errors: string[] };
+  createManualPanoramaLayout: () => boolean;
+  addPanoramaAnchor: (kind: string, positionM: [number, number, number]) => boolean;
+  updatePanoramaAnchorPosition: (anchorId: string, positionM: [number, number, number]) => void;
+  removePanoramaAnchor: (anchorId: string) => void;
   setPanoramaPreviewStatus: (status: { state: "idle" | "loading" | "ready" | "error"; message: string }) => void;
   previewPanoramaDiagnostic: (inputId: string | null) => void;
   setPanoramaDiagnosticPreviewYawDeg: (yawDeg: number) => void;
@@ -1000,6 +1005,7 @@ function snapshotAuthoring(state: WorkbenchState): AuthoringSnapshot {
     actorMappings: state.actorMappings,
     sceneObjects: state.sceneObjects,
     renderScene: state.renderScene,
+    panoramaScenePackage: state.panoramaScenePackage,
     dialogueTimeline: state.dialogueTimeline,
     cameras: state.cameras,
     actorPaths: state.actorPaths,
@@ -1315,8 +1321,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   }),
   setEnvironmentInputCatalog: (environmentInputCatalog) => set((state) => {
     const panoramaDiagnosticPreviewInputId = state.panoramaDiagnosticPreviewInputId && environmentInputCatalog.entries.some((entry) => entry.inputId === state.panoramaDiagnosticPreviewInputId) ? state.panoramaDiagnosticPreviewInputId : null;
+    const activePackage = state.panoramaScenePackage;
+    const boundPanorama = activePackage && environmentInputCatalog.entries.find((entry) => entry.inputId === activePackage.panoramaInputId);
+    const boundDepth = activePackage?.depth && environmentInputCatalog.entries.find((entry) => entry.inputId === activePackage.depth?.inputId);
     return {
       environmentInputCatalog,
+      panoramaScenePackage: activePackage && boundPanorama && boundPanorama.checksum === activePackage.panoramaChecksum && boundPanorama.environmentAllowed && boundPanorama.admissionChecksum === boundPanorama.checksum && (!activePackage.depth || boundDepth?.checksum === activePackage.depth.checksum) ? activePackage : null,
       panoramaDiagnosticPreviewInputId,
       panoramaDiagnosticPreviewYawDeg: panoramaDiagnosticPreviewInputId ? state.panoramaDiagnosticPreviewYawDeg : 0,
       panoramaDiagnosticPreviewFlipVertical: panoramaDiagnosticPreviewInputId ? state.panoramaDiagnosticPreviewFlipVertical : false,
@@ -1329,19 +1339,48 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const catalog = get().environmentInputCatalog.entries;
     const panorama = catalog.find((entry) => entry.inputId === scenePackage.panoramaInputId);
     const errors: string[] = [];
+    if (get().renderScene.panorama.inputId !== scenePackage.panoramaInputId) errors.push("请先选中场景包对应的全景素材。");
     if (!panorama || panorama.usage !== "panorama" || panorama.projection !== "equirectangular" || !panorama.environmentAllowed || panorama.admissionChecksum !== panorama.checksum) {
       errors.push("全景输入尚未通过导演台环境准入。");
     } else if (panorama.checksum !== scenePackage.panoramaChecksum) {
       errors.push("全景 checksum 与场景包不匹配，拒绝应用深度包。");
     }
-    if (scenePackage.depth.checksum) {
-      const depth = catalog.find((entry) => entry.inputId === scenePackage.depth.inputId);
-      if (!depth || depth.checksum !== scenePackage.depth.checksum) errors.push("深度输入 checksum 与场景包不匹配，拒绝应用深度包。");
+    if (scenePackage.depth) {
+      const depthSource = scenePackage.depth;
+      const depth = catalog.find((entry) => entry.inputId === depthSource.inputId);
+      if (!depth || depth.usage !== "calibration_depth" || depth.checksum !== depthSource.checksum) errors.push("深度输入 checksum 与场景包不匹配，拒绝应用深度包。");
     }
+    if (scenePackage.ground.heightM < -10 || scenePackage.ground.heightM > 10) errors.push("地面高度超出导演台可编辑范围（-10 到 10 m）。");
+    if (get().renderScene.ground.locked && get().renderScene.ground.heightM !== scenePackage.ground.heightM) errors.push("请先解锁地面，再导入不同高度的场景包。");
     if (errors.length) return { ok: false as const, errors };
-    set((state) => ({ ...state, panoramaScenePackage: structuredClone(scenePackage), unsavedChanges: true }));
+    get().setGroundHeightM(scenePackage.ground.heightM);
+    set((state) => mutateScene(state, "scene.panorama.package.import", { panoramaScenePackage: structuredClone(scenePackage) }));
     return { ok: true as const };
   },
+  createManualPanoramaLayout: () => {
+    const state = get();
+    const input = state.environmentInputCatalog.entries.find((entry) => entry.inputId === state.renderScene.panorama.inputId);
+    if (!input || input.usage !== "panorama" || !input.environmentAllowed || input.admissionChecksum !== input.checksum) return false;
+    set(mutateScene(state, "scene.panorama.layout.create", { panoramaScenePackage: createManualPanoramaScenePackage(input.inputId, input.checksum, state.renderScene.ground.heightM) }));
+    return true;
+  },
+  addPanoramaAnchor: (kind, positionM) => {
+    const state = get();
+    if (!state.panoramaScenePackage || !kind.trim() || !positionM.every(Number.isFinite)) return false;
+    const anchorId = `anchor-${crypto.randomUUID()}`;
+    set(mutateScene(state, "scene.panorama.anchor.add", { panoramaScenePackage: { ...state.panoramaScenePackage, semanticAnchors: [...state.panoramaScenePackage.semanticAnchors, { anchorId, kind: kind.trim(), positionM: [...positionM], confidence: 1 }], reviewStatus: "needs_director_review", ground: { ...state.panoramaScenePackage.ground, quality: "draft" } } }));
+    return true;
+  },
+  updatePanoramaAnchorPosition: (anchorId, positionM) => set((state) => {
+    const current = state.panoramaScenePackage;
+    if (!current || !positionM.every(Number.isFinite) || !current.semanticAnchors.some((anchor) => anchor.anchorId === anchorId)) return state;
+    return mutateScene(state, "scene.panorama.anchor.move", { panoramaScenePackage: { ...current, semanticAnchors: current.semanticAnchors.map((anchor) => anchor.anchorId === anchorId ? { ...anchor, positionM: [...positionM], confidence: 1 } : anchor), reviewStatus: "needs_director_review" } });
+  }),
+  removePanoramaAnchor: (anchorId) => set((state) => {
+    const current = state.panoramaScenePackage;
+    if (!current || !current.semanticAnchors.some((anchor) => anchor.anchorId === anchorId)) return state;
+    return mutateScene(state, "scene.panorama.anchor.remove", { panoramaScenePackage: { ...current, semanticAnchors: current.semanticAnchors.filter((anchor) => anchor.anchorId !== anchorId), reviewStatus: "needs_director_review" } });
+  }),
   setPanoramaPreviewStatus: (panoramaPreviewStatus) => set({ panoramaPreviewStatus }),
   previewPanoramaDiagnostic: (inputId) => set((state) => {
     if (inputId === null) return state.panoramaDiagnosticPreviewInputId === null ? state : { panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: state.renderScene.panorama.inputId ? { state: "loading", message: "正在恢复正式球面环境纹理…" } : { state: "idle", message: "尚未选择球面环境。" } };
@@ -1360,7 +1399,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   assignPanoramaInput: (inputId) => set((state) => {
     if (inputId === null) {
       if (state.renderScene.panorama.inputId === null) return state;
-      return { ...mutateScene(state, "scene.panorama.clear", { renderScene: { ...state.renderScene, panorama: { ...state.renderScene.panorama, inputId: null }, activePanoramaCalibrationId: null } }), panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" } };
+      return { ...mutateScene(state, "scene.panorama.clear", { renderScene: { ...state.renderScene, panorama: { ...state.renderScene.panorama, inputId: null }, activePanoramaCalibrationId: null } }), panoramaScenePackage: null, panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" } };
     }
     const input = state.environmentInputCatalog.entries.find((entry) => entry.inputId === inputId);
     if (!input || input.projection !== "equirectangular" || !input.environmentAllowed || input.admissionChecksum !== input.checksum || state.renderScene.panorama.inputId === inputId) return state;
@@ -1371,7 +1410,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       panorama: { inputId, rotationDeg: panoramaRotationTuple(calibration), radiusM: calibration.radiusM, exposure: calibration.exposure },
       panoramaCalibrations: existing ? state.renderScene.panoramaCalibrations : [...state.renderScene.panoramaCalibrations, calibration],
       activePanoramaCalibrationId: calibration.calibrationId,
-    } }), panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "loading", message: calibration.confirmed ? "正在加载已确认球面环境纹理…" : "正在加载未确认方向的球面预览…" } };
+    } }), panoramaScenePackage: null, panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "loading", message: calibration.confirmed ? "正在加载已确认球面环境纹理…" : "正在加载未确认方向的球面预览…" } };
   }),
   updatePanoramaCalibration: (calibrationId, update) => set((state) => revisePanoramaCalibration(state, calibrationId, "scene.calibration.panorama.update", update)),
   confirmPanoramaCalibration: (calibrationId) => set((state) => {
@@ -2425,11 +2464,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         ? { ...sceneObject, transform: { ...sceneObject.transform, position: [sceneObject.transform.position[0], sceneObject.transform.position[1], heightM] as [number, number, number] } }
         : sceneObject,
     ]));
-    return mutateScene(state, "scene.ground.height", {
+    return { ...mutateScene(state, "scene.ground.height", {
       characters,
       sceneObjects,
       renderScene: { ...state.renderScene, ground: { ...state.renderScene.ground, heightM } },
-    });
+    }), panoramaScenePackage: state.panoramaScenePackage ? { ...state.panoramaScenePackage, ground: { heightM, quality: "draft" as const }, reviewStatus: "needs_director_review" as const } : null };
   }),
   setGroundOpacity: (value) => set((state) => {
     if (state.renderScene.ground.locked) return state;
@@ -2525,6 +2564,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   }),
   loadRenderScene: (renderScene) => set({
     renderScene: structuredClone(renderScene),
+    panoramaScenePackage: null,
     panoramaDiagnosticPreviewInputId: null,
     panoramaDiagnosticPreviewYawDeg: 0,
     panoramaDiagnosticPreviewFlipVertical: false,
