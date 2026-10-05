@@ -4,8 +4,9 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
-import { X, Rotate3D, Pencil, Save, Image as ImageIcon } from 'lucide-react';
+import { X, Rotate3D, Pencil, Save, Image as ImageIcon, Brush, Scan } from 'lucide-react';
 import type { FilerobotImageEditorConfig } from 'react-filerobot-image-editor';
+import ImageMarkingCanvas, { emptyMarking, renderMarkedImage, type Marking } from './ImageMarkingCanvas';
 
 // Adapted from iyishow's Filerobot workbench; no canvas, API or store dependency.
 const Engine = dynamic(() => import('react-filerobot-image-editor').then(m => m.default), { ssr: false });
@@ -109,6 +110,9 @@ export interface ImageEditorProps {
   onModified?: () => void;
   onDiscard?: () => void;
   onSavePanoramaSource?: () => Promise<void>;
+  onMaskChange?: (marking: Marking) => void;
+  maskMarking?: Marking;
+  sourceDimensions?: { width: number; height: number };
   panoramaEligible?: boolean;
   panoramaSaveEligible?: boolean;
   panoramaCandidate?: boolean;
@@ -117,7 +121,7 @@ export interface ImageEditorProps {
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, panoramaQualityStatus, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, leftPanel, toolPanel, canvasStatus, initialView = 'edit', onModified, onDiscard, onSavePanoramaSource, onMaskChange, maskMarking, sourceDimensions, panoramaEligible = false, panoramaSaveEligible, panoramaCandidate = false, panoramaQualityStatus, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -126,22 +130,34 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
   const inFlight = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [view, setView] = useState<'preview' | 'edit' | 'panorama'>(initialView);
+  const [view, setView] = useState<'preview' | 'edit' | 'panorama' | 'annotate' | 'mask'>(initialView);
+  const [annotations, setAnnotations] = useState<Marking>(emptyMarking);
   const canSavePanorama = (panoramaSaveEligible ?? panoramaEligible) && panoramaQualityStatus !== 'review' && panoramaQualityStatus !== 'fail';
-  useEffect(() => { setView(initialView); dirty.current = false; }, [source, initialView]);
+  useEffect(() => { setView(initialView); setAnnotations(emptyMarking()); dirty.current = false; }, [source, initialView]);
   const close = () => {
     if (inFlight.current) return;
     if (dirty.current && !window.confirm(t('discard'))) return;
     onClose();
   };
-  const changeView = (next: 'preview' | 'edit' | 'panorama') => {
+  const changeView = (next: 'preview' | 'edit' | 'panorama' | 'annotate' | 'mask') => {
     if (inFlight.current || next === view) return;
-    if (view === 'edit' && dirty.current) {
+    if ((view === 'edit' || view === 'annotate') && dirty.current) {
       if (!window.confirm(t('discard'))) return;
       dirty.current = false;
       onDiscard?.();
+      if (view === 'annotate') setAnnotations(emptyMarking());
     }
     setView(next);
+  };
+  const saveAnnotations = async () => {
+    if (!source || !sourceDimensions || inFlight.current) return;
+    inFlight.current = true; setSaving(true); setError('');
+    try {
+      const blob = await renderMarkedImage(source, annotations, sourceDimensions.width, sourceDimensions.height, false);
+      await onSave(new File([blob], `${title.replace(/\.[^.]+$/, '') || 'image'}-annotated.png`, { type: 'image/png' }));
+      dirty.current = false;
+    } catch { setError(t('saveFailed')); }
+    finally { inFlight.current = false; setSaving(false); }
   };
   const savePanoramaSource = async () => {
     if (inFlight.current || !onSavePanoramaSource) return;
@@ -205,6 +221,8 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
           <nav className="flex shrink-0 gap-1 overflow-auto border-b border-glass-border bg-surface px-2 py-2 text-sm lg:w-44 lg:flex-col lg:border-b-0 lg:border-r" aria-label={t('editorFunctions')}>
             <button type="button" aria-current={view === 'preview' ? 'page' : undefined} onClick={() => changeView('preview')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left ${view === 'preview' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><ImageIcon size={16}/>{t('canvasPreview')}</button>
             <button type="button" disabled={!source} aria-current={view === 'edit' ? 'page' : undefined} onClick={() => changeView('edit')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'edit' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Pencil size={16}/>{t('edit')}</button>
+            <button type="button" disabled={!source} aria-current={view === 'annotate' ? 'page' : undefined} onClick={() => changeView('annotate')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'annotate' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Brush size={16}/>{t('annotate')}</button>
+            <button type="button" disabled={!source || !onMaskChange} aria-current={view === 'mask' ? 'page' : undefined} onClick={() => changeView('mask')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'mask' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Scan size={16}/>{t('mask')}</button>
             <button type="button" disabled={!source || !panoramaEligible} aria-current={view === 'panorama' ? 'page' : undefined} onClick={() => changeView('panorama')} className={`flex min-h-10 shrink-0 items-center gap-2 rounded px-3 text-left disabled:opacity-40 ${view === 'panorama' ? 'bg-hover-bg text-primary' : 'hover:bg-hover-bg'}`}><Rotate3D size={16}/>{t('browsePanorama')}</button>
             {leftPanel && <>
               <details className="min-w-32 lg:hidden"><summary className="flex min-h-10 cursor-pointer items-center px-3">{t('copies')}</summary><div className="max-h-40 overflow-auto border-t border-glass-border pt-2">{leftPanel}</div></details>
@@ -212,7 +230,7 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
             </>}
           </nav>
           <main className={`relative min-h-[280px] min-w-0 flex-1 bg-[#101418] ${source ? 'overflow-hidden' : 'overflow-auto'}`} aria-label={t('canvasPreview')}>
-          {source && view === 'panorama' ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source && view === 'edit' ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
+          {source && view === 'panorama' ? <PanoramaViewer src={source} label={t('browsePanorama')} /> : source && view === 'annotate' ? <div className="flex h-full min-h-0 flex-col"><ImageMarkingCanvas source={source} marking={annotations} mode="annotate" onChange={next => { setAnnotations(next); dirty.current = true; onModified?.(); }}/><button type="button" disabled={saving || (!annotations.strokes.length && !annotations.rect)} onClick={() => void saveAnnotations()} className="m-2 min-h-10 shrink-0 rounded bg-primary px-3 text-primary-foreground disabled:opacity-40">{t('saveAnnotations')}</button></div> : source && view === 'mask' && maskMarking && onMaskChange ? <ImageMarkingCanvas source={source} marking={maskMarking} mode="mask" onChange={onMaskChange}/> : source && view === 'edit' ? <fieldset disabled={saving} className="h-full min-w-0 border-0 p-0" aria-busy={saving}>
             <Engine key={source} theme={IMAGE_EDITOR_THEME} source={source} language={locale === 'zh' ? 'zh-CN' : 'en'} useBackendTranslations={false}
               translations={locale === 'zh' ? EDITOR_ZH_TRANSLATIONS : { save: 'Save copy' }}
               onModify={() => { dirty.current = true; onModified?.(); }}
@@ -225,8 +243,8 @@ export default function ImageEditor({ source, title, emptyState, leftPanel, tool
               }}
               onBeforeSave={() => false} closeAfterSave={false} defaultSavedImageType="png" defaultSavedImageName="edited-image"
               avoidChangesNotSavedAlertOnLeave disableSaveIfNoChanges savingPixelRatio={1} previewPixelRatio={1}
-              tabsIds={['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize']}
-              defaultTabId="Adjust" defaultToolId="Rotate" observePluginContainerSize />
+              tabsIds={['Adjust', 'Finetune', 'Filters', 'Watermark', 'Resize']}
+              defaultTabId="Adjust" defaultToolId="Crop" annotationsCommon={{ fill: '#ff4d4f', stroke: '#ff4d4f' }} Pen={{ stroke: '#ff4d4f', strokeWidth: 4, lineCap: 'round' }} observePluginContainerSize />
           </fieldset> : source ? <div className="grid h-full min-h-[280px] place-items-center p-3">
             <div className="grid min-h-0 min-w-0 place-items-center overflow-hidden p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -92,6 +92,19 @@ it('moves the displaced generated image into the left queue when the main image 
   expect(screen.queryByRole('button', { name: 'Older image' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'New image' })).toBeInTheDocument();
 });
+it('shows five recent image thumbnails with six-character labels before expanding', async () => {
+  mocks.history.mockResolvedValue(Array.from({ length: 6 }, (_, index) => ({
+    id: `image-${index}`, mode: 't2i', status: 'completed', prompt: `Filename${index}`,
+    outputs: [{ id: 'image', media_type: 'image', media_path: `/playground/media/${index}/image`, thumbnail_path: `/playground/media/${index}/thumb` }],
+  })));
+  render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
+  fireEvent.click(screen.getByText('title'));
+  expect(await screen.findByRole('button', { name: 'Filename0' })).toHaveTextContent('Filena...');
+  expect(screen.getByRole('button', { name: 'Filename0' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('/playground/media/0/thumb'));
+  expect(screen.queryByRole('button', { name: 'Filename5' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'moreHistory' }));
+  expect(screen.getByRole('button', { name: 'Filename5' })).toBeInTheDocument();
+});
 it('pages past newer tasks when looking for older generated images', async () => {
   const newer = Array.from({ length: 100 }, (_, index) => ({ id: `video-${index}`, mode: 't2v', status: 'completed', prompt: 'Video', outputs: [] }));
   mocks.history.mockResolvedValueOnce(newer).mockResolvedValueOnce([{ id: 'old-image', mode: 't2i', status: 'completed', prompt: 'Old image', outputs: [{ id: 'image', media_type: 'image', media_path: '/playground/media/old-image/image' }] }]);
