@@ -1139,6 +1139,7 @@
     "descriptionOptional": "描述（可选）",
     "descriptionPlaceholder": "输入系列描述...",
     "suggestedEpisodes": "建议集数",
+    "suggestedEpisodesRange": "请输入 1 至 100 集。",
     "analyzing": "分析中...",
     "startAnalysis": "解析并预览分集",
     "previewHint": "导入阶段已经完成一次解析与分集建议。请确认分集结果；创建后将复用这些边界，Director 解读只处理对应集正文。",
@@ -1381,10 +1382,29 @@
       "setting": {
         "format_genre": "作品类型与题材",
         "locations": "地点",
-        "time_period": "时代与时间范围",
+        "time_period": "故事时间范围",
         "social_context": "社会背景",
-        "dramatic_contrast": "戏剧对照",
-        "spatial_motif": "空间意象"
+        "dramatic_contrast": "人物与剧情对照",
+        "spatial_motif": "反复出现的空间"
+      },
+      "settingHint": {
+        "format_genre": "作品类型与叙事题材；不在这里定义画面风格。",
+        "locations": "故事所在地域及主要地点；具体房间、街道由拍摄计划确定。",
+        "time_period": "故事跨越的年代或时间跨度；未知时明确写未交代。",
+        "social_context": "影响人物行为的社会、文化或江湖规则。",
+        "dramatic_contrast": "不同人物、关系或事件之间的对照及其叙事作用；没有明确对照可留空。",
+        "spatial_motif": "反复出现并承担叙事作用的空间；普通地点不要重复填写。"
+      },
+      "legacySettingTitle": "历史/模型附加字段（{count}）",
+      "legacySettingHint": "旧草稿的原始字段仍可编辑；确认含义后再整理，避免误删导演决定。",
+      "domains": {
+        "navigation": "导演理解功能域",
+        "understanding": "导演理解",
+        "understandingHint": "确认原作、时间线、人物关系和原文依据",
+        "intent": "导演意图",
+        "intentHint": "对修订后剧本进行视觉、表演、声音和连续性加工",
+        "questions": "导演问题 / 待确认",
+        "questionsHint": "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"
       },
       "field": {
         "emotional_arc": "情绪曲线",
@@ -1773,15 +1793,6 @@
         "purpose": "目的",
         "focus": "导演重点",
         "asset_need": "所需资产"
-      },
-      "domains": {
-        "navigation": "导演理解功能域",
-        "understanding": "导演理解",
-        "understandingHint": "确认原作、时间线、人物关系和原文依据",
-        "intent": "导演意图",
-        "intentHint": "对修订后剧本进行视觉、表演、声音和连续性加工",
-        "questions": "导演问题 / 待确认",
-        "questionsHint": "回答待确认问题，或提出局部/全部修订；回答会进入下一版导演设定"
       },
       "flow": {
         "scene": "场景",
@@ -3145,6 +3156,12 @@
     "references": "参考图",
     "uploadReferences": "上传参考图",
     "libraryReferences": "从素材库添加",
+    "addedReferences": "已添加的参考图",
+    "annotate": "标注",
+    "mask": "蒙板",
+    "saveAnnotations": "保存标注副本",
+    "maskActive": "当前图片的蒙板将用于下一次生成。",
+    "maskRequiresUniart": "蒙板编辑需要选择 UniArt 图片模型。",
     "searchLibrary": "搜索素材",
     "variant": "版本",
     "addReference": "添加参考图",

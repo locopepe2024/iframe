@@ -70,6 +70,16 @@ it('shows only the selected image in the canvas preview', () => {
   expect(screen.getByRole('img', { name: 'result.png' })).toHaveAttribute('src', 'blob:result');
 });
 
+it('opens a drawable annotation canvas and a separate source-bound mask canvas', () => {
+  const mask = { strokes: [], rect: null };
+  render(<NextIntlClientProvider locale="en" messages={messages}><ImageEditor source="blob:result" title="result.png" maskMarking={mask} onMaskChange={vi.fn()} sourceDimensions={{ width: 32, height: 24 }} onSave={vi.fn()} onClose={vi.fn()}/></NextIntlClientProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'Annotate' }));
+  expect(screen.getByLabelText('标注画布')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save annotated copy' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Mask' }));
+  expect(screen.getByLabelText('蒙板画布')).toBeInTheDocument();
+});
+
 it('isolates the background and restores focus without trapping engine portals in a native modal', () => {
   const opener = document.createElement('button'); document.body.append(opener); opener.focus();
   const close = mount(vi.fn());

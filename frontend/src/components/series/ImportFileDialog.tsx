@@ -37,7 +37,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const [file, setFile] = useState<File | null>(null);
     const [seriesTitle, setSeriesTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [suggestedEpisodes, setSuggestedEpisodes] = useState(3);
+    const [suggestedEpisodesInput, setSuggestedEpisodesInput] = useState("3");
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,13 +56,16 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
     const t = useTranslations("series");
     const tc = useTranslations("common");
+    const suggestedEpisodes = Number(suggestedEpisodesInput);
+    const hasValidEpisodeCount = /^\d+$/.test(suggestedEpisodesInput)
+        && Number.isInteger(suggestedEpisodes) && suggestedEpisodes >= 1 && suggestedEpisodes <= 100;
 
     const resetState = () => {
         setStep(1);
         setFile(null);
         setSeriesTitle("");
         setDescription("");
-        setSuggestedEpisodes(3);
+        setSuggestedEpisodesInput("3");
         setIsAnalyzing(false);
         setPreviewResult(null);
         setIsCreating(false);
@@ -114,7 +117,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
     // Step 1 -> Step 2: Analyze file
     const handleAnalyze = async () => {
-        if (!file || !seriesTitle.trim()) return;
+        if (!file || !seriesTitle.trim() || !hasValidEpisodeCount) return;
         setIsAnalyzing(true);
         setError(null);
         try {
@@ -304,17 +307,24 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
                                     {/* Suggested Episodes */}
                                     <div>
-                                        <label className="block text-sm font-medium text-text-secondary mb-2">
+                                        <label htmlFor="suggested-episodes" className="block text-sm font-medium text-text-secondary mb-2">
                                             {t("suggestedEpisodes")}
                                         </label>
                                         <input
+                                            id="suggested-episodes"
                                             type="number"
-                                            value={suggestedEpisodes}
-                                            onChange={(e) => setSuggestedEpisodes(Math.max(1, parseInt(e.target.value) || 1))}
+                                            value={suggestedEpisodesInput}
+                                            onChange={(e) => setSuggestedEpisodesInput(e.target.value)}
+                                            onFocus={(e) => e.currentTarget.select()}
                                             min={1}
-                                            max={50}
+                                            max={100}
+                                            step={1}
+                                            aria-invalid={!hasValidEpisodeCount}
                                             className="glass-input w-24"
                                         />
+                                        {!hasValidEpisodeCount && (
+                                            <p role="alert" className="mt-1 text-sm text-red-400">{t("suggestedEpisodesRange")}</p>
+                                        )}
                                     </div>
 
                                     {/* Action Button */}
@@ -324,7 +334,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         </button>
                                         <button
                                             onClick={handleAnalyze}
-                                            disabled={!file || !seriesTitle.trim() || isAnalyzing}
+                                            disabled={!file || !seriesTitle.trim() || !hasValidEpisodeCount || isAnalyzing}
                                             className="flex-1 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                         >
                                             {isAnalyzing ? (

@@ -5,7 +5,8 @@
     { "id": "commercial_ad", "name": "Commercial Advertising", "name_zh": "商业广告", "sort_order": 2 },
     { "id": "japanese_anime", "name": "Japanese Anime", "name_zh": "日式动漫", "sort_order": 3 },
     { "id": "american_animation", "name": "American Animation & Graphic Novel", "name_zh": "美式动画 / 图像小说", "sort_order": 4 },
-    { "id": "style_lab", "name": "Style Lab", "name_zh": "风格实验室", "sort_order": 5 }
+    { "id": "chinese_animation", "name": "Chinese Animation", "name_zh": "中式动画", "sort_order": 5 },
+    { "id": "style_lab", "name": "Style Lab", "name_zh": "风格实验室", "sort_order": 6 }
   ],
   "presets": [
     {
@@ -210,7 +211,9 @@
     },
     {
       "id": "chinese_ink_fantasy",
-      "category": "style_lab",
+      "category": "chinese_animation",
+      "visual_family": "ink_wash_2d",
+      "genre_tags": ["武侠", "仙侠", "奇幻"],
       "name": "Chinese Ink Fantasy",
       "name_zh": "东方水墨奇幻",
       "subtitle_zh": "水墨晕染 · 宣纸纹理 · 诗意留白",
@@ -222,6 +225,70 @@
       "sample_prompt": "A young swordsman stands on a misty mountain bridge, ink brush strokes forming the distant peaks, holding a compass that glows through the fog",
       "thumbnail": "/assets/styles/style_lab__chinese_ink_fantasy__swordswoman_mountain_v2__portrait.png",
       "object_position": "center 30%"
+    },
+    {
+      "id": "chinese_expressive_wuxia_2d",
+      "category": "chinese_animation",
+      "visual_family": "expressive_ink_2d",
+      "genre_tags": ["武侠", "古风"],
+      "name": "Expressive Ink Wuxia 2D",
+      "name_zh": "中式写意武侠 2D",
+      "subtitle_zh": "墨线留白 · 身法轮廓 · 克制设色",
+      "description": "以书写性墨线和留白表现武侠身法，保留明确的人物与兵器轮廓；不预设超自然效果。",
+      "best_for": ["武侠", "剑术", "古风叙事"],
+      "avoid_for": ["写实摄影", "密集魔法光效", "塑料质感 3D"],
+      "positive_prompt": "Chinese expressive wuxia 2D animation, calligraphic ink contours, restrained mineral color accents, xuan paper grain, deliberate negative space, readable full-body martial silhouettes, clear sword trajectory, layered hand-painted scenery, controlled brush texture, consistent character proportions across poses",
+      "negative_prompt": "photorealism, glossy CGI, default magical aura, glowing weapons, crowded ornament, heavy western comic outlines, inconsistent anatomy, unreadable action silhouette, text, logo, watermark",
+      "sample_prompt": "A dark-clad young swordsman and a red-clad swordswoman stand apart on an old stone street, full-body grounded poses, visible depth between the pair and shopfronts behind them, no supernatural effects",
+      "thumbnail": null
+    },
+    {
+      "id": "chinese_painted_wuxia_2d",
+      "category": "chinese_animation",
+      "visual_family": "painted_cel_2d",
+      "genre_tags": ["武侠", "古风"],
+      "name": "Painted Wuxia 2D",
+      "name_zh": "中式彩绘武侠 2D",
+      "subtitle_zh": "手绘设色 · 服饰纹样 · 分层绘景",
+      "description": "以彩绘角色、清晰服饰纹样和分层背景建立可连续制作的武侠动画画面。",
+      "best_for": ["武侠", "群像", "城镇动作戏"],
+      "avoid_for": ["纯水墨留白", "真人写实", "高光塑料渲染"],
+      "positive_prompt": "Chinese painted wuxia 2D animation, clean hand-drawn character lines, controlled flat color and painted shadow, legible costume embroidery and fabric layers, layered hand-painted town background, distinct foreground and background planes, strong key action poses, stable faces and clothing details between shots",
+      "negative_prompt": "photorealism, glossy 3D plastic, monochrome ink wash, arbitrary magic effects, blurry costume details, flat undifferentiated background, distorted anatomy, text, logo, watermark",
+      "sample_prompt": "A dark-clad young swordsman and a red-clad swordswoman stand apart on an old stone street, full-body grounded poses, visible depth between the pair and shopfronts behind them, no supernatural effects",
+      "thumbnail": null
+    },
+    {
+      "id": "chinese_fantasy_painted_2_5d",
+      "category": "chinese_animation",
+      "visual_family": "layered_painting_2_5d",
+      "genre_tags": ["玄幻", "仙侠"],
+      "name": "Painted Chinese Fantasy 2.5D",
+      "name_zh": "中式玄幻绘景 2.5D",
+      "subtitle_zh": "绘景纵深 · 云雾层次 · 材质光感",
+      "description": "用绘制的前中后景和温和体积光形成纵深；法术或发光物只在剧情明确需要时出现。",
+      "best_for": ["玄幻", "仙侠", "奇境环境"],
+      "avoid_for": ["纯现实武侠", "日常室内戏", "过量粒子特效"],
+      "positive_prompt": "Chinese fantasy painted 2.5D animation, hand-painted characters and environments, separated foreground midground and background planes, atmospheric depth, layered mist, restrained volumetric light, tactile stone and fabric textures, stable character design and readable spatial staging, supernatural effects only when specified by the scene",
+      "negative_prompt": "automatic glowing weapons, excessive magic particles, flat all-sharp composition, plastic CGI, photorealism, inconsistent scale, obscured faces, text, logo, watermark",
+      "sample_prompt": "A dark-clad young swordsman and a red-clad swordswoman stand apart on an old stone street, full-body grounded poses, visible depth between the pair and shopfronts behind them, no supernatural effects",
+      "thumbnail": null
+    },
+    {
+      "id": "chinese_stylized_animation_3d",
+      "category": "chinese_animation",
+      "visual_family": "stylized_3d",
+      "genre_tags": ["武侠", "玄幻"],
+      "name": "Stylized Chinese Animation 3D",
+      "name_zh": "中式风格化 3D",
+      "subtitle_zh": "空间纵深 · 布料金属 · 稳定光影",
+      "description": "以一致的人物比例、可读的空间纵深和克制材质表现古风 3D 动画。",
+      "best_for": ["武侠", "玄幻", "运动机位"],
+      "avoid_for": ["纯平面水墨", "玩具塑料质感", "过度写实皮肤"],
+      "positive_prompt": "stylized Chinese 3D animation, consistent expressive character proportions, sculpted but natural facial features, layered historical-inspired clothing, believable cloth weight and metal response, grounded feet, readable spatial depth, coherent practical lighting, controlled camera-ready composition, stable materials and silhouettes across angles",
+      "negative_prompt": "plastic toy skin, weightless cloth, floating feet, inconsistent face between views, generic game armor, excessive bloom, over-sharpening, text, logo, watermark",
+      "sample_prompt": "A dark-clad young swordsman and a red-clad swordswoman stand apart on an old stone street, full-body grounded poses, visible depth between the pair and shopfronts behind them, no supernatural effects",
+      "thumbnail": null
     },
     {
       "id": "clay_stop_motion",

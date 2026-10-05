@@ -1139,6 +1139,7 @@
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Enter series description...",
     "suggestedEpisodes": "Suggested Episodes",
+    "suggestedEpisodesRange": "Enter 1 to 100 episodes.",
     "analyzing": "Analyzing...",
     "startAnalysis": "Parse and preview episodes",
     "previewHint": "Import parsing and episode splitting are already complete. Confirm the boundaries; after creation, Director interpretation will process each episode body without repeating the import split.",
@@ -1380,10 +1381,29 @@
       "setting": {
         "format_genre": "Format and genre",
         "locations": "Locations",
-        "time_period": "Time period",
+        "time_period": "Story time span",
         "social_context": "Social context",
-        "dramatic_contrast": "Dramatic contrast",
-        "spatial_motif": "Spatial motif"
+        "dramatic_contrast": "Character and plot contrasts",
+        "spatial_motif": "Recurring spaces"
+      },
+      "settingHint": {
+        "format_genre": "Format and story genre; visual style is defined separately.",
+        "locations": "Geographic setting and major places; the shooting plan defines specific spaces.",
+        "time_period": "Era or span covered by the story; state when the source leaves it unknown.",
+        "social_context": "Social, cultural or world rules that affect the characters.",
+        "dramatic_contrast": "A contrast between people, relationships or events and its narrative role; leave blank if unsupported.",
+        "spatial_motif": "Spaces that recur with a narrative role; do not repeat ordinary locations."
+      },
+      "legacySettingTitle": "Legacy/model fields ({count})",
+      "legacySettingHint": "Original draft fields remain editable. Review their meaning before consolidating director decisions.",
+      "domains": {
+        "navigation": "Director interpretation domains",
+        "understanding": "Director understanding",
+        "understandingHint": "Confirm the original, timeline, relationships and source basis",
+        "intent": "Director intent",
+        "intentHint": "Shape visual, performance, sound and continuity treatment",
+        "questions": "Director questions / open decisions",
+        "questionsHint": "Answer open questions or request a local/full revision; answers enter the next Director revision"
       },
       "field": {
         "emotional_arc": "Emotional arc",
@@ -1772,15 +1792,6 @@
         "purpose": "Purpose",
         "focus": "Directing focus",
         "asset_need": "Asset needs"
-      },
-      "domains": {
-        "navigation": "Director interpretation domains",
-        "understanding": "Director understanding",
-        "understandingHint": "Confirm the original, timeline, relationships and source basis",
-        "intent": "Director intent",
-        "intentHint": "Shape visual, performance, sound and continuity treatment",
-        "questions": "Director questions / open decisions",
-        "questionsHint": "Answer open questions or request a local/full revision; answers enter the next Director revision"
       },
       "flow": {
         "scene": "Scene",
@@ -3145,6 +3156,12 @@
     "references": "References",
     "uploadReferences": "Upload references",
     "libraryReferences": "Add from library",
+    "addedReferences": "Added references",
+    "annotate": "Annotate",
+    "mask": "Mask",
+    "saveAnnotations": "Save annotated copy",
+    "maskActive": "The current image mask will be used for the next generation.",
+    "maskRequiresUniart": "Mask editing requires a UniArt image model.",
     "searchLibrary": "Search assets",
     "variant": "Variant",
     "addReference": "Add reference",

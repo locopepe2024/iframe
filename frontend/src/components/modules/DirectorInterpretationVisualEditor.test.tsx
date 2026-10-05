@@ -134,7 +134,7 @@ it("requires an explicit user action to build a map from legacy phases and keeps
     const onChange = vi.fn();
     renderEditor(profile, onChange);
 
-    expect(screen.getByText("Initial: Close · Change: Long distance · Ending: Separated")).toBeInTheDocument();
+    expect(screen.getByText(/Found 3 legacy summary items/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Enter mind map" }));
 
     const changed = onChange.mock.lastCall?.[0] as Record<string, unknown> | undefined;
@@ -155,6 +155,40 @@ it("requires an explicit user action to build a map from legacy phases and keeps
             })],
         }),
     }));
+});
+
+it("keeps legacy setting fields editable without mixing them into the canonical overview", () => {
+    const onChange = vi.fn();
+    renderEditor({ ...profile, setting: { time_period: "Three years", era: "Late Qing", locations: "Qingxi", primary_location: "Qingxi" } }, onChange);
+
+    expect(screen.getByLabelText("Story time span")).toHaveValue("Three years");
+    expect(screen.getByLabelText("Historical era (legacy field)")).not.toBeVisible();
+    fireEvent.click(screen.getByText("Legacy/model fields (2)"));
+    fireEvent.change(screen.getByLabelText("Historical era (legacy field)"), { target: { value: "Ming dynasty" } });
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        setting: { time_period: "Three years", era: "Ming dynasty", locations: "Qingxi", primary_location: "Qingxi" },
+    }));
+});
+
+it("renders the template snapshot's enabled custom field and keeps other values", () => {
+    const onChange = vi.fn();
+    function CustomEditor() {
+        const [current, setCurrent] = React.useState<Record<string, unknown>>({ ...profile, setting: { locations: "青溪镇", jianghu_rules: "江湖自有江湖规" } });
+        return <NextIntlClientProvider locale="en" messages={messages}><DirectorInterpretationVisualEditor
+            profile={current}
+            onChange={next => { onChange(next); setCurrent(next); }}
+            overviewTemplate={{ revision: 2, fields: [
+                { key: "jianghu_rules", label: "江湖秩序", purpose: "原文中的江湖规则", enabled: true },
+                { key: "spatial_motif", label: "空间意象", purpose: "反复出现的空间", enabled: false },
+            ] }}
+        /></NextIntlClientProvider>;
+    }
+    render(<CustomEditor />);
+    expect(screen.getByLabelText("江湖秩序")).toHaveValue("江湖自有江湖规");
+    expect(screen.queryByLabelText("空间意象")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("江湖秩序"), { target: { value: "朝堂不问武林事" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ setting: { locations: "青溪镇", jianghu_rules: "朝堂不问武林事" } }));
 });
 
 it("builds an explicit story map from a legacy timeline without inventing phase relationship states", () => {

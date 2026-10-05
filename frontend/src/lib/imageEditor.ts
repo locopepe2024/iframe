@@ -1,9 +1,10 @@
 import axios from 'axios';
 import { API_URL, type AssetReferenceIndexEntry } from './api';
 
-export interface EditSource { reference: string; sha256: string; width: number; height: number; mime: string }
+export interface PanoramaQuality { status: 'pass' | 'review' | 'fail'; reason?: string }
+export interface EditSource { reference: string; sha256: string; width: number; height: number; mime: string; panorama_quality?: PanoramaQuality }
 export type ImageProjectionType = 'perspective_plane' | 'equirectangular';
-export interface SavedImageEdit { id: string; path: string; title: string; source_reference: string; source_sha256: string; sha256: string; width: number; height: number; projection_type?: ImageProjectionType }
+export interface SavedImageEdit { id: string; path: string; title: string; source_reference: string; source_sha256: string; sha256: string; width: number; height: number; projection_type?: ImageProjectionType; panorama_quality?: PanoramaQuality }
 export interface ImportedLibraryImage { path: string; title: string; width: number; height: number; sha256: string; asset_type: string; asset_id: string; variant_id: string }
 export const imageEditorApi = {
   async importLibraryVariant(entry: AssetReferenceIndexEntry, variantId: string): Promise<ImportedLibraryImage> {

@@ -1,5 +1,5 @@
-import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os
-from media_signing_config import media_signing_env
+import json, pathlib, subprocess, time, urllib.request, sys
+from server_runtime_env import validate_file
 
 
 def run(args):
@@ -11,6 +11,8 @@ repo = next(
 )
 if repo is None:
     raise RuntimeError('iFrame server repository not found')
+runtime_env_path = repo.parent / 'runtime/iframe-backend.env'
+validate_file(runtime_env_path)
 rev = run(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
 assert not run(['git', '-C', str(repo), 'status', '--porcelain']), 'Dirty repository'
 root = repo.parent / 'releases' / rev
@@ -39,12 +41,8 @@ frontend_container = existing_container('iframe-frontend', 'lumenx-frontend')
 old = json.loads(run(['docker', 'inspect', backend_container]))[0]
 network_name = next(iter(old['NetworkSettings']['Networks']))
 backup = backend_container + '-before-' + rev[:12]
-# Docker inspection contains credentials. Keep it in memory; never persist it.
 args = ['docker','create','--name',backend_container,'--network',network_name,'--network-alias','backend','--restart','unless-stopped']
-fd, envfile = tempfile.mkstemp(prefix='iframe-env-', dir=root)
-with os.fdopen(fd, 'w') as f:
-    f.write('\n'.join(media_signing_env(old['Config']['Env'], repo.parent / 'secrets/media-signing.key')) + '\n')
-args += ['--env-file', envfile]
+args += ['--env-file', str(runtime_env_path)]
 for m in old['Mounts']:
     assert m['Type'] == 'bind'
     args += ['-v', m['Source']+':'+m['Destination']+('' if m['RW'] else ':ro')]
@@ -127,4 +125,3 @@ finally:
         nginx_path.write_text(nginx_original)
         run(['docker', 'exec', frontend_container, 'nginx', '-t'])
         run(['docker', 'exec', frontend_container, 'nginx', '-s', 'reload'])
-    os.unlink(envfile)

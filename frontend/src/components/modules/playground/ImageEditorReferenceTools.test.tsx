@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest';
 import ImageEditorReferenceTools, { generationInputMedia } from './ImageEditorReferenceTools';
 
-const mocks = vi.hoisted(() => ({ models: vi.fn(), library: vi.fn(), generate: vi.fn(), status: vi.fn(), upload: vi.fn(), importVariant: vi.fn() }));
+const mocks = vi.hoisted(() => ({ models: vi.fn(), library: vi.fn(), generate: vi.fn(), status: vi.fn(), upload: vi.fn(), importVariant: vi.fn(), renderMask: vi.fn() }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', api: { getAssetLibraryIndex: mocks.library }, playgroundApi: { getUniArtModels: mocks.models, generate: mocks.generate, getGenerationStatus: mocks.status, uploadMedia: mocks.upload } }));
 vi.mock('@/lib/imageEditor', () => ({ imageEditorApi: { importLibraryVariant: mocks.importVariant } }));
+vi.mock('@/components/shared/image-editor/ImageMarkingCanvas', () => ({ renderMarkedImage: mocks.renderMask }));
 
 const references = [{ path: '/playground/input-media/one.png', title: 'One' }, { path: '/playground/input-media/two.png', title: 'Two' }];
 function writePrompt(value: string) {
@@ -18,6 +19,23 @@ beforeEach(() => {
   mocks.models.mockResolvedValue({ models: [{ id: 'image-model', display_name: 'Image Model', capabilities: ['i2i'], inputs: { reference_images: { max: 4 } } }] });
   mocks.library.mockResolvedValue({ assets: [] });
   mocks.generate.mockResolvedValue({ id: 'generation-1', status: 'completed', outputs: [] });
+  mocks.renderMask.mockResolvedValue(new Blob(['mask'], { type: 'image/png' }));
+  mocks.upload.mockResolvedValue({ path: '/playground/input-media/mask.png' });
+});
+
+it('uploads a source-bound mask and submits it with the source first', async () => {
+  mocks.models.mockResolvedValue({ models: [{ id: 'uniart/gpt-image-2.5-flare', display_name: 'Image Mask Model', capabilities: ['i2i'], inputs: { reference_images: { max: 4 } } }] });
+  const source = { path: '/playground/input-media/source.png', url: 'blob:source', width: 32, height: 24 };
+  const mask = { strokes: [{ points: [{ x: 0.2, y: 0.3 }], width: 0.1 }], rect: null };
+  render(<ImageEditorReferenceTools references={[references[1]]} mask={mask} maskSource={source} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  await screen.findByRole('option', { name: 'Image Mask Model' });
+  writePrompt('Replace the selected area');
+  fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
+  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({
+    mode: 'i2i', input_media: [source.path, references[1].path], parameters: { mask: '/playground/input-media/mask.png' },
+  })));
+  expect(mocks.renderMask).toHaveBeenCalledWith(source.url, mask, 32, 24, true);
+  expect(mocks.upload).toHaveBeenCalledWith(expect.objectContaining({ name: 'edit-mask.png' }));
 });
 
 it('binds named mentions to ordered reference inputs in a generation request', async () => {

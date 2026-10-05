@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { Character, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorStoryMapSection from "./DirectorStoryMapSection";
+import type { OverviewTemplate } from "./DirectorOverviewTemplateEditor";
 
 type Draft = Record<string, unknown>;
 
@@ -15,6 +16,16 @@ const settingFields = [
     "dramatic_contrast",
     "spatial_motif",
 ];
+const legacySettingLabels: Record<string, [string, string]> = {
+    era: ["时代背景（旧字段）", "Historical era (legacy field)"],
+    session_time: ["时间补充（旧字段）", "Time detail (legacy field)"],
+    scene_time: ["场景时段（旧字段）", "Scene time (legacy field)"],
+    geography: ["地域背景（旧字段）", "Geography (legacy field)"],
+    primary_location: ["主要地点（旧字段）", "Primary location (legacy field)"],
+    sub_location: ["具体地点（旧字段）", "Specific location (legacy field)"],
+    style: ["风格补充（旧字段）", "Style detail (legacy field)"],
+    status: ["状态说明（旧字段）", "Status detail (legacy field)"],
+};
 const longFields = ["emotional_arc", "pacing", "visual_language", "performance_direction", "dialogue_direction", "sound_direction"] as const;
 const listFields = ["continuity_constraints", "prohibitions", "unresolved_questions"] as const;
 const asText = (value: unknown): string => {
@@ -25,16 +36,19 @@ const asText = (value: unknown): string => {
 
 function TextField({
     label,
+    hint,
     value,
     onChange,
 }: {
     label: string;
+    hint?: string;
     value: string;
     onChange: (value: string) => void;
 }) {
     return (
         <label className="block min-w-0 space-y-1.5">
             <span className="text-xs font-medium text-text-secondary">{label}</span>
+            {hint && <span className="block text-[11px] leading-4 text-text-muted">{hint}</span>}
             <textarea
                 aria-label={label}
                 value={value}
@@ -56,6 +70,7 @@ export default function DirectorInterpretationVisualEditor({
     factsError = "",
     onReloadFacts = () => undefined,
     mindMapOnly = false,
+    overviewTemplate,
 }: {
     profile: Draft;
     onChange: (profile: Draft) => void;
@@ -67,6 +82,7 @@ export default function DirectorInterpretationVisualEditor({
     factsError?: string;
     onReloadFacts?: () => void;
     mindMapOnly?: boolean;
+    overviewTemplate?: OverviewTemplate;
 }) {
     const t = useTranslations("artDirection.directorEditor");
     const locale = useLocale();
@@ -90,7 +106,8 @@ export default function DirectorInterpretationVisualEditor({
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
         ? profile.setting as Draft
         : {};
-    const settingKeys = [...settingFields, ...Object.keys(setting).filter(key => !settingFields.includes(key))];
+    const visibleSettingFields = overviewTemplate?.fields.filter(field => field.enabled) ?? settingFields.map(key => ({ key, label: t(`setting.${key}`), purpose: t(`settingHint.${key}`), enabled: true }));
+    const extraSettingKeys = Object.keys(setting).filter(key => !visibleSettingFields.some(field => field.key === key));
     const updateProfile = (key: string, value: unknown) => onChange({ ...profile, [key]: value });
     const updateSetting = (key: string, value: string) => updateProfile("setting", { ...setting, [key]: value });
     const updateListAt = (key: string, index: number, value: string) => {
@@ -135,15 +152,28 @@ export default function DirectorInterpretationVisualEditor({
                     <p className="mt-1 text-xs leading-5 text-text-secondary">{t("overviewHint")}</p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                    {settingKeys.map(key => (
+                    {visibleSettingFields.map(field => (
                         <TextField
-                            key={key}
-                            label={settingFields.includes(key) ? t(`setting.${key}`) : key}
-                            value={asText(setting[key])}
-                            onChange={value => updateSetting(key, value)}
+                            key={field.key}
+                            label={field.label}
+                            hint={field.purpose}
+                            value={asText(setting[field.key])}
+                            onChange={value => updateSetting(field.key, value)}
                         />
                     ))}
                 </div>
+                {extraSettingKeys.length > 0 && <details className="mt-4 border-t border-border pt-3">
+                    <summary className="cursor-pointer text-xs font-medium text-text-secondary">{t("legacySettingTitle", { count: extraSettingKeys.length })}</summary>
+                    <p className="mt-2 text-xs leading-5 text-text-muted">{t("legacySettingHint")}</p>
+                    <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        {extraSettingKeys.map(key => <TextField
+                            key={key}
+                            label={legacySettingLabels[key]?.[locale.startsWith("zh") ? 0 : 1] ?? key}
+                            value={asText(setting[key])}
+                            onChange={value => updateSetting(key, value)}
+                        />)}
+                    </div>
+                </details>}
             </section>}
 
             {(mindMapOnly || activeDomain === "understanding") && <DirectorStoryMapSection

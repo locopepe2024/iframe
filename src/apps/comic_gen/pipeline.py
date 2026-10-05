@@ -22,6 +22,8 @@ from .models import (
     PromptConfig,
     ArtDirection,
     DirectorProfile,
+    DirectorOverviewTemplate,
+    default_director_overview_template,
     DirectorProfileRevision,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
@@ -48,7 +50,7 @@ from .models import (
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
-from .llm import ScriptProcessor
+from .llm import ScriptProcessor, numbered_episode_headings
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -107,6 +109,8 @@ def _director_profile_content(value: Any) -> Dict[str, Any]:
     content = profile.model_dump(exclude={"revision", "content_hash", "confirmed_at"})
     if content.get("story_map") is None:
         content.pop("story_map", None)
+    if content.get("overview_template_snapshot") is None:
+        content.pop("overview_template_snapshot", None)
     return content
 
 
@@ -2323,7 +2327,51 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
-    def preview_series_director_profile(self, series_id: str) -> Dict[str, Any]:
+    def effective_director_overview_template(self, script: Script) -> DirectorOverviewTemplate:
+        if script.director_overview_template:
+            return script.director_overview_template
+        if script.series_id:
+            series = self.series_store.get(script.series_id)
+            if series and series.director_overview_template:
+                return series.director_overview_template
+        return default_director_overview_template()
+
+    def save_director_overview_template(self, script_id: str, template: DirectorOverviewTemplate) -> DirectorOverviewTemplate:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            if template.revision != self.effective_director_overview_template(script).revision:
+                raise ValueError("Director overview template revision changed; reload before saving")
+            revision = self.effective_director_overview_template(script).revision + 1
+            script.director_overview_template = template.model_copy(update={"revision": revision})
+            script.updated_at = time.time()
+            self._save_data()
+            return script.director_overview_template
+
+    def save_series_director_overview_template(self, series_id: str, template: DirectorOverviewTemplate) -> DirectorOverviewTemplate:
+        series = self.series_store.get(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        if template.revision != (series.director_overview_template or default_director_overview_template()).revision:
+            raise ValueError("Director overview template revision changed; reload before saving")
+        revision = (series.director_overview_template or default_director_overview_template()).revision + 1
+        series.director_overview_template = template.model_copy(update={"revision": revision})
+        series.updated_at = time.time()
+        self._save_series_data_unlocked()
+        return series.director_overview_template
+
+    def inherit_director_overview_template(self, script_id: str) -> DirectorOverviewTemplate:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            script.director_overview_template = None
+            script.updated_at = time.time()
+            self._save_data()
+            return self.effective_director_overview_template(script)
+
+    def preview_series_director_profile(self, series_id: str, overview_template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         series = self.series_store.get(series_id)
         if not series:
             raise ValueError("Series not found")
@@ -2337,6 +2385,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [item.model_dump() for item in series.scenes],
             "props": [item.model_dump() for item in series.props],
             "scope": "series",
+            "_director_overview_template": overview_template or (series.director_overview_template or default_director_overview_template()).model_dump(),
         }
         style = series.art_direction.style_config if series.art_direction else {}
         try:
@@ -2358,6 +2407,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                     pass
             raise
         normalized = normalize_director_profile_draft(analyzed["profile"])
+        normalized["overview_template_snapshot"] = DirectorOverviewTemplate.model_validate(
+            entities["_director_overview_template"]
+        ).model_dump()
         # A Series profile is global context, not an Episode source ledger.
         normalized["story_map"] = None
         normalized["source_revision"] = None
@@ -2631,6 +2683,8 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
         script, entities, _ = self.storyboard_analysis_context(script_id)
+        entities = dict(entities)
+        entities["_director_overview_template"] = self.effective_director_overview_template(script).model_dump()
         if script.series_id:
             series = self.series_store.get(script.series_id)
             if series:
@@ -2646,13 +2700,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         style = art_direction.style_config if art_direction else {}
         return script, entities, style
 
-    def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
-        analyzed = self.preview_director_profile_with_audit(script_id)
+    def preview_director_profile(self, script_id: str, overview_template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        analyzed = self.preview_director_profile_with_audit(script_id, overview_template=overview_template)
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto") -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", overview_template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
+        if overview_template is not None:
+            entities["_director_overview_template"] = overview_template
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
@@ -2673,6 +2729,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
                 source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
             normalized = normalize_director_profile_draft(draft)
+            normalized["overview_template_snapshot"] = DirectorOverviewTemplate.model_validate(
+                entities["_director_overview_template"]
+            ).model_dump()
             self._bind_director_story_map(script, entities, normalized)
             DirectorProfile(**normalized)
             self._validate_director_story_map(script, normalized.get("story_map"))
@@ -2698,8 +2757,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise
 
     def refine_director_profile(self, script_id: str, draft: Dict[str, Any],
-                                instructions: List[str]) -> Dict[str, Any]:
+                                instructions: List[str], overview_template: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
+        if overview_template is not None:
+            entities["_director_overview_template"] = overview_template
         normalized_draft = normalize_director_profile_draft(draft)
         self._bind_director_story_map(script, entities, normalized_draft)
         DirectorProfile(**normalized_draft)
@@ -2708,6 +2769,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             script.original_text, entities, style, normalized_draft, instructions
         )
         normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
+        normalized_result["overview_template_snapshot"] = DirectorOverviewTemplate.model_validate(
+            entities["_director_overview_template"]
+        ).model_dump()
         self._bind_director_story_map(script, entities, normalized_result)
         DirectorProfile(**normalized_result)
         self._validate_director_story_map(script, normalized_result.get("story_map"))
@@ -8297,6 +8361,27 @@ class ComicGenPipeline(StudioOwnerMixin):
         """
         import re
 
+        episode_headings = numbered_episode_headings(text or "")
+        if episode_headings:
+            first = episode_headings[0].start()
+            if first == 0:
+                return {}, text
+            preamble = text[:first].strip()
+            if not preamble:
+                return {}, text[first:]
+            synopsis_match = re.search(
+                r"剧本梗概\s*[：:]\s*(.*?)(?=人物小传\s*[：:]|五、|$)",
+                preamble,
+                re.S,
+            )
+            return {
+                "schema_version": 1,
+                "kind": "series_submission_context",
+                "preamble": preamble,
+                "synopsis": synopsis_match.group(1).strip() if synopsis_match else "",
+                "body_char_count": len(text) - first,
+            }, text[first:]
+
         heading = re.compile(
             r"(?m)^\s*\d+\s*[、.]\s*[^\n]{1,120}?\s+(?:日|夜|晨|晚)\s+(?:内|外)(?:\s|$)"
         )
@@ -8350,19 +8435,17 @@ class ComicGenPipeline(StudioOwnerMixin):
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
-        # Create the Series (already acquires lock internally)
+        series_context, screenplay_text = self._split_import_series_context(text)
+        # Split text into episode chunks based on markers. Markers are applied
+        # only to screenplay text, never to the submission preamble.
+        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
         series = self.create_series(
             title,
             description,
             owner_user_id=owner_user_id,
             owner_profile_id=owner_profile_id,
         )
-
-        series_context, screenplay_text = self._split_import_series_context(text)
         series.source_context = series_context
-        # Split text into episode chunks based on markers. Markers are applied
-        # only to screenplay text, never to the submission preamble.
-        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
 
         with self._save_lock:
             # Create Episode (Script) for each chunk
@@ -8400,6 +8483,22 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _split_text_by_markers(self, text: str, episodes_data: List[Dict]) -> List[str]:
         """Split text into chunks using start/end markers from LLM.
         Searches sequentially to avoid overlapping chunks."""
+        if episodes_data and all("start_offset" in ep and "end_offset" in ep for ep in episodes_data):
+            chunks = []
+            previous_end = 0
+            for ep in episodes_data:
+                start, end = ep["start_offset"], ep["end_offset"]
+                if (not isinstance(start, int) or not isinstance(end, int)
+                        or start != previous_end or end <= start or end > len(text)):
+                    raise ValueError("分集原文位置无效；请重新预览导入")
+                chunk = text[start:end]
+                if not chunk.strip():
+                    raise ValueError("分集正文为空；请重新预览导入")
+                chunks.append(chunk)
+                previous_end = end
+            if previous_end != len(text):
+                raise ValueError("分集未覆盖完整原文；请重新预览导入")
+            return chunks
         chunks = []
         search_from = 0  # Track position to avoid overlap
 

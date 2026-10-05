@@ -207,6 +207,8 @@ export interface StylePresetCategory {
 export interface StylePreset {
     id: string;
     category: string;
+    visual_family?: string;
+    genre_tags?: string[];
     name: string;
     name_zh: string;
     subtitle_zh?: string;
@@ -241,6 +243,7 @@ export interface ArtDirection {
 
 export interface DirectorProfile {
     setting: Record<string, unknown>;
+    overview_template_snapshot?: { revision: number; fields: Array<{ key: string; label: string; purpose: string; enabled: boolean }> } | null;
     timeline: Record<string, unknown>[];
     relationships: Record<string, unknown>[];
     key_events: Record<string, unknown>[];

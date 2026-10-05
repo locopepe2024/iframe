@@ -24,6 +24,7 @@ from .models import (
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
+    default_director_overview_template,
 )
 
 
@@ -34,6 +35,60 @@ def _strip_markdown_json(content: str) -> str:
     elif "```" in content:
         content = content.split("```")[1].split("```")[0]
     return content.strip()
+
+
+_EPISODE_HEADING = re.compile(
+    r"(?m)^[ \t]*(?:#{1,6}[ \t]+)?第[ \t]*([0-9]{1,3}|[一二三四五六七八九十百零两]+)[ \t]*集"
+    r"(?:[ \t]*[：:、.．-]?[ \t]*([^\r\n]{0,80}))?[ \t]*\r?$"
+)
+
+
+def _episode_number(value: str) -> int:
+    if value.isdigit():
+        return int(value)
+    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if "百" in value:
+        before, after = value.split("百", 1)
+        return digits.get(before, 1) * 100 + (_episode_number(after) if after else 0)
+    if "十" in value:
+        before, after = value.split("十", 1)
+        return (digits.get(before, 1) if before else 1) * 10 + digits.get(after, 0)
+    return digits.get(value, -1)
+
+
+def numbered_episode_headings(text: str) -> list[re.Match[str]]:
+    """Find consecutive episode headings without treating scene numbers as episodes."""
+    matches = list(_EPISODE_HEADING.finditer(text))
+    if len(matches) < 2:
+        return []
+    numbers = [_episode_number(match.group(1)) for match in matches]
+    if numbers != list(range(1, len(matches) + 1)):
+        raise ValueError("分集标题编号不连续；请检查重复或缺失的“第 N 集”标题")
+    return matches
+
+
+def split_numbered_episodes(text: str, suggested_episodes: int) -> list[dict[str, Any]]:
+    headings = numbered_episode_headings(text)
+    if not headings:
+        return []
+    if len(headings) != suggested_episodes:
+        raise ValueError(f"原文识别到 {len(headings)} 集，与建议集数 {suggested_episodes} 不一致")
+    episodes = []
+    for index, heading in enumerate(headings):
+        start = 0 if index == 0 else heading.start()
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        body = text[heading.end():end].strip()
+        if not body:
+            raise ValueError(f"第 {index + 1} 集没有正文")
+        episodes.append({
+            "episode_number": index + 1,
+            "title": heading.group(0).lstrip(" \t#").strip(),
+            "summary": body[:50],
+            "start_offset": start,
+            "end_offset": end,
+        })
+    return episodes
 
 
 def _prompt_json(value: Any) -> str:
@@ -1160,8 +1215,13 @@ class ScriptProcessor:
         Uses LLM to split a long text into episodes by narrative rhythm.
         Returns a list of episode dicts with title, summary, start/end markers, etc.
         """
+        numbered = split_numbered_episodes(text, suggested_episodes)
+        if numbered:
+            return numbered
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        if suggested_episodes > 50 and len(text) > 80000:
+            raise ValueError("超过 50 集的长篇剧本请使用连续的“第 1 集”至“第 N 集”标题，确保每集原文完整导入")
 
         # RAG-style map/reduce for long scripts: retain coverage and stable
         # entities instead of silently truncating after 80k characters.
@@ -1515,6 +1575,8 @@ class ScriptProcessor:
             else "原始剧本"
         )
         analysis_scope = str(entities_json.get("scope", "episode") or "episode")
+        overview_template = entities_json.get("_director_overview_template") or default_director_overview_template().model_dump()
+        story_entities = {key: value for key, value in entities_json.items() if key != "_director_overview_template"}
         scope_guidance = (
             "本次是 Series 全剧导演理解。投稿资料与全部分集是不同来源：投稿梗概描述全剧走向，"
             "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
@@ -1541,7 +1603,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json(story_entities)}</entities>
+
+用户配置的导演总览模板（字段 key、标签、分析目的及启用状态）：
+<director_overview_template>{_prompt_json(overview_template)}</director_overview_template>
 
 如果 entities 中包含 series_context 或 series_director_understanding，它们是系列级只读 handoff：
 用于约束全剧背景、人物关系和跨集连续性，不等于本集已经发生的事件。Episode 输出只能把本集原文
@@ -1561,7 +1626,12 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
 sound_direction, continuity_constraints, prohibitions, unresolved_questions, sample_plan,
 execution_summary, scene_summaries, canon_state。
-setting 是对象；timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
+setting 仅使用 director_overview_template 中 enabled=true 的字段 key，值为字符串，按字段的 label 和 purpose 分析。
+模板是分析要求，不是剧本事实；原文缺乏依据时明确写未知或留空，不得编造。
+具体场景的内外、时段、季节、天气、道具和人物状态交由 scene_summaries 与后续拍摄计划处理。
+视觉风格写入 visual_language，事实是否确定写入 unresolved_questions 或带证据状态的事实结构；
+不要在 setting 中另加模板未启用的 style、status、primary_location、sub_location 等重复键。
+timeline/relationships/key_events/sample_plan 是对象数组；constraints、prohibitions、questions 是字符串数组。
 story_map 是规范的故事结构对象，包含 schema_version=1、phases、relationship_arcs、story_threads。
 phases 按剧情时间顺序排列，每个 phase 使用稳定 phase_id/order/label/time_anchor，并含有序 events。
 event 使用 event_id/order/title/description/character_refs/character_ids/unresolved_character_refs/dramatic_function/source_fact_ids/evidence_status。
@@ -1640,6 +1710,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             else "原始剧本"
         )
         style_summary = build_visual_style_summary(style_config)
+        overview_template = entities_json.get("_director_overview_template") or default_director_overview_template().model_dump()
+        story_entities = {key: value for key, value in entities_json.items() if key != "_director_overview_template"}
         # The visible draft already contains the effects of earlier revisions.
         # Keep the newest instructions within a small budget for callers that
         # still submit accumulated history (the UI now submits only one).
@@ -1671,7 +1743,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
 当输入标记为长篇来源摘要时，chunk_summaries 是对全文的有界检索摘要，head_anchor 和
 tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来源，不是场景名称。
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json(story_entities)}</entities>
+<director_overview_template>{_prompt_json(overview_template)}</director_overview_template>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>
 <current_director_profile_context>{_prompt_json(build_director_refinement_context(draft))}</current_director_profile_context>
@@ -1682,6 +1755,8 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 execution_summary 或相应方向字段中，并标记为用户要求；它们不是需要补写的剧情事实。
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 保留未要求改变的正确内容，并同步刷新受影响的 execution_summary 或 scene_summaries。
+如果本次修改 setting，只更新 director_overview_template 中启用且与用户要求相关的字段。
+旧草稿中未在模板里的字段须保留，不主动扩写；视觉风格写在 visual_language，场景时段写在 scene_summaries。
 这是“变更补丁”协议：只返回因本次 revision_instructions 发生变化的顶层字段；没有变化时返回 {{}}。
 不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。

@@ -51,7 +51,7 @@ def test_import_preview_is_durable_deduplicated_and_owner_scoped(tmp_path, monke
         jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
         monkeypatch.setattr(api, "pipeline", pipeline)
         monkeypatch.setattr(api, "extraction_jobs", jobs)
-        monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+        monkeypatch.setenv("IFRAME_IMPORT_DIR", str(tmp_path / "imports"))
 
         first = asyncio.run(api.import_file_preview(upload(text), 3, owner))
         done = wait_done(jobs, "owner", first)
@@ -71,6 +71,83 @@ def test_import_preview_is_durable_deduplicated_and_owner_scoped(tmp_path, monke
             jobs.get("owner", "series-import", first["id"])
 
 
+def test_import_preview_accepts_sixty_episodes(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    owner = UserContext("user", "owner", "", "")
+    calls = Mock(return_value=[{"episode_number": number, "title": f"第{number}集"}
+                               for number in range(1, 61)])
+    pipeline = SimpleNamespace(
+        script_processor=SimpleNamespace(
+            llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
+        ),
+        import_file_and_split=calls,
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+        monkeypatch.setattr(api, "pipeline", pipeline)
+        monkeypatch.setattr(api, "extraction_jobs", jobs)
+        monkeypatch.setenv("IFRAME_IMPORT_DIR", str(tmp_path / "imports"))
+        job = asyncio.run(api.import_file_preview(upload("第1集\n剧本正文"), 60, owner))
+        result = wait_done(jobs, "owner", job)
+        assert result["status"] == "completed"
+        assert len(result["result"]["episodes"]) == 60
+        calls.assert_called_once()
+
+
+def test_persisted_import_text_preserves_crlf_for_preview_offsets(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    monkeypatch.setenv("IFRAME_IMPORT_DIR", str(tmp_path / "imports"))
+    text = "剧本梗概：武侠故事。\r\n第1集 开篇\r\n正文一\r\n第2集 续篇\r\n正文二\r\n"
+    import_id = "b" * 32
+    api._store_import_text("owner", import_id, text)
+
+    assert api._load_import_text("owner", import_id) == text
+
+
+def test_import_source_uses_persistent_output_directory(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFRAME_IMPORT_DIR", raising=False)
+    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "container-home-a"))
+    import_id = "c" * 32
+    api._store_import_text("owner", import_id, "第1集\r\n正文")
+    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "container-home-b"))
+
+    assert api._load_import_text("owner", import_id) == "第1集\r\n正文"
+    assert api._import_text_path("owner", import_id).resolve().is_relative_to(tmp_path / "output" / "imports")
+
+
+def test_import_source_reads_legacy_preview_until_confirmed(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    monkeypatch.setenv("IFRAME_IMPORT_DIR", str(tmp_path / "output" / "imports"))
+    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "legacy"))
+    import_id = "d" * 32
+    legacy_path = api._legacy_import_text_path("owner", import_id)
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_bytes("第1集\r\n正文".encode("utf-8"))
+
+    assert api._load_import_text("owner", import_id) == "第1集\r\n正文"
+    api._delete_import_text("owner", import_id)
+    assert not legacy_path.exists()
+
+
+def test_import_failure_uses_import_error_label(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+
+        def fail():
+            raise ValueError("分集标题无法识别")
+
+        job = jobs.start("owner", "series-import", "series-import:sample", fail)
+        result = wait_done(jobs, "owner", job)
+        assert result["status"] == "failed"
+        assert result["error"] == "分集导入分析失败：分集标题无法识别"
+
+
 def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_path, monkeypatch):
     from src.apps.comic_gen import api
 
@@ -80,7 +157,7 @@ def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_
     jobs = Mock()
     monkeypatch.setattr(api, "pipeline", pipeline)
     monkeypatch.setattr(api, "extraction_jobs", jobs)
-    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+    monkeypatch.setenv("IFRAME_IMPORT_DIR", str(tmp_path / "imports"))
     monkeypatch.setattr(api, "signed_response", lambda value: value)
     import_id = "a" * 32
     api._store_import_text("owner", import_id, "full script")

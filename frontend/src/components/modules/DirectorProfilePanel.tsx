@@ -16,6 +16,7 @@ import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
 import ScriptFactLedgerPanel from "./ScriptFactLedgerPanel";
 import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
+import DirectorOverviewTemplateEditor, { type OverviewTemplateState } from "./DirectorOverviewTemplateEditor";
 
 const editableProfile = (profile?: DirectorProfile) => {
     if (!profile) return "";
@@ -71,9 +72,19 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
     const [factEvidence, setFactEvidence] = useState<ScriptFactLedgerQueryResult | null>(null);
     const [factsLoading, setFactsLoading] = useState(false);
     const [factsError, setFactsError] = useState("");
+    const [overviewTemplate, setOverviewTemplate] = useState<OverviewTemplateState | null>(null);
     const [factRefreshToken, setFactRefreshToken] = useState(0);
     const draftHydratedRef = useRef(false);
     const sourceRevision = currentProject?.source_revision ?? 1;
+    useEffect(() => {
+        if (!currentProject || typeof api.getDirectorOverviewTemplate !== "function") return;
+        let active = true;
+        setOverviewTemplate(null);
+        void api.getDirectorOverviewTemplate("projects", currentProject.id)
+            .then(value => { if (active) setOverviewTemplate(value); })
+            .catch(() => { if (active) setOverviewTemplate(null); });
+        return () => { active = false; };
+    }, [currentProject?.id]);
     const isDirty = draftText !== savedDraftText;
     const hasStaleDraft = draftContextSourceRevision !== null && draftContextSourceRevision !== sourceRevision;
     const needsDraftSave = isDirty || draftContextSourceRevision !== draftSourceRevision;
@@ -381,7 +392,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
     const saveDraft = async () => {
         if (!currentProject || !draftText) return;
         const requestedName = window.prompt(t("directorDraftNamePrompt"), draftName || t("directorDraftNameDefault"));
-        if (requestedName === null) return;
+        if (typeof requestedName !== "string") return;
         const trimmedName = requestedName.trim();
         if (!trimmedName) {
             toast.info(t("directorDraftNameRequired"));
@@ -499,6 +510,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 </div>
             )}
 
+            {!mindMapOnly && overviewTemplate && <details className="mb-4 rounded-md border border-border bg-background/40 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-text-secondary">导演总览模板</summary>
+                <DirectorOverviewTemplateEditor scope="projects" id={currentProject!.id} state={overviewTemplate} onSaved={setOverviewTemplate} />
+            </details>}
+
             {draftText ? (
                 <div className="space-y-3">
                     {revisions.length > 0 && (
@@ -537,6 +553,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                                     onReloadFacts={() => setFactRefreshToken(token => token + 1)}
                                     onChange={value => setDraftText(JSON.stringify(value, null, 2))}
                                     mindMapOnly={mindMapOnly}
+                                    overviewTemplate={(parseDraft().overview_template_snapshot as OverviewTemplateState["template"] | undefined) ?? overviewTemplate?.template}
                                 />
                             );
                         } catch {
