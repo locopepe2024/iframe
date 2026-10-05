@@ -36,6 +36,60 @@ def _strip_markdown_json(content: str) -> str:
     return content.strip()
 
 
+_EPISODE_HEADING = re.compile(
+    r"(?m)^[ \t]*(?:#{1,6}[ \t]+)?第[ \t]*([0-9]{1,3}|[一二三四五六七八九十百零两]+)[ \t]*集"
+    r"(?:[ \t]*[：:、.．-]?[ \t]*([^\r\n]{0,80}))?[ \t]*$"
+)
+
+
+def _episode_number(value: str) -> int:
+    if value.isdigit():
+        return int(value)
+    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if "百" in value:
+        before, after = value.split("百", 1)
+        return digits.get(before, 1) * 100 + (_episode_number(after) if after else 0)
+    if "十" in value:
+        before, after = value.split("十", 1)
+        return (digits.get(before, 1) if before else 1) * 10 + digits.get(after, 0)
+    return digits.get(value, -1)
+
+
+def numbered_episode_headings(text: str) -> list[re.Match[str]]:
+    """Find consecutive episode headings without treating scene numbers as episodes."""
+    matches = list(_EPISODE_HEADING.finditer(text))
+    if len(matches) < 2:
+        return []
+    numbers = [_episode_number(match.group(1)) for match in matches]
+    if numbers != list(range(1, len(matches) + 1)):
+        raise ValueError("分集标题编号不连续；请检查重复或缺失的“第 N 集”标题")
+    return matches
+
+
+def split_numbered_episodes(text: str, suggested_episodes: int) -> list[dict[str, Any]]:
+    headings = numbered_episode_headings(text)
+    if not headings:
+        return []
+    if len(headings) != suggested_episodes:
+        raise ValueError(f"原文识别到 {len(headings)} 集，与建议集数 {suggested_episodes} 不一致")
+    episodes = []
+    for index, heading in enumerate(headings):
+        start = 0 if index == 0 else heading.start()
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        body = text[heading.end():end].strip()
+        if not body:
+            raise ValueError(f"第 {index + 1} 集没有正文")
+        episodes.append({
+            "episode_number": index + 1,
+            "title": heading.group(0).lstrip(" \t#").strip(),
+            "summary": body[:50],
+            "start_offset": start,
+            "end_offset": end,
+        })
+    return episodes
+
+
 def _prompt_json(value: Any) -> str:
     """Serialize structured context without indentation overhead.
 
@@ -1160,8 +1214,13 @@ class ScriptProcessor:
         Uses LLM to split a long text into episodes by narrative rhythm.
         Returns a list of episode dicts with title, summary, start/end markers, etc.
         """
+        numbered = split_numbered_episodes(text, suggested_episodes)
+        if numbered:
+            return numbered
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        if suggested_episodes > 50 and len(text) > 80000:
+            raise ValueError("超过 50 集的长篇剧本请使用连续的“第 1 集”至“第 N 集”标题，确保每集原文完整导入")
 
         # RAG-style map/reduce for long scripts: retain coverage and stable
         # entities instead of silently truncating after 80k characters.

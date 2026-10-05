@@ -48,7 +48,7 @@ from .models import (
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
-from .llm import ScriptProcessor
+from .llm import ScriptProcessor, numbered_episode_headings
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -8297,6 +8297,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         """
         import re
 
+        episode_headings = numbered_episode_headings(text or "")
+        if episode_headings:
+            first = episode_headings[0].start()
+            if first == 0:
+                return {}, text
+            preamble = text[:first].strip()
+            if not preamble:
+                return {}, text[first:]
+            return {
+                "schema_version": 1,
+                "kind": "series_submission_context",
+                "preamble": preamble,
+                "body_char_count": len(text) - first,
+            }, text[first:]
+
         heading = re.compile(
             r"(?m)^\s*\d+\s*[、.]\s*[^\n]{1,120}?\s+(?:日|夜|晨|晚)\s+(?:内|外)(?:\s|$)"
         )
@@ -8350,19 +8365,17 @@ class ComicGenPipeline(StudioOwnerMixin):
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
-        # Create the Series (already acquires lock internally)
+        series_context, screenplay_text = self._split_import_series_context(text)
+        # Split text into episode chunks based on markers. Markers are applied
+        # only to screenplay text, never to the submission preamble.
+        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
         series = self.create_series(
             title,
             description,
             owner_user_id=owner_user_id,
             owner_profile_id=owner_profile_id,
         )
-
-        series_context, screenplay_text = self._split_import_series_context(text)
         series.source_context = series_context
-        # Split text into episode chunks based on markers. Markers are applied
-        # only to screenplay text, never to the submission preamble.
-        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
 
         with self._save_lock:
             # Create Episode (Script) for each chunk
@@ -8400,6 +8413,22 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _split_text_by_markers(self, text: str, episodes_data: List[Dict]) -> List[str]:
         """Split text into chunks using start/end markers from LLM.
         Searches sequentially to avoid overlapping chunks."""
+        if episodes_data and all("start_offset" in ep and "end_offset" in ep for ep in episodes_data):
+            chunks = []
+            previous_end = 0
+            for ep in episodes_data:
+                start, end = ep["start_offset"], ep["end_offset"]
+                if (not isinstance(start, int) or not isinstance(end, int)
+                        or start != previous_end or end <= start or end > len(text)):
+                    raise ValueError("分集原文位置无效；请重新预览导入")
+                chunk = text[start:end]
+                if not chunk.strip():
+                    raise ValueError("分集正文为空；请重新预览导入")
+                chunks.append(chunk)
+                previous_end = end
+            if previous_end != len(text):
+                raise ValueError("分集未覆盖完整原文；请重新预览导入")
+            return chunks
         chunks = []
         search_from = 0  # Track position to avoid overlap
 

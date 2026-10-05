@@ -1663,8 +1663,8 @@ async def import_file_preview(
     user: UserContext = Depends(require_studio_user),
 ):
     """Upload text once and start or resume a durable episode-split job."""
-    if suggested_episodes < 1 or suggested_episodes > 50:
-        raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
+    if suggested_episodes < 1 or suggested_episodes > 100:
+        raise HTTPException(status_code=400, detail="建议集数应在 1-100 之间")
     try:
         content_bytes = await file.read()
         if len(content_bytes) > 2 * 1024 * 1024:
@@ -1729,6 +1729,8 @@ async def import_file_confirm(
 ):
     """Confirm the episode split and create Series + Episodes."""
     try:
+        if not 1 <= len(request.episodes) <= 100:
+            raise ValueError("确认导入集数应在 1-100 之间")
         # Prefer persistent owner-scoped source, then legacy memory cache,
         # and finally direct text for compatibility with older clients.
         text = None

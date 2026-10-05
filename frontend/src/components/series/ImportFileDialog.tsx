@@ -310,9 +310,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         <input
                                             type="number"
                                             value={suggestedEpisodes}
-                                            onChange={(e) => setSuggestedEpisodes(Math.max(1, parseInt(e.target.value) || 1))}
+                                            onChange={(e) => setSuggestedEpisodes(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
                                             min={1}
-                                            max={50}
+                                            max={100}
                                             className="glass-input w-24"
                                         />
                                     </div>
