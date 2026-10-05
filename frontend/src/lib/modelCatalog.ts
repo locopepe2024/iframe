@@ -328,24 +328,18 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
 }
 
 function getVisibleModels(group: SelectionGroup, surface: VisibilitySurface): CatalogModel[] {
-    // Strict match: model declared its primary selection_group as `group`.
-    const direct = SORTED_MODEL_ENTRIES.filter(
-        (model) => model.ui.selection_group === group && isVisibleModel(model, surface)
-    );
-    // Capability fallback: when the strict bucket is empty for t2i/i2i (the
-    // current catalog ships only `image`-group models that can do both),
-    // accept any visible image-group model that declares the matching
-    // capability. Without this, resolveModelId() always falls through to
-    // catalog defaults — meaning user-picked t2i/i2i selections silently
-    // revert on the next render. (See PR-3* assembly model picker bug.)
-    if (direct.length > 0 || (group !== 't2i' && group !== 'i2i' && group !== 'r2v')) {
-        return direct;
+    if (group !== 't2i' && group !== 'i2i' && group !== 'r2v') {
+        return SORTED_MODEL_ENTRIES.filter(
+            (model) => model.ui.selection_group === group && isVisibleModel(model, surface)
+        );
     }
-    const capability = group; // 't2i' | 'i2i' | 'r2v'
+    // Unified image models and legacy mode-specific models coexist. Include
+    // both so a selected image model is not replaced by an old t2i default.
     return SORTED_MODEL_ENTRIES.filter(
         (model) =>
-            (model.ui.selection_group === 'image' || model.ui.selection_group === 'i2v') &&
-            model.capabilities.includes(capability) &&
+            (model.ui.selection_group === group ||
+                model.ui.selection_group === (group === 'r2v' ? 'i2v' : 'image')) &&
+            model.capabilities.includes(group) &&
             isVisibleModel(model, surface)
     );
 }
