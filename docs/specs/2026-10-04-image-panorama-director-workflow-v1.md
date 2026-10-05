@@ -10,7 +10,11 @@
 
 - Image editor: preserve the source image, save ordinary edits as `perspective_plane`, and expose a separate "Save as panorama" action for exact 2:1 sources. That action writes `equirectangular`; users do not choose raw projection metadata. Browse panorama candidates with mouse/touch orbit controls.
 - Playground API: persist projection metadata and panorama quality diagnostics in the same immutable edit record and idempotency intent; reject an equirectangular declaration for non-2:1 output or a detected seam/zenith/nadir gap.
-- Director: read only the current owner's saved edits, admit only declared 2:1 equirectangular images whose stored checksum matches the catalog admission checksum, show a spherical background, and let the user assign/clear it. Existing scene objects, white models, cameras, motion paths and timeline remain the editable foreground.
+- Director: read the current owner's dedicated saved panorama catalog, admit only declared 2:1 equirectangular images whose stored checksum matches the catalog admission checksum, show a spherical background, and let the user assign/clear it. Existing scene objects, white models, cameras, motion paths and timeline remain the editable foreground.
+
+## Decoupled asset flow
+
+Image editing ends when a panorama candidate is explicitly saved as an owner-scoped `image-edits` asset. It must not import director modules, stage director session state, or navigate to the director. The director independently reads `GET /playground/panorama-assets`, selects a quality-passed asset, and imports it only after the user presses the import command. Generation history remains separate from saved assets. The saved asset path and checksum are the handoff contract; a direct in-memory image-editor-to-director handoff is not supported.
 - The environment catalog is session state. Director drafts must not silently restore a panorama without reloading and validating its owner-scoped asset record.
 
 ## Acceptance
