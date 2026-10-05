@@ -14,6 +14,7 @@ import { createIdleMotionTrackImportState } from "./motion-track-import";
 import { compileReviewedMotionTrack as compileReviewedMotionTrackPure, createIdleMotionTrackReviewState } from "./motion-track-review";
 import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
+import { parsePanoramaScenePackage, type PanoramaScenePackage } from "./panorama-scene-package";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
 const jointById = new Map(rigProfile.joints.map((joint) => [joint.joint_id, joint]));
@@ -748,6 +749,7 @@ export interface WorkbenchState {
   sceneTypeFilter: "all" | "character" | "camera" | "object" | "environment";
   objectAssetCatalog: ObjectAssetCatalogState;
   environmentInputCatalog: EnvironmentInputCatalogState;
+  panoramaScenePackage: PanoramaScenePackage | null;
   panoramaPreviewStatus: { state: "idle" | "loading" | "ready" | "error"; message: string };
   panoramaDiagnosticPreviewInputId: string | null;
   panoramaDiagnosticPreviewYawDeg: number;
@@ -793,6 +795,7 @@ export interface WorkbenchState {
   setObjectAssetCatalog: (catalog: ObjectAssetCatalogState) => void;
   insertAdmittedObjectAsset: (assetId: string) => void;
   setEnvironmentInputCatalog: (catalog: EnvironmentInputCatalogState) => void;
+  applyPanoramaScenePackage: (input: unknown) => { ok: true } | { ok: false; errors: string[] };
   setPanoramaPreviewStatus: (status: { state: "idle" | "loading" | "ready" | "error"; message: string }) => void;
   previewPanoramaDiagnostic: (inputId: string | null) => void;
   setPanoramaDiagnosticPreviewYawDeg: (yawDeg: number) => void;
@@ -1156,6 +1159,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   sceneTypeFilter: "all",
   objectAssetCatalog: { status: "unavailable", message: "3D 与 Gaussian importer 尚未完成格式准入；当前只开放内置对象。", assets: [] },
   environmentInputCatalog: { status: "loading", message: "正在读取环境素材…", entries: [] },
+  panoramaScenePackage: null,
   panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" },
   panoramaDiagnosticPreviewInputId: null,
   panoramaDiagnosticPreviewYawDeg: 0,
@@ -1318,6 +1322,26 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       panoramaDiagnosticPreviewFlipVertical: panoramaDiagnosticPreviewInputId ? state.panoramaDiagnosticPreviewFlipVertical : false,
     };
   }),
+  applyPanoramaScenePackage: (input) => {
+    const parsed = parsePanoramaScenePackage(input);
+    if (!parsed.ok) return parsed;
+    const scenePackage = parsed.package;
+    const catalog = get().environmentInputCatalog.entries;
+    const panorama = catalog.find((entry) => entry.inputId === scenePackage.panoramaInputId);
+    const errors: string[] = [];
+    if (!panorama || panorama.usage !== "panorama" || panorama.projection !== "equirectangular" || !panorama.environmentAllowed || panorama.admissionChecksum !== panorama.checksum) {
+      errors.push("全景输入尚未通过导演台环境准入。");
+    } else if (panorama.checksum !== scenePackage.panoramaChecksum) {
+      errors.push("全景 checksum 与场景包不匹配，拒绝应用深度包。");
+    }
+    if (scenePackage.depth.checksum) {
+      const depth = catalog.find((entry) => entry.inputId === scenePackage.depth.inputId);
+      if (!depth || depth.checksum !== scenePackage.depth.checksum) errors.push("深度输入 checksum 与场景包不匹配，拒绝应用深度包。");
+    }
+    if (errors.length) return { ok: false as const, errors };
+    set((state) => ({ ...state, panoramaScenePackage: structuredClone(scenePackage), unsavedChanges: true }));
+    return { ok: true as const };
+  },
   setPanoramaPreviewStatus: (panoramaPreviewStatus) => set({ panoramaPreviewStatus }),
   previewPanoramaDiagnostic: (inputId) => set((state) => {
     if (inputId === null) return state.panoramaDiagnosticPreviewInputId === null ? state : { panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: state.renderScene.panorama.inputId ? { state: "loading", message: "正在恢复正式球面环境纹理…" } : { state: "idle", message: "尚未选择球面环境。" } };
