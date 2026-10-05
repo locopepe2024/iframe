@@ -16,7 +16,7 @@ Allow a user to explicitly apply a confirmed Director shooting plan to the Story
 1. Applying is a separate, user-triggered action on an up-to-date confirmed shooting-plan revision. Drafts and stale confirmed plans cannot be applied.
 2. Applying maps the confirmed plan directly to frames; it does not call an LLM, create video tasks, or generate media.
 3. One plan shot becomes one Storyboard frame. The adapter copies visual atoms and stable asset references; it does not reinterpret or split shots.
-4. Every plan scene must bind to an available Scene asset before applying. The UI provides a stable-ID selector; the backend rejects missing or unavailable bindings rather than falling back to the first scene.
+4. A plan scene does not require a分集 Scene asset before applying. The Storyboard editor lets the user select an adopted scene media, image-editor result, or later 3D director snapshot when the shot is being prepared; missing scene media is a review state, not a silent fallback.
 5. The API uses optimistic preconditions for the confirmed plan revision/hash and the exact current frame ID list. This prevents applying an outdated plan or silently replacing frames changed since the user opened the confirmation.
 6. The confirmation UI states how many current frames will be replaced and how many planned shots will be applied. The user must explicitly confirm.
 7. New Storyboard frames store the plan revision/hash and plan scene/beat/shot IDs in addition to normal script/Director lineage.
@@ -27,7 +27,7 @@ Allow a user to explicitly apply a confirmed Director shooting plan to the Story
 
 - Plan revision exists, is current, matches the submitted hash, and matches current script, confirmed Director, and style lineage.
 - Expected current Storyboard frame IDs exactly match persisted frame IDs.
-- Every scene asset ID, character ID, and prop ID exists in the effective episode asset set.
+- Every character/prop reference resolves to the effective episode references; a selected scene media or 3D snapshot is owner-scoped and accessible when the shot is submitted.
 - Plan shots remain complete under the existing confirmation contract.
 - Apply tests assert one frame per shot, complete visual-field mapping, provenance IDs, no LLM call, and no video-task mutation.
 
@@ -35,7 +35,7 @@ Allow a user to explicitly apply a confirmed Director shooting plan to the Story
 
 ### Included
 
-- Optional scene asset binding in the plan schema, LLM contract, plan editor, and plan validation.
+- Optional scene context in the plan schema and editor; scene media binding belongs to Storyboard preparation and submission.
 - Explicit apply endpoint and a confirmation dialog on the Director shooting-plan tab.
 - Deterministic plan-to-frame adapter with lineage and stable plan source IDs.
 - Backend/API/UI behavior tests and en/zh copy.
@@ -46,7 +46,7 @@ Allow a user to explicitly apply a confirmed Director shooting plan to the Story
 
 ## Success criteria
 
-- User can bind each planned scene to an existing Scene asset, save and confirm the plan, then explicitly apply it.
+- User can apply a confirmed plan without first creating a Scene asset, then select or generate scene media while preparing the relevant shot.
 - Stale plan or changed Storyboard frames produce a conflict with no mutation.
 - Applying replaces frames only after explicit user confirmation and produces exactly one frame per shot with traceable source IDs.
 - No LLM or video-generation task is called during apply.
