@@ -22,7 +22,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star, Upload, Trash2, Library } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
+import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import {
     createSingleFlightTaskStatusPoller,
@@ -38,7 +38,6 @@ import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
 } from "@/components/modules/playground/ReferencePromptEditor";
-import { CHARACTER_IDENTITY_FACETS_FALLBACK, type CharacterIdentityFacet } from "./characterIdentityFacets";
 
 export type CastKind = "character" | "scene" | "prop";
 
@@ -365,7 +364,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const selectedModelId = resolveAssetGenerationModel(requestedModelId);
     const isGptImage2 = selectedModelId === "gpt-image-2" || selectedModelId === "uniart/gpt-image-2";
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
-    const [characterIdentityFacets, setCharacterIdentityFacets] = useState<CharacterIdentityFacet[]>([]);
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
     const lastSeededEntityId = useRef<string | null>(null);
@@ -461,29 +459,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setMention(null);
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
-
-    useEffect(() => {
-        let active = true;
-        if (!isOpen || kind !== "character") {
-            setCharacterIdentityFacets([]);
-            return () => { active = false; };
-        }
-        void agentRequest<{ installed?: Array<{ id: string; enabled?: boolean; workbench_facets?: CharacterIdentityFacet[] }>; catalog?: Array<{ id: string; workbench_facets?: CharacterIdentityFacet[] }> }>("/skills")
-            .then((inventory) => {
-                if (!active) return;
-                const skill = (inventory.installed ?? []).find(item => item.id === "character-identity-design" && item.enabled !== false);
-                // Installed Skills are pinned snapshots. Use the catalog facets when an
-                // older snapshot predates the workbench facet metadata, while keeping
-                // enablement and prompt instructions owner-scoped.
-                const catalogSkill = (inventory.catalog ?? []).find(item => item.id === "character-identity-design");
-                const facets = Array.isArray(skill?.workbench_facets)
-                    ? skill.workbench_facets
-                    : Array.isArray(catalogSkill?.workbench_facets) ? catalogSkill.workbench_facets : [];
-                setCharacterIdentityFacets(facets.length ? facets : CHARACTER_IDENTITY_FACETS_FALLBACK);
-            })
-            .catch(() => { if (active) setCharacterIdentityFacets(CHARACTER_IDENTITY_FACETS_FALLBACK); });
-        return () => { active = false; };
-    }, [isOpen, kind]);
 
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
@@ -1353,47 +1328,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </button>
                                 ))}
                             </div>
-
-                            {kind === "character" && characterIdentityFacets.length > 0 && (
-                                <section className="mt-4 rounded-md border border-primary/20 bg-primary/5 px-3.5 py-3" aria-label={t("characterSkillTitle")}>
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="text-xs font-medium text-primary">{t("characterSkillTitle")}</p>
-                                            <p className="mt-1 text-[0.6875rem] leading-relaxed text-text-muted">{t("characterSkillHint")}</p>
-                                        </div>
-                                        <span className="shrink-0 rounded-full border border-primary/20 px-2 py-0.5 text-[0.625rem] text-primary/80">Skill</span>
-                                    </div>
-                                    <div className="mt-3 space-y-3">
-                                        {(["identity", "look", "continuity"] as const).map((section) => {
-                                            const facets = characterIdentityFacets.filter(facet => (facet.section || "identity") === section);
-                                            if (!facets.length) return null;
-                                            const sectionTitle = section === "identity" ? t("characterSkillIdentity") : section === "look" ? t("characterSkillLook") : t("characterSkillContinuity");
-                                            return (
-                                                <div key={section}>
-                                                    <p className="mb-1.5 text-[0.6875rem] font-medium text-text-secondary">{sectionTitle}</p>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {facets.map((facet) => (
-                                                            <button
-                                                                key={facet.id}
-                                                                type="button"
-                                                                disabled={generationBusy}
-                                                                onClick={() => setPrompt((current) => {
-                                                                    const value = locale.startsWith("zh") ? facet.prompt_zh : facet.prompt_en;
-                                                                    if (current.includes(value)) return current;
-                                                                    return `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`;
-                                                                })}
-                                                                className="rounded border border-primary/20 bg-background/40 px-2.5 py-1.5 text-[0.6875rem] text-text-secondary hover:border-primary/50 hover:text-primary disabled:opacity-40"
-                                                            >
-                                                                + {locale.startsWith("zh") ? facet.label_zh : facet.label_en}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            )}
 
                             {/* Customer-facing summary: keep it short and readable. The full
                                 provider prompt remains in the editable field above and the

@@ -121,23 +121,10 @@ it('submits only once when generate is clicked twice during project validation',
  expect(vi.mocked(api.generateAsset).mock.calls[0][9]).toBe(1);
 });
 
-it('offers enabled character identity Skill facets as editable prompt suggestions', async () => {
- vi.mocked(agentRequest).mockResolvedValueOnce({ installed: [{ id: 'character-identity-design', enabled: true, workbench_facets: [{ id: 'eyes-gaze', label_zh: '眼神', label_en: 'Eyes and gaze', prompt_zh: '眼神清晰自然', prompt_en: 'clear natural eyes' }] }] } as any);
+it('does not load the legacy character Skill facet panel', () => {
  show();
- const facet = await screen.findByRole('button', { name: /Eyes and gaze/ });
- fireEvent.click(facet);
- expect(promptEditor().editor.getText()).toContain('clear natural eyes');
-});
-
-it('uses catalog facets when an older installed Skill snapshot has none', async () => {
- vi.mocked(agentRequest).mockResolvedValueOnce({
-   installed: [{ id: 'character-identity-design', enabled: true }],
-   catalog: [{ id: 'character-identity-design', workbench_facets: [
-     { id: 'costume-lock', section: 'continuity', label_zh: '服装连续性锁', label_en: 'Costume continuity lock', prompt_zh: '服装连续', prompt_en: 'costume continuity' },
-   ] }],
- } as any);
- show();
- expect(await screen.findByRole('button', { name: /Costume continuity lock/ })).toBeInTheDocument();
+ expect(agentRequest).not.toHaveBeenCalled();
+ expect(screen.queryByText('Eyes and gaze')).not.toBeInTheDocument();
 });
 
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {

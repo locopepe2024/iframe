@@ -6,10 +6,12 @@
 
 ## Boundaries
 
-- Character identity, episode look variants, continuity facets, prompts, uploads and generation actions live in `CharacterWorkbench`.
+- Character identity, episode look references, continuity facets, existing prompts, uploads and generation actions remain in `CharacterWorkbench` for saved-project compatibility.
 - Cast-specific aggregation, voice binding and scene/prop editing remain in Cast.
 - Image editing is a top-level workbench and is not rendered inside either character entry.
 - Director profile internals are lineage/context data and must not be appended to character image prompts.
+- New visual design templates and Skills for appearance, expression, action, style, and effects belong to the image editor. The character workbench resolves person, era, look and continuity for downstream use; it does not gain another template editor.
+- Existing character fields, candidates, and accepted facet IDs are not migrated or deleted by this cleanup.
 
 ## Success criteria
 
@@ -18,3 +20,7 @@
 3. Facets have one implementation and one fallback source.
 4. Route-level tests prove both entry paths mount the canonical component.
 5. Typecheck, focused UI tests and a production build pass before deployment.
+
+## Cleanup scope
+
+Remove the duplicate character facet loader and panel from `CastWorkbenchModal`. Cast character entry already routes through `CharacterWorkbenchBridge`; the modal keeps scene/prop generation and its existing compatibility helpers. Director and shooting-plan contracts are outside this change.
