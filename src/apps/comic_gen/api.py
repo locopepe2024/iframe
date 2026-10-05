@@ -2035,6 +2035,10 @@ def get_project(script_id: str):
     if script.series_id:
         series = pipeline.get_series(script.series_id)
         if series:
+            # Series generation settings are the effective defaults for an
+            # episode. A saved episode may still carry the model chosen when
+            # it was created, so expose the current series choice to clients.
+            payload["model_settings"] = series.model_settings.model_dump()
             ep_char_ids = {c.id for c in script.characters}
             ep_scene_ids = {s.id for s in script.scenes}
             ep_prop_ids = {p.id for p in script.props}

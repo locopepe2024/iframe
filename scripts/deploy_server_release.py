@@ -1,4 +1,4 @@
-import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os, shutil
+import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os
 from media_signing_config import media_signing_env
 
 
@@ -114,8 +114,9 @@ try:
     data_backup.mkdir(exist_ok=True)
     for filename in ('projects.json', 'series.json'):
         destination = data_backup / filename
-        with (output_path / filename).open('rb') as source_stream, destination.open('wb') as backup_stream:
-            shutil.copyfileobj(source_stream, backup_stream)
+        with destination.open('wb') as backup_stream:
+            subprocess.run(['docker', 'exec', backend_container, 'cat', '/app/output/' + filename],
+                           stdout=backup_stream, check=True)
             backup_stream.flush()
             os.fsync(backup_stream.fileno())
     run(['docker', 'stop', '--time', '210', backend_container])

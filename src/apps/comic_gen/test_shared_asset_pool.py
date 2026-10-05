@@ -316,3 +316,26 @@ def test_get_project_does_not_merge_global_source():
         pipeline.library_store = prev_library
         pipeline.get_script = prev_get_script
         pipeline.scripts.pop(sid, None)
+
+
+def test_get_project_uses_current_series_generation_settings():
+    from src.apps.comic_gen import api
+
+    pipeline = api.pipeline
+    sid = "episode-model-inheritance-test"
+    series_id = "series-model-inheritance-test"
+    episode = _script(sid=sid, series_id=series_id)
+    episode.model_settings.t2i_model = "uniart/gpt-image-2"
+    series = _series(sid=series_id)
+    series.model_settings.t2i_model = "uniart/gpt-image-2.5-flare-discount"
+    previous_get_script = pipeline.get_script
+    previous_get_series = pipeline.get_series
+    pipeline.get_script = lambda script_id, owner_profile_id=None: episode if script_id == sid else None
+    pipeline.get_series = lambda requested_id, owner_profile_id=None: series if requested_id == series_id else None
+    try:
+        payload = json.loads(api.get_project(sid).body)
+        assert payload["model_settings"]["t2i_model"] == series.model_settings.t2i_model
+        assert episode.model_settings.t2i_model == "uniart/gpt-image-2"
+    finally:
+        pipeline.get_script = previous_get_script
+        pipeline.get_series = previous_get_series
