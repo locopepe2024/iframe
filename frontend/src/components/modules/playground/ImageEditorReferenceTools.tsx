@@ -119,6 +119,7 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
       const result = await playgroundApi.generate({ mode: taskMode, model_id: modelId, prompt: instruction,
         input_media: inputMedia.length ? inputMedia : undefined,
         media_names: Object.fromEntries(references.map(reference => [reference.path, reference.title])),
+        parameters: mode === 'panorama' ? { size: '4k', aspect_ratio: '2:1' } : undefined,
         batch_size: 1 });
       setGeneration(result); onGenerationChange?.(result);
     } catch { setError(t('generationFailed')); }
