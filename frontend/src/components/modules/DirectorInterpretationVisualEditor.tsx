@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { Character, ScriptFactLedgerQueryEntry } from "@/store/projectStore";
 import DirectorStoryMapSection from "./DirectorStoryMapSection";
+import type { OverviewTemplate } from "./DirectorOverviewTemplateEditor";
 
 type Draft = Record<string, unknown>;
 
@@ -69,6 +70,7 @@ export default function DirectorInterpretationVisualEditor({
     factsError = "",
     onReloadFacts = () => undefined,
     mindMapOnly = false,
+    overviewTemplate,
 }: {
     profile: Draft;
     onChange: (profile: Draft) => void;
@@ -80,6 +82,7 @@ export default function DirectorInterpretationVisualEditor({
     factsError?: string;
     onReloadFacts?: () => void;
     mindMapOnly?: boolean;
+    overviewTemplate?: OverviewTemplate;
 }) {
     const t = useTranslations("artDirection.directorEditor");
     const locale = useLocale();
@@ -103,7 +106,8 @@ export default function DirectorInterpretationVisualEditor({
     const setting = profile.setting && typeof profile.setting === "object" && !Array.isArray(profile.setting)
         ? profile.setting as Draft
         : {};
-    const extraSettingKeys = Object.keys(setting).filter(key => !settingFields.includes(key));
+    const visibleSettingFields = overviewTemplate?.fields.filter(field => field.enabled) ?? settingFields.map(key => ({ key, label: t(`setting.${key}`), purpose: t(`settingHint.${key}`), enabled: true }));
+    const extraSettingKeys = Object.keys(setting).filter(key => !visibleSettingFields.some(field => field.key === key));
     const updateProfile = (key: string, value: unknown) => onChange({ ...profile, [key]: value });
     const updateSetting = (key: string, value: string) => updateProfile("setting", { ...setting, [key]: value });
     const updateListAt = (key: string, index: number, value: string) => {
@@ -148,13 +152,13 @@ export default function DirectorInterpretationVisualEditor({
                     <p className="mt-1 text-xs leading-5 text-text-secondary">{t("overviewHint")}</p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                    {settingFields.map(key => (
+                    {visibleSettingFields.map(field => (
                         <TextField
-                            key={key}
-                            label={t(`setting.${key}`)}
-                            hint={t(`settingHint.${key}`)}
-                            value={asText(setting[key])}
-                            onChange={value => updateSetting(key, value)}
+                            key={field.key}
+                            label={field.label}
+                            hint={field.purpose}
+                            value={asText(setting[field.key])}
+                            onChange={value => updateSetting(field.key, value)}
                         />
                     ))}
                 </div>

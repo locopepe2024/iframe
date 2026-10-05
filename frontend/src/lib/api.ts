@@ -1135,6 +1135,18 @@ export const api = {
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
+    getDirectorOverviewTemplate: async (scope: "projects" | "series", id: string): Promise<{ source: string; template: { revision: number; fields: Array<{ key: string; label: string; purpose: string; enabled: boolean }> } }> => {
+        const res = await axios.get(`${API_URL}/${scope}/${id}/director-overview-template`);
+        return res.data;
+    },
+    saveDirectorOverviewTemplate: async (scope: "projects" | "series", id: string, template: { revision: number; fields: Array<{ key: string; label: string; purpose: string; enabled: boolean }> }) => {
+        const res = await axios.put(`${API_URL}/${scope}/${id}/director-overview-template`, template);
+        return res.data as { source: string; template: typeof template };
+    },
+    inheritDirectorOverviewTemplate: async (id: string) => {
+        const res = await axios.delete(`${API_URL}/projects/${id}/director-overview-template`);
+        return res.data as { source: string; template: { revision: number; fields: Array<{ key: string; label: string; purpose: string; enabled: boolean }> } };
+    },
     analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus),
     saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
     saveSeriesSourceContext: (seriesId: string, text: string) => saveSeriesSourceContext(API_URL, seriesId, text),

@@ -171,6 +171,26 @@ it("keeps legacy setting fields editable without mixing them into the canonical 
     }));
 });
 
+it("renders the template snapshot's enabled custom field and keeps other values", () => {
+    const onChange = vi.fn();
+    function CustomEditor() {
+        const [current, setCurrent] = React.useState<Record<string, unknown>>({ ...profile, setting: { locations: "青溪镇", jianghu_rules: "江湖自有江湖规" } });
+        return <NextIntlClientProvider locale="en" messages={messages}><DirectorInterpretationVisualEditor
+            profile={current}
+            onChange={next => { onChange(next); setCurrent(next); }}
+            overviewTemplate={{ revision: 2, fields: [
+                { key: "jianghu_rules", label: "江湖秩序", purpose: "原文中的江湖规则", enabled: true },
+                { key: "spatial_motif", label: "空间意象", purpose: "反复出现的空间", enabled: false },
+            ] }}
+        /></NextIntlClientProvider>;
+    }
+    render(<CustomEditor />);
+    expect(screen.getByLabelText("江湖秩序")).toHaveValue("江湖自有江湖规");
+    expect(screen.queryByLabelText("空间意象")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("江湖秩序"), { target: { value: "朝堂不问武林事" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ setting: { locations: "青溪镇", jianghu_rules: "朝堂不问武林事" } }));
+});
+
 it("builds an explicit story map from a legacy timeline without inventing phase relationship states", () => {
     const result = createDirectorStoryMapFromLegacy(profile, 4, characters);
     expect(result.source_revision).toBe(4);

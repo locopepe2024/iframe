@@ -22,6 +22,14 @@ const profile = {
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, "getDirectorOverviewTemplate").mockResolvedValue({ source: "default", template: { revision: 1, fields: [
+        { key: "format_genre", label: "Format and genre", purpose: "Genre", enabled: true },
+        { key: "locations", label: "Locations", purpose: "Places", enabled: true },
+        { key: "time_period", label: "Story time span", purpose: "Era", enabled: true },
+        { key: "social_context", label: "Social context", purpose: "Context", enabled: true },
+        { key: "dramatic_contrast", label: "Character and plot contrasts", purpose: "Contrast", enabled: true },
+        { key: "spatial_motif", label: "Recurring spaces", purpose: "Spaces", enabled: true },
+    ] } });
     vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
         project_id: "film", draft_revision: 0, source_revision: null, draft: null, updated_at: null,
     });
@@ -58,7 +66,7 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     await waitFor(() => expect(
-        (screen.getByLabelText("geography") as HTMLTextAreaElement).value,
+        (screen.getByLabelText("Geography (legacy field)") as HTMLTextAreaElement).value,
     ).toContain("Chinese university and Beijing"));
     expect(apply).not.toHaveBeenCalled();
 
@@ -72,7 +80,7 @@ it("loads an AI result directly into the editable draft", async () => {
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
-    expect(await screen.findByLabelText("geography")).toHaveValue("AI geography");
+    expect(await screen.findByLabelText("Geography (legacy field)")).toHaveValue("AI geography");
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
 });
 
@@ -174,7 +182,7 @@ it("restores a saved Director draft independently from the confirmed profile", a
     );
 
     expect(await screen.findByText("Saved draft v3")).toBeInTheDocument();
-    expect(screen.getByLabelText("geography")).toHaveValue("User-edited geography");
+    expect(screen.getByLabelText("Geography (legacy field)")).toHaveValue("User-edited geography");
 });
 
 it("restores a browser draft when the previous server save failed", async () => {

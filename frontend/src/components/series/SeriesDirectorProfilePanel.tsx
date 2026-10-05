@@ -4,6 +4,7 @@ import { BrainCircuit, Check, Loader2, Save, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
+import DirectorOverviewTemplateEditor, { type OverviewTemplateState } from "@/components/modules/DirectorOverviewTemplateEditor";
 
 export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seriesId: string; onSaved: () => void }) {
   const t = useTranslations("series");
@@ -16,6 +17,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
   const [busy, setBusy] = useState<"analyze" | "save" | "saveContext" | "confirm" | null>(null);
   const [error, setError] = useState("");
+  const [overviewTemplate, setOverviewTemplate] = useState<OverviewTemplateState | null>(null);
   const dirty = draftText !== savedText;
 
   const load = async () => {
@@ -29,6 +31,11 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     setContextText(contextValue); setSavedContextText(contextValue);
   };
   useEffect(() => { void load().catch(e => setError(String(e?.message || e))); }, [seriesId]);
+  useEffect(() => {
+    let active = true;
+    void api.getDirectorOverviewTemplate("series", seriesId).then(value => { if (active) setOverviewTemplate(value); }).catch(e => { if (active) setError(String(e?.message || e)); });
+    return () => { active = false; };
+  }, [seriesId]);
 
   const analyze = async () => {
     setBusy("analyze"); setError("");
@@ -75,6 +82,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     </header>
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
     <div className="min-h-0 flex-1 overflow-y-auto p-8">
+      {overviewTemplate && <details className="mb-5 rounded-lg border border-glass-border bg-background/30 p-4"><summary className="cursor-pointer text-sm font-medium">导演总览模板</summary><DirectorOverviewTemplateEditor scope="series" id={seriesId} state={overviewTemplate} onSaved={setOverviewTemplate} /></details>}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
         <div className="flex flex-col gap-3 rounded-lg border border-glass-border bg-background/30 p-5">
           <label className="text-xs font-medium text-text-secondary">{t("seriesDirectorContextInputLabel")}</label>

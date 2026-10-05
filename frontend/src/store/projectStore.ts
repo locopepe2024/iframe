@@ -241,6 +241,7 @@ export interface ArtDirection {
 
 export interface DirectorProfile {
     setting: Record<string, unknown>;
+    overview_template_snapshot?: { revision: number; fields: Array<{ key: string; label: string; purpose: string; enabled: boolean }> } | null;
     timeline: Record<string, unknown>[];
     relationships: Record<string, unknown>[];
     key_events: Record<string, unknown>[];
