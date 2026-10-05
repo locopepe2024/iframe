@@ -107,7 +107,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   useEffect(() => {
     if (!activePanel) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (!composerRef.current?.contains(event.target as Node)) setActivePanel(null);
+      const target = event.target as Node;
+      if (!composerRef.current?.contains(target) && !(target instanceof Element && target.closest('[data-agent-asset-picker]'))) {
+        setActivePanel(null);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setActivePanel(null);

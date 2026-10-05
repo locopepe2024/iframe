@@ -287,6 +287,7 @@ export default function AssetPickerModal({
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          data-agent-asset-picker
           className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 px-3 pt-3 backdrop-blur-sm"
           style={{ paddingBottom: bottomOffset }}
           variants={overlayVariants}
