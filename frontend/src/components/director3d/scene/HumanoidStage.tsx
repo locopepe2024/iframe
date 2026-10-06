@@ -3,6 +3,10 @@ import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 
@@ -22,6 +26,34 @@ interface RigRuntime {
 function CanvasClearAlpha({ transparent }: { transparent: boolean }) {
   const { gl } = useThree();
   useEffect(() => { gl.setClearAlpha(transparent ? 0 : 1); }, [gl, transparent]);
+  return null;
+}
+
+function CameraDepthOfField({ focusDistanceM, aperture }: { focusDistanceM: number; aperture: number }) {
+  const { gl, scene, camera, size } = useThree();
+  const effects = useMemo(() => {
+    const composer = new EffectComposer(gl);
+    const bokeh = new BokehPass(scene, camera, { focus: focusDistanceM, aperture, maxblur: 0.015 });
+    const output = new OutputPass();
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(bokeh);
+    composer.addPass(output);
+    return { composer, bokeh, output };
+  }, [gl, scene, camera]);
+  useEffect(() => {
+    effects.composer.setSize(size.width, size.height);
+  }, [effects, size.width, size.height]);
+  useEffect(() => {
+    const uniforms = effects.bokeh.uniforms as Record<"focus" | "aperture", { value: number }>;
+    uniforms.focus.value = focusDistanceM;
+    uniforms.aperture.value = aperture;
+  }, [effects, focusDistanceM, aperture]);
+  useEffect(() => () => {
+    effects.bokeh.dispose();
+    effects.output.dispose();
+    effects.composer.dispose();
+  }, [effects]);
+  useFrame((_, delta) => effects.composer.render(delta), 1);
   return null;
 }
 
@@ -558,6 +590,7 @@ export function HumanoidStage() {
         </group>
         {playheadFrame === 1 && !selectedSceneObjectId && !selectedActorPathControlPointId && !selectedCameraPathControlPointId && selectedCharacter?.visible && !selectedCharacter.locked && <TransformGizmo target={targets[selectedCharacterId] ?? null} characterId={selectedCharacterId} mode={transformMode} />}
         <ViewCamera viewMode={viewMode} calibration={null} composition={cameraComposition} compositionTargetM={compositionTargetM} compositionPositionM={compositionPositionM} />
+        {viewMode === "camera" && cameraComposition.depthOfField?.enabled && <CameraDepthOfField focusDistanceM={cameraComposition.depthOfField.focusDistanceM} aperture={cameraComposition.depthOfField.aperture}/>}
       </Canvas>
       </div>
       {viewMode === "camera" && <div className="camera-framing-guides" aria-hidden="true">{cameraComposition.framingGuides.ruleOfThirds && <><span className="third vertical one"/><span className="third vertical two"/><span className="third horizontal one"/><span className="third horizontal two"/></>}{cameraComposition.framingGuides.centerCross && <><span className="center vertical"/><span className="center horizontal"/></>}{cameraComposition.framingGuides.safeArea && <span className="safe-area"/>}</div>}
