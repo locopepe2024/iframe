@@ -181,12 +181,17 @@ The three visible regions have separate meanings:
    asset's current selection, or create a revision. An asset with no image has
    no image candidate. The current `@` index exposes image variants only;
    video/audio references require their own capability and input contract.
-2. **Strip between the main display and Prompt:** in static mode this lists
-   image variants in that character's current role container (master,
-   three-view, or headshot). These are asset-bound image variants in today's
-   implementation, not material revisions and not voice assets. Selecting one
-   sets the current image for that panel's role. In the target model, a
-   candidate material is shown separately until confirmed as an asset variant.
+2. **Upload reference area and variant strip:** uploading a reference image is
+   supported, but the uploaded image first enters a separate **Reference
+   inputs** area for the active generation panel. It must not be inserted into
+   the confirmed variant strip or selected as the asset's current variant by
+   the upload action alone. The user can choose **Use in this prompt** (a
+   request-local input) or **Confirm as character variant** (an explicit
+   asset-revision mutation). The **Confirmed variants** strip then contains
+   only confirmed image bindings for the panel role. Generated outputs also
+   enter Reference inputs first; they join Confirmed variants only after
+   confirmation. A confirmed variant can be selected as current for its role
+   separately from choosing the asset cover.
 3. **Main display:** a viewer for the current image variant of the active
    panel's role, or an explicit empty/unavailable state. It is not inherently
    the character's `display` cover. The asset card cover follows its own
@@ -219,6 +224,33 @@ image may be both `display` and `identity_master`. Video candidates must carry
 their input image/material reference and task lineage. The current code's
 `source_image_id=None` on a motion video is a provenance gap, not evidence
 that the video had no source image.
+
+Do not label the confirmed-variant filmstrip `revisions`: each thumbnail
+identifies one confirmed variant binding. The asset revision is the immutable
+snapshot committed when membership, role selection, or cover changes; a
+history view should show those snapshots and their differences. Multiple
+thumbnails may belong to one asset revision, and the same thumbnail may remain
+active across several revisions.
+
+### Required Functional Titles
+
+The workbench must distinguish these areas with visible titles (and matching
+accessible labels/tooltips):
+
+- **Reference inputs** — uploaded or generated candidates available to the
+  current prompt/task; not part of the character until confirmed.
+- **Confirmed variants · Master / Three-view / Portrait** — asset-bound image
+  variants for the named role; selecting one changes that role's current
+  selection.
+- **Asset cover** — the `display` image used by asset cards; independent from
+  the panel role selection.
+- **Motion references** — confirmed or candidate video materials for the
+  motion role; never silently used as the still-image cover.
+
+The upload button title should say **Upload reference input**. The variant
+strip title should say **Confirmed variants** plus its role. Avoid the generic
+labels `Upload`, `Variants`, or `Revisions`, which hide the different persisted
+effects.
 
 ## Scope and Copy Rules
 
