@@ -4914,8 +4914,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             storyboard_aspect_ratio = script.model_settings.storyboard_aspect_ratio
             effective_size = ASPECT_RATIO_TO_SIZE.get(storyboard_aspect_ratio, "1024*576")  # Default to landscape
             
-            # Use model from settings
-            i2i_model = script.model_settings.i2i_model
+            # Series settings own asset and storyboard image generation for episodes.
+            series = self.series_store.get(script.series_id) if script.series_id else None
+            i2i_model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
             logger.info(f"Rendering frame {frame_id} using model {i2i_model} with {len(ref_image_paths)} reference images")
             if len(ref_image_urls) > 0:
                 logger.debug(f"Original reference URLs from frontend: {ref_image_urls}")

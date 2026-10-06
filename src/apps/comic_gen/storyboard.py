@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
 from ...models.image import WanxImageModel
+from ..studio_access import studio_uniart_config
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 
@@ -13,6 +14,16 @@ class StoryboardGenerator:
         self.config = config or {}
         self.model = WanxImageModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', 'output/storyboard')
+
+    def _get_model_for(self, model_name: str):
+        """Use the same provider routing as asset generation."""
+        if model_name and model_name.startswith("uniart/gpt-image-"):
+            from ...models.uniart import UniArtImageModel
+            return UniArtImageModel(studio_uniart_config())
+        if model_name and model_name.startswith("gpt-image"):
+            from ...models.mulerouter import MuleRouterImageModel
+            return MuleRouterImageModel({})
+        return self.model
 
     def generate_storyboard(self, script: Any, characters: List[Character] = None, scenes: List[Scene] = None) -> Any:
         """Generates images for all frames in the storyboard.
@@ -191,7 +202,7 @@ class StoryboardGenerator:
                 # Use I2I if reference images are available
                 # Pass collected asset paths to model
                 logger.info(f"[Storyboard] Calling model.generate with {len(asset_ref_paths)} reference images using model {model_name or 'default'}")
-                self.model.generate(
+                self._get_model_for(model_name).generate(
                     prompt,
                     output_path,
                     ref_image_paths=asset_ref_paths,
@@ -252,5 +263,6 @@ class StoryboardGenerator:
         except Exception as e:
             logger.error(f"Failed to generate frame {frame.id}: {e}")
             frame.status = GenerationStatus.FAILED
+            raise
             
         return frame

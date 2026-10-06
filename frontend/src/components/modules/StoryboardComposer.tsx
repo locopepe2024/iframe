@@ -344,7 +344,7 @@ export default function StoryboardComposer() {
 
         } catch (error) {
             console.error("Render failed:", error);
-            alert("Render failed. See console for details.");
+            alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
         } finally {
             removeRenderingFrame(frame.id);
         }

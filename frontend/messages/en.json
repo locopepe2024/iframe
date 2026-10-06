@@ -1256,6 +1256,7 @@
     "shotNegativePlaceholder": "Replaces the global negative prompt when filled",
     "shotStyleHelper": "Leave empty to inherit global settings; lighting is added to the shot style.",
     "generateFailed": "Failed to generate frame",
+    "renderFailedDetail": "Failed to render storyboard image: {detail}",
     "generatedAssets": "Generated Assets",
     "upload": "Upload",
     "generateAll": "Generate All",
