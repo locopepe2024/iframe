@@ -6,6 +6,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 builder_image="${IFRAME_FRONTEND_BUILDER_IMAGE:-iframe-frontend-builder:director-1a34522a}"
 dependency_volume="${IFRAME_FRONTEND_NODE_MODULES_VOLUME:-iframe-frontend-node-modules}"
+source_revision="$(git -C "$repo_root" rev-parse HEAD)"
+if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]; then
+  echo "Refusing to build from modified tracked files" >&2
+  exit 1
+fi
 
 docker volume create "$dependency_volume" >/dev/null
 docker run --rm \
@@ -13,6 +18,8 @@ docker run --rm \
   -v "$dependency_volume:/workspace/frontend/node_modules" \
   -w /workspace/frontend \
   -e DOCKER_BUILD=true \
+  -e IFRAME_SOURCE_REVISION="$source_revision" \
+  -e IFRAME_SOURCE_DIRTY=false \
   "$builder_image" \
   sh -ceu '
     if cmp -s /app/package-lock.json /workspace/frontend/package-lock.json &&
@@ -28,4 +35,5 @@ docker run --rm \
   '
 
 test -f "$repo_root/frontend/out/build-manifest.json"
+grep -q "$source_revision" "$repo_root/frontend/out/build-manifest.json"
 echo "Frontend static output: $repo_root/frontend/out"

@@ -8,13 +8,15 @@ const root = process.cwd();
 const result = spawnSync('next', ['build'], { stdio: 'inherit', env: process.env });
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-let sourceRevision = 'unknown';
-let sourceDirty = false;
-try {
-  sourceRevision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  sourceDirty = Boolean(execFileSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' }).trim());
-} catch {
-  // Packaged environments may not contain the git metadata; the build remains valid.
+let sourceRevision = process.env.IFRAME_SOURCE_REVISION || 'unknown';
+let sourceDirty = process.env.IFRAME_SOURCE_DIRTY === 'true';
+if (!process.env.IFRAME_SOURCE_REVISION) {
+  try {
+    sourceRevision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    sourceDirty = Boolean(execFileSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' }).trim());
+  } catch {
+    // Packaged environments may not contain git metadata.
+  }
 }
 
 const outputDir = process.env.DOCKER_BUILD === 'true' || process.env.TAURI_BUILD === 'true' || process.env.IFRAME_PREVIEW_BASE_PATH
