@@ -31,7 +31,8 @@ const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"
 //   - Voice  → Cast voice binding + Storyboard DialogueAudioRow (PR-3g-3j)
 //   - Mix    → Assembly Mix phase tab (PR-3k)
 //   - Export → Assembly Export phase tab (PR-3k)
-// Both legacy and unified projects now share the 6-step shape.
+// Both legacy and unified projects keep the same final Assembly boundary;
+// unified additionally separates scene references from Shot Design.
 const LEGACY_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
@@ -41,18 +42,17 @@ const LEGACY_STEPS = [
     { id: "assembly", label: "6. Assembly", icon: Film },
 ];
 
-// PR-3f (r2v-workflow-v3) — Unified workflow: 5 steps including Cast.
-// Per-shot tabMode toggle (t2i_i2v vs direct_r2v) inside Storyboard
-// replaces the project-level i2v_legacy / r2v split. Backend enum
-// value remains "r2v" for backward compat — UI normalizes to "Unified".
-// Legacy `assets` step is dropped — Cast supersedes ConsistencyVault
-// for unified projects (ConsistencyVault stays only for legacy workflow).
+// Unified workflow: keep Cast as the character/voice surface, then expose
+// Assets, Storyboard scene references, and Shot Design as separate decisions.
+// The backend enum remains "r2v" for backward compatibility.
 const UNIFIED_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "cast", label: "3. Cast", icon: Users },
-    { id: "storyboard_r2v", label: "4. Storyboard", icon: Clapperboard },
-    { id: "assembly", label: "5. Assembly", icon: Film },
+    { id: "assets", label: "4. Assets", icon: ImagePlus },
+    { id: "storyboard", label: "5. Storyboard", icon: Clapperboard },
+    { id: "shot_design", label: "6. Shot Design", icon: Video },
+    { id: "assembly", label: "7. Assembly", icon: Film },
 ];
 
 export default function ProjectClient({ id, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
@@ -125,8 +125,8 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                             ? { status: "ready", statusLabel: tp("railCastBound", { n: chars.length, m: bound }) }
                             : { status: "ready", statusLabel: tp("railCast", { n: chars.length }) })
                         : { status: "idle" };
-                case "storyboard_r2v":
                 case "storyboard":
+                case "shot_design":
                     return frameCount > 0 ? { status: "ready", statusLabel: tp("railShots", { n: frameCount }) } : { status: "idle" };
                 case "assembly":
                     return hasMerged
@@ -279,9 +279,9 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                         {activeStep === "script" && <ScriptProcessor />}
                         {activeStep === "art_direction" && <ArtDirection />}
                         {activeStep === "cast" && <Cast />}
-                        {activeStep === "assets" && <ConsistencyVault />}  {/* legacy i2v only */}
+                        {activeStep === "assets" && <ConsistencyVault />}
                         {activeStep === "storyboard" && <StoryboardComposer />}
-                        {activeStep === "storyboard_r2v" && <StoryboardR2V />}
+                        {activeStep === "shot_design" && <StoryboardR2V />}
                         {activeStep === "motion" && <VideoGenerator />}
                         {activeStep === "assembly" && <VideoAssembly />}
                     </div>
