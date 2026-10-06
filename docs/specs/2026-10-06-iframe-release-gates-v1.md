@@ -11,15 +11,25 @@
 ## Release contract
 
 1. Discover the actual service, image, mounts, network, port binding, static root, and current revision from `docker inspect` and the static `build-manifest.json`. Reject unknown or mismatched topology. Do not copy an old release script and substitute commit hashes.
-2. Pin one reviewed Git commit. Confirm the GitHub branch, host checkout, backend image revision label, and frontend build manifest all equal that full commit ID. Build from a clean host checkout; do not include uncommitted local files.
+2. Pin one reviewed Git commit. Confirm the GitHub branch, host checkout, backend image revision label, and frontend build manifest all equal that full commit ID. Perform the GitHub SSH lookup as the checkout owner (`ubuntu` on this host), whose trusted-host configuration is available; root handles only privileged service and data operations. Build from a clean host checkout; do not include uncommitted local files.
 3. Validate persisted project and series stores through the same model-loading path the candidate will use. Record counts and identifiers, and make timestamped copies without changing the originals. A failed load or missing identifier blocks deployment.
-4. Run candidate startup against an isolated writable copy of the complete output tree required by startup, including SQLite files and their sidecars. The candidate must use a separate port and must not access the live writable output mount. Validate health, project/series loading, and the new preview endpoint's OpenAPI presence. Remove the candidate after validation.
+4. Run candidate startup against an isolated writable copy of the durable top-level state required by startup: project, series and global library JSON plus SQLite files and sidecars. Exclude the large `users/` media tree. The candidate must use a separate port and must not access the live writable output mount. Validate health, project/series loading, and the new preview endpoint's OpenAPI presence. Remove the candidate after validation.
 5. Prepare a versioned static release directory and a backend image before changing production. The static directory must contain the exact commit in `build-manifest.json`; the image must carry the same revision label.
-6. Switch the backend with an explicit rollback container and the inspected production env, mounts, network, and port bindings. Keep the old container intact until health and data checks pass. Then switch the static directory atomically and verify the live manifest. On any mismatch, restore both prior components.
+6. Switch the backend with an explicit rollback container and the managed `/srv/lumenx/runtime/iframe-backend.env`, inspected mounts, network, and port bindings. Require the environment file to exist with private permissions; never reconstruct it from an old container. Keep the old container intact until health and data checks pass. Then switch the static directory atomically and verify both its file and the HTTP-served manifest report the new revision. On any mismatch, restore both prior components.
 7. After switch, compare persisted IDs/counts with the preflight snapshot and report GitHub, host checkout, backend image, and live static revisions separately. Do not claim a deployment when only Git or a build has advanced.
 
 ## Not yet proven
 
-- The full set of writable startup paths has not been inventoried. The isolated-copy check must confirm it before a switch.
+- The isolated candidate checks startup and state compatibility. It does not validate access to media under `output/users/`; a production smoke test must cover the new preview route after the switch.
 - The preview endpoint has passed local tests, but has not run against the host's object storage and real asset records.
-- A current deployment script implementing the contract above does not exist yet. The old scripts are examples of past releases, not a safe entry point for this revision.
+- The canonical deployment entry is `scripts/iframe_release.py`. `scripts/deploy_server_release.py` is retired and exits without changing containers or nginx.
+
+## Canonical commands
+
+```bash
+python3 scripts/iframe_release.py inspect
+sudo python3 scripts/iframe_release.py prepare --revision <full-40-character-sha>
+sudo python3 scripts/iframe_release.py deploy --revision <full-40-character-sha>
+```
+
+`prepare` and `deploy` require root because the service account cannot safely snapshot the owner-scoped output store. They require the exact feature branch and exact GitHub branch revision; no implicit HEAD, branch merge, or old deployment script is accepted.
