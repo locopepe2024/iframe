@@ -171,6 +171,38 @@ bindings on the same character; one explicitly selected image is the cover.
 
 ### Character Workbench Selection Rules
 
+The three visible regions have separate meanings:
+
+1. **Prompt `@` references:** request-local input choices. Any authorized
+   character, scene, or prop may supply an image reference when it has an
+   accessible image variant supported by the selected generation mode. Choose
+   the exact variant, not merely the asset name or its card cover. Referencing
+   another asset does not attach its material to this character, change either
+   asset's current selection, or create a revision. An asset with no image has
+   no image candidate. The current `@` index exposes image variants only;
+   video/audio references require their own capability and input contract.
+2. **Strip between the main display and Prompt:** in static mode this lists
+   image variants in that character's current role container (master,
+   three-view, or headshot). These are asset-bound image variants in today's
+   implementation, not material revisions and not voice assets. Selecting one
+   sets the current image for that panel's role. In the target model, a
+   candidate material is shown separately until confirmed as an asset variant.
+3. **Main display:** a viewer for the current image variant of the active
+   panel's role, or an explicit empty/unavailable state. It is not inherently
+   the character's `display` cover. The asset card cover follows its own
+   `display` selection; the main viewer and cover may show different images
+   because they answer different questions. Zooming or locally previewing a
+   strip item changes neither selection nor revision.
+
+In motion mode the panel instead displays a motion/video result and an
+optional uploaded audio input used to drive lip-sync or rhythm. That audio
+input is a task input, not a version of the character's voice identity.
+Current code displays the latest video in the array rather than its stored
+`selected_video_id`, and the upload is held as a local URL; therefore the
+current player cannot be treated as an authoritative video-variant selection.
+The target contract displays the current confirmed video for the named motion
+role and records the exact video and audio material IDs used by a task.
+
 | Choice in the workbench | Changes asset? | Meaning |
 | --- | --- | --- |
 | Check image/video candidate, then confirm | Yes, one asset revision | Accept material into this character with media type and role. |
