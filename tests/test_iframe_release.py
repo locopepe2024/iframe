@@ -19,8 +19,13 @@ def topology():
         "HostConfig": {"PortBindings": {"17177/tcp": [{"HostIp": "127.0.0.1", "HostPort": "17177"}]}},
     }
     frontend = {
-        "Mounts": [{"Destination": "/usr/share/nginx/html", "Source": str(release.STATIC), "Type": "bind"}],
+        "Mounts": [
+            {"Destination": "/usr/share/nginx/html", "Source": str(release.STATIC), "Type": "bind"},
+            {"Destination": "/etc/nginx/conf.d/default.conf", "Source": "/srv/lumenx/repo/docker/nginx.conf", "Type": "bind", "RW": False},
+        ],
         "NetworkSettings": {"Networks": {release.NETWORK: {}}},
+        "HostConfig": {"PortBindings": {"80/tcp": [{"HostIp": "", "HostPort": "3000"}]}},
+        "Config": {"Image": "nginx:alpine"},
     }
     return backend, frontend
 
@@ -96,6 +101,18 @@ def test_store_check_imports_application_from_container_workdir(monkeypatch, tmp
     monkeypatch.setattr(release, "run", lambda *args: calls.append(args) or '{"projects": 2, "series": 1}')
     assert release.store_identity("image:test", tmp_path) == {"projects": 2, "series": 1}
     assert ("-e", "PYTHONPATH=/app") == calls[0][3:5]
+
+
+def test_frontend_recreation_preserves_verified_mounts_and_port(monkeypatch):
+    _, frontend = topology()
+    calls = []
+    monkeypatch.setattr(release, "run", lambda *args: calls.append(args) or "")
+    release.create_frontend("lumenx-frontend", frontend)
+    args = calls[0]
+    assert f"{release.STATIC}:/usr/share/nginx/html:ro" in args
+    assert "/srv/lumenx/repo/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro" in args
+    assert "3000:80" in args
+    assert args[-1] == "nginx:alpine"
 
 
 def test_release_snapshot_excludes_large_media(tmp_path):

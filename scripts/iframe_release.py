@@ -92,6 +92,18 @@ def verify_topology(backend, frontend):
         raise RuntimeError("Unexpected frontend static mount")
     if NETWORK not in frontend["NetworkSettings"]["Networks"]:
         raise RuntimeError("Unexpected frontend network")
+    frontend_runtime(frontend)
+
+
+def frontend_runtime(frontend):
+    mounts = {mount["Destination"]: mount for mount in frontend["Mounts"]}
+    config = mounts.get("/etc/nginx/conf.d/default.conf")
+    if not config or config["Type"] != "bind" or config["RW"]:
+        raise RuntimeError("Unexpected frontend nginx config mount")
+    binding = frontend["HostConfig"]["PortBindings"].get("80/tcp")
+    if binding != [{"HostIp": "", "HostPort": "3000"}]:
+        raise RuntimeError("Unexpected frontend port binding")
+    return config["Source"]
 
 
 def store_identity(image, output):
@@ -191,6 +203,15 @@ def create_backend(name, image, env_path, output, host_port, *, restart=False):
     run(*(args + [image]))
 
 
+def create_frontend(name, frontend):
+    config_source = frontend_runtime(frontend)
+    run("docker", "create", "--name", name, "--network", NETWORK,
+        "--restart", "unless-stopped", "-p", "3000:80",
+        "-v", f"{STATIC}:/usr/share/nginx/html:ro",
+        "-v", f"{config_source}:/etc/nginx/conf.d/default.conf:ro",
+        frontend["Config"]["Image"])
+
+
 def remove_container(name):
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -253,6 +274,7 @@ def prepare(repo, expected):
 def deploy(repo, expected):
     require_release_authority(repo, expected)
     rev, backend = inspect(repo)
+    frontend = docker_inspect(FRONTEND)
     release = RELEASES / rev
     prepared = json.loads((release / "prepared.json").read_text())
     image = prepared["image"]
@@ -261,8 +283,9 @@ def deploy(repo, expected):
     if store_ids(OUTPUT) != prepared["ids"]:
         raise RuntimeError("Project/series identities changed since prepare; prepare again")
     old_name = f"{BACKEND}-before-{rev[:12]}"
+    old_frontend = f"{FRONTEND}-before-{rev[:12]}"
     old_static = RELEASES / f"before-{rev[:12]}"
-    if old_static.exists() or subprocess.run(["docker", "inspect", old_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+    if old_static.exists() or any(subprocess.run(["docker", "inspect", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0 for name in (old_name, old_frontend)):
         raise RuntimeError("Rollback target already exists")
     staged_static = release / "static"
     backup = release / "data-before-switch"
@@ -270,6 +293,7 @@ def deploy(repo, expected):
         raise RuntimeError("Data backup already exists")
     env_path = managed_env()
     backend_renamed = False
+    frontend_renamed = False
     static_switched = False
     try:
         # Stop incoming writes before freezing the old process and copying data.
@@ -291,13 +315,21 @@ def deploy(repo, expected):
         STATIC.rename(old_static)
         static_switched = True
         staged_static.rename(STATIC)
+        # A bind-mounted directory stays attached to its old inode after a
+        # host rename, so the frontend container must be recreated.
+        run("docker", "rename", FRONTEND, old_frontend)
+        frontend_renamed = True
+        create_frontend(FRONTEND, frontend)
         run("docker", "start", FRONTEND)
         wait_http("http://127.0.0.1:3000/build-manifest.json", expected_revision=rev)
         if manifest_revision(STATIC / "build-manifest.json") != rev:
             raise RuntimeError("Live static revision mismatch")
-        (release / "deployment.json").write_text(json.dumps({"revision": rev, "rollback_backend": old_name, "rollback_static": str(old_static)}, indent=2))
+        (release / "deployment.json").write_text(json.dumps({"revision": rev, "rollback_backend": old_name, "rollback_frontend": old_frontend, "rollback_static": str(old_static)}, indent=2))
         print(f"Deployed {rev}; rollback preserved as {old_name} and {old_static}")
     except Exception:
+        if frontend_renamed:
+            remove_container(FRONTEND)
+            run("docker", "rename", old_frontend, FRONTEND)
         if static_switched:
             if STATIC.exists():
                 STATIC.rename(release / "static-failed")
