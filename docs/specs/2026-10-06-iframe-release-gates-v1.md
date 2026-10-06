@@ -15,7 +15,7 @@
 3. Validate persisted project and series stores through the same model-loading path the candidate will use. Record counts and identifiers, and make timestamped copies without changing the originals. A failed load or missing identifier blocks deployment.
 4. Run candidate startup against an isolated writable copy of the complete output tree required by startup, including SQLite files and their sidecars. The candidate must use a separate port and must not access the live writable output mount. Validate health, project/series loading, and the new preview endpoint's OpenAPI presence. Remove the candidate after validation.
 5. Prepare a versioned static release directory and a backend image before changing production. The static directory must contain the exact commit in `build-manifest.json`; the image must carry the same revision label.
-6. Switch the backend with an explicit rollback container and the inspected production env, mounts, network, and port bindings. Keep the old container intact until health and data checks pass. Then switch the static directory atomically and verify the live manifest. On any mismatch, restore both prior components.
+6. Switch the backend with an explicit rollback container and the validated `/srv/lumenx/runtime/iframe-backend.env`, inspected mounts, network, and port bindings. Keep the old container intact until health and data checks pass. Then switch the static directory atomically and verify the live manifest. On any mismatch, restore both prior components.
 7. After switch, compare persisted IDs/counts with the preflight snapshot and report GitHub, host checkout, backend image, and live static revisions separately. Do not claim a deployment when only Git or a build has advanced.
 
 ## Not yet proven
@@ -23,3 +23,7 @@
 - The full set of writable startup paths has not been inventoried. The isolated-copy check must confirm it before a switch.
 - The preview endpoint has passed local tests, but has not run against the host's object storage and real asset records.
 - A current deployment script implementing the contract above does not exist yet. The old scripts are examples of past releases, not a safe entry point for this revision.
+
+## Configuration owner cutover
+
+Production configuration has one source: `/srv/lumenx/runtime/iframe-backend.env`. See [runtime configuration spec](2026-10-06-iframe-runtime-config-owner-v1.md). The maintained entry is `scripts/deploy_server_release.py`; legacy one-off host scripts and direct Compose upgrades are not release entry points. Do not read Config.Env as the source or fall back to repository .env. This configuration change does not prove that the isolated writable candidate, frontend atomic switch, or all other release gates are implemented; those gates remain mandatory before deployment.

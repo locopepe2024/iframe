@@ -1,5 +1,5 @@
-import json, pathlib, subprocess, time, urllib.request, sys, tempfile, os
-from media_signing_config import media_signing_env
+import json, pathlib, subprocess, time, urllib.request, sys
+from production_runtime_config import validate_production_env
 
 
 def run(args):
@@ -11,6 +11,7 @@ repo = next(
 )
 if repo is None:
     raise RuntimeError('iFrame server repository not found')
+envfile = validate_production_env()
 rev = run(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
 assert not run(['git', '-C', str(repo), 'status', '--porcelain']), 'Dirty repository'
 root = repo.parent / 'releases' / rev
@@ -44,10 +45,7 @@ assert len(output_mounts) == 1, 'Expected one bind mount for /app/output'
 output_path = pathlib.Path(output_mounts[0]['Source'])
 # Docker inspection contains credentials. Keep it in memory; never persist it.
 args = ['docker','create','--name',backend_container,'--network',network_name,'--network-alias','backend','--restart','unless-stopped']
-fd, envfile = tempfile.mkstemp(prefix='iframe-env-', dir=root)
-with os.fdopen(fd, 'w') as f:
-    f.write('\n'.join(media_signing_env(old['Config']['Env'], repo.parent / 'secrets/media-signing.key')) + '\n')
-args += ['--env-file', envfile]
+args += ['--env-file', str(envfile)]
 for m in old['Mounts']:
     assert m['Type'] == 'bind'
     args += ['-v', m['Source']+':'+m['Destination']+('' if m['RW'] else ':ro')]
@@ -140,7 +138,7 @@ try:
     run(['docker','exec',frontend_container,'nginx','-s','reload'])
     with urllib.request.urlopen('http://127.0.0.1:3000/openapi.json', timeout=5) as r:
         assert '/agent/sessions/{sid}/messages/{mid}' in json.load(r)['paths']
-    record = {'revision': rev, 'image': run(['docker','inspect',backend_container,'--format','{{.Image}}']), 'rollback_container': backup}
+    record = {'config_source': str(envfile), 'revision': rev, 'image': run(['docker','inspect',backend_container,'--format','{{.Image}}']), 'rollback_container': backup}
     (root/'deployment.json').write_text(json.dumps(record, indent=2)+'\n')
     print(json.dumps(record))
 except Exception as e:
@@ -156,4 +154,3 @@ finally:
         nginx_path.write_text(nginx_original)
         run(['docker', 'exec', frontend_container, 'nginx', '-t'])
         run(['docker', 'exec', frontend_container, 'nginx', '-s', 'reload'])
-    os.unlink(envfile)

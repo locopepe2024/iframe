@@ -1,3 +1,5 @@
+# Production upgrades use scripts/deploy_server_release.py.
+# This topology shares the sole production config source; no repository .env.
 version: "3.8"
 
 services:
@@ -7,9 +9,7 @@ services:
       dockerfile: Dockerfile.backend
     container_name: iframe-backend
     env_file:
-      - .env
-    environment:
-      - NO_PROXY=*.aliyuncs.com,localhost,127.0.0.1
+      - /srv/lumenx/runtime/iframe-backend.env
     volumes:
       - /srv/lumenx/output:/app/output
     ports:
