@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import AssetLibraryPage from './AssetLibraryPage';
 const mocked = vi.hoisted(() => ({
-  getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), error: vi.fn(),
+  getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), error: vi.fn(),
 }));
-vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '' }));
+vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
 vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
@@ -17,6 +17,8 @@ vi.mock('./AssetInspector', () => ({ default: ({ onCoverUpdated }: { onCoverUpda
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('IntersectionObserver', undefined);
+  mocked.authenticatedFetch.mockRejectedValue(new Error('preview unavailable'));
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
 });
 it('deletes a library character without selecting its card', async () => {
@@ -95,6 +97,22 @@ it('patches a cover from the mutation response without reloading the library ind
   expect(cardImage).toHaveAttribute('loading', 'lazy');
   fireEvent.click(screen.getByText('Test character'));
   fireEvent.click(await screen.findByRole('button', { name: 'apply cover selection' }));
-  await waitFor(() => expect(cardImage).toHaveAttribute('src', '/files/assets/candidate.png'));
+  await waitFor(() => expect(screen.getByRole('img', { name: 'Test character' })).toHaveAttribute('src', '/files/assets/candidate.png'));
   expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(1);
+});
+
+it('loads a cover preview using the authenticated asset reference', async () => {
+  const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cover-preview');
+  mocked.authenticatedFetch.mockResolvedValue({ ok: true, blob: async () => new Blob(['webp'], { type: 'image/webp' }) });
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{
+    asset_type: 'scene', asset_id: 'room', name: 'Room', source_scope: 'global',
+    source_container_id: null, selected_variant_id: 'v1', variants: [{ id: 'v1', url: 'assets/room.png' }],
+  }] });
+  try {
+    render(<AssetLibraryPage />);
+    expect(await screen.findByRole('img', { name: 'Room' })).toHaveAttribute('src', 'blob:cover-preview');
+    expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/asset-index/preview?scope=global'), expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  } finally { createObjectURL.mockRestore(); }
 });

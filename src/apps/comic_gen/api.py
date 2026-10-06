@@ -135,6 +135,7 @@ from ..studio_access import (
 from ..user_config import router as user_config_router
 from ..playground.api import _storage_for as playground_storage_for, router as playground_router
 from ...utils.media_thumbnails import create_media_thumbnail
+from ...utils.asset_previews import create_asset_preview
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
 app.include_router(identity_router)
@@ -219,6 +220,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/library"
         or path.startswith("/library/")
         or path == "/asset-index"
+        or path.startswith("/asset-index/")
         or path == "/upload"
         or path == "/config/uniart/models"
         or path.startswith("/tasks/")
@@ -2082,6 +2084,63 @@ def get_project_asset_index(
 def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
     """Return the normalized cross-series/project/global asset view."""
     return private_no_store_signed_response(pipeline.get_asset_library_reference_index(user.owner_profile_id))
+
+
+@app.get("/asset-index/preview")
+def get_asset_library_preview(
+    scope: Literal["global", "series", "project"],
+    asset_type: Literal["character", "scene", "prop"],
+    asset_id: str,
+    variant_id: str,
+    container_id: str = "",
+    user: UserContext = Depends(require_studio_user),
+):
+    """Serve a small cover for a variant visible in this owner's library."""
+    if scope == "global":
+        assets = pipeline._library_list_for_type(asset_type, user.owner_profile_id) if not container_id else []
+    elif scope == "series":
+        series = pipeline.get_series(container_id, user.owner_profile_id)
+        assets = getattr(series, f"{asset_type}s", []) if series else []
+    else:
+        script = pipeline.get_script(container_id, user.owner_profile_id)
+        assets = getattr(script, f"{asset_type}s", []) if script and not script.series_id else []
+    asset = next((item for item in assets if item.id == asset_id), None)
+    variant = next((item for item in pipeline._asset_image_variants(asset, asset_type) if item.id == variant_id), None) if asset else None
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Asset variant not found")
+
+    raw = variant.url
+    uploader = OSSImageUploader()
+    remote = False
+    if is_object_key(raw):
+        source = uploader.sign_url_for_api(raw)
+        remote = True
+    elif raw.startswith(("http://", "https://")):
+        # External URLs are not fetched through the authenticated preview endpoint.
+        raise HTTPException(status_code=422, detail="External image preview is unavailable")
+    else:
+        try:
+            source = pipeline._resolve_stored_reference_value(raw, user.owner_profile_id)
+        except InvalidAssetReference as exc:
+            raise HTTPException(status_code=404, detail="Asset image not found") from exc
+        if is_object_key(source):
+            source = uploader.sign_url_for_api(source)
+            remote = True
+    if not source:
+        raise HTTPException(status_code=503, detail="Asset image storage is unavailable")
+    try:
+        preview = create_asset_preview(
+            source,
+            studio_owner_dir(user.owner_profile_id),
+            f"{scope}:{container_id}:{asset_type}:{asset_id}:{variant_id}:{variant.created_at}:{raw}",
+            remote=remote,
+        )
+    except (OSError, ValueError) as exc:
+        logger.warning("Asset preview failed for %s: %s", variant_id, exc)
+        raise HTTPException(status_code=415, detail="Asset image preview is unavailable") from exc
+    return FileResponse(preview, media_type="image/webp", headers={
+        "Cache-Control": "private, max-age=1800", "X-Content-Type-Options": "nosniff",
+    })
 
 
 @app.get("/projects/{script_id}/assembly-plan")

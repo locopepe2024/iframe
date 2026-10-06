@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, API_URL, authenticatedFetch } from "@/lib/api";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import type { AssetCoverSelectionResult, AssetReferenceIndexEntry } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
@@ -68,6 +68,76 @@ function getImageUrl(asset: Character | Scene | Prop, type: AssetTab): string | 
   const selected = variants.find((variant) => variant.id === a.image_asset?.selected_id);
   const raw = cover?.url || selected?.url || variants[0]?.url || a.image_url;
   return raw ? getAssetUrl(raw) : undefined;
+}
+
+function getCoverVariantId(asset: Character | Scene | Prop, type: AssetTab): string | undefined {
+  if (type === "characters") {
+    const character = asset as Character;
+    return character.cover_variant_id || character.reference_sheet?.selected_image_id || character.reference_sheet?.image_variants?.[0]?.id;
+  }
+  const item = asset as Scene | Prop;
+  return item.cover_variant_id || item.image_asset?.selected_id || item.image_asset?.variants?.[0]?.id;
+}
+
+function AssetCover({ asset, type, source, url }: { asset: Character | Scene | Prop; type: AssetTab; source: AssetSource; url: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState<string>();
+  const variantId = getCoverVariantId(asset, type);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setNearViewport(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!nearViewport) return;
+    if (!variantId) {
+      setDisplayUrl(url);
+      return;
+    }
+    const params = new URLSearchParams({
+      scope: source.kind,
+      container_id: source.kind === "global" ? "" : source.rawId,
+      asset_type: SINGULAR[type],
+      asset_id: asset.id,
+      variant_id: variantId,
+    });
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    setDisplayUrl(undefined);
+    authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Asset preview unavailable");
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setDisplayUrl(objectUrl);
+      })
+      .catch(() => { if (!controller.signal.aborted) setDisplayUrl(url); });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [nearViewport, url, variantId, source.kind, source.rawId, type, asset.id]);
+
+  return <div ref={ref} className="absolute inset-0">
+    {displayUrl && (type === "characters" ? <>
+      <img src={displayUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40" />
+      <img src={displayUrl} alt={asset.name} loading="lazy" decoding="async" className="relative w-full h-full object-contain transition-transform group-hover:scale-105" />
+    </> : <img src={displayUrl} alt={asset.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform group-hover:scale-105" />)}
+  </div>;
 }
 
 function variantCount(asset: Character | Scene | Prop, type: AssetTab): number {
@@ -583,28 +653,7 @@ function SemanticAssetLibrary() {
                         >
                           <div className={`${isChar ? "aspect-[4/3]" : "aspect-square"} bg-surface-inset overflow-hidden relative`}>
                             {url ? (
-                              isChar ? (
-                                // 角色卡横竖混杂 → 磨砂铺底（模糊同图填满留白）+ object-contain 完整显示不裁切
-                                <>
-                                  <img
-                                    src={url}
-                                    alt=""
-                                    aria-hidden="true"
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                                  />
-                                  <img
-                                    src={url}
-                                    alt={asset.name}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="relative w-full h-full object-contain transition-transform group-hover:scale-105"
-                                  />
-                                </>
-                              ) : (
-                                <img src={url} alt={asset.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                              )
+                              <AssetCover asset={asset} type={type} source={src} url={url} />
                             ) : (
                               // 无图：atelier 文字/渐变封面（取代发灰占位图标）— 确定性渐变 + 颗粒 + 首字母
                               <div
