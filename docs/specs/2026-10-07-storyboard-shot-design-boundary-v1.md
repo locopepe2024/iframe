@@ -25,6 +25,10 @@ Storyboard defines the visual reference package for a shot. It may contain:
 
 Storyboard does not create the final video. Uploaded material is shot-scoped by default and is not silently promoted to a global asset. Promotion requires an explicit save-as-asset action.
 
+## Assets: reusable material preparation
+
+Assets owns reusable project, series, and global character, scene, and prop material. It is the source of stable asset identities, selected covers/variants, descriptions, and asset-level references. Storyboard may reference these assets without changing their definitions.
+
 ## Shot Design: shot and video design
 
 Shot Design consumes the Storyboard reference package and defines execution:

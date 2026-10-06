@@ -393,7 +393,7 @@ export default function StoryboardComposer() {
                 stepNumber={4}
                 totalSteps={6}
                 icon={<Layout />}
-                englishName="Storyboard Composer"
+                englishName="Scene Reference Design"
                 title={tStep("storyboardComposerTitle")}
                 subtitle={tStep("storyboardComposerSubtitle")}
                 trailing={(

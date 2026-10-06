@@ -1978,8 +1978,8 @@ export default function StoryboardR2V() {
             <StepPageHeader
                 stepNumber={4}
                 englishName="STORYBOARD R2V"
-                title={tStep("storyboardTitle")}
-                subtitle={tStep("storyboardSubtitle")}
+                title={tStep("shotDesignTitle")}
+                subtitle={tStep("shotDesignSubtitle")}
                 pills={(
                     <>
                         {currentProject?.art_direction?.style_config?.name ? (
