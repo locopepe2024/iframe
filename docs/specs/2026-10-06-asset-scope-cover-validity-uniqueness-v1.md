@@ -37,6 +37,11 @@ cover-selection implementation differs, the migration rules below apply.
   accept one uploaded initial image. The workbench has separate image pools
   and selections for master/full-body, three-view, and headshot, plus motion
   video variants and older `video_assets` records.
+- Code fact: the workbench's `Upload reference` action calls the project asset
+  upload endpoint. That endpoint saves the file, then immediately appends an
+  `ImageVariant` to the existing character, selects it for its image role, and
+  can update the character description. The reference-sheet generation path
+  also appends an output directly to the character's variant list.
 - Code fact: entity extraction preview and refinement return proposed
   Character/Scene/Prop records without changing project assets. Applying a
   reparse writes a new Script with its extracted entity lists, replacing the
@@ -170,6 +175,31 @@ candidates, not several characters. Confirming two candidates creates two
 bindings on the same character; one explicitly selected image is the cover.
 
 ### Character Workbench Selection Rules
+
+The character is already a semantic asset before the workbench opens. An
+upload in this workbench does not create another character asset. The missing
+operation is the **material-to-variant confirmation** on that existing asset.
+Today's upload combines file retention, binding, role selection, and possibly
+description editing in one action; its label only communicates the first step.
+
+The target lifecycle is explicit:
+
+```text
+upload or generate -> material candidate -> use as task reference
+                                    \-> confirm binding to character
+                                          -> choose current role image
+                                          -> optionally choose asset cover
+```
+
+Each arrow is a separate user decision except the initial creation of a
+single-image asset, where the creation form explicitly confirms its initial
+binding and cover together. Uploading for a prompt never mutates the asset's
+description. A candidate remains accessible in the material/task area if the
+workbench closes; it is not represented as a confirmed variant or as an asset
+revision. Confirming an existing candidate creates a new binding and asset
+revision, not a new semantic character. The confirmation action must be
+visible in the character workbench, show the target character and image role,
+and report the committed result.
 
 The three visible regions have separate meanings:
 
