@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video, Upload, Loader2 } from "lucide-react";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Upload, Loader2 } from "lucide-react";
 import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -81,6 +81,7 @@ interface CharacterWorkbenchProps {
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
+    const [isPlanOpen, setIsPlanOpen] = useState(false);
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
@@ -534,23 +535,35 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-surface border border-glass-border rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden shadow-lg"
             >
-                <div className="h-16 border-b border-glass-border flex justify-between items-center px-6 bg-surface">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-bold text-foreground">{asset.name} <span className="text-text-muted font-normal text-sm ml-2">{tc("workbench")}</span></h2>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                <div className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-glass-border bg-surface px-4 md:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <h2 className="min-w-0 truncate text-lg font-bold text-foreground md:text-xl">{asset.name} <span className="text-text-muted font-normal text-sm ml-2">{tc("workbench")}</span></h2>
+                        <div className="hidden shrink-0 items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full lg:flex">
                             <span className="text-xs text-blue-400 font-medium">{tc("tipConsistency")}</span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors">
-                        <X size={24} />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                        {planEntries.length > 0 && (
+                            <button type="button" aria-expanded={isPlanOpen} aria-controls="character-plan-constraints" onClick={() => setIsPlanOpen(open => !open)} className="flex items-center gap-1 rounded border border-glass-border px-2 py-1.5 text-xs text-text-secondary hover:text-foreground" title="拍摄计划约束">
+                                拍摄计划 · {planEntries.length} 条
+                                {isPlanOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors" aria-label="关闭角色工作台">
+                            <X size={24} />
+                        </button>
+                    </div>
+                    {isPlanOpen && planEntries.length > 0 && (
+                        <div id="character-plan-constraints" className="absolute right-3 top-full z-50 max-h-[45vh] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border border-glass-border bg-surface shadow-lg md:right-6">
+                            <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => {
+                                if (activePanel === "three_view") setThreeViewPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                                else if (activePanel === "headshot") setHeadshotPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                                else setFullBodyPrompt(previous => `${previous.trim()}\n${text}`.trim());
+                                setIsPlanOpen(false);
+                            }} />
+                        </div>
+                    )}
                 </div>
-
-                <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => {
-                    if (activePanel === "three_view") setThreeViewPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                    else if (activePanel === "headshot") setHeadshotPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                    else setFullBodyPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                }} />
 
                 {/* Main Content - 3 Columns */}
                 <div className="flex-1 flex overflow-hidden">

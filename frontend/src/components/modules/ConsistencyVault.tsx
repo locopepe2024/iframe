@@ -25,6 +25,7 @@ import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
+import AssetCoverBadges from "./AssetCoverBadges";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -1198,12 +1199,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 </div>
             )}
 
-            {asset.status === "failed" && !isGenerating && (
-                <div className="absolute top-2 left-2 z-30 max-w-[calc(100%-1rem)] rounded-md bg-red-950/80 px-2 py-1 text-[0.625rem] text-red-200" title={asset.generation_error || "Generation failed"}>
-                    Generation failed
-                </div>
-            )}
-            {planCount > 0 && <div className="absolute top-2 left-2 z-30 rounded bg-surface/85 px-2 py-1 text-xs text-foreground">拍摄计划 · {planCount} 条</div>}
+            <AssetCoverBadges planCount={planCount} failed={asset.status === "failed" && !isGenerating} error={asset.generation_error} />
 
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

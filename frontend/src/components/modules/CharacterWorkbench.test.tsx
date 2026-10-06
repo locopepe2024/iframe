@@ -56,6 +56,30 @@ it("keeps image editing out of the character workbench", () => {
     expect(screen.queryByText("title")).not.toBeInTheDocument();
 });
 
+it("keeps shooting-plan constraints collapsed in the workbench header", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-plan", name: "Hero", description: "A hero" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+            planEntries={[{ key: "scene-1", sceneLabel: "电影院", details: ["2018年秋天", "室外"], prompt: "拍摄计划场景：电影院" }]}
+        />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /拍摄计划 · 1 条/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("2018年秋天")).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("2018年秋天 · 室外")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加入提示词" }));
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("2018年秋天 · 室外")).not.toBeInTheDocument();
+});
+
 it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const { container } = render(
