@@ -1,4 +1,5 @@
 from pathlib import Path
+from threading import RLock
 from unittest.mock import MagicMock
 import time
 
@@ -88,7 +89,8 @@ def test_series_asset_generation_uses_only_series_image_model():
                     model_settings=ModelSettings(t2i_model="uniart/gpt-image-2"),
                     created_at=now, updated_at=now)
     series = Series(id="series-1", title="Series", model_settings=ModelSettings(
-        t2i_model="uniart/gpt-image-2.5-flare-discount"), created_at=now, updated_at=now)
+        t2i_model="uniart/gpt-image-2.5-flare-discount",
+        i2i_model="uniart/gpt-image-2.5-flare-discount"), created_at=now, updated_at=now)
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {series.id: series}
@@ -97,3 +99,18 @@ def test_series_asset_generation_uses_only_series_image_model():
     pipeline.effective_director_profile = lambda _script: None
 
     assert pipeline._asset_generation_model(script, "uniart/gpt-image-2") == "uniart/gpt-image-2.5-flare-discount"
+
+    from src.apps.comic_gen.models import Character
+
+    character = Character(id="character-1", name="Character", description="")
+    script.characters = [character]
+    pipeline._save_lock = RLock()
+    pipeline.asset_generation_tasks = {}
+    pipeline.generate_asset(
+        script.id, character.id, "character", generation_type="full_body",
+        reference_image_url="reference.png", image_generation_mode="reference",
+    )
+
+    generation = pipeline.asset_generator.generate_character.call_args.kwargs
+    assert generation["model_name"] == "uniart/gpt-image-2.5-flare-discount"
+    assert generation["i2i_model_name"] == "uniart/gpt-image-2.5-flare-discount"

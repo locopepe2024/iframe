@@ -968,7 +968,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         # Get effective model names from project settings if not overridden
         t2i_model = self._asset_generation_model(script, model_name)
-        i2i_model = script.model_settings.i2i_model
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        i2i_model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
         
         # Get effective size based on asset type (aspect_ratio param overrides model_settings)
         from .assets import ASPECT_RATIO_TO_SIZE
