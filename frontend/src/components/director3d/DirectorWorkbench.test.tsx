@@ -12,6 +12,7 @@ import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid"
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
 import { admittedPanoramaEntries } from "./scene/PanoramaEnvironmentPanel";
+import { ACTION_STRUCTURES, validateActionStructure } from "./action/action-structures";
 import { panoramaAssetApi } from "@/lib/panoramaAssets";
 
 vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
@@ -310,9 +311,9 @@ it("previews an illustrative action before one undoable timeline application", (
   fireEvent.click(screen.getByRole("tab", { name: "动作" }));
   fireEvent.change(screen.getByLabelText("动作描述"), { target: { value: "让 A 做一段鹤形拳" } });
   fireEvent.click(screen.getByRole("button", { name: "查找动作" }));
-  expect(screen.getByText("鹤形拳（示意动作结构）")).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "鹤形拳（示意动作结构）" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "应用到时间线" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "预览动作" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看分段" }));
   expect(screen.getByText(/待应用：5 段动作/)).toBeInTheDocument();
   expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
   fireEvent.click(screen.getByRole("button", { name: "应用到时间线" }));
@@ -324,6 +325,19 @@ it("previews an illustrative action before one undoable timeline application", (
   applied.undo();
   expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
   expect(fetch).not.toHaveBeenCalled();
+});
+it("applies each martial action from the selected white model placement", () => {
+  expect(ACTION_STRUCTURES).toHaveLength(4);
+  for (const action of ACTION_STRUCTURES) expect(validateActionStructure(action)).toEqual([]);
+  for (const action of ACTION_STRUCTURES) {
+    useWorkbenchStore.setState(initialState, true);
+    useWorkbenchStore.getState().setTransformVector(CHARACTER_A_ID, "position", [1.2, 0.6, 0]);
+    useWorkbenchStore.getState().applyActionStructure({ actionId: action.actionId, characterId: CHARACTER_A_ID, opponentId: null, startSeconds: 0, durationSeconds: action.defaultDurationSeconds, includeContact: false });
+    const tracks = useWorkbenchStore.getState().dialogueTimeline.tracks;
+    expect(tracks.map(track => track.trackKind)).toEqual(["character_pose", "character_transform"]);
+    expect(tracks[1].keyframes[0].value).toEqual([1.2, 0.6, 0]);
+    expect(tracks[0].keyframes).toHaveLength(action.phases.length + 1);
+  }
 });
 it("adds an optional contact candidate only for an existing opponent", () => {
   const before = useWorkbenchStore.getState().dialogueTimeline;
