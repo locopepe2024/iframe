@@ -312,6 +312,33 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     ));
 });
 
+it("does not refetch references for an equivalent project snapshot or discard them on refresh failure", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    const index = { assets: [{
+        asset_type: "character", asset_id: "character-1", name: "Hero", source_scope: "series",
+        variants: [{ id: "view-1", url: "/files/view-1.png" }],
+    }] };
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce(index).mockRejectedValueOnce(new Error("temporary failure"));
+    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1" }] };
+    const view = () => <CharacterWorkbench
+        asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]}
+    />;
+    const { rerender } = render(view());
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
+
+    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1" }] };
+    rerender(view());
+    expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1);
+
+    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1", updated_at: 2 }] };
+    rerender(view());
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { editor.editor.commands.setContent("<p>@</p>"); });
+    expect(screen.getByRole("option")).toHaveTextContent("Hero");
+});
+
 it("builds Chinese character defaults without duplicate punctuation", () => {
     const prompt = buildCharacterImagePrompt(
         "full_body",

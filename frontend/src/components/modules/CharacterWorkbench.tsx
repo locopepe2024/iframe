@@ -85,6 +85,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const assetIndexRevision = JSON.stringify(
+        [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
+            Array.isArray(items) ? items.map((item: any) => [
+                item?.id,
+                item?.updated_at,
+                item?.image_asset?.variants?.map((variant: any) => variant.id),
+                item?.reference_sheet?.image_variants?.map((variant: any) => variant.id),
+                item?.full_body_asset?.variants?.map((variant: any) => variant.id),
+                item?.three_view_asset?.variants?.map((variant: any) => variant.id),
+                item?.headshot_asset?.variants?.map((variant: any) => variant.id),
+            ]) : [],
+        ),
+    );
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
     const [promptReferences, setPromptReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
@@ -109,11 +122,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             .then((index) => {
                 if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.some((variant) => variant.id)));
             })
-            .catch(() => {
-                if (active) setAssetIndex([]);
-            });
+            // Keep the last successful index on transient refresh failures. Clearing it
+            // makes @ references disappear and turns a recoverable network blip into a
+            // misleading "no available references" state.
+            .catch(() => undefined);
         return () => { active = false; };
-    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+    }, [currentProject?.id, assetIndexRevision]);
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });

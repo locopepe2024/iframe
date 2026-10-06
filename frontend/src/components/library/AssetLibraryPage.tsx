@@ -125,7 +125,7 @@ function AssetCover({ asset, type, source, url }: { asset: Character | Scene | P
         objectUrl = URL.createObjectURL(blob);
         setDisplayUrl(objectUrl);
       })
-      .catch(() => { if (!controller.signal.aborted) setDisplayUrl(url); });
+      .catch(() => { if (!controller.signal.aborted) setDisplayUrl(undefined); });
     return () => {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);

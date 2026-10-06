@@ -712,6 +712,19 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
     const [assetIndex, setAssetIndex] = useState<any[]>([]);
+    const assetIndexRevision = JSON.stringify(
+        [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
+            Array.isArray(items) ? items.map((item: any) => [
+                item?.id,
+                item?.updated_at,
+                item?.image_asset?.variants?.map((variant: any) => variant.id),
+                item?.reference_sheet?.image_variants?.map((variant: any) => variant.id),
+                item?.full_body_asset?.variants?.map((variant: any) => variant.id),
+                item?.three_view_asset?.variants?.map((variant: any) => variant.id),
+                item?.headshot_asset?.variants?.map((variant: any) => variant.id),
+            ]) : [],
+        ),
+    );
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
 
     // Style Controls
@@ -745,11 +758,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
             .then((index) => {
                 if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.length));
             })
-            .catch(() => {
-                if (active) setAssetIndex([]);
-            });
+            .catch(() => undefined);
         return () => { active = false; };
-    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props, asset.id]);
+    }, [currentProject?.id, assetIndexRevision, asset.id]);
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
         const labels = new Set<string>();
@@ -1091,27 +1102,12 @@ function TabButton({ active, onClick, icon, label, count }: any) {
 function ImageWithRetry({ src, alt, className }: { src: string, alt: string, className?: string }) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(false);
-    const [retryCount, setRetryCount] = useState(0);
 
     // Reset state when src changes
     useEffect(() => {
         setIsLoading(true);
         setError(false);
-        setRetryCount(0);
     }, [src]);
-
-    useEffect(() => {
-        if (error && retryCount < 10) {
-            const timer = setTimeout(() => {
-                setRetryCount(prev => prev + 1);
-                setError(false);
-            }, 1000 * (retryCount + 1)); // Exponential backoff
-            return () => clearTimeout(timer);
-        }
-    }, [error, retryCount]);
-
-    // Construct src with retry param to bypass cache if retrying
-    const displaySrc = retryCount > 0 ? `${src}${src.includes('?') ? '&' : '?'}retry=${retryCount}` : src;
 
     return (
         <div className={`relative ${className}`}>
@@ -1121,18 +1117,18 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
                 </div>
             )}
             <img
-                src={displaySrc}
+                src={src}
                 alt={alt}
                 className={`${className} ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
                 onLoad={() => setIsLoading(false)}
                 onError={() => {
                     setError(true);
-                    setIsLoading(true); // Keep showing loader while retrying
+                    setIsLoading(false);
                 }}
             />
-            {error && retryCount >= 10 && (
+            {error && (
                 <div className="absolute inset-0 flex items-center justify-center bg-red-500/10 backdrop-blur-sm z-20">
-                    <span className="text-xs text-red-400 font-bold">Failed to load</span>
+                    <span className="text-xs text-red-400 font-bold">Failed to load preview</span>
                 </div>
             )}
         </div>
