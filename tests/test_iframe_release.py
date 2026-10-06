@@ -91,6 +91,13 @@ def test_release_checks_served_static_revision(monkeypatch):
     release.wait_http("http://localhost/build-manifest.json", expected_revision="new", attempts=1)
 
 
+def test_store_check_imports_application_from_container_workdir(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(release, "run", lambda *args: calls.append(args) or '{"projects": 2, "series": 1}')
+    assert release.store_identity("image:test", tmp_path) == {"projects": 2, "series": 1}
+    assert ("-e", "PYTHONPATH=/app") == calls[0][3:5]
+
+
 def test_release_snapshot_excludes_large_media(tmp_path):
     (tmp_path / "projects.json").write_text("{}")
     (tmp_path / "series.json").write_text("{}")

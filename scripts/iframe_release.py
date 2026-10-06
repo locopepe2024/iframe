@@ -96,7 +96,7 @@ def verify_topology(backend, frontend):
 
 def store_identity(image, output):
     result = run(
-        "docker", "run", "--rm", "-v", f"{output}:/app/output:ro", image,
+        "docker", "run", "--rm", "-e", "PYTHONPATH=/app", "-v", f"{output}:/app/output:ro", image,
         "python", "scripts/check_project_store_compatibility.py", "/app/output",
     )
     return json.loads(result.splitlines()[-1])
