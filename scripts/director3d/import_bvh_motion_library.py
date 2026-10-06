@@ -20,6 +20,8 @@ def args():
     parser.add_argument("--source-blend", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--motion-id", required=True)
+    parser.add_argument("--retarget-plugin", default="none", choices=("none", "expy_kit", "rokoko_studio_live", "native_blender"))
+    parser.add_argument("--retarget-plugin-version", default=None)
     return parser.parse_args(raw)
 
 
@@ -60,6 +62,7 @@ def main():
         "boneNames": sorted(set(bones)),
         "frameRange": frame_range,
         "fps": fps,
+        "retargetPlugin": {"id": parsed.retarget_plugin, "version": parsed.retarget_plugin_version, "status": "not_run"},
         "retargetStatus": "unmapped",
         "warnings": [] if imported and actions else ["BVH imported without a usable armature action; retargeting is not admitted."],
     }

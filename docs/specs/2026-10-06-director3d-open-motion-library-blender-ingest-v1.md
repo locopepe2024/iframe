@@ -26,6 +26,7 @@
     "actionTags": ["martial_arts"],
     "fps": 24,
     "skeletonProfile": "string",
+    "retargetPlugin": { "id": "none | expy_kit | rokoko_studio_live | native_blender", "version": null },
     "retargetStatus": "unmapped | mapped | validated"
   }]
 }
@@ -45,6 +46,13 @@ catalog entry + local BVH
 ```
 
 The ingest manifest records Blender version, input SHA-256, imported armature names, action names, frame range, FPS, and bone names. It must include warnings when no armature or action is found.
+
+### Retarget plugin policy
+
+- `expy_kit` is the open-source candidate for Mixamo/Rigify-style mapping; its installed version and license must be recorded.
+- `rokoko_studio_live` is a free/proprietary candidate, not an open-source dependency; its use is allowed only on the media host and must be recorded as such.
+- `native_blender` means Blender built-in tools or a project-owned script.
+- The probe writes `retargetPlugin.status: not_run`; choosing a plugin does not change `retargetStatus`.
 
 ## Acceptance
 
