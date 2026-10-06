@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Upload, Loader2 } from "lucide-react";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video } from "lucide-react";
 import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -28,8 +28,6 @@ import { CHARACTER_IDENTITY_FACETS_FALLBACK } from "./cast/characterIdentityFace
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 
-type CharacterEditUploadType = "reference_sheet" | "full_body" | "three_views" | "head_shot";
-
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
     const variants = Array.isArray(unit?.variants)
         ? unit.variants
@@ -51,16 +49,6 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
     const selectedId = referenceSheet?.selected_image_id;
     if (selectedId) return variants.find((variant: any) => variant?.id === selectedId)?.url;
     return variants[0]?.url;
-}
-
-function selectedVariant(unit: any): any | undefined {
-    const variants = Array.isArray(unit?.variants)
-        ? unit.variants
-        : Array.isArray(unit?.image_variants)
-            ? unit.image_variants
-            : [];
-    const selectedId = unit?.selected_id || unit?.selected_image_id;
-    return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
 }
 
 interface CharacterWorkbenchProps {
@@ -159,59 +147,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return candidates;
     }, [assetIndex]);
 
-    // Uploads are immediately usable in the same explicit @ index. The
-    // project asset index is fetched once per workbench session, so merge the
-    // newly created selected variant locally instead of requiring a reload.
-    const retainUploadedVariantInIndex = (updatedProject: any, uploadType: CharacterEditUploadType) => {
-        const updatedAsset = updatedProject?.characters?.find((item: any) => item.id === asset.id);
-        const unit = uploadType === "reference_sheet"
-            ? updatedAsset?.reference_sheet
-            : uploadType === "full_body"
-                ? updatedAsset?.full_body_asset
-                : uploadType === "three_views"
-                ? updatedAsset?.three_view_asset
-                : updatedAsset?.headshot_asset;
-        const variant = selectedVariant(unit);
-        if (!variant?.id) return;
-        setAssetIndex((current) => {
-            const existing = current.find((entry) => entry.asset_type === "character" && entry.asset_id === asset.id);
-            if (!existing) {
-                return [...current, {
-                    asset_type: "character",
-                    asset_id: asset.id,
-                    name: updatedAsset?.name || asset.name,
-                    source_scope: "episode",
-                    source_container_id: currentProject?.id || null,
-                    selected_variant_id: variant.id,
-                    variants: [{ id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
-                }];
-            }
-            if (existing.variants.some((item) => item.id === variant.id)) return current;
-            return current.map((entry) => entry === existing
-                ? {
-                    ...entry,
-                    selected_variant_id: variant.id,
-                    variants: [...entry.variants, { id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
-                }
-                : entry);
-        });
-    };
-
-    const uploadCharacterImage = async (file: File, uploadType: CharacterEditUploadType) => {
-        if (!currentProject) throw new Error("Project is no longer available");
-        const updatedProject = await api.uploadAsset(
-            currentProject.id,
-            "character",
-            asset.id,
-            file,
-            uploadType,
-            asset.description,
-        );
-        updateProject(currentProject.id, updatedProject);
-        retainUploadedVariantInIndex(updatedProject, uploadType);
-        toast.success(tc("uploadRef"));
-    };
-
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
     const [headshotMode, setHeadshotMode] = useState<'static' | 'motion'>('static');
@@ -247,7 +182,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
-    const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
 
     // Local state for prompts
@@ -591,7 +525,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={masterAsset}
                         currentImageUrl={masterImageUrl}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, masterImageUploadType)}
                         onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
@@ -644,7 +577,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
@@ -677,7 +609,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
@@ -834,7 +765,6 @@ export function WorkbenchPanel({
     // Variant Props
     asset,
     currentImageUrl,
-    onUploadImage,
     onSelect,
     onDelete,
     onFavorite,
@@ -880,7 +810,6 @@ export function WorkbenchPanel({
 }: any) {
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
-    const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
         candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
@@ -897,37 +826,6 @@ export function WorkbenchPanel({
                     <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
-
-                    {mode === 'static' && (
-                        <div className="flex items-center gap-1">
-                            {onUploadImage && (
-                                <label
-                                    className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-within:outline focus-within:outline-2 focus-within:outline-primary"
-                                    title={tc("uploadRef")}
-                                >
-                                    <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp"
-                                        className="sr-only"
-                                        aria-label={`${tc("uploadRef")}: ${title}`}
-                                        disabled={isUploadingImage}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onChange={async (event) => {
-                                            event.stopPropagation();
-                                            const file = event.target.files?.[0];
-                                            event.target.value = "";
-                                            if (!file) return;
-                                            setIsUploadingImage(true);
-                                            try { await onUploadImage(file); }
-                                            finally { setIsUploadingImage(false); }
-                                        }}
-                                    />
-                                    {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                    <span className="hidden text-xs sm:inline">{tc("uploadRef")}</span>
-                                </label>
-                            )}
-                        </div>
-                    )}
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
@@ -1141,6 +1039,7 @@ export function WorkbenchPanel({
                         <VariantSelector
                             key={assetScope}
                             asset={asset}
+                            filmstripTitle={`${title} · 图片变体`}
                             currentImageUrl={currentImageUrl}
                             onSelect={onSelect}
                             onDelete={onDelete}

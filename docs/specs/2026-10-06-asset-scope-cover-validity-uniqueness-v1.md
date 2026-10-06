@@ -282,6 +282,14 @@ strip title should say **Confirmed variants** plus its role. Avoid the generic
 labels `Upload`, `Variants`, or `Revisions`, which hide the different persisted
 effects.
 
+Interim UI gate: remove the character workbench's direct image-upload control
+until the separate reference-input area and confirmation mutation exist. Keep
+`@` reference selection and existing image-variant viewing/selection. The
+existing image upload API remains for other callers and legacy records remain
+readable. The workbench must not advertise an upload that silently calls the
+asset-variant mutation. A role-specific image-variant title may describe the
+current strip, but it must not claim asset-revision history is implemented.
+
 ## Scope and Copy Rules
 
 1. A personal/global asset remains personal even when a project picker shows

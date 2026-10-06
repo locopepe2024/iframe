@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 
 interface VariantSelectorProps {
     asset: ImageAsset | undefined;
+    filmstripTitle?: string;
     currentImageUrl?: string; // Fallback/Legacy URL
     onSelect: (variantId: string) => void | Promise<void>;
     onDelete: (variantId: string) => void | Promise<void>;
@@ -25,6 +26,7 @@ const getApiBaseUrl = () => API_URL;
 
 export const VariantSelector: React.FC<VariantSelectorProps> = ({
     asset,
+    filmstripTitle,
     currentImageUrl,
     onSelect,
     onDelete,
@@ -184,6 +186,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     </button>
                 </div>
 
+                {filmstripTitle && <h4 className="text-xs font-medium text-text-secondary">{filmstripTitle}</h4>}
                 {/* Variants Filmstrip */}
                 {variants.length > 0 && (
                     <div className="relative">

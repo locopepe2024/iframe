@@ -24,8 +24,11 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: ({ onGenerate }: { onGenerate?: (batchSize: number) => void }) => (
-        <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
+    VariantSelector: ({ onGenerate, filmstripTitle }: { onGenerate?: (batchSize: number) => void; filmstripTitle?: string }) => (
+        <div>
+            <span>{filmstripTitle}</span>
+            <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
+        </div>
     ),
 }));
 vi.mock("../common/VideoVariantSelector", () => ({
@@ -107,14 +110,12 @@ it("unlocks derived asset prompts when the canonical reference sheet is availabl
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
-it("uploads a new image directly from the static asset panel", async () => {
-    const onUploadImage = vi.fn().mockResolvedValue(undefined);
-    render(<WorkbenchPanel {...baseProps} onUploadImage={onUploadImage} />);
-    const file = new File(["image"], "actor.png", { type: "image/png" });
+it("does not offer direct image upload from the character panel", () => {
+    render(<WorkbenchPanel {...baseProps} />);
 
-    fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
-
-    await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
+    expect(screen.queryByLabelText("uploadRef: Full body")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("uploadRef")).not.toBeInTheDocument();
+    expect(screen.getByText("Full body · 图片变体")).toBeInTheDocument();
 });
 
 it("shows indexed clips when typing @ and emits the stable selected reference", () => {
