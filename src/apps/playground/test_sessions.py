@@ -43,6 +43,44 @@ def test_generation_records_edit_source(tmp_path: Path):
     assert storage.get_session(session.id).draft.parent_generation_id == child.id
 
 
+def test_library_studio_reference_resolves_before_generation_and_keeps_alias(tmp_path: Path, monkeypatch):
+    from src.apps.studio_access import studio_media_url, studio_owner_dir
+    from src.models.reference_binding import bind_reference_names
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-signing-key")
+    image = Path(studio_owner_dir("profile-a")) / "assets" / "suyan.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"image")
+    stored = str(image.relative_to("output"))
+    signed = studio_media_url("profile-a", stored)
+    service = PlaygroundService(make_storage(tmp_path))
+
+    generation = service.create_generation(GenerateRequest(
+        mode=PlaygroundMode.I2I,
+        model_id="uniart/image-model",
+        prompt="@苏砚 持剑站立",
+        input_media=[signed],
+        media_names={signed.split("?", 1)[0]: "苏砚"},
+    ))
+
+    assert generation.input_media == [stored]
+    assert generation.media_names == {stored: "苏砚"}
+    assert bind_reference_names(generation.prompt, [generation.media_names[stored]]) == "@1 持剑站立"
+
+    foreign_image = Path(studio_owner_dir("another-profile")) / "assets" / "foreign.png"
+    foreign_image.parent.mkdir(parents=True)
+    foreign_image.write_bytes(b"other image")
+    foreign_signed = studio_media_url("another-profile", str(foreign_image.relative_to("output")))
+    with pytest.raises(ValueError, match="another owner"):
+        service.create_generation(GenerateRequest(
+            mode=PlaygroundMode.I2I,
+            model_id="uniart/image-model",
+            prompt="unrelated",
+            input_media=[foreign_signed],
+        ))
+
+
 def test_legacy_history_moves_into_history_session(tmp_path: Path):
     history_path = tmp_path / "history.json"
     legacy = PlaygroundGeneration(
