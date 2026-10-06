@@ -58,7 +58,7 @@ exact asset variant when it refers to an asset.
 | Asset | One semantic character, scene, or prop, independent of its images, name, and storage scope. | Stable `(asset_type, asset_id)`; owner and workspace are authorization and placement facts. |
 | Asset variant | A confirmed binding from one asset to one material, with role and provenance. Multiple assets may bind the same material independently. | `(asset_type, asset_id, variant_id)`; the binding ID is never reused. |
 | Video variant | A confirmed binding from an asset to video material, for a named motion/performance role. A video task/result remains separate until confirmed. | The same asset-scoped variant identity rule, with `media_type=video`. |
-| Asset revision | One committed snapshot of variant membership, roles, and current selections for an asset. | `(asset_type, asset_id, revision)`, monotonically increasing. |
+| Asset revision | One committed snapshot of the asset's semantic fields, source binding, variant membership, roles, and current selections. | `(asset_type, asset_id, revision)`, monotonically increasing. |
 | Placement | Membership of an asset in a personal, series, or project workspace. | Stable `placement_id` in the target model; one active placement per asset per workspace. |
 | Global asset | A semantic asset placed in the owner's personal reusable library. `global` describes reach within that owner's workspace, not public visibility. | The same asset identity rules as any other scope. |
 | Series asset | A semantic asset placed in a series and available to its episodes under the series policy. | Asset ID plus series placement. |
@@ -78,11 +78,54 @@ still reject it until a suitable input exists.
 An extraction result has two stages. Before apply, it is an **entity
 proposal**, not a committed asset. After user apply, each accepted
 Character/Scene/Prop becomes a project-scoped semantic asset envelope, even
-when it has no visual material. Its extraction/source revision is provenance,
-not an image variant. Re-extraction must match, update, create, or retire
-semantic assets explicitly; it must not erase confirmed variants merely
-because a new parse returned a fresh entity ID. The current replace-all
-implementation does not yet meet that target rule.
+when it has no visual material. Its extraction and source revisions are
+provenance, not image variants. The current replace-all reparse implementation
+does not yet preserve asset revision history or reconcile identities.
+
+### Re-extraction and History
+
+`source_revision` versions the original text. It increments only when that
+text changes. An **extraction revision** versions one accepted entity snapshot
+and pins its source revision, extraction configuration, and reviewed result.
+Applying a changed extraction advances the extraction revision even when the
+source text is unchanged. A byte-identical accepted result should be
+idempotent; rerunning a preview without applying it changes no revision.
+
+For each matched semantic asset whose definition, source binding, status, or
+confirmed visual selection changes, commit `asset_revision = previous + 1`.
+The new revision is the current version. The previous revision is immutable
+history for comparison, rollback, and exact references held by accepted shots
+or tasks. It is not another active asset and does not supply an implicit
+fallback cover or generation reference to the new revision.
+
+Reparse reconciles the new accepted snapshot with the previous one:
+
+- A matched entity keeps its asset ID. Its new revision contains the newly
+  extracted semantic facts. Prior confirmed image/video bindings remain
+  attached to their old revisions. The new revision may explicitly carry
+  forward a binding only after its compatibility with the new definition is
+  confirmed; until then it has no current visual selection for that role and
+  reports `needs_visual_review`. The old cover remains visible in history,
+  not as the new revision's effective cover.
+- A new entity creates a new asset ID and first revision, possibly without
+  media. An entity absent from the new snapshot gets a new retired revision
+  and leaves the current project Assets view; old versions and references
+  remain readable.
+- Matching uses typed source evidence and reviewed continuity decisions.
+  Name equality alone is not identity. Ambiguous matches require explicit
+  resolution before confirmed media can carry forward.
+
+Rollback selects an old revision's content as the source of a **new** revision
+with a new number. It does not decrement the revision counter or rewrite the
+historical record. A rollback of one asset does not silently roll back source
+text, other entities, Director decisions, or already accepted tasks. The UI
+must show these dependency differences before confirming the rollback.
+
+A style, art-direction, or model-setting change is not by itself an entity
+reparse. It versions the changed configuration and marks dependent visual
+outputs for review. If an actual re-extraction is requested, its accepted
+result follows the revision rules above, even when triggered from a style
+workflow.
 
 `selected_variant_id` in today's generation container is not necessarily the
 asset cover. In the target model, selections are named by role: `display`,
