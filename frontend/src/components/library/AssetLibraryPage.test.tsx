@@ -57,6 +57,8 @@ it('resolves local variant paths before rendering library previews', async () =>
     'src',
     '/files/assets/scenes/night-train.png',
   );
+  expect(screen.getByRole('img', { name: '夜间火车车厢' })).toHaveAttribute('loading', 'lazy');
+  expect(screen.getByRole('img', { name: '夜间火车车厢' })).toHaveAttribute('decoding', 'async');
 });
 
 it('opens recreation media from the library and returns to semantic assets', async () => {
@@ -90,6 +92,7 @@ it('patches a cover from the mutation response without reloading the library ind
   render(<AssetLibraryPage />);
   const cardImage = await screen.findByRole('img', { name: 'Test character' });
   expect(cardImage).toHaveAttribute('src', '/files/assets/cover.png');
+  expect(cardImage).toHaveAttribute('loading', 'lazy');
   fireEvent.click(screen.getByText('Test character'));
   fireEvent.click(await screen.findByRole('button', { name: 'apply cover selection' }));
   await waitFor(() => expect(cardImage).toHaveAttribute('src', '/files/assets/candidate.png'));

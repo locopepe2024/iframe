@@ -590,16 +590,20 @@ function SemanticAssetLibrary() {
                                     src={url}
                                     alt=""
                                     aria-hidden="true"
+                                    loading="lazy"
+                                    decoding="async"
                                     className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
                                   />
                                   <img
                                     src={url}
                                     alt={asset.name}
+                                    loading="lazy"
+                                    decoding="async"
                                     className="relative w-full h-full object-contain transition-transform group-hover:scale-105"
                                   />
                                 </>
                               ) : (
-                                <img src={url} alt={asset.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                <img src={url} alt={asset.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                               )
                             ) : (
                               // 无图：atelier 文字/渐变封面（取代发灰占位图标）— 确定性渐变 + 颗粒 + 首字母
