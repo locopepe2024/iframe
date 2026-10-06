@@ -4366,6 +4366,15 @@ def render_frame(script_id: str, request: RenderFrameRequest):
         )
         return signed_response(updated_script)
     except ValueError as e:
+        logger.warning(
+            "Storyboard render rejected: script_id=%s frame_id=%s detail=%s loaded_script=%s frame_count=%s",
+            script_id,
+            request.frame_id,
+            str(e),
+            script_id in pipeline.scripts,
+            len(getattr(pipeline.scripts.get(script_id), "frames", []) or [])
+            if pipeline.scripts.get(script_id) else 0,
+        )
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.exception(f"Error rendering frame {request.frame_id}: {e}")
