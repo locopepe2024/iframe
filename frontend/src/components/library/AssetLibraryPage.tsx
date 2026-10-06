@@ -136,7 +136,7 @@ function AssetCover({ asset, type, source, url }: { asset: Character | Scene | P
     {displayUrl && (type === "characters" ? <>
       <img src={displayUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40" />
       <img src={displayUrl} alt={asset.name} loading="lazy" decoding="async" className="relative w-full h-full object-contain transition-transform group-hover:scale-105" />
-    </> : <img src={displayUrl} alt={asset.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform group-hover:scale-105" />)}
+    </> : <img src={displayUrl} alt={asset.name} loading="lazy" decoding="async" className="w-full h-full object-contain transition-transform group-hover:scale-105" />)}
   </div>;
 }
 

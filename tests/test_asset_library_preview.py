@@ -41,3 +41,31 @@ def test_asset_library_preview_is_owner_scoped_and_cached(monkeypatch, tmp_path)
             assert client.get("/asset-index/preview", params=params).status_code == 404
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
+
+
+def test_episode_asset_preview_works_inside_series(monkeypatch, tmp_path):
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import require_studio_user
+
+    source = tmp_path / "episode.png"
+    Image.new("RGB", (800, 1200), "blue").save(source)
+    owner = UserContext("owner", "owner", "Owner", "")
+    asset = SimpleNamespace(id="character-1", variants=[SimpleNamespace(id="variant-1", url=str(source), created_at=1)])
+    episode = SimpleNamespace(series_id="series-1", characters=[asset])
+    monkeypatch.setattr(api.pipeline, "get_script", lambda project_id, profile: episode if (project_id, profile) == ("episode-1", "owner") else None)
+    monkeypatch.setattr(api.pipeline, "_asset_image_variants", lambda item, _kind: item.variants)
+    monkeypatch.setattr(api.pipeline, "_resolve_stored_reference_value", lambda value, _owner: value)
+    monkeypatch.setattr(api, "studio_owner_dir", lambda profile: str(tmp_path / profile))
+    monkeypatch.setattr(api, "_resolve_request_context", lambda *_args: (owner, False))
+    api.app.dependency_overrides[require_studio_user] = lambda: owner
+    try:
+        with TestClient(api.app) as client:
+            response = client.get("/asset-index/preview", params={
+                "scope": "project", "container_id": "episode-1", "asset_type": "character",
+                "asset_id": "character-1", "variant_id": "variant-1",
+            })
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/webp"
+    finally:
+        api.app.dependency_overrides.pop(require_studio_user, None)

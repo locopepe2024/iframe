@@ -2103,7 +2103,7 @@ def get_asset_library_preview(
         assets = getattr(series, f"{asset_type}s", []) if series else []
     else:
         script = pipeline.get_script(container_id, user.owner_profile_id)
-        assets = getattr(script, f"{asset_type}s", []) if script and not script.series_id else []
+        assets = getattr(script, f"{asset_type}s", []) if script else []
     asset = next((item for item in assets if item.id == asset_id), None)
     variant = next((item for item in pipeline._asset_image_variants(asset, asset_type) if item.id == variant_id), None) if asset else None
     if variant is None:

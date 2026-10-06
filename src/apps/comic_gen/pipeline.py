@@ -925,6 +925,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
+    def _asset_generation_model(self, script: Script, requested_model: Optional[str]) -> str:
+        if script.series_id:
+            series = self.series_store.get(script.series_id)
+            if not series:
+                raise ValueError("Series not found")
+            return series.model_settings.t2i_model
+        return requested_model or script.model_settings.t2i_model
+
     def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
@@ -959,7 +967,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 reference_provenance_list.append(provenance)
         
         # Get effective model names from project settings if not overridden
-        t2i_model = model_name or script.model_settings.t2i_model
+        t2i_model = self._asset_generation_model(script, model_name)
         i2i_model = script.model_settings.i2i_model
         
         # Get effective size based on asset type (aspect_ratio param overrides model_settings)
@@ -1166,7 +1174,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_image_url = None
 
         normalized_references = self._normalize_asset_references(references or [])
-        effective_reference_model = model_name or script.model_settings.t2i_model
+        effective_reference_model = self._asset_generation_model(script, model_name)
         reference_limit = self._asset_reference_limit(effective_reference_model)
         if len(normalized_references) > reference_limit:
             raise InvalidAssetReference(
@@ -1209,7 +1217,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "apply_style": apply_style,
                     "negative_prompt": negative_prompt,
                     "batch_size": batch_size,
-                    "model_name": model_name,
+                    "model_name": effective_reference_model,
                     "aspect_ratio": aspect_ratio,
                     "use_reference_image": bool(reference_image_url),
                 }
@@ -7852,18 +7860,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
-            old_t2i_model = series.model_settings.t2i_model
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
                         value = ArtDirection(**value)
                     setattr(series, key, value)
-            if series.model_settings.t2i_model != old_t2i_model:
-                for episode_id in series.episode_ids:
-                    episode = self.scripts.get(episode_id)
-                    if episode and episode.series_id == series_id and episode.model_settings.t2i_model == old_t2i_model:
-                        episode.model_settings.t2i_model = series.model_settings.t2i_model
-                self._save_data()
             series.updated_at = time.time()
             self.series_store[series_id] = series
             self._save_series_data_unlocked()

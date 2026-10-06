@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import time
 
 from src.apps.comic_gen.assets import AssetGenerator
-from src.apps.comic_gen.models import Prop, Scene
+from src.apps.comic_gen.models import ModelSettings, Prop, Scene, Series
 
 
 class FakeImageModel:
@@ -77,3 +77,23 @@ def test_pipeline_forwards_scene_prompt_to_generator():
     )
 
     assert pipeline.asset_generator.generate_scene.call_args.kwargs["prompt"] == "中式茶事：茶桌与黄连中药材"
+
+
+def test_series_asset_generation_uses_only_series_image_model():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from src.apps.comic_gen.models import Script
+
+    now = time.time()
+    script = Script(id="episode-1", series_id="series-1", title="Episode", original_text="",
+                    model_settings=ModelSettings(t2i_model="uniart/gpt-image-2"),
+                    created_at=now, updated_at=now)
+    series = Series(id="series-1", title="Series", model_settings=ModelSettings(
+        t2i_model="uniart/gpt-image-2.5-flare-discount"), created_at=now, updated_at=now)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {series.id: series}
+    pipeline.asset_generator = MagicMock()
+    pipeline._save_after_asset_mutation = MagicMock()
+    pipeline.effective_director_profile = lambda _script: None
+
+    assert pipeline._asset_generation_model(script, "uniart/gpt-image-2") == "uniart/gpt-image-2.5-flare-discount"

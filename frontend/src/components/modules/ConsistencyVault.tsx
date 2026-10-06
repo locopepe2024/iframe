@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, crudApi, type AssetLibraryReference } from "@/lib/api";
+import { api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
@@ -26,6 +26,7 @@ import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/dire
 import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
+import { characterImageUrl } from "@/lib/characterImage";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -151,7 +152,7 @@ export default function ConsistencyVault() {
                 applyStyle,
                 negativePrompt,
                 batchSize,
-                resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+                currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
                 undefined,
                 undefined,
                 references,
@@ -1135,6 +1136,49 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
     );
 }
 
+function AssetCardCover({ asset, type, projectId, seriesId }: { asset: any; type: string; projectId: string; seriesId?: string }) {
+    const variants = type === "character"
+        ? [...(asset.reference_sheet?.image_variants || []), ...(asset.full_body_asset?.variants || []),
+            ...(asset.three_view_asset?.variants || []), ...(asset.headshot_asset?.variants || [])]
+        : asset.image_asset?.variants || [];
+    const selectedId = type === "character"
+        ? asset.reference_sheet?.selected_image_id || asset.full_body_asset?.selected_id
+        : asset.image_asset?.selected_id;
+    const variant = variants.find((item: any) => item.id === asset.cover_variant_id)
+        || variants.find((item: any) => item.id === selectedId) || variants[0];
+    const source = asset.source === "series" && seriesId ? "series" : "project";
+    const containerId = source === "series" ? seriesId! : projectId;
+    const [previewUrl, setPreviewUrl] = useState<string>();
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => {
+        if (!variant?.id) return;
+        const params = new URLSearchParams({ scope: source, container_id: containerId,
+            asset_type: type, asset_id: asset.id, variant_id: variant.id });
+        const controller = new AbortController();
+        let objectUrl: string | undefined;
+        setPreviewUrl(undefined);
+        setFailed(false);
+        authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
+            .then(async (response) => {
+                if (!response.ok) throw new Error("Preview unavailable");
+                const blob = await response.blob();
+                if (controller.signal.aborted) return;
+                objectUrl = URL.createObjectURL(blob);
+                setPreviewUrl(objectUrl);
+            })
+            .catch(() => { if (!controller.signal.aborted) setFailed(true); });
+        return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    }, [asset.id, variant?.id, source, containerId, type]);
+
+    const legacyUrl = type === "character" ? characterImageUrl(asset) : asset.image_url;
+    const imageUrl = variant ? previewUrl : getAssetUrl(legacyUrl);
+    if (imageUrl) return <ImageWithRetry src={imageUrl} alt={asset.name} className="w-full h-full object-contain" />;
+    return <div className="w-full h-full flex items-center justify-center bg-glass">
+        {variant && !failed ? <RefreshCw size={24} className="animate-spin text-text-secondary" /> : <ImageIcon className="text-text-muted" size={48} />}
+    </div>;
+}
+
 function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
@@ -1160,9 +1204,6 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
         }
     };
 
-    const imageUrl = (type === 'character' ? (asset.avatar_url || asset.image_url) : asset.image_url);
-    const fullImageUrl = getAssetUrl(imageUrl);
-
     return (
         <motion.div
             layout
@@ -1175,17 +1216,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
             {/* Image Area */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60 z-10" />
 
-            {imageUrl ? (
-                <ImageWithRetry
-                    src={fullImageUrl}
-                    alt={asset.name}
-                    className="w-full h-full object-cover"
-                />
-            ) : (
-                <div className="w-full h-full flex items-center justify-center bg-glass">
-                    <ImageIcon className="text-text-muted" size={48} />
-                </div>
-            )}
+            {currentProject && <AssetCardCover asset={asset} type={type} projectId={currentProject.id} seriesId={currentProject.series_id} />}
 
             {/* Loading Overlay */}
             {isGenerating && (
