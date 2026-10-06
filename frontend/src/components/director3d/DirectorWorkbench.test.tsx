@@ -6,7 +6,7 @@ import DirectorWorkbench from "./DirectorWorkbench";
 import { POSE_PRESETS } from "./pose/pose-presets";
 import { humanoidUrl } from "./data/humanoid";
 import { useWorkbenchStore } from "./state/workbench-store";
-import { DIRECTOR_DRAFT_STORAGE_KEY } from "./state/local-draft";
+import { DIRECTOR_DRAFT_STORAGE_KEY, restoreLocalDirectorDraft, saveLocalDirectorDraft } from "./state/local-draft";
 import { parseLocalAnimationManifest } from "./state/local-animation-import";
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid";
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
@@ -70,6 +70,32 @@ it("stages a camera path without replacing its easing and supports undo", () => 
   expect(useWorkbenchStore.getState().dialogueTimeline.tracks.some(item => item.trackId === track?.trackId)).toBe(false);
 });
 
+it("edits per-camera depth of field with undo, immutable snapshots and draft recovery", () => {
+  const cameraId = useWorkbenchStore.getState().selectedCameraId;
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.enabled).toBe(false);
+  act(() => useWorkbenchStore.getState().setCameraDepthOfField(cameraId, { enabled: true, focusDistanceM: 2.5, aperture: 0.012 }));
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField).toEqual({ enabled: true, focusDistanceM: 2.5, aperture: 0.012 });
+  act(() => useWorkbenchStore.getState().createCameraSnapshot(cameraId, "近焦"));
+  const snapshot = useWorkbenchStore.getState().cameraSnapshots[0];
+  expect(snapshot.depthOfField).toEqual({ enabled: true, focusDistanceM: 2.5, aperture: 0.012 });
+  act(() => useWorkbenchStore.getState().setCameraDepthOfField(cameraId, { focusDistanceM: 8 }));
+  expect(useWorkbenchStore.getState().cameraSnapshots[0]).toEqual(snapshot);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.focusDistanceM).toBe(2.5);
+  saveLocalDirectorDraft();
+  useWorkbenchStore.setState(initialState, true);
+  expect(restoreLocalDirectorDraft()).not.toBeNull();
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.focusDistanceM).toBe(2.5);
+});
+
+it("loads older drafts without depth of field enabled", () => {
+  const cameras = structuredClone(useWorkbenchStore.getState().cameras);
+  delete (cameras["camera-main"] as Partial<typeof cameras["camera-main"]>).depthOfField;
+  window.localStorage.setItem(DIRECTOR_DRAFT_STORAGE_KEY, JSON.stringify({ schemaVersion: "iframe.director3d.browser-draft.v1", savedAt: new Date().toISOString(), state: { cameras } }));
+  expect(restoreLocalDirectorDraft()).not.toBeNull();
+  expect(useWorkbenchStore.getState().cameras["camera-main"].depthOfField).toEqual({ enabled: false, focusDistanceM: 5, aperture: 0.005 });
+});
+
 beforeEach(() => {
   useWorkbenchStore.setState(initialState, true);
   vi.stubGlobal("fetch", vi.fn());
@@ -118,6 +144,10 @@ it("uses the compact director checkbox contract for authoring toggles", () => {
   fireEvent.click(screen.getByRole("tab", { name: "路径事件" }));
   expect(screen.getByRole("checkbox", { name: "写入导出标记" })).toHaveClass("director-checkbox");
   fireEvent.click(screen.getByRole("tab", { name: "镜头视图" }));
+  const depthOfField = screen.getByRole("checkbox", { name: "启用镜头景深" });
+  expect(depthOfField).not.toBeChecked();
+  fireEvent.click(depthOfField);
+  expect(useWorkbenchStore.getState().cameras["camera-main"].depthOfField.enabled).toBe(true);
   for (const name of [
     "女性运动服白模 A",
     "女性运动服白模 B",

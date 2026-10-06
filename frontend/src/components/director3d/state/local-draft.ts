@@ -1,4 +1,4 @@
-import { useWorkbenchStore, type WorkbenchState } from "./workbench-store";
+import { createInitialCameras, useWorkbenchStore, type WorkbenchState } from "./workbench-store";
 import { createIdleFrameManifestImportState } from "./frame-manifest-import";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
 import { createIdleMotionTrackReviewState } from "./motion-track-review";
@@ -82,6 +82,10 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
     if (envelope.schemaVersion !== "iframe.director3d.browser-draft.v1" || !envelope.state || typeof envelope.savedAt !== "string") return null;
     useWorkbenchStore.setState({
       ...envelope.state,
+      cameras: Object.fromEntries(Object.entries(envelope.state.cameras ?? createInitialCameras()).map(([id, camera]) => [id, {
+        ...camera,
+        depthOfField: camera.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 },
+      }])),
       frameManifestImport: envelope.state.frameManifestImport ?? createIdleFrameManifestImportState(),
       motionTrackReview: envelope.state.motionTrackReview ?? createIdleMotionTrackReviewState(),
       motionTrackReviewUndo: [],

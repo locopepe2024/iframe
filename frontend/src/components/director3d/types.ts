@@ -316,6 +316,7 @@ export interface CameraNoiseTrackState {
 export type CameraCompositionPresetId = "close_up" | "medium" | "medium_wide" | "wide" | "full_body" | "two_shot";
 export type CameraAspectRatio = "auto" | "21:9" | "16:9" | "4:3" | "1:1" | "3:4" | "9:16";
 export interface CameraTargetState { targetType: "character" | "scene_object" | "world_point"; targetId: string; }
+export interface CameraDepthOfFieldState { enabled: boolean; focusDistanceM: number; aperture: number; }
 
 export interface CameraCompositionState {
   cameraId: string;
@@ -323,6 +324,7 @@ export interface CameraCompositionState {
   transform: ObjectTransform;
   fovDeg: number;
   focalLengthMm: number;
+  depthOfField: CameraDepthOfFieldState;
   zoom: number;
   aspectRatio: CameraAspectRatio;
   compositionPresetId: CameraCompositionPresetId;
@@ -344,6 +346,7 @@ export interface CameraSnapshotState {
   transform: ObjectTransform;
   fovDeg: number;
   focalLengthMm: number;
+  depthOfField: CameraDepthOfFieldState;
   zoom: number;
   aspectRatio: CameraAspectRatio;
   compositionPresetId: CameraCompositionPresetId;

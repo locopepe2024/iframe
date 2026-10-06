@@ -314,7 +314,7 @@ export function createInitialDialogueTimeline(): DialogueTimelineState {
 }
 
 export function createInitialCameras(): Record<string, CameraCompositionState> {
-  return { "camera-main": { cameraId: "camera-main", label: "主机位", transform: { position: [0, -7, 2.5], rotationDeg: [72, 0, 0], scale: [1, 1, 1], groundSnap: false }, fovDeg: 50, focalLengthMm: 38.6, zoom: 1, aspectRatio: "16:9", compositionPresetId: "medium_wide", subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID], lookAt: { targetType: "character", targetId: CHARACTER_A_ID }, follow: null, framingGuides: { ruleOfThirds: true, centerCross: false, safeArea: true }, snapshotIds: [], visible: true, locked: false } };
+  return { "camera-main": { cameraId: "camera-main", label: "主机位", transform: { position: [0, -7, 2.5], rotationDeg: [72, 0, 0], scale: [1, 1, 1], groundSnap: false }, fovDeg: 50, focalLengthMm: 38.6, depthOfField: { enabled: false, focusDistanceM: 5, aperture: 0.005 }, zoom: 1, aspectRatio: "16:9", compositionPresetId: "medium_wide", subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID], lookAt: { targetType: "character", targetId: CHARACTER_A_ID }, follow: null, framingGuides: { ruleOfThirds: true, centerCross: false, safeArea: true }, snapshotIds: [], visible: true, locked: false } };
 }
 
 function snapshotChecksum(snapshot: Omit<CameraSnapshotState, "stateChecksum">): string {
@@ -873,6 +873,7 @@ export interface WorkbenchState {
   setCameraTransformAxis: (cameraId: string, field: "position" | "rotationDeg", axis: number, value: number) => void;
   setCameraFov: (cameraId: string, fovDeg: number) => void;
   setCameraZoom: (cameraId: string, zoom: number) => void;
+  setCameraDepthOfField: (cameraId: string, patch: Partial<CameraCompositionState["depthOfField"]>) => void;
   setCameraLookAt: (cameraId: string, target: CameraTargetState | null) => void;
   setCameraFollow: (cameraId: string, target: CameraTargetState | null) => void;
   applyCameraPathPreset: (cameraId: string, presetId: CameraPathPresetId, mode: CameraPathApplyMode, segmentDurationSeconds: number, easing: ActorPathEasing) => void;
@@ -1908,7 +1909,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const camera = state.cameras[cameraId]; if (!camera) return state;
     const order = state.cameraSnapshots.filter((snapshot) => snapshot.cameraId === cameraId).length;
     const snapshotId = `snapshot-${cameraId.replace(/^camera-/, "")}-${String(order + 1).padStart(4, "0")}`;
-    const base: Omit<CameraSnapshotState, "stateChecksum"> = { snapshotId, cameraId, label: requestedLabel?.trim().slice(0, 80) || `${camera.label} 快照 ${order + 1}`, order, frame: state.playheadFrame, transform: structuredClone(camera.transform), fovDeg: camera.fovDeg, focalLengthMm: camera.focalLengthMm, zoom: camera.zoom, aspectRatio: camera.aspectRatio, compositionPresetId: camera.compositionPresetId, subjectTargetIds: [...camera.subjectTargetIds], lookAt: camera.lookAt ? { ...camera.lookAt } : null, follow: camera.follow ? { ...camera.follow } : null, actorMappingIds: camera.subjectTargetIds.flatMap((targetId) => state.characters[targetId]?.actorMappingId ? [state.characters[targetId].actorMappingId] : []), framingGuides: { ...camera.framingGuides }, dimensionsPx: snapshotDimensions(camera.aspectRatio) };
+    const base: Omit<CameraSnapshotState, "stateChecksum"> = { snapshotId, cameraId, label: requestedLabel?.trim().slice(0, 80) || `${camera.label} 快照 ${order + 1}`, order, frame: state.playheadFrame, transform: structuredClone(camera.transform), fovDeg: camera.fovDeg, focalLengthMm: camera.focalLengthMm, depthOfField: { ...camera.depthOfField }, zoom: camera.zoom, aspectRatio: camera.aspectRatio, compositionPresetId: camera.compositionPresetId, subjectTargetIds: [...camera.subjectTargetIds], lookAt: camera.lookAt ? { ...camera.lookAt } : null, follow: camera.follow ? { ...camera.follow } : null, actorMappingIds: camera.subjectTargetIds.flatMap((targetId) => state.characters[targetId]?.actorMappingId ? [state.characters[targetId].actorMappingId] : []), framingGuides: { ...camera.framingGuides }, dimensionsPx: snapshotDimensions(camera.aspectRatio) };
     const snapshot: CameraSnapshotState = { ...base, stateChecksum: snapshotChecksum(base) };
     return { cameraSnapshots: [...state.cameraSnapshots, snapshot], cameras: { ...state.cameras, [cameraId]: { ...camera, snapshotIds: [...camera.snapshotIds, snapshotId] } }, unsavedChanges: true, commandHistory: [...state.commandHistory, "camera.snapshot.create"].slice(-100) };
   }),
@@ -1936,6 +1937,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       transform: sourceCamera ? structuredClone(sourceCamera.transform) : { position: [...navigation.positionM], rotationDeg: cameraRotationFromNavigation(navigation), scale: [1, 1, 1], groundSnap: false },
       fovDeg,
       focalLengthMm: sourceCamera?.focalLengthMm ?? Number((18 / Math.tan(fovDeg * Math.PI / 360)).toFixed(2)),
+      depthOfField: { ...(sourceCamera?.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 }) },
       zoom: sourceCamera?.zoom ?? navigation.zoom,
       aspectRatio: sourceCamera?.aspectRatio ?? "16:9",
       compositionPresetId: sourceCamera?.compositionPresetId ?? "medium_wide",
@@ -1985,6 +1987,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const camera = state.cameras[cameraId]; if (!camera || camera.locked) return state;
     const zoom = finiteBounded(value, 0.1, 10); if (zoom === camera.zoom) return state;
     return mutateScene(state, "camera.zoom.set", { cameras: { ...state.cameras, [cameraId]: { ...camera, zoom } } });
+  }),
+  setCameraDepthOfField: (cameraId, patch) => set((state) => {
+    const camera = state.cameras[cameraId]; if (!camera || camera.locked) return state;
+    const current = camera.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 };
+    const depthOfField = {
+      enabled: typeof patch.enabled === "boolean" ? patch.enabled : current.enabled,
+      focusDistanceM: patch.focusDistanceM === undefined ? current.focusDistanceM : finiteBounded(patch.focusDistanceM, 0.1, 100),
+      aperture: patch.aperture === undefined ? current.aperture : finiteBounded(patch.aperture, 0.001, 0.02),
+    };
+    if (JSON.stringify(depthOfField) === JSON.stringify(current)) return state;
+    return mutateScene(state, "camera.depth_of_field.set", { cameras: { ...state.cameras, [cameraId]: { ...camera, depthOfField } } });
   }),
   setCameraLookAt: (cameraId, lookAt) => set((state) => {
     const camera = state.cameras[cameraId]; if (!camera || camera.locked || !cameraTargetExists(state, lookAt)) return state;
