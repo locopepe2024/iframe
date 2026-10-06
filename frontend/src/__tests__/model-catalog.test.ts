@@ -44,6 +44,7 @@ describe('model catalog selectors', () => {
             i2v_model: 'uniart/seedance-2.5-vip',
             image_model: 'uniart/gpt-image-2',
         });
+        expect(GLOBAL_IMAGE_MODELS.map((model) => model.id)).toContain('uniart/gpt-image-2.5-flare-discount');
 
         // The 't2i' and 'i2i' selection_group surfaces moved to 'image'
         // in Phase 2. The resolver now falls through to visible image-group
@@ -72,6 +73,7 @@ describe('model catalog fallbacks', () => {
         expect(resolveAssetGenerationModel('wan2.7-image-pro')).toBe('uniart/gpt-image-2');
         expect(resolveAssetGenerationModel(undefined)).toBe('uniart/gpt-image-2');
         expect(resolveAssetGenerationModel('uniart/gpt-image-2')).toBe('uniart/gpt-image-2');
+        expect(resolveAssetGenerationModel('uniart/gpt-image-2.5-flare-discount')).toBe('uniart/gpt-image-2.5-flare-discount');
     });
 
     it('falls back unknown and legacy-surface ids to catalog defaults', () => {

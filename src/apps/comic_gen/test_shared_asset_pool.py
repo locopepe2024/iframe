@@ -339,3 +339,40 @@ def test_get_project_uses_current_series_generation_settings():
     finally:
         pipeline.get_script = previous_get_script
         pipeline.get_series = previous_get_series
+
+
+def test_batch_generation_uses_current_series_image_model():
+    pipeline = _bare_pipeline()
+    episode = _script(sid="batch-episode", series_id="batch-series", characters=[_char("person")])
+    episode.model_settings.t2i_model = "uniart/gpt-image-2"
+    series = _series(sid="batch-series")
+    series.model_settings.t2i_model = "uniart/gpt-image-2.5-flare-discount"
+    pipeline.scripts = {episode.id: episode}
+    pipeline.series_store = {series.id: series}
+    calls = []
+    pipeline.generate_asset = lambda *args, **kwargs: calls.append((args, kwargs))
+    pipeline._save_data = lambda: None
+
+    pipeline.generate_assets(episode.id)
+
+    assert calls[0][1]["model_name"] == "uniart/gpt-image-2.5-flare-discount"
+
+
+def test_series_model_update_preserves_episode_override():
+    pipeline = _bare_pipeline()
+    series = _series(sid="model-series")
+    series.episode_ids = ["inherited", "overridden"]
+    inherited = _script(sid="inherited", series_id=series.id)
+    overridden = _script(sid="overridden", series_id=series.id)
+    inherited.model_settings.t2i_model = series.model_settings.t2i_model
+    overridden.model_settings.t2i_model = "uniart/gpt-image-2.5-sunburst-discount"
+    pipeline.series_store = {series.id: series}
+    pipeline.scripts = {inherited.id: inherited, overridden.id: overridden}
+    pipeline._save_data = lambda: None
+    pipeline._save_series_data_unlocked = lambda: None
+
+    new_settings = series.model_settings.model_copy(update={"t2i_model": "uniart/gpt-image-2.5-flare-discount"})
+    pipeline.update_series(series.id, {"model_settings": new_settings})
+
+    assert inherited.model_settings.t2i_model == "uniart/gpt-image-2.5-flare-discount"
+    assert overridden.model_settings.t2i_model == "uniart/gpt-image-2.5-sunburst-discount"

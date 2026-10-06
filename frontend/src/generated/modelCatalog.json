@@ -19,6 +19,7 @@
       "seedance-2.0-r2v": "seedance/seedance-2.0-video#r2v",
       "seedance-2.0-t2v": "seedance/seedance-2.0-video#t2v",
       "uniart/gpt-image-2": "uniart/uniart/gpt-image-2#image",
+      "uniart/gpt-image-2.5-flare-discount": "uniart/uniart/gpt-image-2.5-flare-discount#image",
       "uniart/minimax-h3-vip": "uniart/uniart/minimax-h3-vip#i2v",
       "uniart/seedance-2.0-vip": "uniart/uniart/seedance-2.0-vip#i2v",
       "uniart/seedance-2.5-special": "uniart/uniart/seedance-2.5-special#i2v",
@@ -356,6 +357,7 @@
       "family": "uniart",
       "models": [
         "uniart/gpt-image-2",
+        "uniart/gpt-image-2.5-flare-discount",
         "uniart/minimax-h3-vip",
         "uniart/seedance-2.0-vip",
         "uniart/seedance-2.5-special",
@@ -1251,6 +1253,69 @@
       "runtime": {
         "uniart": {
           "api_model_id": "gpt-image-2",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "t2v",
+        "i2v",
+        "r2v",
+        "f2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      }
+    },
+    "uniart/uniart/gpt-image-2.5-flare-discount": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2.5 Flare Discount through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2.5 Flare Discount",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2.5-flare-discount"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "family": "uniart",
+      "id": "uniart/uniart/gpt-image-2.5-flare-discount",
+      "legacy_model_ids": [
+        "uniart/gpt-image-2.5-flare-discount"
+      ],
+      "modes": [
+        "uniart/uniart/gpt-image-2.5-flare-discount#image"
+      ],
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "gpt-image-2.5-flare-discount",
           "gateway": "uniart"
         }
       },
@@ -3982,6 +4047,78 @@
         ],
         "order": 20,
         "recommended": true,
+        "selection_group": "image",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/gpt-image-2.5-flare-discount": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i",
+        "i2i"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2.5 Flare Discount through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2.5 Flare Discount",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2.5-flare-discount"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": null,
+      "family": "uniart",
+      "id": "uniart/gpt-image-2.5-flare-discount",
+      "inputs": {},
+      "params": {
+        "size": {
+          "default": "1k",
+          "options": [
+            "1k",
+            "2k",
+            "4k"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 25,
+        "recommended": false,
         "selection_group": "image",
         "visible_in": [
           "project_settings",
@@ -7610,6 +7747,87 @@
         ],
         "order": 20,
         "recommended": true,
+        "selection_group": "image",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "uniart/uniart/gpt-image-2.5-flare-discount#image": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i",
+        "i2i"
+      ],
+      "credential_sources": {
+        "uniart": [
+          "UNIART_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "default_backend": "uniart",
+      "description": "GPT Image 2.5 Flare Discount through the UniArt gateway",
+      "display_name": "UniArt GPT Image 2.5 Flare Discount",
+      "docs": {
+        "context_hub_doc_ids": [
+          "uniart/gpt-image-2.5-flare-discount"
+        ],
+        "official_snapshot_ids": [
+          "uniart/models/2026-09-07"
+        ]
+      },
+      "duration": null,
+      "family": "uniart",
+      "id": "uniart/uniart/gpt-image-2.5-flare-discount#image",
+      "inputs": {},
+      "legacy_model_id": "uniart/gpt-image-2.5-flare-discount",
+      "mode": "image",
+      "model_line_id": "uniart/uniart/gpt-image-2.5-flare-discount",
+      "params": {
+        "size": {
+          "default": "1k",
+          "options": [
+            "1k",
+            "2k",
+            "4k"
+          ]
+        }
+      },
+      "provider": "uniart",
+      "release_stage": "stable",
+      "routing_prefixes": [
+        "uniart/gpt-image-",
+        "uniart/seedance-"
+      ],
+      "runtime": {
+        "uniart": {
+          "api_model_id": "gpt-image-2.5-flare-discount",
+          "gateway": "uniart"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "uniart"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "uniart": "uniart_audio_url"
+        },
+        "image_input_mode": {
+          "uniart": "uniart_base64_image"
+        },
+        "reference_video_input_mode": {
+          "uniart": "uniart_video_url"
+        }
+      },
+      "ui": {
+        "badges": [
+          "UniArt"
+        ],
+        "order": 25,
+        "recommended": false,
         "selection_group": "image",
         "visible_in": [
           "project_settings",

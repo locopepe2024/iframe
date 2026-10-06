@@ -904,6 +904,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+
+        series = self.get_series(script.series_id) if script.series_id else None
+        model_name = series.model_settings.t2i_model if series else script.model_settings.t2i_model
             
         logger.info(f"Generating assets for script {script.id}")
         
@@ -911,13 +914,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         sorted_chars = sorted(script.characters, key=lambda c: 0 if not c.base_character_id else 1)
 
         for char in sorted_chars:
-            self.generate_asset(script_id, char.id, "character")
+            self.generate_asset(script_id, char.id, "character", model_name=model_name)
             
         for scene in script.scenes:
-            self.generate_asset(script_id, scene.id, "scene")
+            self.generate_asset(script_id, scene.id, "scene", model_name=model_name)
             
         for prop in script.props:
-            self.generate_asset(script_id, prop.id, "prop")
+            self.generate_asset(script_id, prop.id, "prop", model_name=model_name)
             
         self._save_data()
         return script
@@ -7849,11 +7852,18 @@ class ComicGenPipeline(StudioOwnerMixin):
             series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
+            old_t2i_model = series.model_settings.t2i_model
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
                         value = ArtDirection(**value)
                     setattr(series, key, value)
+            if series.model_settings.t2i_model != old_t2i_model:
+                for episode_id in series.episode_ids:
+                    episode = self.scripts.get(episode_id)
+                    if episode and episode.series_id == series_id and episode.model_settings.t2i_model == old_t2i_model:
+                        episode.model_settings.t2i_model = series.model_settings.t2i_model
+                self._save_data()
             series.updated_at = time.time()
             self.series_store[series_id] = series
             self._save_series_data_unlocked()
