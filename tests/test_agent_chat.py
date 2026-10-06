@@ -192,6 +192,52 @@ def test_audio_and_text_payloads(setup, tmp_path, monkeypatch):
     assert '分镜：小狗跳舞' in agent.reference_content(setup, 'reference')['text']
 
 
+def test_agent_accepts_owned_library_path_and_validates_signed_studio_reference(setup, tmp_path, monkeypatch):
+    from src.apps.studio_access import studio_media_url, studio_owner_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-signing-key')
+    image = agent.os.path.join(studio_owner_dir(setup.owner_profile_id), 'assets', 'character.png')
+    agent.os.makedirs(agent.os.path.dirname(image), exist_ok=True)
+    with open(image, 'wb') as file:
+        file.write(b'image')
+    stored = agent.os.path.relpath(image, 'output')
+
+    assert agent.reference_path(setup, stored) == agent.os.path.realpath(image)
+    signed = studio_media_url(setup.owner_profile_id, stored)
+    assert agent.reference_path(setup, signed) == agent.os.path.realpath(image)
+    with pytest.raises(HTTPException, match='参考素材不存在'):
+        agent.reference_path(setup, signed.replace('signature=', 'signature=wrong'))
+
+    foreign = agent.os.path.join(studio_owner_dir('foreign-profile'), 'assets', 'other.png')
+    agent.os.makedirs(agent.os.path.dirname(foreign), exist_ok=True)
+    with open(foreign, 'wb') as file:
+        file.write(b'other image')
+    with pytest.raises(HTTPException, match='参考素材不存在'):
+        agent.reference_path(setup, agent.os.path.relpath(foreign, 'output'))
+
+
+def test_agent_resolves_only_owned_library_object_keys(setup, monkeypatch):
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api as studio_api
+    from src.models import uniart
+
+    owned = 'lumenx/assets/owned-character.png'
+    foreign = 'lumenx/assets/foreign-character.png'
+    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(url=owned)])])
+    lookup = Mock(return_value=index)
+    monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index', lookup)
+    sign = Mock(return_value='https://media.example/owned-character.png?fresh=1')
+    monkeypatch.setattr(uniart, '_image_reference_url', sign)
+
+    assert agent.reference_content(setup, owned)['image_url']['url'] == sign.return_value
+    assert agent.reference_content(setup, 'https://old.example/' + owned + '?expired=1')['image_url']['url'] == sign.return_value
+    assert lookup.call_args.args == (setup.owner_profile_id,)
+    assert sign.call_args.args == (owned,)
+    with pytest.raises(HTTPException):
+        agent.reference_content(setup, foreign)
+
+
 def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkeypatch):
     from src.models import uniart
     files = []

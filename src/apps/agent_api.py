@@ -213,7 +213,7 @@ def playground_conversation(sid: str, ctx: UserContext = Depends(require_user_co
 
 def reference_path(ctx, reference):
     from .playground.api import _storage_for
-    from .studio_access import studio_owner_key
+    from .studio_access import resolve_studio_reference, studio_owner_key
     parsed = urlsplit(reference)
     storage = _storage_for(ctx)
     if parsed.scheme:
@@ -222,11 +222,19 @@ def reference_path(ctx, reference):
         path = storage.resolve_media_reference(reference)
         root = os.path.realpath(os.path.dirname(storage.output_dir))
     elif parsed.path.startswith("/studio/media/"):
-        pieces = unquote(parsed.path).split("/", 4)
-        if len(pieces) != 5 or pieces[3] != studio_owner_key(ctx.owner_profile_id):
-            raise HTTPException(404, "参考素材不存在")
-        root = os.path.realpath(os.path.join("output", "users", pieces[3], "studio"))
-        path = os.path.join(root, pieces[4])
+        try:
+            stored = resolve_studio_reference(reference, ctx.owner_profile_id)
+        except ValueError as error:
+            raise HTTPException(404, "参考素材不存在") from error
+        root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id), "studio"))
+        path = os.path.join("output", stored)
+    elif not parsed.scheme and parsed.path.startswith("users/"):
+        try:
+            stored = resolve_studio_reference(reference, ctx.owner_profile_id)
+        except ValueError as error:
+            raise HTTPException(404, "参考素材不存在") from error
+        root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id), "studio"))
+        path = os.path.join("output", stored)
     else:
         raise HTTPException(422, "参考图片地址无效，请重新选择素材")
     path = os.path.realpath(path)
@@ -240,7 +248,28 @@ def image_reference(ctx, reference):
     return _image_reference_url(reference_path(ctx, reference))
 
 
+def owned_library_image_key(ctx, reference):
+    """Resolve a selected library image through the owner's asset index."""
+    from .comic_gen.api import pipeline
+    from ..utils.oss_utils import is_object_key
+
+    parsed = urlsplit(reference)
+    candidate = unquote(parsed.path).lstrip("/") if parsed.scheme in ("http", "https") else reference
+    if not is_object_key(candidate):
+        return None
+    index = pipeline.get_asset_library_reference_index(ctx.owner_profile_id)
+    for asset in index.assets:
+        for variant in asset.variants:
+            if variant.url == candidate:
+                return candidate
+    return None
+
+
 def reference_content(ctx, reference):
+    library_key = owned_library_image_key(ctx, reference)
+    if library_key:
+        from ..models.uniart import _image_reference_url
+        return {"type": "image_url", "image_url": {"url": _image_reference_url(library_key)}}
     path = reference_path(ctx, reference)
     mime = mimetypes.guess_type(path)[0] or ""
     ext = os.path.splitext(path)[1].lower()
