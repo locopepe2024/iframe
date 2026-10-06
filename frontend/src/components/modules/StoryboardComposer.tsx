@@ -46,6 +46,14 @@ export default function StoryboardComposer() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadTargetFrameId, setUploadTargetFrameId] = useState<string | null>(null);
 
+    useEffect(() => {
+        if (!currentProject?.id) return;
+        let active = true;
+        api.getProject(currentProject.id).then((project) => {
+            if (active) useProjectStore.getState().updateProject(currentProject.id, project);
+        }).catch((error) => console.error("Could not refresh storyboard:", error));
+        return () => { active = false; };
+    }, [currentProject?.id]);
 
 
     // NEW: Analyze script text to generate storyboard frames
@@ -227,6 +235,7 @@ export default function StoryboardComposer() {
         if (!currentProject) return;
 
         addRenderingFrame(frame.id);
+        const initialVariantCount = frame.rendered_image_asset?.variants?.length || 0;
         try {
             // Construct composition data with references
             const compositionData: any = {
@@ -329,14 +338,34 @@ export default function StoryboardComposer() {
                 finalPrompt = parts.join(" . ");
             }
 
-            await api.renderFrame(
-                currentProject.id,
-                frame.id,
-                compositionData,
-                finalPrompt,
-                batchSize,
-                frameNegativePrompt,
-            );
+            const requestId = crypto.randomUUID();
+            let job;
+            try {
+                job = await api.submitFrameRender(
+                    currentProject.id, frame.id, compositionData, finalPrompt,
+                    batchSize, frameNegativePrompt, requestId,
+                );
+            } catch (error) {
+                // A lost submission response does not mean the paid work stopped.
+                job = await api.submitFrameRender(
+                    currentProject.id, frame.id, compositionData, finalPrompt,
+                    batchSize, frameNegativePrompt, requestId,
+                );
+            }
+            let pollFailures = 0;
+            while (job.status === "running") {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                try {
+                    job = { ...job, ...await api.getFrameRenderJob(currentProject.id, job.job_id) };
+                    pollFailures = 0;
+                } catch (error) {
+                    console.warn("Render status temporarily unavailable:", error);
+                    if (++pollFailures >= 5) throw error;
+                }
+            }
+            if (job.status !== "completed") {
+                throw new Error(job.error || t("generateFailed"));
+            }
 
             // Fetch updated project to get new image URL and timestamp
             const updatedProject = await api.getProject(currentProject.id);
@@ -344,6 +373,14 @@ export default function StoryboardComposer() {
 
         } catch (error) {
             console.error("Render failed:", error);
+            try {
+                const updatedProject = await api.getProject(currentProject.id);
+                useProjectStore.getState().updateProject(currentProject.id, updatedProject);
+                const latest = updatedProject.frames?.find((item: any) => item.id === frame.id);
+                if ((latest?.rendered_image_asset?.variants?.length || 0) > initialVariantCount) return;
+            } catch (refreshError) {
+                console.error("Could not refresh rendered frame:", refreshError);
+            }
             alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
         } finally {
             removeRenderingFrame(frame.id);

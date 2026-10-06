@@ -4350,34 +4350,72 @@ class RenderFrameRequest(BaseModel):
     batch_size: int = 1
 
 
+class RenderFrameJobRequest(RenderFrameRequest):
+    request_id: str
+
+
+@app.post("/projects/{script_id}/storyboard/render-jobs", status_code=202)
+def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    """Submit a storyboard render without holding the browser connection open."""
+    import hashlib
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    if not any(frame.id == request.frame_id for frame in script.frames):
+        raise HTTPException(status_code=404, detail="Frame not found")
+    if not request.request_id or len(request.request_id) > 128:
+        raise HTTPException(status_code=422, detail="Invalid request id")
+    fingerprint = hashlib.sha256(json.dumps({
+        "request_id": request.request_id,
+        "frame_id": request.frame_id,
+        "composition_data": request.composition_data,
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt,
+        "batch_size": request.batch_size,
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    def work():
+        logger.info("Rendering frame %s", request.frame_id)
+        pipeline.generate_storyboard_render(
+            script_id, request.frame_id, request.composition_data,
+            request.prompt, request.batch_size, request.negative_prompt,
+        )
+        return {"frame_id": request.frame_id}
+
+    job = extraction_jobs.start(
+        user.owner_profile_id, f"{script_id}:{request.frame_id}",
+        f"storyboard-render:{fingerprint}", work, reuse_running=True,
+    )
+    return {"job_id": job["id"], "status": job["status"], "error": job.get("error")}
+
+
+@app.get("/projects/{script_id}/storyboard/render-jobs/{job_id}")
+def render_frame_status(script_id: str, job_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    job = extraction_jobs.get_for_project_prefix(
+        user.owner_profile_id, script_id, job_id, "storyboard-render:",
+    )
+    return {"job_id": job["id"], "status": job["status"], "error": job.get("error")}
+
+
 @app.post("/projects/{script_id}/storyboard/render", response_model=Script)
 def render_frame(script_id: str, request: RenderFrameRequest):
-    """Renders a specific frame using composition data (I2I)."""
+    """Legacy synchronous rendering contract for other storyboard surfaces."""
     try:
-        logger.info(f"Rendering frame {request.frame_id}")
-        
         updated_script = pipeline.generate_storyboard_render(
-            script_id,
-            request.frame_id,
-            request.composition_data,
-            request.prompt,
-            request.batch_size,
-            request.negative_prompt,
+            script_id, request.frame_id, request.composition_data,
+            request.prompt, request.batch_size, request.negative_prompt,
         )
         return signed_response(updated_script)
     except ValueError as e:
-        logger.warning(
-            "Storyboard render rejected: script_id=%s frame_id=%s detail=%s loaded_script=%s frame_count=%s",
-            script_id,
-            request.frame_id,
-            str(e),
-            script_id in pipeline.scripts,
-            len(getattr(pipeline.scripts.get(script_id), "frames", []) or [])
-            if pipeline.scripts.get(script_id) else 0,
-        )
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.exception(f"Error rendering frame {request.frame_id}: {e}")
+        logger.exception("Error rendering frame %s", request.frame_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 

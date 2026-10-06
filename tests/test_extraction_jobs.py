@@ -36,6 +36,33 @@ def test_immediate_deduplicated_durable_and_owner_scoped(tmp_path):
         assert calls == ['owner']
 
 
+def test_frame_render_reuses_running_job_but_allows_later_revision(tmp_path):
+    gate = Event()
+    calls = []
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def work():
+            calls.append('render')
+            gate.wait(2)
+            return {'frame_id': 'frame'}
+
+        first = store.start('owner', 'project:frame', 'storyboard-render:request-1', work, reuse_running=True)
+        assert store.start('owner', 'project:frame', 'storyboard-render:request-1', work, reuse_running=True)['id'] == first['id']
+        assert store.start('owner', 'project:frame', 'storyboard-render:request-2', work, reuse_running=True)['id'] == first['id']
+        assert store.get_for_project_prefix('owner', 'project', first['id'], 'storyboard-render:')['status'] == 'running'
+        with pytest.raises(HTTPException):
+            store.get_for_project_prefix('other', 'project', first['id'], 'storyboard-render:')
+        gate.set()
+        while store.get('owner', 'project:frame', first['id'])['status'] == 'running':
+            time.sleep(.01)
+        later = store.start('owner', 'project:frame', 'storyboard-render:request-2', work, reuse_running=True)
+        assert later['id'] != first['id']
+        while store.get('owner', 'project:frame', later['id'])['status'] == 'running':
+            time.sleep(.01)
+        assert calls == ['render', 'render']
+
+
 def test_failure_is_explicit_and_retryable(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)

@@ -1431,6 +1431,27 @@ export const api = {
         return res.data;
     },
 
+    submitFrameRender: async (
+        scriptId: string, frameId: string, compositionData: any,
+        prompt: string, batchSize: number, negativePrompt: string | undefined,
+        requestId: string,
+    ): Promise<{ job_id: string; status: string; error?: string }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-jobs`, {
+            frame_id: frameId,
+            composition_data: compositionData,
+            prompt,
+            negative_prompt: negativePrompt,
+            batch_size: batchSize,
+            request_id: requestId,
+        }, { timeout: 15000 });
+        return res.data;
+    },
+
+    getFrameRenderJob: async (scriptId: string, jobId: string): Promise<{ status: string; error?: string }> => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/storyboard/render-jobs/${jobId}`, { timeout: 15000 });
+        return res.data;
+    },
+
     // === STORYBOARD DRAMATIZATION v2 ===
 
     /**

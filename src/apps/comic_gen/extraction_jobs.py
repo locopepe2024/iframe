@@ -114,7 +114,7 @@ class ExtractionJobs:
                 'result': json.loads(row['result']) if row['result'] and status != 'superseded' else None,
                 'error': error}
 
-    def start(self, owner, project, fingerprint, work, *, queue_policy='fifo', queue_group='', pass_job_id=False, total_batches=0):
+    def start(self, owner, project, fingerprint, work, *, queue_policy='fifo', queue_group='', pass_job_id=False, total_batches=0, reuse_running=False):
         if queue_policy not in ('fifo', 'lifo'):
             raise ValueError(f'Unknown extraction queue policy: {queue_policy}')
         if queue_policy == 'lifo':
@@ -128,9 +128,17 @@ class ExtractionJobs:
             prior = db.execute("SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint=? AND status IN ('running','completed') ORDER BY created DESC LIMIT 1", (owner, project, fingerprint)).fetchone()
             if prior:
                 return self.public(prior)
+            if reuse_running:
+                active = db.execute(
+                    "SELECT * FROM jobs WHERE owner=? AND project=? AND status='running' ORDER BY created DESC LIMIT 1",
+                    (owner, project),
+                ).fetchone()
+                if active:
+                    return self.public(active)
             if db.execute("SELECT 1 FROM jobs WHERE owner=? AND project=? AND status='running'", (owner, project)).fetchone():
                 raise HTTPException(409, '该项目仍在分析上一版剧本，请等待完成后重试。')
-            if db.execute("SELECT COUNT(*) FROM jobs WHERE status='running'").fetchone()[0] >= 4:
+            active_limit = 64 if fingerprint.startswith('storyboard-render:') else 4
+            if db.execute("SELECT COUNT(*) FROM jobs WHERE status='running'").fetchone()[0] >= active_limit:
                 raise HTTPException(503, '分析任务繁忙，请稍后重试。')
             job_id = uuid4().hex
             db.execute('INSERT INTO jobs (id, owner, project, fingerprint, status, created, result, error, superseded, queue_group, total_batches) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)',
@@ -264,6 +272,8 @@ class ExtractionJobs:
             message = (
                 '分镜分析失败；已完成的分段已保存，重试会从未完成段继续。'
                 if row and row['fingerprint'].startswith('storyboard:')
+                else '分镜图片渲染失败，请检查当前帧状态后重试。'
+                if row and row['fingerprint'].startswith('storyboard-render:')
                 else '导演拍摄计划分析失败；已完成的分段已保存，重试会从未完成段继续。'
                 if row and row['fingerprint'].startswith('director_shooting_plan:')
                 else '剧本分析失败，请检查模型配置后重试。'
@@ -300,6 +310,16 @@ class ExtractionJobs:
                     (owner, project, row['fingerprint']),
                 ).fetchone()[0]
             return self.public(row, completed)
+
+    def get_for_project_prefix(self, owner, project_prefix, job_id, fingerprint_prefix):
+        with closing(self.connect()) as db:
+            row = db.execute(
+                'SELECT * FROM jobs WHERE id=? AND owner=? AND project LIKE ? AND fingerprint LIKE ?',
+                (job_id, owner, project_prefix + ':%', fingerprint_prefix + '%'),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, 'Render task not found')
+            return self.public(row)
 
     def forget_result(self, owner, project, key, value):
         """Remove completed jobs whose JSON result contains an exact key/value."""
