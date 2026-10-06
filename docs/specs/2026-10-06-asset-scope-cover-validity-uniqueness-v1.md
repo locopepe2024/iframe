@@ -37,6 +37,11 @@ cover-selection implementation differs, the migration rules below apply.
   accept one uploaded initial image. The workbench has separate image pools
   and selections for master/full-body, three-view, and headshot, plus motion
   video variants and older `video_assets` records.
+- Code fact: entity extraction preview and refinement return proposed
+  Character/Scene/Prop records without changing project assets. Applying a
+  reparse writes a new Script with its extracted entity lists, replacing the
+  project's prior lists. This path does not reconcile old asset IDs, variants,
+  or covers before replacement.
 
 ## Direct Implication
 
@@ -62,6 +67,23 @@ exact asset variant when it refers to an asset.
 | Asset cover | The one confirmed current image used to represent an asset in ordinary cards for a committed revision. | Derived from that revision's `display` selection; no separate media identity. |
 | Assets cover | The image shown for an asset row/card in an Assets view. It projects that row's source asset cover at a declared revision. | No independent selection or identity in the view. |
 
+An **asset envelope** is the semantic asset record and its owned state:
+identity, owner/placement, name and description, lineage, revision, variant
+bindings, role selections, and status. The envelope may contain zero image
+variants and zero video variants. A material file is not required to create
+or retain the envelope. `Assets` may list such an asset with an explicit
+`no_visual_material` state; image/video generation requiring a source must
+still reject it until a suitable input exists.
+
+An extraction result has two stages. Before apply, it is an **entity
+proposal**, not a committed asset. After user apply, each accepted
+Character/Scene/Prop becomes a project-scoped semantic asset envelope, even
+when it has no visual material. Its extraction/source revision is provenance,
+not an image variant. Re-extraction must match, update, create, or retire
+semantic assets explicitly; it must not erase confirmed variants merely
+because a new parse returned a fresh entity ID. The current replace-all
+implementation does not yet meet that target rule.
+
 `selected_variant_id` in today's generation container is not necessarily the
 asset cover. In the target model, selections are named by role: `display`,
 `identity_master`, `full_body`, `portrait`, `look`, and so on. Exactly one
@@ -85,6 +107,11 @@ accepted as the character's identity/master image.
 | Asset Library `New asset` with one image | Create a personal/global semantic asset, one initial confirmed image binding, and its first asset revision in one commit. Upload and existing-material selection are equivalent after ownership checks. | The initial image is the only `display` selection. | Current API accepts an optional URL and creates a variant immediately; it has no unified media identity or committed revision. Metadata-only creation needs an explicit empty-asset state, not a synthetic cover. |
 | Series/episode/project Assets `Add character` from text | Create a character identity in that chosen scope. Generation produces an output material candidate; user confirmation attaches it as an image variant. A failed generation leaves the named character with no cover and a terminal task result. | None until a generated image is confirmed. The first confirmed image can become `display` in the same explicit confirmation. | Project quick-create and generation are already separate calls, but successful generation currently attaches/selects a variant without acceptance. Series quick-create can also start with one uploaded image. |
 | Character workbench | Reuse the existing character ID. Uploads, generated images, and videos are candidate materials; confirmation assigns image/video roles and commits variant membership. Changing role-current selection or `display` commits a new asset revision. | Only the current confirmed `display` image; reference selection and video selection do not change it implicitly. | Current panels have several image containers, automatic selection, a separate cover pointer, video pools, and prompt-local reference choices without one shared revision owner. |
+
+Entity extraction is another entry into the third row's semantic-asset
+creation rule: preview proposes text-backed assets; apply commits them to the
+episode/project scope. It does not need to generate media to make them valid
+semantic assets.
 
 `Save material` and `Save as asset` must be separate commands. If the user
 chooses the latter directly from an Agent result, the operation may retain
