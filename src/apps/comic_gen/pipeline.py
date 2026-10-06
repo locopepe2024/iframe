@@ -4875,6 +4875,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             for url in ref_image_urls:
                 if not url:
                     continue
+                if url.startswith("/studio/media/"):
+                    url = resolve_studio_reference(url, script.owner_profile_id)
                 if is_object_key(url) or url.startswith("http"):
                     ref_image_paths.append(url)
                 else:
@@ -4884,6 +4886,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             # Also handle single path if provided (legacy support)
             if ref_image_url and ref_image_url not in ref_image_urls:
+                if ref_image_url.startswith("/studio/media/"):
+                    ref_image_url = resolve_studio_reference(ref_image_url, script.owner_profile_id)
                 if is_object_key(ref_image_url) or ref_image_url.startswith("http"):
                     if ref_image_url not in ref_image_paths:
                         ref_image_paths.append(ref_image_url)

@@ -73,3 +73,55 @@ def test_series_storyboard_render_uses_series_i2i_model(tmp_path):
     pipeline.generate_storyboard_render(script.id, frame.id, None, "A street")
 
     assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["model_name"] == "uniart/gpt-image-2.5-flare-discount"
+
+
+def test_storyboard_render_resolves_signed_studio_references(monkeypatch, tmp_path):
+    now = time.time()
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    script = Script(
+        id="project-1", title="Project", original_text="", frames=[frame],
+        owner_profile_id="apikey-owner", created_at=now, updated_at=now,
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_generator = Mock()
+    pipeline._save_data = Mock()
+    pipeline.resolve_episode_assets = Mock(return_value={"characters": [], "scenes": []})
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "output").mkdir()
+    reference = tmp_path / "output" / "reference.png"
+    reference.write_bytes(b"image")
+    signed_url = "/studio/media/owner/reference.png?expires=123&signature=test"
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.resolve_studio_reference",
+        lambda value, owner: "reference.png" if value == signed_url and owner == "apikey-owner" else None,
+    )
+
+    pipeline.generate_storyboard_render(
+        script.id, frame.id, {"reference_image_urls": [signed_url]}, "A street",
+    )
+
+    assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["ref_image_paths"] == [str(reference)]
+
+
+def test_storyboard_render_rejects_foreign_studio_reference(monkeypatch, tmp_path):
+    now = time.time()
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    script = Script(
+        id="project-1", title="Project", original_text="", frames=[frame],
+        owner_profile_id="apikey-owner", created_at=now, updated_at=now,
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline._save_data = Mock()
+    signed_url = "/studio/media/foreign/reference.png?expires=123&signature=test"
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.resolve_studio_reference",
+        Mock(side_effect=ValueError("Media reference belongs to another owner")),
+    )
+
+    with pytest.raises(ValueError, match="another owner"):
+        pipeline.generate_storyboard_render(
+            script.id, frame.id, {"reference_image_urls": [signed_url]}, "A street",
+        )
