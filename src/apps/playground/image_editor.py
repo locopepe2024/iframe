@@ -1,6 +1,7 @@
 """Immutable local edits of owned Playground images; no provider execution."""
 from contextlib import contextmanager, closing
 import hashlib
+import os
 from io import BytesIO
 import json
 from pathlib import Path
@@ -14,6 +15,7 @@ from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
+from ..media_registry import register_media
 
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
@@ -143,7 +145,15 @@ class ImageEditStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('xb') as stream:
             stream.write(data)
-        return {'path': f'/playground/input-media/{filename}', 'title': entry.name,
+        media_id = register_media(
+            self.storage.owner_profile_id,
+            os.path.relpath(target, "output"),
+            kind="temporary_input",
+            display_name=entry.name,
+            sha256=hashlib.sha256(data).hexdigest(),
+            metadata={"asset_type": asset_type, "asset_id": asset_id, "variant_id": variant_id},
+        )
+        return {'media_id': media_id, 'path': f'/playground/input-media/{filename}', 'title': entry.name,
                 'width': width, 'height': height, 'sha256': hashlib.sha256(data).hexdigest(),
                 'asset_type': asset_type, 'asset_id': asset_id, 'variant_id': variant_id}
 
@@ -218,6 +228,15 @@ class ImageEditStore:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with target.open('xb') as stream:
                     stream.write(data)
+                register_media(
+                    self.storage.owner_profile_id,
+                    os.path.relpath(target, "output"),
+                    kind="editor_output",
+                    display_name=title,
+                    sha256=digest,
+                    media_id=media_id,
+                    metadata={"source_reference": source['reference'], "operation": "local_image_edit"},
+                )
                 record = {'id': media_id, 'path': f'/playground/input-media/{filename}', 'title': title,
                           'source_reference': source['reference'], 'source_sha256': source_sha256,
                           'sha256': digest, 'width': width, 'height': height, 'projection_type': projection_type,

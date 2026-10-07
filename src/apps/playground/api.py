@@ -26,6 +26,7 @@ from .service import PlaygroundService
 from .storage import PlaygroundStorage
 from ..identity import BROWSER_PROFILE_COOKIE, UserContext, _resolve_request_context, require_user_context
 from ..user_config import get_user_config_store
+from ..media_registry import register_media
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -405,10 +406,17 @@ async def upload_media(
     contents = await file.read()
     with open(dest, "wb") as f:
         f.write(contents)
+    media_id = register_media(
+        identity.owner_profile_id,
+        os.path.relpath(dest, "output"),
+        kind="temporary_input",
+        display_name=os.path.basename(file.filename or filename),
+        sha256=hashlib.sha256(contents).hexdigest(),
+    )
     # Return an owner-scoped browser reference, never the server filesystem
     # path. The corresponding endpoint verifies the current owner before
     # serving the file.
-    return {"path": f"/playground/input-media/{filename}"}
+    return {"media_id": media_id, "path": f"/playground/input-media/{filename}"}
 
 
 def get_input_media(
