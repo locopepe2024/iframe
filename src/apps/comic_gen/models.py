@@ -330,6 +330,7 @@ class VideoTask(BaseModel):
     frame_id: Optional[str] = Field(None, description="ID of the storyboard frame this video belongs to")
     asset_id: Optional[str] = Field(None, description="ID of the asset this video belongs to")
     image_url: str
+    input_media_id: Optional[str] = Field(None, description="Stable media identity of the I2V input frame")
     prompt: str
     status: str = "pending"  # pending, processing, completed, failed
     error: Optional[str] = Field(None, description="Failure reason, if any (set by pipeline / cancel / orphan recovery)")
@@ -345,6 +346,8 @@ class VideoTask(BaseModel):
     shot_type: str = Field("single", description="Shot type: 'single' or 'multi' (only for wan I2V models)")
     generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
+    reference_media_ids: List[str] = Field(default_factory=list, description="Stable media identities consumed by this shot")
+    storyboard_reference_revision: Optional[int] = Field(None, description="Storyboard reference package revision consumed by this shot")
     # Kling params
     mode: Optional[str] = Field(None, description="Kling mode: std/pro")
     sound: Optional[str] = Field(None, description="Kling sound: on/off")

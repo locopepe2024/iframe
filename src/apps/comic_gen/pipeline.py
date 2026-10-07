@@ -5184,6 +5184,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                 from .prompt_assembly import enrich_prompt_with_dialogue
                 prompt = enrich_prompt_with_dialogue(prompt, frame)
 
+        source_frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
+        input_media_id = None
+        reference_media_ids: List[str] = []
+        storyboard_reference_revision = None
+        if source_frame:
+            package = source_frame.reference_package
+            storyboard_reference_revision = package.revision
+            reference_media_ids.extend(item for item in (
+                package.first_frame_media_id,
+                package.last_frame_media_id,
+                *(ref.media_id for ref in package.references),
+            ) if item)
+            rendered = source_frame.rendered_image_asset
+            selected_id = rendered.selected_id if rendered else None
+            selected = next((item for item in (rendered.variants if rendered else []) if item.id == selected_id), None)
+            input_media_id = selected.media_id if selected else None
+
         task = VideoTask(
             id=task_id,
             project_id=script_id,
@@ -5201,6 +5218,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 else None
             ),
             image_url=snapshot_url,
+            input_media_id=input_media_id,
             prompt=prompt,
             status="pending",
             duration=duration,
@@ -5214,6 +5232,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             shot_type=shot_type,
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
+            reference_media_ids=list(dict.fromkeys(reference_media_ids)),
+            storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],
             ratio=ratio,
             watermark=watermark,
