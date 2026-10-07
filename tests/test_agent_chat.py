@@ -1,11 +1,52 @@
 from unittest.mock import Mock
+from io import BytesIO
 
 import pytest
 import httpx
 from openai import APIStatusError, APITimeoutError
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from src.apps import agent_api as agent
 from src.apps.identity import UserContext
+
+
+def test_asr_requires_catalog_access_and_valid_audio(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: False)
+    with pytest.raises(HTTPException, match='尚未开放'):
+        agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.wav'), setup)
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: True)
+    with pytest.raises(HTTPException, match='格式不支持'):
+        agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.webm'), setup)
+
+
+def test_asr_returns_draft_without_creating_chat_message(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: True)
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={
+        'api_key': 'test', 'base_url': 'https://example.test/v1',
+    })))
+    captured = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.audio = Mock(transcriptions=Mock(create=self.create))
+
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return Mock(text=' 明天下午去公园 ')
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    import openai
+    monkeypatch.setattr(openai, 'OpenAI', Client)
+    result = agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.wav', headers={'content-type': 'audio/wav'}), setup)
+    assert result == {'text': '明天下午去公园', 'model': 'asr-1.0'}
+    assert captured['model'] == 'asr-1.0'
+    assert captured['file'][0] == 'voice.wav'
+    with agent.database() as db:
+        assert db.execute('SELECT COUNT(*) FROM sessions').fetchone()[0] == 0
 
 
 @pytest.mark.parametrize('status,expected', [(502, '对话网关返回'), (401, '鉴权'), (429, '请求受限'), (400, '拒绝对话请求')])

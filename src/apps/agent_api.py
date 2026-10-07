@@ -12,7 +12,7 @@ from urllib.parse import urlsplit, unquote
 import mimetypes
 import base64
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from .identity import UserContext, require_user_context
@@ -116,6 +116,46 @@ def catalog(ctx):
     except Exception:
         raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
     return _agent_chat_models(items)
+
+
+def asr_available(ctx):
+    config = get_user_config_store().get_runtime_uniart(ctx)
+    req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
+    try:
+        with urlopen(req, timeout=15) as response:
+            items = normalize_uniart_catalog(json.load(response))
+    except Exception:
+        raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
+    return any(item["api_model_id"] == "asr-1.0" for item in items)
+
+
+@router.get("/transcription-capability")
+def transcription_capability(ctx: UserContext = Depends(require_user_context)):
+    return {"available": asr_available(ctx), "model": "asr-1.0"}
+
+
+@router.post("/transcriptions")
+def transcribe_audio(file: UploadFile = File(...), ctx: UserContext = Depends(require_user_context)):
+    if not asr_available(ctx):
+        raise HTTPException(503, "当前用户尚未开放 MiniMax ASR 1.0")
+    filename = os.path.basename(file.filename or "")
+    if os.path.splitext(filename)[1].lower() not in {".wav", ".aiff", ".aif", ".flac", ".m4a", ".mp3", ".aac", ".opus", ".ogg"}:
+        raise HTTPException(422, "录音格式不支持，请使用 WAV、M4A、MP3 或 OGG")
+    data = file.file.read(50 * 1024 * 1024 + 1)
+    if not data or len(data) > 50 * 1024 * 1024:
+        raise HTTPException(422, "录音须小于 50 MiB")
+    from openai import OpenAI, APIError
+    config = get_user_config_store().get_runtime_uniart(ctx)
+    try:
+        with OpenAI(api_key=config["api_key"], base_url=config["base_url"], timeout=90, max_retries=0) as client:
+            result = client.audio.transcriptions.create(model="asr-1.0", file=(filename, data, file.content_type or "application/octet-stream"), response_format="json")
+    except APIError:
+        logger.warning("MiniMax ASR request failed", exc_info=True)
+        raise HTTPException(502, "语音识别暂时失败，请重试")
+    text = getattr(result, "text", "")
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(502, "未识别出文字，请重录或手动输入")
+    return {"text": text.strip(), "model": "asr-1.0"}
 
 
 CHAT_MODEL_LABELS = {
