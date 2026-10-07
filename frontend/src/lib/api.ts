@@ -233,6 +233,7 @@ export interface AssetLibraryReference {
 
 export interface AssetReferenceIndexVariant {
     id: string;
+    media_id?: string | null;
     url: string;
     created_at?: number;
     prompt_used?: string | null;

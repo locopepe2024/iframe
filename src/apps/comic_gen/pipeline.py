@@ -69,6 +69,7 @@ from ..studio_access import (
     studio_owner_dir,
     resolve_studio_reference,
 )
+from ..media_registry import register_media
 
 logger = get_logger(__name__)
 
@@ -1795,6 +1796,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             return cover_id
         return None
 
+    @staticmethod
+    def _register_asset_variant_media(variants: List[Any], owner_profile_id: Optional[str]) -> List[Any]:
+        """Backfill owner media identities while projecting the asset index."""
+        if not owner_profile_id:
+            return variants
+        for variant in variants:
+            if getattr(variant, "media_id", None):
+                continue
+            storage_key = image_variant_storage_key(variant)
+            if not storage_key or storage_key.startswith(("http://", "https://")):
+                continue
+            variant.media_id = register_media(
+                owner_profile_id,
+                storage_key,
+                kind="asset_variant",
+                display_name=f"asset-variant-{getattr(variant, 'id', 'unknown')}",
+                metadata={"variant_id": getattr(variant, "id", "")},
+            )
+        return variants
+
     def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
         """Return the normalized effective assets used by reference pickers."""
         script = self.get_script(script_id)
@@ -1820,6 +1841,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if asset.id in seen:
                     continue
                 seen.add(asset.id)
+                variants = self._register_asset_variant_media(
+                    self._asset_image_variants(asset, asset_type), script.owner_profile_id,
+                )
                 entries.append(AssetReferenceIndexEntry(
                     asset_type=asset_type,
                     asset_id=asset.id,
@@ -1831,7 +1855,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     source_name=source_name,
                     selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
                     cover_variant_id=self._explicit_asset_cover_variant_id(asset, asset_type),
-                    variants=self._asset_image_variants(asset, asset_type),
+                    variants=variants,
                 ))
 
         for asset_type, attr in (
@@ -1861,6 +1885,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         def append_container(container: Any, scope: str, container_id: Optional[str], name: Optional[str]) -> None:
             for asset_type, attr in (("character", "characters"), ("scene", "scenes"), ("prop", "props")):
                 for asset in getattr(container, attr, []) or []:
+                    variants = self._register_asset_variant_media(
+                        self._asset_image_variants(asset, asset_type), owner_profile_id,
+                    )
                     entries.append(AssetReferenceIndexEntry(
                         asset_type=asset_type,
                         asset_id=asset.id,
@@ -1872,7 +1899,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         source_name=name,
                         selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
                         cover_variant_id=self._explicit_asset_cover_variant_id(asset, asset_type),
-                        variants=self._asset_image_variants(asset, asset_type),
+                        variants=variants,
                     ))
 
         for series in self.list_series(owner_profile_id):

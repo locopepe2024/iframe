@@ -174,6 +174,10 @@ class ImageVariant(BaseModel):
         None,
         description="Durable local output key or COS/OSS object key",
     )
+    media_id: Optional[str] = Field(
+        None,
+        description="Owner-scoped immutable media identity for this material",
+    )
     created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
