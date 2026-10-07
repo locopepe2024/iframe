@@ -287,6 +287,11 @@ def owned_library_image_key(ctx, reference):
             # index lookup proves owner scope before any value is sent onward.
             if stored == reference or stored == candidate or stored.removeprefix("output/") == candidate:
                 return stored
+    if parsed.path.startswith("/studio/media/") and candidate.startswith("users/"):
+        local = os.path.realpath(os.path.join("output", candidate))
+        owner_root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id)))
+        if local.startswith(owner_root + os.sep) and os.path.isfile(local):
+            return candidate
             stored_parsed = urlsplit(stored)
             if stored_parsed.scheme in ("http", "https"):
                 stored_candidate = unquote(stored_parsed.path).lstrip("/")
