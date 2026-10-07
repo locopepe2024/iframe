@@ -246,6 +246,16 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         }
     };
 
+    const handleReferenceVideoUpload = async (file: File, slotIndex: number) => {
+        try {
+            const uploaded = await api.uploadFile(file);
+            handleCastSlotSelect(slotIndex, { url: uploaded.url, name: file.name });
+        } catch (error) {
+            console.error("Reference video upload failed", error);
+            alert(tc("referenceVideoUploadFailed"));
+        }
+    };
+
     // R2V: Handle Cast Slot Selection
     const handleCastSlotSelect = (slotIndex: number, video: { url: string; name: string }) => {
         setCastSlots(prev => {
@@ -1012,11 +1022,20 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                         {slot?.url ? (
                                                             /* Filled Slot */
                                                             <div className="aspect-video relative">
-                                                                <img
-                                                                    src={getAssetUrl(video?.thumbnail || '')}
-                                                                    alt={slot.name}
-                                                                    className="w-full h-full object-cover rounded-xl"
-                                                                />
+                                                                {video?.thumbnail ? (
+                                                                    <img
+                                                                        src={getAssetUrl(video.thumbnail)}
+                                                                        alt={slot.name}
+                                                                        className="w-full h-full object-cover rounded-xl"
+                                                                    />
+                                                                ) : (
+                                                                    <video
+                                                                        src={getAssetUrl(slot.url)}
+                                                                        muted
+                                                                        playsInline
+                                                                        className="w-full h-full object-cover rounded-xl"
+                                                                    />
+                                                                )}
                                                                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 rounded-b-xl">
                                                                     <p className="text-xs text-foreground font-medium truncate">{slot.name}</p>
                                                                 </div>
@@ -1031,6 +1050,19 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                             /* Empty Slot */
                                                             <div className="aspect-video flex flex-col items-center justify-center p-4">
                                                                 <p className="text-xs text-text-secondary mb-2">{slotTitle}</p>
+                                                                <label className="mb-2 cursor-pointer rounded-md border border-glass-border px-2 py-1 text-xs text-text-secondary hover:bg-glass">
+                                                                    {tc("uploadSource")}
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="video/*,.mp4,.mov,.webm,.avi,.mkv"
+                                                                        className="hidden"
+                                                                        onChange={(event) => {
+                                                                            const file = event.target.files?.[0];
+                                                                            if (file) void handleReferenceVideoUpload(file, slotIndex);
+                                                                            event.target.value = "";
+                                                                        }}
+                                                                    />
+                                                                </label>
                                                                 <select
                                                                     className="w-full text-xs bg-input-bg border border-glass-border rounded-lg px-2 py-1.5 text-text-secondary focus:border-primary focus:outline-none"
                                                                     value=""

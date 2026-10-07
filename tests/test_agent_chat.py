@@ -237,7 +237,7 @@ def test_agent_resolves_only_owned_library_object_keys(setup, monkeypatch):
 
     owned = 'lumenx/assets/owned-character.png'
     foreign = 'lumenx/assets/foreign-character.png'
-    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(url=owned)])])
+    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(storage_key=owned)])])
     lookup = Mock(return_value=index)
     monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index', lookup)
     sign = Mock(return_value='https://media.example/owned-character.png?fresh=1')
@@ -262,13 +262,36 @@ def test_agent_resolves_owned_library_local_variant_path(setup, tmp_path, monkey
     image = tmp_path / local_path
     image.parent.mkdir(parents=True)
     image.write_bytes(b'image')
-    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(url=local_path)])])
+    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(storage_key=local_path)])])
     monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index', Mock(return_value=index))
     monkeypatch.setattr(uniart, '_image_reference_url', lambda value: 'https://media.example/character.png')
 
     result = agent.reference_content(setup, local_path)
 
     assert result == {'type': 'image_url', 'image_url': {'url': 'https://media.example/character.png'}}
+
+
+def test_agent_resolves_signed_studio_asset_url_to_owned_storage_key(setup, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api as studio_api
+    from src.apps.studio_access import studio_media_url, studio_owner_key
+    from src.models import uniart
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-media-signing-key")
+    owner_key = studio_owner_key(setup.owner_profile_id)
+    storage_key = f"users/{owner_key}/studio/assets/character.png"
+    image = tmp_path / "output" / storage_key
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"image")
+    reference = studio_media_url(setup.owner_profile_id, storage_key)
+    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(storage_key=storage_key)])])
+    monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index', Mock(return_value=index))
+    monkeypatch.setattr(uniart, '_image_reference_url', lambda value: f"https://media.example/{value}")
+
+    result = agent.reference_content(setup, reference)
+
+    assert result['image_url']['url'] == f"https://media.example/{storage_key}"
 
 
 def test_image_variant_promotes_legacy_url_to_storage_key():

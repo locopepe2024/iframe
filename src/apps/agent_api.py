@@ -263,13 +263,21 @@ def owned_library_image_key(ctx, reference):
     scoped index.
     """
     from .comic_gen.api import pipeline
+    from .studio_access import resolve_studio_reference
 
     parsed = urlsplit(reference)
     candidate = unquote(parsed.path).lstrip("/") if parsed.scheme in ("http", "https") else reference
+    if parsed.path.startswith("/studio/media/"):
+        try:
+            candidate = resolve_studio_reference(reference, ctx.owner_profile_id)
+        except ValueError:
+            return None
     index = pipeline.get_asset_library_reference_index(ctx.owner_profile_id)
     for asset in index.assets:
         for variant in asset.variants:
-            stored = getattr(variant, "storage_key", None) or variant.url
+            stored = getattr(variant, "storage_key", None)
+            if not stored:
+                continue
             # External delivery URLs identify an object by their path, while
             # local and Studio references need an exact value match.  The
             # index lookup proves owner scope before any value is sent onward.

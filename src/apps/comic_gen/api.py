@@ -520,13 +520,25 @@ def upload_file(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Try uploading to OSS
-        oss_url = OSSImageUploader().upload_image(file_path)
-        if oss_url:
-            return signed_response({"url": oss_url})
+        uploader = OSSImageUploader()
+        from ..studio_access import studio_owner_key
+        oss_key = uploader.upload_file(
+            file_path,
+            sub_path=f"users/{studio_owner_key(user.owner_profile_id)}/studio/uploads",
+        )
+        storage_key = oss_key or stored_path
+        from ..media_registry import register_media
+        media_id = register_media(
+            user.owner_profile_id,
+            storage_key,
+            kind="temporary_input",
+            display_name=os.path.basename(file.filename or filename),
+        )
+        if oss_key:
+            return signed_response({"url": oss_key, "media_id": media_id, "storage_key": storage_key})
 
         # Fallback to local URL (relative path for frontend getAssetUrl)
-        return signed_response({"url": stored_path})
+        return signed_response({"url": stored_path, "media_id": media_id, "storage_key": storage_key})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

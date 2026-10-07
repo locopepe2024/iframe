@@ -2328,6 +2328,7 @@
     "firstFrame": "First Frame",
     "storyboardSource": "Storyboard",
     "uploadSource": "Upload",
+    "referenceVideoUploadFailed": "Reference video upload failed",
     "maxRefVideos": "Maximum 3 reference videos",
     "genFailed": "Video generation failed: {error}",
     "pollFailed": "Video polling failed: {error}",

@@ -2328,6 +2328,7 @@
     "firstFrame": "首帧",
     "storyboardSource": "分镜",
     "uploadSource": "上传",
+    "referenceVideoUploadFailed": "参考视频上传失败",
     "maxRefVideos": "最多选择 3 个参考视频",
     "genFailed": "视频生成失败: {error}",
     "pollFailed": "视频轮询失败: {error}",
