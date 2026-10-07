@@ -42,6 +42,8 @@ def storage_key(value: object, output_root: Path) -> str | None:
             return None
     if value.startswith("output/"):
         value = value[7:]
+    if value.startswith("lumenx/"):
+        return value
     candidate = (root / value).resolve()
     try:
         candidate.relative_to(root)
