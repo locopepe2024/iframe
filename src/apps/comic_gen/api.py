@@ -73,6 +73,7 @@ from .models import (
     Script,
     Series,
     StoryboardFrame,
+    StoryboardReferencePackage,
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
@@ -4251,6 +4252,7 @@ class UpdateFrameRequest(BaseModel):
     style_prompt_override: Optional[str] = None
     lighting_override: Optional[str] = None
     negative_prompt_override: Optional[str] = None
+    reference_package: Optional[StoryboardReferencePackage] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
 def update_frame(script_id: str, request: UpdateFrameRequest):
@@ -4272,6 +4274,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             style_prompt_override=request.style_prompt_override,
             lighting_override=request.lighting_override,
             negative_prompt_override=request.negative_prompt_override,
+            reference_package=request.reference_package,
         )
         return signed_response(updated_script)
     except ValueError as e:

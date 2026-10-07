@@ -1397,6 +1397,19 @@ export const api = {
         style_prompt_override?: string;
         lighting_override?: string;
         negative_prompt_override?: string;
+        reference_package?: {
+            revision?: number;
+            first_frame_url?: string | null;
+            last_frame_url?: string | null;
+            references?: Array<{
+                id?: string;
+                kind: "scene" | "effect" | "upload" | "reference_video";
+                url: string;
+                label?: string | null;
+                source_asset_id?: string | null;
+            }>;
+            confirmed?: boolean;
+        };
     }) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/update`, {
             frame_id: frameId,

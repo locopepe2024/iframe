@@ -557,6 +557,26 @@ class Prop(BaseModel):
     director_profile_hash: Optional[str] = None
     generation_lineage: Optional[ArtifactLineage] = None
 
+class StoryboardReference(BaseModel):
+    """A shot-scoped visual reference prepared in Storyboard."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    kind: Literal["scene", "effect", "upload", "reference_video"] = "scene"
+    url: str
+    label: Optional[str] = None
+    source_asset_id: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+
+
+class StoryboardReferencePackage(BaseModel):
+    """Confirmed Storyboard inputs consumed by Shot Design."""
+    revision: int = Field(1, ge=1)
+    first_frame_url: Optional[str] = None
+    last_frame_url: Optional[str] = None
+    references: List[StoryboardReference] = Field(default_factory=list)
+    confirmed: bool = False
+    updated_at: float = Field(default_factory=time.time)
+
+
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
@@ -590,6 +610,10 @@ class StoryboardFrame(BaseModel):
     
     # Composition Data (JSON structure for canvas)
     composition_data: Optional[Dict[str, Any]] = Field(None, description="JSON data representing the canvas composition")
+    reference_package: StoryboardReferencePackage = Field(
+        default_factory=StoryboardReferencePackage,
+        description="Confirmed shot-scoped Storyboard references consumed by Shot Design",
+    )
 
     # === Storyboard Schema v2: Rich frame fields ===
     duration: Optional[int] = Field(None, description="建议时长（秒）")

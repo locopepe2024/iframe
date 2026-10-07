@@ -4567,6 +4567,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.lighting_override = kwargs['lighting_override']
         if kwargs.get('negative_prompt_override') is not None:
             frame.negative_prompt_override = kwargs['negative_prompt_override']
+        if kwargs.get('reference_package') is not None:
+            package = kwargs['reference_package']
+            package.revision = max(frame.reference_package.revision + 1, package.revision)
+            package.updated_at = time.time()
+            frame.reference_package = package
         
         self._save_data()
         return script
