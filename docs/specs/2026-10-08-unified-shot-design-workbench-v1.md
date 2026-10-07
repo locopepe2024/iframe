@@ -8,18 +8,16 @@
 
 ## Decision
 
-For project and series workflows, Storyboard and Shot List are one product step named **Storyboard / Shot Design** and rendered by `StoryboardR2V`.
+The current cut does not merge the Storyboard scene-reference step with Shot Design. `StoryboardComposer` remains responsible for storyboard scene/reference preparation, while `StoryboardR2V` remains responsible for shot prompt and video design.
 
-Scene/reference preparation remains a capability inside that workbench and does not create a second shot editor. The old `StoryboardComposer` navigation entry is removed from the project pipeline; its frame data remains compatible because both paths use the same `Script.frames` records.
-
-`VideoCreator` is retained as a compatibility surface for callers outside `ProjectClient` until its generation controls are migrated into `ShotCard`.
+The product-level concept is that both operate on the same shots, but their responsibilities and project navigation entries remain separate until a dedicated migration defines which scene-reference decisions should move into each shot. This cut only shares the optimizer selector UI between `ShotCard` and the legacy `VideoCreator` surface.
 
 ## Success criteria
 
-- Unified and legacy project modes expose one shot design step.
-- Selecting the step mounts `StoryboardR2V` for both modes.
+- Storyboard scene/reference preparation remains a distinct step.
+- Shot Design remains the shot prompt and video generation step.
+- Optimizer selection uses one shared component wherever AI polish is available.
 - Existing frame ids, prompts, variants, and video task history remain unchanged.
-- No second storyboard/shot-list navigation item remains.
 
 ## Verification
 
