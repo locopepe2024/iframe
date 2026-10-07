@@ -261,7 +261,7 @@ def sign_studio_media_paths(value: Any, owner_profile_id: str) -> Any:
         return [sign_studio_media_paths(item, owner_profile_id) for item in value]
     if isinstance(value, dict):
         return {
-            key: sign_studio_media_paths(item, owner_profile_id)
+            key: item if key == "storage_key" else sign_studio_media_paths(item, owner_profile_id)
             for key, item in value.items()
         }
     return value

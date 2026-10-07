@@ -165,8 +165,15 @@ class ProviderRoutingConfig(BaseModel):
     )
 
 class ImageVariant(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
-    url: str = Field(..., description="URL of the image")
+    # ``url`` is retained as the API/browser projection for compatibility.
+    # Durable asset identity is ``storage_key`` and must not be a signed URL.
+    url: str = Field(..., description="Delivery URL projection (legacy field)")
+    storage_key: Optional[str] = Field(
+        None,
+        description="Durable local output key or COS/OSS object key",
+    )
     created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
@@ -188,6 +195,19 @@ class ImageVariant(BaseModel):
         None,
         description="Asset-library reference variant ID used to generate this variant",
     )
+
+    @model_validator(mode="after")
+    def normalize_storage_key(self):
+        # Existing records only have ``url``. Treat that value as the legacy
+        # storage key until the next persistence write; new records get the
+        # canonical field immediately. Runtime signing never mutates either
+        # field on the model instance.
+        if self.url and (
+            not self.storage_key
+            or (self.url != self.storage_key and not self.url.startswith(("http://", "https://")))
+        ):
+            self.storage_key = self.url
+        return self
     reference_inputs: List[Dict[str, str]] = Field(
         default_factory=list,
         description="Ordered stable asset-library inputs used to generate this variant",

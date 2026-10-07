@@ -258,6 +258,18 @@ def test_agent_resolves_owned_library_local_variant_path(setup, tmp_path, monkey
     assert result == {'type': 'image_url', 'image_url': {'url': 'https://media.example/character.png'}}
 
 
+def test_image_variant_promotes_legacy_url_to_storage_key():
+    from src.apps.comic_gen.models import ImageVariant
+
+    variant = ImageVariant(id='v1', url='output/assets/character.png')
+
+    assert variant.storage_key == 'output/assets/character.png'
+    variant.url = 'lumenx/assets/character.png'
+    assert variant.storage_key == 'lumenx/assets/character.png'
+    variant.url = 'https://cdn.example/character.png'
+    assert variant.storage_key == 'lumenx/assets/character.png'
+
+
 def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkeypatch):
     from src.models import uniart
     files = []

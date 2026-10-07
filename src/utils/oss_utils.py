@@ -362,7 +362,7 @@ def sign_oss_urls_in_data(data, uploader: OSSImageUploader = None):
             # print(f"DEBUG: sign_oss_urls_in_data - skipping string '{value[:50]}...'")
             return value
         elif isinstance(value, dict):
-            return {k: process_value(v) for k, v in value.items()}
+            return {k: v if k == "storage_key" else process_value(v) for k, v in value.items()}
         elif isinstance(value, list):
             return [process_value(item) for item in value]
         else:

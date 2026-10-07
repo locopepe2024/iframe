@@ -264,7 +264,7 @@ def owned_library_image_key(ctx, reference):
     index = pipeline.get_asset_library_reference_index(ctx.owner_profile_id)
     for asset in index.assets:
         for variant in asset.variants:
-            stored = variant.url
+            stored = getattr(variant, "storage_key", None) or variant.url
             # External delivery URLs identify an object by their path, while
             # local and Studio references need an exact value match.  The
             # index lookup proves owner scope before any value is sent onward.
