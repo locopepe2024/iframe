@@ -156,6 +156,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
+    const [optimizerProvider, setOptimizerProvider] = useState<"minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm">("qwen");
+    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
 
     const handlePolish = async (feedback: string = "") => {
         const draftPrompt = feedback ? (polishedPrompt?.en || prompt) : prompt;
@@ -171,10 +173,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     .map((slot) => ({
                         description: slot.name || 'Unknown character'
                     }));
-                res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId);
+                res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
             } else {
                 // I2V mode: use video polish
-                res = await api.polishVideoPrompt(draftPrompt, feedback, scriptId);
+                res = await api.polishVideoPrompt(draftPrompt, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
             }
             if (res.prompt_cn && res.prompt_en) {
                 setPolishedPrompt({ cn: res.prompt_cn, en: res.prompt_en });
@@ -1114,6 +1116,23 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         </button>
                                     </div>
                                 )}
+                                <select
+                                    value={optimizerProvider}
+                                    onChange={(event) => {
+                                        const provider = event.target.value as typeof optimizerProvider;
+                                        setOptimizerProvider(provider);
+                                        setOptimizationSkills(provider === "minimax_context_ir" ? [] : ["minimax-h3-director"]);
+                                    }}
+                                    className="text-[0.625rem] bg-glass border border-glass-border rounded px-1.5 py-1 text-text-secondary"
+                                    aria-label="选择提示词优化器"
+                                    title="选择提示词优化器"
+                                >
+                                    <option value="minimax_context_ir">MiniMax IR</option>
+                                    <option value="gpt">GPT</option>
+                                    <option value="qwen">Qwen</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="glm">GLM</option>
+                                </select>
                                 <button
                                     onClick={() => handlePolish()}
                                     disabled={isPolishing || !prompt}
