@@ -335,7 +335,9 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     const preferredModel = modelPreferences[mode];
     set({
       mode,
-      ...(mode === 't2i' ? { inputMedia: [], mediaNames: {} } : {}),
+      // Text-only modes must never carry references from a previous image or
+      // video mode into the next request or Agent handoff.
+      ...(['t2i', 't2v'].includes(mode) ? { inputMedia: [], mediaNames: {} } : {}),
       ...(preferredModel !== undefined ? { modelId: preferredModel } : {}),
     });
   },
