@@ -304,6 +304,63 @@ class PolishError(Exception):
         super().__init__(f"[{reason}] {message_en}")
 
 
+def _parse_bilingual_polish(content: str, *, label: str) -> Dict[str, str]:
+    """Parse the bilingual envelope returned by a polish model.
+
+    Providers occasionally wrap the JSON in ``data``/``result``/``output``
+    or use the equivalent ``prompt_zh``/``cn`` key names.  Unwrap only mapping
+    values and require both languages; a single-language response remains a
+    hard contract error instead of being copied into the other language.
+    """
+    content = _strip_markdown_json(content)
+    try:
+        value: Any = json.loads(content.strip())
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse %s polish JSON: %s", label, exc)
+        raise PolishError(
+            reason="json_parse_error",
+            message_zh="模型返回了无效响应，建议重试或简化提示词。",
+            message_en="Model returned invalid response. Try again or simplify the prompt.",
+        ) from exc
+
+    aliases = {
+        "prompt_cn": ("prompt_cn", "prompt_zh", "cn", "zh", "中文提示词"),
+        "prompt_en": ("prompt_en", "en", "english", "英文提示词"),
+    }
+    candidates: List[Dict[str, Any]] = []
+    queue: List[Any] = [value]
+    seen: set[int] = set()
+    while queue and len(candidates) < 12:
+        item = queue.pop(0)
+        if not isinstance(item, dict) or id(item) in seen:
+            continue
+        seen.add(id(item))
+        candidates.append(item)
+        for key in ("data", "result", "output", "response", "content"):
+            nested = item.get(key)
+            if isinstance(nested, dict):
+                queue.append(nested)
+
+    result: Dict[str, str] = {}
+    for target, keys in aliases.items():
+        for item in candidates:
+            for key in keys:
+                candidate = item.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    result[target] = candidate.strip()
+                    break
+            if target in result:
+                break
+    if set(result) != {"prompt_cn", "prompt_en"}:
+        logger.warning("%s polish missing bilingual keys; top-level type=%s", label, type(value).__name__)
+        raise PolishError(
+            reason="missing_keys",
+            message_zh="模型返回了不完整的双语结果，建议重试。",
+            message_en="Model returned incomplete bilingual result. Please retry.",
+        )
+    return result
+
+
 _CHARACTER_VARIANT_RE = re.compile(
     r"^\s*(?P<base>.+?)\s*[\(（](?P<variant>[^()（）]+)[\)）]\s*$"
 )
@@ -2441,24 +2498,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             ) from e
         logger.debug(f"Video Prompt Polish Raw: {content[:200]}...")
 
-        content = _strip_markdown_json(content)
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse video polish JSON: {e}")
-            raise PolishError(
-                reason="json_parse_error",
-                message_zh="模型返回了无效响应，建议重试或简化提示词。",
-                message_en="Model returned invalid response. Try again or simplify the prompt.",
-            ) from e
-
-        if "prompt_cn" not in result or "prompt_en" not in result:
-            logger.warning("Video polish missing bilingual keys")
-            raise PolishError(
-                reason="missing_keys",
-                message_zh="模型返回了不完整的双语结果，建议重试。",
-                message_en="Model returned incomplete bilingual result. Please retry.",
-            )
+        result = _parse_bilingual_polish(content, label="Video")
 
         # Echo 检测：模型几乎原文返回。本质是 warning（带原文给前端），
         # 不是 hard error；前端按黄色警告渲染，让用户补 feedback。
@@ -2586,24 +2626,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             ) from e
         logger.debug(f"R2V Polished Raw: {content[:200]}...")
 
-        content = _strip_markdown_json(content)
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse R2V polish JSON: {e}")
-            raise PolishError(
-                reason="json_parse_error",
-                message_zh="模型返回了无效响应，建议重试或简化提示词。",
-                message_en="Model returned invalid response. Try again or simplify the prompt.",
-            ) from e
-
-        if "prompt_cn" not in result or "prompt_en" not in result:
-            logger.warning("R2V polish missing bilingual keys")
-            raise PolishError(
-                reason="missing_keys",
-                message_zh="模型返回了不完整的双语结果，建议重试。",
-                message_en="Model returned incomplete bilingual result. Please retry.",
-            )
+        result = _parse_bilingual_polish(content, label="R2V")
 
         if _is_echo(result["prompt_en"], draft_prompt):
             raise PolishError(

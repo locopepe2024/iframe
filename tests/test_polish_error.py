@@ -111,6 +111,16 @@ class TestPolishVideoPromptErrors:
         assert "prompt_en" in result
         assert "Cinematic" in result["prompt_en"]
 
+    def test_nested_and_alias_bilingual_envelope_is_unwrapped(self):
+        sp = ScriptProcessor.__new__(ScriptProcessor)
+        sp.llm = MagicMock()
+        sp.llm.is_configured = True
+        sp.llm.chat.return_value = json.dumps({
+            "data": {"prompt_zh": "中文优化结果", "en": "Polished English result"}
+        })
+        result = sp.polish_video_prompt("hero on cliff")
+        assert result == {"prompt_cn": "中文优化结果", "prompt_en": "Polished English result"}
+
 
 # ---------------------------------------------------------------------------
 # 双语锚点迭代 (#119)
