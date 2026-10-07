@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { agentRequest, type ChatMessage, type ChatModel, type ChatSession } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceName } from './referenceMedia';
+import { readCompanionSkills, COMPANION_SKILLS_STORAGE_KEY, type CompanionSkillId } from './companionSkills';
 
 export function useAgentConversation(enabled: boolean, sessionId: string | null) {
   const [models, setModels] = useState<ChatModel[]>([]);
@@ -14,10 +15,23 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [companionSkills, setCompanionSkills] = useState<CompanionSkillId[]>([]);
+  const [skillsLoaded, setSkillsLoaded] = useState(false);
   const active = useRef(sessionId);
   active.current = sessionId;
   const sending = useRef(false);
   const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    setCompanionSkills(readCompanionSkills(window.localStorage));
+    setSkillsLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!skillsLoaded) return;
+    try { window.localStorage.setItem(COMPANION_SKILLS_STORAGE_KEY, JSON.stringify(companionSkills)); } catch { /* Preferences are optional. */ }
+  }, [companionSkills, skillsLoaded]);
+  function toggleCompanionSkill(id: CompanionSkillId) {
+    setCompanionSkills(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
   useEffect(() => {
     const changed = () => setRevision(r => r + 1);
     window.addEventListener('lumenx:uniart-skus-changed', changed);
@@ -79,6 +93,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       });
       const result = await agentRequest<{ user_message: ChatMessage; assistant_message: ChatMessage }>(`/sessions/${session.id}/messages`, 'POST', {
         content: snapshot.prompt, input_media: snapshot.inputMedia,
+        companion_skills: companionSkills,
         asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
         duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
         ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
@@ -101,5 +116,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage };
+  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill };
 }
