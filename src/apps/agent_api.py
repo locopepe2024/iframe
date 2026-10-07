@@ -217,7 +217,14 @@ def reference_path(ctx, reference):
     parsed = urlsplit(reference)
     storage = _storage_for(ctx)
     if parsed.scheme:
-        raise HTTPException(422, "请从素材库选择或上传参考图片")
+        # Browser state can retain the absolute API URL after a refresh. The
+        # managed path remains owner-resolved below; arbitrary remote URLs do
+        # not become server fetch targets.
+        if parsed.path.startswith(("/playground/media/", "/playground/input-media/", "/studio/media/")):
+            reference = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+            parsed = urlsplit(reference)
+        else:
+            raise HTTPException(422, "请从素材库选择或上传参考图片")
     if parsed.path.startswith(("/playground/media/", "/playground/input-media/")):
         path = storage.resolve_media_reference(reference)
         root = os.path.realpath(os.path.dirname(storage.output_dir))

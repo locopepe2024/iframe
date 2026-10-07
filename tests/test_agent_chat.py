@@ -217,6 +217,19 @@ def test_agent_accepts_owned_library_path_and_validates_signed_studio_reference(
         agent.reference_path(setup, agent.os.path.relpath(foreign, 'output'))
 
 
+def test_agent_accepts_absolute_managed_media_url(setup, tmp_path, monkeypatch):
+    from src.apps.playground import api as playground_api
+
+    monkeypatch.chdir(tmp_path)
+    upload = tmp_path / 'output' / 'users' / 'owner' / 'playground' / 'uploads' / 'edited.png'
+    upload.parent.mkdir(parents=True)
+    upload.write_bytes(b'image')
+    storage = Mock(output_dir=str(upload.parent.parent.parent), resolve_media_reference=lambda value: str(upload))
+    monkeypatch.setattr(playground_api, '_storage_for', lambda ctx: storage)
+
+    assert agent.reference_path(setup, 'https://garage.uniart.fun/playground/input-media/edited.png') == str(upload.resolve())
+
+
 def test_agent_resolves_only_owned_library_object_keys(setup, monkeypatch):
     from types import SimpleNamespace
     from src.apps.comic_gen import api as studio_api
