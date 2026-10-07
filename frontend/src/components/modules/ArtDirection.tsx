@@ -57,6 +57,7 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
     const [editingPositive, setEditingPositive] = useState("");
     const [editingNegative, setEditingNegative] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [styleSettingsOpen, setStyleSettingsOpen] = useState(false);
 
     const filteredPresets = useMemo(() => {
         if (activeCategory === "all") return presets;
@@ -601,10 +602,38 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
                 {/* Built-in Presets v2 */}
                 <div>
-                    <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                        <Palette size={20} className="text-blue-400" />
-                        {ta("builtInPresets")}
-                    </h3>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                            <Palette size={20} className="text-blue-400" />
+                            {ta("builtInPresets")}
+                        </h3>
+                        <WorkflowActionButton
+                            variant="secondary"
+                            size="sm"
+                            leftIcon={<Pencil />}
+                            onClick={() => setStyleSettingsOpen(value => !value)}
+                            disabled={!selectedStyle}
+                        >
+                            {styleSettingsOpen ? ta("closeStyleSettings") : ta("styleSettings")}
+                        </WorkflowActionButton>
+                    </div>
+
+                    {styleSettingsOpen && selectedStyle && (
+                        <div className="mb-6 grid gap-4 rounded-lg border border-primary/30 bg-primary/5 p-4 md:grid-cols-2">
+                            <label className="block md:col-span-2">
+                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("styleNameLabel")}</span>
+                                <input value={editingName} onChange={event => { setEditingName(event.target.value); setIsModified(true); }} className="w-full rounded-md border border-border bg-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                            </label>
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("positivePromptLabel")}</span>
+                                <textarea value={editingPositive} onChange={event => { setEditingPositive(event.target.value); setIsModified(true); }} rows={5} className="w-full resize-y rounded-md border border-border bg-elevated p-3 text-sm text-foreground outline-none focus:border-primary" />
+                            </label>
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("negativePromptLabel")}</span>
+                                <textarea value={editingNegative} onChange={event => { setEditingNegative(event.target.value); setIsModified(true); }} rows={5} className="w-full resize-y rounded-md border border-border bg-elevated p-3 text-sm text-foreground outline-none focus:border-primary" />
+                            </label>
+                        </div>
+                    )}
 
                     {/* Category tabs */}
                     <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">

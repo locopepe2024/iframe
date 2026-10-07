@@ -1325,6 +1325,11 @@
     "exportHint": "Configure your export settings and click \"Start Render\""
   },
   "artDirection": {
+    "styleSettings": "Style settings",
+    "closeStyleSettings": "Close settings",
+    "styleNameLabel": "Style name",
+    "positivePromptLabel": "Positive style prompt",
+    "negativePromptLabel": "Negative style prompt",
     "directorAnalysis": "Director Interpretation",
     "directorAnalysisHint": "Confirm setting, timeline, relationship changes, narrative weight, pacing, and continuity before asset and storyboard work.",
     "directorAnalyze": "Generate Director Interpretation",

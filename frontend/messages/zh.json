@@ -1325,6 +1325,11 @@
     "exportHint": "配置导出设置后点击「开始渲染」"
   },
   "artDirection": {
+    "styleSettings": "风格设置",
+    "closeStyleSettings": "收起设置",
+    "styleNameLabel": "风格名称",
+    "positivePromptLabel": "正向风格提示词",
+    "negativePromptLabel": "负向风格提示词",
     "subtitle": "导演设定与视觉风格 - 建立叙事和画面标准",
     "directorAnalysis": "Director 解读",
     "directorAnalysisHint": "确认时代、地点、时间线、人物关系变化、叙事重点、节奏与连续性后，再用于资产和分镜。",
