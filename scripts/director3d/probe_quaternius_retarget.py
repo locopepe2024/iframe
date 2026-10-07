@@ -35,6 +35,16 @@ def import_armature(path):
     return armatures[0]
 
 
+def load_target(path):
+    if path.suffix.lower() == ".blend":
+        bpy.ops.wm.open_mainfile(filepath=str(path))
+        armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
+        if len(armatures) != 1:
+            raise ValueError(f"expected one armature in {path.name}, found {len(armatures)}")
+        return armatures[0]
+    return import_armature(path)
+
+
 def quaternion_angle(left, right):
     dot = abs(left.normalized().dot(right.normalized()))
     return math.degrees(2 * math.acos(min(1.0, max(0.0, dot))))
@@ -101,11 +111,18 @@ def main():
     source_hash = require_hash(args.source, mapping["sourceSha256"])
     source_buffer = args.source.with_name("AnimationLibrary_Godot_Standard.bin")
     buffer_hash = require_hash(source_buffer, mapping["sourceBufferSha256"])
-    target_hash = require_hash(args.target, mapping["targetSha256"])
+    target_hash = sha256(args.target)
+    expected_target_hash = mapping.get("targetBlendSha256") if args.target.suffix.lower() == ".blend" else mapping["targetSha256"]
+    if target_hash != expected_target_hash:
+        raise ValueError(f"SHA-256 mismatch for {args.target.name}: {target_hash}")
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    source = import_armature(args.source)
-    target = import_armature(args.target)
+    if args.target.suffix.lower() == ".blend":
+        target = load_target(args.target)
+        source = import_armature(args.source)
+    else:
+        source = import_armature(args.source)
+        target = load_target(args.target)
     pairs = mapping["pairs"]
     if len({item["target"] for item in pairs}) != len(pairs):
         raise ValueError("duplicate target bone in mapping")
@@ -202,7 +219,8 @@ def main():
         "mappingSha256": sha256(args.mapping),
         "sourceSha256": source_hash,
         "sourceBufferSha256": buffer_hash,
-        "targetGlbSha256": target_hash,
+        "targetArtifact": args.target.name,
+        "targetSha256": target_hash,
         "blenderVersion": bpy.app.version_string,
         "mappedBones": len(pairs),
         "sourceBones": len(source.data.bones),
@@ -210,7 +228,9 @@ def main():
         "actions": reports,
         "warnings": mapping["warnings"] + [
             "Pelvis and foot positions are diagnostic only; no ground calibration, contact acceptance, or IK was performed.",
-            "Target GLB is not the pinned Blender .blend rig; this report cannot validate production retargeting.",
+            *([] if args.target.suffix.lower() == ".blend" else [
+                "Target GLB is not the pinned Blender .blend rig; this report cannot validate production retargeting.",
+            ]),
         ],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
