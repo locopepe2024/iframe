@@ -335,6 +335,7 @@ class VideoTask(BaseModel):
     status: str = "pending"  # pending, processing, completed, failed
     error: Optional[str] = Field(None, description="Failure reason, if any (set by pipeline / cancel / orphan recovery)")
     video_url: Optional[str] = None
+    video_media_id: Optional[str] = Field(None, description="Stable media identity of the generated video")
     duration: int = Field(5, description="Video duration in seconds (model-specific range)")
     seed: Optional[int] = Field(None, description="Random seed for reproducibility")
     resolution: str = Field("720p", description="Video resolution")
