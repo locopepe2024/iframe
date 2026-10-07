@@ -1325,8 +1325,16 @@
     "exportHint": "配置导出设置后点击「开始渲染」"
   },
   "artDirection": {
-    "styleSettings": "风格设置",
-    "closeStyleSettings": "收起设置",
+    "addStyle": "添加",
+    "addStyleTitle": "添加 Style Profile",
+    "addStyleHint": "创建可复用的自定义视觉风格，不会修改内置预设。",
+    "coverLabel": "风格封面",
+    "summaryLabel": "摘要",
+    "tagsLabel": "标签",
+    "tagsPlaceholder": "写实、冷色、武侠（逗号分隔）",
+    "sampleDescriptionLabel": "示例描述",
+    "styleAdded": "风格已添加",
+    "styleAddFailed": "风格添加失败",
     "styleNameLabel": "风格名称",
     "positivePromptLabel": "正向风格提示词",
     "negativePromptLabel": "负向风格提示词",

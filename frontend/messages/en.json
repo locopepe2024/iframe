@@ -1325,8 +1325,16 @@
     "exportHint": "Configure your export settings and click \"Start Render\""
   },
   "artDirection": {
-    "styleSettings": "Style settings",
-    "closeStyleSettings": "Close settings",
+    "addStyle": "Add",
+    "addStyleTitle": "Add Style Profile",
+    "addStyleHint": "Create a reusable custom visual style without changing built-in presets.",
+    "coverLabel": "Style cover",
+    "summaryLabel": "Summary",
+    "tagsLabel": "Tags",
+    "tagsPlaceholder": "realistic, cool, wuxia (comma separated)",
+    "sampleDescriptionLabel": "Example description",
+    "styleAdded": "Style added",
+    "styleAddFailed": "Could not add style",
     "styleNameLabel": "Style name",
     "positivePromptLabel": "Positive style prompt",
     "negativePromptLabel": "Negative style prompt",
