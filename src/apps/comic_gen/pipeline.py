@@ -1816,6 +1816,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         return variants
 
+    @staticmethod
+    def _register_storyboard_frame_media(frame: StoryboardFrame, owner_profile_id: Optional[str]) -> None:
+        """Attach owner-scoped media IDs to generated/uploaded storyboard variants."""
+        if not owner_profile_id:
+            return
+        image_asset = getattr(frame, "rendered_image_asset", None)
+        variants = getattr(image_asset, "variants", []) if image_asset else []
+        ComicGenPipeline._register_asset_variant_media(variants, owner_profile_id)
+
     def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
         """Return the normalized effective assets used by reference pickers."""
         script = self.get_script(script_id)
@@ -4546,6 +4555,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             characters=resolved["characters"],
             scenes=resolved["scenes"],
         )
+        for frame in script.frames:
+            self._register_storyboard_frame_media(frame, script.owner_profile_id)
         self._save_data()
         return script
 
@@ -4971,6 +4982,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 size=effective_size,
                 model_name=i2i_model
             )
+            self._register_storyboard_frame_media(frame, script.owner_profile_id)
             
             self._save_data()
             return script
@@ -5264,6 +5276,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         frame.rendered_image_asset.variants.append(variant)
         frame.rendered_image_asset.selected_id = variant.id
+        self._register_storyboard_frame_media(frame, script.owner_profile_id)
         # Also update rendered_image_url so VideoCreator can pick it up
         frame.rendered_image_url = image_url
 
@@ -5307,6 +5320,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         frame.rendered_image_asset.variants.append(variant)
         frame.rendered_image_asset.selected_id = variant.id
+        self._register_storyboard_frame_media(frame, script.owner_profile_id)
         # Also update rendered_image_url so VideoCreator can pick it up
         frame.rendered_image_url = image_url
 

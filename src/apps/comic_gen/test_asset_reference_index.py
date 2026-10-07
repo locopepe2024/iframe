@@ -67,12 +67,14 @@ def _pipeline(project: Script, series: Series, library: GlobalAssetLibrary) -> C
     return pipeline
 
 
-def test_asset_reference_index_normalizes_scope_precedence_and_variants():
+def test_asset_reference_index_normalizes_scope_precedence_and_variants(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     project = Script(
         id="episode",
         title="Episode",
         original_text="text",
         series_id="series",
+        owner_profile_id="owner",
         characters=[_character("shared", "Episode actor", "episode-view")],
         created_at=0,
         updated_at=0,
@@ -80,6 +82,7 @@ def test_asset_reference_index_normalizes_scope_precedence_and_variants():
     series = Series(
         id="series",
         title="Series",
+        owner_profile_id="owner",
         characters=[
             _character("shared", "Shadowed series actor", "series-shadow"),
             _character("series-actor", "Series actor", "series-view"),
@@ -92,6 +95,7 @@ def test_asset_reference_index_normalizes_scope_precedence_and_variants():
         characters=[_character("shared", "Shadowed global actor", "global-shadow")],
         props=[_prop("global-prop", "Global prop", "prop-view")],
     )
+    library.props[0].owner_profile_id = "owner"
 
     index = _pipeline(project, series, library).get_asset_reference_index("episode")
 
@@ -108,6 +112,7 @@ def test_asset_reference_index_normalizes_scope_precedence_and_variants():
     assert by_id["shared"].source_container_id == "episode"
     assert by_id["shared"].selected_variant_id == "episode-view"
     assert [item.id for item in by_id["shared"].variants] == ["episode-view"]
+    assert by_id["shared"].variants[0].media_id
     assert by_id["series-actor"].source_scope == "series"
     assert by_id["series-actor"].source_container_id == "series"
     assert by_id["global-prop"].source_scope == "global"

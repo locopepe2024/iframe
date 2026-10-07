@@ -50,3 +50,33 @@ def get_media(owner_profile_id: str, media_id: str) -> dict | None:
     if not row:
         return None
     return dict(zip(("media_id", "storage_key", "kind", "display_name", "sha256", "metadata", "created_at"), row), metadata=json.loads(row[5]))
+
+
+def list_media(owner_profile_id: str, *, display_name: str | None = None,
+               kind: str | None = None) -> list[dict]:
+    """List owner-owned media mappings for application-level name lookup."""
+    path = _registry_path(owner_profile_id)
+    if not os.path.isfile(path):
+        return []
+    clauses = []
+    params: list[str] = []
+    if display_name is not None:
+        clauses.append("display_name=?")
+        params.append(display_name)
+    if kind is not None:
+        clauses.append("kind=?")
+        params.append(kind)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with closing(sqlite3.connect(path, timeout=10)) as db:
+        rows = db.execute(
+            "SELECT media_id,storage_key,kind,display_name,sha256,metadata,created_at "
+            f"FROM media_records{where} ORDER BY created_at, media_id",
+            params,
+        ).fetchall()
+    return [
+        dict(
+            zip(("media_id", "storage_key", "kind", "display_name", "sha256", "metadata", "created_at"), row),
+            metadata=json.loads(row[5]),
+        )
+        for row in rows
+    ]

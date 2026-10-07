@@ -593,6 +593,10 @@ class StoryboardReference(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     kind: Literal["scene", "effect", "upload", "reference_video"] = "scene"
     url: str
+    media_id: Optional[str] = Field(
+        None,
+        description="Owner-scoped immutable media identity; URL is only a delivery projection",
+    )
     label: Optional[str] = None
     source_asset_id: Optional[str] = None
     created_at: float = Field(default_factory=time.time)
@@ -602,7 +606,9 @@ class StoryboardReferencePackage(BaseModel):
     """Confirmed Storyboard inputs consumed by Shot Design."""
     revision: int = Field(1, ge=1)
     first_frame_url: Optional[str] = None
+    first_frame_media_id: Optional[str] = None
     last_frame_url: Optional[str] = None
+    last_frame_media_id: Optional[str] = None
     references: List[StoryboardReference] = Field(default_factory=list)
     confirmed: bool = False
     updated_at: float = Field(default_factory=time.time)
