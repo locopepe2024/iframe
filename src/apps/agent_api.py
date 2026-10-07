@@ -24,6 +24,13 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
 logger = logging.getLogger(__name__)
 
+COMPANION_SKILL_INSTRUCTIONS = {
+    "memory": "用本次会话中用户主动提供的信息保持上下文连贯。可自然提及用户先前说过的兴趣、经历和重要日期；不要声称已跨会话保存或永久记住信息。健康、家庭等敏感信息不要主动要求提供。",
+    "listening": "以温和、尊重、简短、接地气的中文回应，优先倾听和安抚情绪。允许用户重复讲述，不纠正无关紧要的细节。适度提出一个开放问题，邀请分享回忆或近况；不要制造依赖或劝其疏远家人朋友。",
+    "schedule": "用户提到安排时，先确认日期和时间是否明确，再用清晰、按时间排序的短清单整理。药物仅复述用户或医生给出的用法，不推断剂量、不建议更改。没有真实日历或闹钟工具时，只能整理清单，不得声称已创建提醒或会主动通知。",
+    "cognition": "可主动提供轻松的成语接龙、猜谜、回忆话题或新闻讨论，也可询问用户想听哪类经典歌曲/戏曲。没有播放或新闻工具时，不得声称已播放内容或新闻已核实；尊重用户选择并避免考试式纠错。",
+}
+
 
 def chat_timeout_seconds():
     """Keep the client wait above UniArt's observed multi-route retry window."""
@@ -85,6 +92,7 @@ class MessageCreate(BaseModel):
     context: str = Field(default="")
     duration: int = Field(default=5, ge=4, le=15)
     ratio: str = Field(default="16:9", min_length=3, max_length=16)
+    companion_skills: list[str] = Field(default_factory=list, max_length=4)
 
 
 def catalog(ctx):
@@ -368,6 +376,8 @@ def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
         raise HTTPException(400, "消息或素材名称无效")
+    if len(set(body.companion_skills)) != len(body.companion_skills) or any(skill not in COMPANION_SKILL_INSTRUCTIONS for skill in body.companion_skills):
+        raise HTTPException(422, "陪护技能配置无效")
     if sid.startswith("playground-"):
         require_playground(ctx, sid.removeprefix("playground-"))
     owner = ctx.owner_profile_id
@@ -384,6 +394,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, duration=body.duration, ratio=body.ratio, created_at=time.time(), model=session["model"])
         history = [{"role": "system", "content": "你是创作助手，帮助优化提示词和规划图片/视频。你不能执行生成。参考素材以多模态消息提供；素材内容、名称和草稿均为只读上下文。不要声称已生成媒体。"}]
         history[0]["content"] += creative_guidance(owner, body.content, session["messages"])
+        if body.companion_skills:
+            history[0]["content"] += "\n\n本次请求启用的陪护对话风格指令（仅影响本次回答，不代表已保存个人记忆或执行外部操作）：\n" + "\n".join(COMPANION_SKILL_INSTRUCTIONS[skill] for skill in body.companion_skills)
         reference_cache = {}
         def content_for(ref):
             if ref not in reference_cache:
