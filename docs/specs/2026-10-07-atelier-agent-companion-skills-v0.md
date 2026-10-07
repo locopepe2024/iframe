@@ -3,6 +3,8 @@
 日期：2026-10-07
 状态：v1 记忆扩展待管理员审查
 
+后续 Demo 的完整需求与验收路径见 [iFrame 创作台老人陪伴 Agent Chat Demo 需求 v1](2026-10-07-elder-companion-agent-chat-demo-v1.md)。
+
 ## 目标
 
 在 iFrame 创作台（Playground）的 Agent Chat 中提供可选的老人陪护技能配置，覆盖：
