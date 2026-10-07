@@ -27,3 +27,9 @@ The free CC0 candidate contains usable strike and sword-action inputs. The exist
 2. Create a versioned candidate bone map against the pinned Blender `.blend`, including an explicit policy for source hand and foot bones versus target wrist and ankle helper chains.
 3. Apply `A_TPose` and sampled frames from `Punch_Jab`, `Punch_Cross`, and `Sword_Attack` in Blender. Check evaluated parent-space bone directions and quaternion composition before enabling IK.
 4. Measure root motion, foot-contact residuals, and pose continuity across each clip; render review frames and keep failure reasons. Only a reviewed result may advance to `validated`.
+
+## Candidate transfer diagnostic
+
+The versioned candidate map is `quaternius-standard-bone-map.v1.json`. `probe_quaternius_retarget.py` checked source and target SHA-256 before importing them in a fresh Blender 5.2.0 LTS background process. It evaluated all 21 `Punch_Jab`, 25 `Punch_Cross`, and 37 `Sword_Attack` frames and mapped 22 major bones. The report was written only to `/private/tmp/iframe-quaternius-retarget-diagnostic.v1.json` with `status: candidate_only`.
+
+The largest evaluated source-to-target bone-direction error was 13.769 degrees at `neck`; `spine_chest` reached 9.4651 degrees, `foot_l` 8.7004 degrees, and `pelvis` 0.4665 degrees. The largest rotation residual against the solver's desired target rotation was below 0.07 degrees. That residual measures implementation consistency, not fidelity to a performer. `Sword_Attack` has a 122.0495-degree right-hand change at frame 10 on both source and target, so it is source motion evidence rather than a newly introduced target-only jump. Contact, IK, root travel, finger motion, sword grip, and rendered deformation were not checked. The target was the browser GLB, not the pinned Blender `.blend`; `retargetStatus` remains `unmapped`.
