@@ -12,6 +12,13 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert 'replacement' in text
 
 
+def test_h3_polish_contract_forbids_text_overlays():
+    text = api._storyboard_polish_contract('uniart/minimax-h3-vip', '', '')
+    assert 'HARD H3 TEXT-OVERLAY PROHIBITION' in text
+    assert 'subtitles' in text
+    assert 'Dialogue, if\nrequested, is audio only' in text
+
+
 def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     processor = Mock()
     structured = '\n'.join([

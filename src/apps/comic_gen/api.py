@@ -5738,6 +5738,14 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+    if "h3" in (model_id or "").lower():
+        constraints += """
+HARD H3 TEXT-OVERLAY PROHIBITION:
+Do not add subtitles, captions, karaoke text, dialogue text overlays, title cards,
+watermarks, labels, or any other burned-in/on-screen typography. Dialogue, if
+requested, is audio only and must not be rendered as text. Do not describe or
+request subtitle tracks in either prompt language.
+"""
     return guidance + "\n" + custom + constraints + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string contains
@@ -5778,10 +5786,11 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         """
         if not isinstance(text, str):
             return False
-        normalized = re.sub(r"[\s_-]+", "_", field.strip().lower())
+        parts = [part for part in re.split(r"[\s_-]+", field.strip().lower()) if part]
+        field_pattern = r"[\s_-]*".join(re.escape(part) for part in parts)
         pattern = re.compile(
-            rf"(?im)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:`|\*\*)?"
-            rf"{re.escape(normalized)}(?:`|\*\*)?\s*[:：]"
+            rf"(?im)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:[\"'`]|\*\*)?"
+            rf"{field_pattern}(?:[\"'`]|\*\*)?\s*(?:[:：-]|$)"
         )
         return pattern.search(text) is not None
 
