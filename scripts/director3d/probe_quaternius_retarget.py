@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import bpy
-from mathutils import Matrix, Quaternion
+from mathutils import Matrix, Quaternion, Vector
 
 
 def sha256(path):
@@ -52,6 +52,39 @@ def direction_angle(source, source_bone, target, target_bone):
     return math.degrees(source_direction.angle(target_direction))
 
 
+def world_position(armature, bone, endpoint="head"):
+    position = getattr(bone, endpoint)
+    return [round(value, 5) for value in armature.matrix_world @ position]
+
+
+def distance(left, right):
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
+
+
+def render_preview(source, output):
+    for obj in source.children_recursive:
+        if obj.type == "MESH":
+            obj.hide_render = True
+    camera_data = bpy.data.cameras.new("diagnostic-camera")
+    camera = bpy.data.objects.new("diagnostic-camera", camera_data)
+    bpy.context.collection.objects.link(camera)
+    camera.location = (3.4, -5.5, 2.3)
+    focus = Vector((0, 0, 0.95))
+    camera.rotation_euler = (focus - camera.location).to_track_quat("-Z", "Y").to_euler()
+    camera_data.type = "ORTHO"
+    camera_data.ortho_scale = 2.8
+    scene = bpy.context.scene
+    scene.camera = camera
+    scene.render.engine = "BLENDER_WORKBENCH"
+    scene.render.resolution_x = 640
+    scene.render.resolution_y = 640
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.filepath = str(output)
+    bpy.ops.render.render(write_still=True)
+    bpy.data.objects.remove(camera, do_unlink=True)
+
+
 def main():
     raw = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
@@ -59,6 +92,7 @@ def main():
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--preview-dir", type=Path)
     args = parser.parse_args(raw)
 
     mapping = json.loads(args.mapping.read_text())
@@ -83,6 +117,8 @@ def main():
     target_rest = {item["target"]: target.data.bones[item["target"]].matrix_local.to_quaternion() for item in pairs}
     actions = ("Punch_Jab", "Punch_Cross", "Sword_Attack")
     reports = []
+    if args.preview_dir:
+        args.preview_dir.mkdir(parents=True, exist_ok=True)
     for name in actions:
         action = bpy.data.actions.get(name)
         if not action or not action.slots:
@@ -132,8 +168,32 @@ def main():
                 if item["target"] in previous:
                     continuity[item["target"]] = round(quaternion_angle(previous[item["target"]], evaluated), 4)
                 previous[item["target"]] = evaluated.copy()
-            samples.append({"frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity})
-        reports.append({"action": name, "frameRange": [start, end], "samples": samples})
+            source_points = {
+                "pelvis": world_position(source, source.pose.bones["DEF-hips"]),
+                "foot_l": world_position(source, source.pose.bones["DEF-foot.L"], "tail"),
+                "foot_r": world_position(source, source.pose.bones["DEF-foot.R"], "tail"),
+            }
+            target_points = {
+                "pelvis": world_position(target, target.pose.bones["pelvis"]),
+                "foot_l": world_position(target, target.pose.bones["foot_l"], "tail"),
+                "foot_r": world_position(target, target.pose.bones["foot_r"], "tail"),
+            }
+            samples.append({"frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity, "sourcePointsM": source_points, "targetPointsM": target_points})
+            if args.preview_dir and frame == (start + end) // 2:
+                render_preview(source, args.preview_dir / f"{name}-frame-{frame}.png")
+        first, last = samples[0], samples[-1]
+        travel = {
+            "sourcePelvisM": round(distance(first["sourcePointsM"]["pelvis"], last["sourcePointsM"]["pelvis"]), 5),
+            "targetPelvisM": round(distance(first["targetPointsM"]["pelvis"], last["targetPointsM"]["pelvis"]), 5),
+        }
+        foot_heights = {
+            side: {
+                scope: [min(sample[f"{scope}PointsM"][side][2] for sample in samples), max(sample[f"{scope}PointsM"][side][2] for sample in samples)]
+                for scope in ("source", "target")
+            }
+            for side in ("foot_l", "foot_r")
+        }
+        reports.append({"action": name, "frameRange": [start, end], "pelvisTravelM": travel, "footHeightRangeM": foot_heights, "previewFrame": (start + end) // 2 if args.preview_dir else None, "samples": samples})
 
     report = {
         "schema": "director3d-retarget-diagnostic.v1",
@@ -149,7 +209,7 @@ def main():
         "targetBones": len(target.data.bones),
         "actions": reports,
         "warnings": mapping["warnings"] + [
-            "No foot-contact or IK validation was performed.",
+            "Pelvis and foot positions are diagnostic only; no ground calibration, contact acceptance, or IK was performed.",
             "Target GLB is not the pinned Blender .blend rig; this report cannot validate production retargeting.",
         ],
     }
