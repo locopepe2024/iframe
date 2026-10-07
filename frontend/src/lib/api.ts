@@ -1314,6 +1314,9 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
+        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizationSkills: string[] = [],
+        targetRatio: string = "16:9",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -1323,6 +1326,9 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            optimizer_provider: optimizerProvider,
+            optimization_skills: optimizationSkills,
+            target_ratio: targetRatio,
             generate_audio: generateAudio,
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
@@ -1342,6 +1348,9 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
+        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizationSkills: string[] = [],
+        targetRatio: string = "16:9",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -1352,6 +1361,9 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            optimizer_provider: optimizerProvider,
+            optimization_skills: optimizationSkills,
+            target_ratio: targetRatio,
             generate_audio: generateAudio,
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",

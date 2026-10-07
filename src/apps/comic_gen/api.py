@@ -5692,6 +5692,9 @@ class PolishVideoPromptRequest(BaseModel):
     # 显式覆盖 polish 用的 LLM 模型；空 = 用 project / series PromptConfig
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
+    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
+    target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -5713,7 +5716,7 @@ def _polish_error_response(err) -> Dict[str, Any]:
 
 
 def _target_model_guidance(model_id: str) -> str:
-    """Load the installed provider skill for storyboard prompt polishing."""
+    """Legacy model-to-skill mapping for callers before explicit skill selection."""
     value = (model_id or "").lower()
     from ..agent_skills import catalog
     label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
@@ -5724,8 +5727,29 @@ def _target_model_guidance(model_id: str) -> str:
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="") -> str:
-    guidance = _target_model_guidance(model_id)
+def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
+    """Compose explicitly selected catalog skills in request order.
+
+    This is intentionally independent of the target video model.  The catalog
+    remains the source of truth, so arbitrary prompt text cannot inject a new
+    instruction package or a missing skill id.
+    """
+    if skill_ids is None:
+        return ""
+    from ..agent_skills import catalog
+    packages = {package["id"]: package for package in catalog()}
+    unknown = [skill_id for skill_id in skill_ids if skill_id not in packages]
+    if unknown:
+        raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
+    selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
+    if not selected:
+        return ""
+    text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
+    return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None) -> str:
+    guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
     if not guidance:
         return custom or default
     constraints = ""
@@ -5786,11 +5810,8 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
     """Reject responses that ignore the selected provider's prompt contract."""
     if "h3" not in (model_id or "").lower():
         return
-    fields = (
-        ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
-        if reference_mode
-        else ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
-    )
+    reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
+    base_fields = ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     def has_field(text: Any, field: str) -> bool:
         """Accept the model's harmless Markdown decoration around contract fields.
 
@@ -5812,7 +5833,11 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
     invalid_languages = []
     for key in ("prompt_cn", "prompt_en"):
         text = result.get(key, "")
-        if any(not has_field(text, field) for field in fields):
+        # MiniMax IR may return the valid base H3/T2VA contract even when the
+        # caller entered through the R2V polish surface. Accept that explicit
+        # three-field form; do not accept an unstructured sentence.
+        accepted = (reference_fields, base_fields) if reference_mode else (base_fields,)
+        if not any(all(has_field(text, field) for field in fields) for fields in accepted):
             invalid_languages.append(key)
     if invalid_languages:
         from .llm import PolishError
@@ -5832,6 +5857,62 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             message_zh="润色结果遗漏或改写了镜头对白，请重试。本次结果未应用。",
             message_en="The polished prompt omitted or rewrote the shot dialogue. Retry; this result was not applied.",
         )
+
+
+def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
+    """Run the official MiniMax Context-IR optimizer for storyboard polish."""
+    from .llm import PolishError
+    if request.target_video_model and "h3" not in request.target_video_model.lower():
+        raise HTTPException(status_code=422, detail={
+            "reason": "optimizer_target_mismatch",
+            "message": "MiniMax Context-IR is only available for MiniMax H3 optimization.",
+        })
+    user = current_studio_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="MiniMax Context-IR requires a Studio user context")
+    from ..models.uniart import complete_context_ir, _image_reference_url
+    from ..studio_access import runtime_uniart_for_owner
+    config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
+    instruction = custom_prompt.strip()
+    instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
+    if request.optimization_skills:
+        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
+    if getattr(request, "feedback", "").strip():
+        text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
+    content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
+    for index, value in enumerate(request.image_urls or []):
+        content.append({"type": "text", "text": f"Reference image {index + 1}"})
+        content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
+    try:
+        prompt = complete_context_ir(
+            config,
+            content,
+            duration=max(1, int(round(request.target_duration or 5))),
+            ratio=request.target_ratio or "16:9",
+            idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}",
+        )
+    except Exception as exc:
+        logger.exception("MiniMax Context-IR storyboard polish failed")
+        raise PolishError(reason="api_error", message_zh=f"MiniMax IR 调用失败：{exc}", message_en=f"MiniMax Context-IR failed: {exc}") from exc
+    return {"prompt_cn": prompt, "prompt_en": prompt}
+
+
+_OPTIMIZER_MODEL_IDS = {
+    "gpt": "gpt-5.6-sol",
+    "qwen": "qwen3.8-flash",
+    "deepseek": "deepseek-v4.1-flash",
+    "glm": "glm-5.3",
+}
+
+
+def _effective_optimization_skills(request) -> Optional[List[str]]:
+    """Non-IR optimizer models use the H3 Director skill by default."""
+    if request.optimization_skills is not None:
+        return request.optimization_skills
+    if request.optimizer_provider in _OPTIMIZER_MODEL_IDS:
+        return ["minimax-h3-director"]
+    return None
 
 
 @app.post("/video/polish_prompt")
@@ -5859,9 +5940,15 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         director = _get_director_prompt_context(request.script_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
+        selected_skills = _effective_optimization_skills(request)
+        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
+        if request.optimizer_provider == "minimax_context_ir":
+            result = _complete_minimax_ir_polish(request, custom_prompt)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            return result
         # Polish model: request override → project/series PromptConfig → ""
-        polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
+        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         result = processor.polish_video_prompt(
             request.draft_prompt,
@@ -5900,6 +5987,9 @@ class PolishR2VPromptRequest(BaseModel):
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
     polish_model: str = ""
+    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
+    target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -5917,8 +6007,14 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         director = _get_director_prompt_context(request.script_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
-        polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
+        selected_skills = _effective_optimization_skills(request)
+        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
+        if request.optimizer_provider == "minimax_context_ir":
+            result = _complete_minimax_ir_polish(request, custom_prompt)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            return result
+        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
         result = processor.polish_r2v_prompt(
