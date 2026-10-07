@@ -66,12 +66,15 @@ class PlaygroundService:
             if name:
                 media_names[resolved] = name
         draft = PlaygroundDraft(
-            media_names=dict(request.media_names),
+            # Persist the resolved owner-scoped storage identity. Signed
+            # delivery URLs are presentation references and must not survive
+            # a session refresh as the durable media identity.
+            media_names=dict(media_names),
             mode=request.mode,
             model_id=request.model_id,
             prompt=request.prompt,
             negative_prompt=request.negative_prompt,
-            input_media=list(request.input_media or []),
+            input_media=list(input_media),
             parameters=request.parameters or {},
             batch_size=request.batch_size or 1,
             parent_generation_id=request.parent_generation_id,

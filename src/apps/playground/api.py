@@ -296,7 +296,21 @@ def update_session(
     if request.title is not None:
         session.title = request.title.strip() or session.title
     if request.draft is not None:
-        session.draft = request.draft
+        draft = request.draft
+        names = draft.media_names or {}
+        resolved_media = []
+        resolved_names = {}
+        for value in draft.input_media:
+            resolved = storage.resolve_media_reference(value)
+            key = urlsplit(value).path if value.startswith(("/playground/", "/studio/")) else value
+            name = names.get(key) or names.get(value)
+            resolved_media.append(resolved)
+            if name:
+                resolved_names[resolved] = name
+        session.draft = draft.model_copy(update={
+            "input_media": resolved_media,
+            "media_names": resolved_names,
+        })
     session.updated_at = datetime.now(timezone.utc).isoformat()
     return _public_session(storage.update_session(session), identity)
 
