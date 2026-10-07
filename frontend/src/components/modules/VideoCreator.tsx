@@ -23,6 +23,7 @@ import { R2V_SELECTION_MODEL_ID, getR2vRouteModelId, isR2vImageBased } from "@/l
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import { characterImageUrl, characterReferenceVariants } from "@/lib/characterImage";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
+import OptimizerSelector, { type OptimizerProvider } from "./storyboard-r2v/OptimizerSelector";
 import type { VideoParams } from "@/store/projectStore";
 
 interface VideoCreatorProps {
@@ -156,7 +157,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
-    const [optimizerProvider, setOptimizerProvider] = useState<"minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm">("qwen");
+    const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
 
     const handlePolish = async (feedback: string = "") => {
@@ -1116,23 +1117,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         </button>
                                     </div>
                                 )}
-                                <select
-                                    value={optimizerProvider}
-                                    onChange={(event) => {
-                                        const provider = event.target.value as typeof optimizerProvider;
+                                <OptimizerSelector
+                                    provider={optimizerProvider}
+                                    skills={optimizationSkills}
+                                    onProviderChange={(provider) => {
                                         setOptimizerProvider(provider);
                                         setOptimizationSkills(provider === "minimax_context_ir" ? [] : ["minimax-h3-director"]);
                                     }}
-                                    className="text-[0.625rem] bg-glass border border-glass-border rounded px-1.5 py-1 text-text-secondary"
-                                    aria-label="选择提示词优化器"
-                                    title="选择提示词优化器"
-                                >
-                                    <option value="minimax_context_ir">MiniMax IR</option>
-                                    <option value="gpt">GPT</option>
-                                    <option value="qwen">Qwen</option>
-                                    <option value="deepseek">DeepSeek</option>
-                                    <option value="glm">GLM</option>
-                                </select>
+                                    onToggleSkill={(skillId) => setOptimizationSkills((current) => current.includes(skillId)
+                                        ? current.filter((id) => id !== skillId)
+                                        : [...current, skillId])}
+                                />
                                 <button
                                     onClick={() => handlePolish()}
                                     disabled={isPolishing || !prompt}
