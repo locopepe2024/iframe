@@ -218,6 +218,8 @@ export interface StyleConfig {
     positive_prompt: string;
     negative_prompt: string;
     thumbnail_url?: string;
+    tags?: string[];
+    sample_prompt?: string;
     is_custom: boolean;
     reason?: string; // For AI recommendations
 }

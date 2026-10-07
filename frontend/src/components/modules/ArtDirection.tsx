@@ -57,7 +57,10 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
     const [editingPositive, setEditingPositive] = useState("");
     const [editingNegative, setEditingNegative] = useState("");
     const [isSaving, setIsSaving] = useState(false);
-    const [styleSettingsOpen, setStyleSettingsOpen] = useState(false);
+    const [newStyleOpen, setNewStyleOpen] = useState(false);
+    const [newStyleSaving, setNewStyleSaving] = useState(false);
+    const [newStyleCover, setNewStyleCover] = useState<File | null>(null);
+    const [newStyleDraft, setNewStyleDraft] = useState({ name: "", description: "", tags: "", positive: "", negative: "", sample: "" });
 
     const filteredPresets = useMemo(() => {
         if (activeCategory === "all") return presets;
@@ -399,6 +402,42 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
         }
     };
 
+    const handleCreateStyle = async () => {
+        if (!currentProject || !newStyleDraft.name.trim() || !newStyleDraft.positive.trim() || newStyleSaving) return;
+        setNewStyleSaving(true);
+        try {
+            const thumbnail = newStyleCover ? (await api.uploadLibraryImage(newStyleCover)).image_url : undefined;
+            const style: StyleConfig = {
+                id: `custom-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+                name: newStyleDraft.name.trim(),
+                description: newStyleDraft.description.trim(),
+                positive_prompt: newStyleDraft.positive.trim(),
+                negative_prompt: newStyleDraft.negative.trim(),
+                thumbnail_url: thumbnail,
+                tags: newStyleDraft.tags.split(",").map(item => item.trim()).filter(Boolean),
+                sample_prompt: newStyleDraft.sample.trim(),
+                is_custom: true,
+            };
+            const nextCustomStyles = [...customStyles, style];
+            const updated = await api.saveArtDirection(currentProject.id, style.id, style, nextCustomStyles, aiRecommendations);
+            updateProject(currentProject.id, updated);
+            setCustomStyles(nextCustomStyles);
+            setSelectedStyle(style);
+            setEditingName(style.name);
+            setEditingPositive(style.positive_prompt);
+            setEditingNegative(style.negative_prompt);
+            setNewStyleOpen(false);
+            setNewStyleCover(null);
+            setNewStyleDraft({ name: "", description: "", tags: "", positive: "", negative: "", sample: "" });
+            toast.success(ta("styleAdded"), { projectId: currentProject.id, projectTitle: currentProject.title });
+        } catch (error) {
+            console.error("Failed to add custom style:", error);
+            toast.error(ta("styleAddFailed"), { projectId: currentProject?.id, projectTitle: currentProject?.title });
+        } finally {
+            setNewStyleSaving(false);
+        }
+    };
+
     if (mindMapOnly) {
         return <div className="min-h-screen bg-background p-6"><DirectorProfilePanel mindMapOnly /></div>;
     }
@@ -611,29 +650,12 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                             variant="secondary"
                             size="sm"
                             leftIcon={<Pencil />}
-                            onClick={() => setStyleSettingsOpen(value => !value)}
-                            disabled={!selectedStyle}
+                            onClick={() => setNewStyleOpen(true)}
                         >
-                            {styleSettingsOpen ? ta("closeStyleSettings") : ta("styleSettings")}
+                            {ta("addStyle")}
                         </WorkflowActionButton>
                     </div>
 
-                    {styleSettingsOpen && selectedStyle && (
-                        <div className="mb-6 grid gap-4 rounded-lg border border-primary/30 bg-primary/5 p-4 md:grid-cols-2">
-                            <label className="block md:col-span-2">
-                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("styleNameLabel")}</span>
-                                <input value={editingName} onChange={event => { setEditingName(event.target.value); setIsModified(true); }} className="w-full rounded-md border border-border bg-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                            </label>
-                            <label className="block">
-                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("positivePromptLabel")}</span>
-                                <textarea value={editingPositive} onChange={event => { setEditingPositive(event.target.value); setIsModified(true); }} rows={5} className="w-full resize-y rounded-md border border-border bg-elevated p-3 text-sm text-foreground outline-none focus:border-primary" />
-                            </label>
-                            <label className="block">
-                                <span className="mb-1 block text-sm font-medium text-foreground">{ta("negativePromptLabel")}</span>
-                                <textarea value={editingNegative} onChange={event => { setEditingNegative(event.target.value); setIsModified(true); }} rows={5} className="w-full resize-y rounded-md border border-border bg-elevated p-3 text-sm text-foreground outline-none focus:border-primary" />
-                            </label>
-                        </div>
-                    )}
 
                     {/* Category tabs */}
                     <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
@@ -822,6 +844,30 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                                 {ta("overrideConfirmBtn")}
                             </WorkflowActionButton>
                         </footer>
+                    </div>
+                </div>
+            )}
+
+            {newStyleOpen && (
+                <div className="fixed inset-0 z-[120] grid place-items-center bg-overlay/80 p-4 backdrop-blur-sm" onClick={() => setNewStyleOpen(false)}>
+                    <div className="w-full max-w-3xl rounded-xl border border-glass-border bg-elevated shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <header className="flex items-center justify-between border-b border-glass-border px-6 py-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-foreground">{ta("addStyleTitle")}</h2>
+                                <p className="mt-1 text-xs text-text-muted">{ta("addStyleHint")}</p>
+                            </div>
+                            <button type="button" aria-label={ta("cancelBtn")} onClick={() => setNewStyleOpen(false)} className="text-text-muted hover:text-foreground"><X size={18} /></button>
+                        </header>
+                        <div className="grid gap-4 p-6 md:grid-cols-2">
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("coverLabel")}</span><input type="file" accept="image/*" onChange={event => setNewStyleCover(event.target.files?.[0] ?? null)} className="block w-full text-xs text-text-secondary" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("styleNameLabel")}</span><input value={newStyleDraft.name} onChange={event => setNewStyleDraft({ ...newStyleDraft, name: event.target.value })} className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("tagsLabel")}</span><input value={newStyleDraft.tags} onChange={event => setNewStyleDraft({ ...newStyleDraft, tags: event.target.value })} placeholder={ta("tagsPlaceholder")} className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground" /></label>
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("summaryLabel")}</span><textarea value={newStyleDraft.description} onChange={event => setNewStyleDraft({ ...newStyleDraft, description: event.target.value })} rows={2} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("positivePromptLabel")}</span><textarea value={newStyleDraft.positive} onChange={event => setNewStyleDraft({ ...newStyleDraft, positive: event.target.value })} rows={5} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("negativePromptLabel")}</span><textarea value={newStyleDraft.negative} onChange={event => setNewStyleDraft({ ...newStyleDraft, negative: event.target.value })} rows={5} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("sampleDescriptionLabel")}</span><textarea value={newStyleDraft.sample} onChange={event => setNewStyleDraft({ ...newStyleDraft, sample: event.target.value })} rows={3} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                        </div>
+                        <footer className="flex justify-end gap-2 border-t border-glass-border px-6 py-3"><WorkflowActionButton variant="ghost" onClick={() => setNewStyleOpen(false)}>{ta("cancelBtn")}</WorkflowActionButton><WorkflowActionButton variant="primary" loading={newStyleSaving} onClick={() => void handleCreateStyle()} disabled={!newStyleDraft.name.trim() || !newStyleDraft.positive.trim()}>{ta("addStyle")}</WorkflowActionButton></footer>
                     </div>
                 </div>
             )}
