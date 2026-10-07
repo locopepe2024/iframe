@@ -141,6 +141,9 @@ export default function StoryboardR2V() {
             model: i2vModelId,
             r2vModel: r2vModelId,
             duration: defaultDuration,
+            ratio: finalConfig?.params?.ratio?.default
+                ?? VIDEO_R2V_MODELS.find(m => m.id === r2vModelId)?.params?.ratio?.default
+                ?? DEFAULT_VIDEO_CONFIG.ratio,
         };
     });
 
@@ -1021,7 +1024,7 @@ export default function StoryboardR2V() {
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
                     imageBased ? referenceUrls : undefined, // referenceImageUrls
-                    undefined, // ratio
+                    videoConfig.ratio,
                     shot.tabMode,
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
@@ -1120,7 +1123,7 @@ export default function StoryboardR2V() {
                     videoConfig.movementAmplitude,
                     // HappyHorse
                     undefined,
-                    undefined, // ratio
+                    videoConfig.ratio,
                     shot.tabMode,
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
@@ -1714,7 +1717,7 @@ export default function StoryboardR2V() {
             // "random per generation".
             seed: shotSeeds[shot.id],
             resolution: videoConfig.resolution,
-            ratio: undefined,
+            ratio: videoConfig.ratio,
             negativePrompt: videoConfig.negativePrompt,
             promptExtend: videoConfig.promptExtend,
             cfgScale: videoConfig.cfgScale,
@@ -1774,6 +1777,7 @@ export default function StoryboardR2V() {
                 ...prev,
                 duration: next.duration,
                 resolution: next.resolution ?? prev.resolution,
+                ratio: next.ratio ?? prev.ratio,
                 negativePrompt: next.negativePrompt ?? prev.negativePrompt,
                 promptExtend: next.promptExtend ?? prev.promptExtend,
                 cfgScale: next.cfgScale ?? prev.cfgScale,
