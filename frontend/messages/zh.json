@@ -1299,6 +1299,8 @@
     ,"confirmReferencePackage": "确认参考素材"
     ,"referencePackageConfirmed": "参考素材已确认"
     ,"referencePackageSaveFailed": "保存镜头参考素材失败"
+    ,"referenceDesign": "参考设计"
+    ,"openReferenceDesign": "打开镜头参考设计"
   },
   "video": {
     "taskQueue": "任务队列",
