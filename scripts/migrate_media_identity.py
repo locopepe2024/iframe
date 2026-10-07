@@ -8,9 +8,12 @@ import copy
 import json
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.apps.media_registry import get_media, register_media
 
