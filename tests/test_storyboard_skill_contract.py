@@ -17,6 +17,10 @@ def test_h3_polish_contract_forbids_text_overlays():
     assert 'HARD H3 TEXT-OVERLAY PROHIBITION' in text
     assert 'subtitles' in text
     assert 'Dialogue, if\nrequested, is audio only' in text
+    assert 'FINAL H3 ENFORCEMENT (highest priority)' in text
+    assert 'Do not return a standalone sentence' in text
+    assert 'subject_definitions:' in text
+    assert 'non_diegetic_music:' in text
 
 
 def test_polish_keeps_default_contract_with_model_skill(monkeypatch):

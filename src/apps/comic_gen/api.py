@@ -5764,6 +5764,21 @@ Do not invent dialogue text, music, extra shots or replacement identities unless
 requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
+
+FINAL H3 ENFORCEMENT (highest priority):
+Do not return a standalone sentence, summary, explanation, Markdown prose, or
+an unstructured action description. Return one JSON object with exactly these
+string keys: prompt_cn and prompt_en. Inside EACH string, emit the required
+field headings in this exact order and spelling, each followed by a colon:
+subject_definitions:
+summary:
+retention_analysis:
+detailed_description:
+overall_soundscape:
+non_diegetic_music:
+If the request is not reference mode, still use the same six headings and set
+subject_definitions/retention_analysis to N/A when no references exist. Never
+omit a heading. Never put subtitles or any other text overlay in the prompt.
 """
 
 
