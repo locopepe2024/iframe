@@ -3,7 +3,7 @@ import uuid
 import time
 from typing import Dict, Any, List
 from urllib.parse import quote
-from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET
+from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET, image_variant_storage_key
 from .character_prompts import (
     DEFAULT_CHARACTER_STYLE_SUFFIX,
     append_style_suffix,
@@ -137,9 +137,9 @@ class AssetGenerator:
             # selected id. Match the gallery's first-available display rule.
             selected = variants[0]
 
-        if not selected.url:
+        if not image_variant_storage_key(selected):
             raise ValueError("Selected reference image is missing; select it again")
-        return selected.url
+        return image_variant_storage_key(selected)
 
     @staticmethod
     def _selected_reference_sheet_url(character: Character) -> str:
@@ -161,9 +161,9 @@ class AssetGenerator:
             # selected id. Match the gallery's first-available display rule.
             selected = variants[0]
 
-        if not selected.url:
+        if not image_variant_storage_key(selected):
             raise ValueError("Selected reference image is missing; select it again")
-        return selected.url
+        return image_variant_storage_key(selected)
 
     def generate_character(
         self,
@@ -212,9 +212,9 @@ class AssetGenerator:
                     reference = character.image_url
                 if reference_image_url is None and unit and unit.selected_image_id:
                     selected = next((v for v in unit.image_variants if v.id == unit.selected_image_id), None)
-                    if not selected or not selected.url:
+                    if not selected or not image_variant_storage_key(selected):
                         raise ValueError("Selected reference image is missing; select it again")
-                    reference = selected.url
+                    reference = image_variant_storage_key(selected)
                 reference_args = {}
                 if reference:
                     reference_args["ref_image_path"] = self._reference_path(reference)
@@ -346,7 +346,7 @@ class AssetGenerator:
                             None
                         )
                         if uploaded_variant:
-                            ref_url = uploaded_variant.url
+                            ref_url = image_variant_storage_key(uploaded_variant)
                             if is_object_key(ref_url):
                                 ref_image_path = ref_url
                                 logger.debug(f"Reverse generation: Using uploaded three_views as reference: {ref_url}")
@@ -363,7 +363,7 @@ class AssetGenerator:
                             None
                         )
                         if uploaded_variant:
-                            ref_url = uploaded_variant.url
+                            ref_url = image_variant_storage_key(uploaded_variant)
                             if is_object_key(ref_url):
                                 ref_image_path = ref_url
                                 logger.debug(f"Reverse generation: Using uploaded headshot as reference: {ref_url}")
@@ -462,7 +462,7 @@ class AssetGenerator:
             if character.full_body_asset and character.full_body_asset.selected_id:
                 selected_variant = next((v for v in character.full_body_asset.variants if v.id == character.full_body_asset.selected_id), None)
                 if selected_variant:
-                    current_full_body_url = selected_variant.url
+                    current_full_body_url = image_variant_storage_key(selected_variant)
 
             # The canonical reference sheet owns the master image in R2V v2.
             # Derived-only generations must use its selected variant ahead of
@@ -493,7 +493,7 @@ class AssetGenerator:
                         None
                     )
                     if uploaded_variant:
-                        uploaded_reference_url = uploaded_variant.url
+                        uploaded_reference_url = image_variant_storage_key(uploaded_variant)
                         logger.debug(f"Reverse generation: Will use uploaded headshot as reference for three_view")
                 
                 elif generation_type == "headshot" and character.three_view_asset:
@@ -503,7 +503,7 @@ class AssetGenerator:
                         None
                     )
                     if uploaded_variant:
-                        uploaded_reference_url = uploaded_variant.url
+                        uploaded_reference_url = image_variant_storage_key(uploaded_variant)
                         logger.debug(f"Reverse generation: Will use uploaded three_views as reference for headshot")
                 
                 # Also check own asset type for uploaded source
@@ -515,7 +515,7 @@ class AssetGenerator:
                             None
                         )
                         if uploaded_variant:
-                            uploaded_reference_url = uploaded_variant.url
+                            uploaded_reference_url = image_variant_storage_key(uploaded_variant)
                             logger.debug(f"Reverse generation: Will use own uploaded image as reference")
 
             if generation_type in ["three_view", "headshot"] and not current_full_body_url and not uploaded_reference_url and not explicit_reference_path:

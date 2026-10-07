@@ -1,7 +1,7 @@
 import os
 import time
 from typing import Dict, Any, List
-from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
+from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, image_variant_storage_key
 from ...models.image import WanxImageModel
 from ..studio_access import studio_uniart_config
 from ...utils import get_logger
@@ -99,21 +99,21 @@ class StoryboardGenerator:
                     if char.three_view_asset and char.three_view_asset.selected_id:
                         selected_variant = next((v for v in char.three_view_asset.variants if v.id == char.three_view_asset.selected_id), None)
                         if selected_variant:
-                            target_url = selected_variant.url
+                            target_url = image_variant_storage_key(selected_variant)
                             source = f"three_view_asset"
                     
                     # Priority 2: Use selected variant from full_body_asset
                     if not target_url and char.full_body_asset and char.full_body_asset.selected_id:
                         selected_variant = next((v for v in char.full_body_asset.variants if v.id == char.full_body_asset.selected_id), None)
                         if selected_variant:
-                            target_url = selected_variant.url
+                            target_url = image_variant_storage_key(selected_variant)
                             source = f"full_body_asset"
                     
                     # Priority 3: Use selected variant from headshot_asset
                     if not target_url and char.headshot_asset and char.headshot_asset.selected_id:
                         selected_variant = next((v for v in char.headshot_asset.variants if v.id == char.headshot_asset.selected_id), None)
                         if selected_variant:
-                            target_url = selected_variant.url
+                            target_url = image_variant_storage_key(selected_variant)
                             source = f"headshot_asset"
                     
                     # Priority 4: Fallback to legacy fields
@@ -139,7 +139,7 @@ class StoryboardGenerator:
                 if scene.image_asset and scene.image_asset.selected_id:
                     selected_variant = next((v for v in scene.image_asset.variants if v.id == scene.image_asset.selected_id), None)
                     if selected_variant:
-                        scene_url = selected_variant.url
+                        scene_url = image_variant_storage_key(selected_variant)
                 if not scene_url:
                     scene_url = scene.image_url
                 
@@ -229,8 +229,8 @@ class StoryboardGenerator:
             # Sync legacy fields
             selected_variant = next((v for v in frame.rendered_image_asset.variants if v.id == frame.rendered_image_asset.selected_id), None)
             if selected_variant:
-                frame.rendered_image_url = selected_variant.url
-                frame.image_url = selected_variant.url
+                frame.rendered_image_url = image_variant_storage_key(selected_variant)
+                frame.image_url = image_variant_storage_key(selected_variant)
                 
             frame.updated_at = time.time()
             frame.status = GenerationStatus.COMPLETED

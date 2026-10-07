@@ -45,6 +45,7 @@ from .models import (
     AssetLibraryReference,
     AssetReferenceIndex,
     AssetReferenceIndexEntry,
+    image_variant_storage_key,
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
@@ -1972,7 +1973,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"(asset_type={asset_type}, asset_id={asset_id}, "
                 f"variant_id={normalized['variant_id']})"
             )
-        value = getattr(variant, "url", None)
+        value = image_variant_storage_key(variant)
         if not isinstance(value, str) or not value.strip():
             raise InvalidAssetReference("reference variant has no image material")
         resolved = self._resolve_stored_reference_value(
@@ -4720,13 +4721,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_selected_id = getattr(reference_sheet, "selected_image_id", None)
             if reference_selected_id and reference_variants:
                 source_img = next((v for v in reference_variants if v.id == reference_selected_id), None)
-                if source_img is None or not source_img.url:
+                if source_img is None or not image_variant_storage_key(source_img):
                     raise ValueError("Selected reference image is missing; select it again")
-                source_image_url = source_img.url
+                source_image_url = image_variant_storage_key(source_img)
             elif reference_selected_id and not reference_variants:
                 raise ValueError("Selected reference image is missing; select it again")
             elif reference_variants:
-                source_image_url = reference_variants[0].url
+                source_image_url = image_variant_storage_key(reference_variants[0])
             # Fall back to the legacy selected image or URL when no canonical
             # reference image exists.
             elif asset_unit and asset_unit.selected_image_id:
@@ -4734,7 +4735,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     (v for v in asset_unit.image_variants if v.id == asset_unit.selected_image_id),
                     None
                 )
-                source_image_url = source_img.url if source_img else (
+                source_image_url = image_variant_storage_key(source_img) if source_img else (
                     target_asset.full_body_image_url if asset_type == "full_body" else target_asset.headshot_image_url
                 )
             else:

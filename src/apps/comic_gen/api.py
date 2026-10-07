@@ -77,6 +77,7 @@ from .models import (
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
+    image_variant_storage_key,
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, director_preset_identity
@@ -2110,7 +2111,7 @@ def get_asset_library_preview(
     if variant is None:
         raise HTTPException(status_code=404, detail="Asset variant not found")
 
-    raw = variant.url
+    raw = image_variant_storage_key(variant)
     uploader = OSSImageUploader()
     remote = False
     if is_object_key(raw):

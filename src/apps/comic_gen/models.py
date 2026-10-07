@@ -223,6 +223,13 @@ class ImageVariant(BaseModel):
     camera_yaw: Optional[float] = Field(None, description="Optional camera yaw in degrees")
     camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
 
+
+def image_variant_storage_key(variant: Optional[ImageVariant]) -> Optional[str]:
+    """Return the durable material key, never a delivery URL projection."""
+    if variant is None:
+        return None
+    return getattr(variant, "storage_key", None) or getattr(variant, "url", None)
+
 # Maximum variants to keep per asset (excluding favorited ones)
 MAX_VARIANTS_PER_ASSET = 10
 
