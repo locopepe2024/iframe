@@ -1132,6 +1132,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.generation_error = str(e)
             raise e
         finally:
+            self._register_asset_media(
+                target_asset,
+                getattr(target_asset, "owner_profile_id", None) or script.owner_profile_id,
+            )
             self._save_after_asset_mutation(source)
 
         return script
@@ -1817,6 +1821,44 @@ class ComicGenPipeline(StudioOwnerMixin):
         return variants
 
     @staticmethod
+    def _register_asset_media(asset: Any, owner_profile_id: Optional[str]) -> None:
+        """Register durable image and video materials at asset write time."""
+        if not asset or not owner_profile_id:
+            return
+        containers = (
+            "reference_sheet", "full_body", "head_shot", "three_views",
+            "image_asset", "full_body_asset", "headshot_asset", "three_view_asset",
+        )
+        image_variants: List[Any] = []
+        video_variants: List[Any] = []
+        for name in containers:
+            container = getattr(asset, name, None)
+            if not container:
+                continue
+            image_variants.extend(getattr(container, "image_variants", None) or [])
+            image_variants.extend(getattr(container, "variants", None) or [])
+            video_variants.extend(getattr(container, "video_variants", None) or [])
+        video_variants.extend(getattr(asset, "video_assets", None) or [])
+        ComicGenPipeline._register_asset_variant_media(image_variants, owner_profile_id)
+        for variant in video_variants:
+            if getattr(variant, "media_id", None):
+                continue
+            storage_key = (
+                getattr(variant, "storage_key", None)
+                or getattr(variant, "video_url", None)
+                or getattr(variant, "url", None)
+            )
+            if not storage_key or storage_key.startswith(("http://", "https://")):
+                continue
+            variant.media_id = register_media(
+                owner_profile_id,
+                storage_key,
+                kind="asset_video_variant",
+                display_name=f"asset-video-{getattr(variant, 'id', 'unknown')}",
+                metadata={"variant_id": getattr(variant, "id", "")},
+            )
+
+    @staticmethod
     def _register_storyboard_frame_media(frame: StoryboardFrame, owner_profile_id: Optional[str]) -> None:
         """Attach owner-scoped media IDs to generated/uploaded storyboard variants."""
         if not owner_profile_id:
@@ -2264,6 +2306,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # assets because `_find_asset_with_source` has already resolved the
         # owning container above.
         target_asset.status = GenerationStatus.COMPLETED
+        self._register_asset_media(target_asset, script.owner_profile_id)
         
         self._save_after_asset_mutation(source)
         return script
@@ -4836,6 +4879,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             asset_unit.selected_video_id = video_variant.id
 
                         generated_videos.append(video_variant)
+                        self._register_asset_media(target_asset, script.owner_profile_id)
                         logger.info(f"Generated motion ref video: {video_variant.id}")
                     else:
                         # For scenes and props, create VideoTask and add to asset's video_assets
@@ -4859,6 +4903,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         # Add to the asset's video_assets
                         target_asset.video_assets.append(video_task)
                         generated_videos.append(video_task)
+                        self._register_asset_media(target_asset, script.owner_profile_id)
                         logger.info(f"Generated motion ref video for {asset_type}: {video_task.id}")
             except Exception as e:
                 logger.error(f"Failed to generate motion ref video for {asset_type}: {e}")

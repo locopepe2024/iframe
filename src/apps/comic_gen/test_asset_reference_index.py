@@ -146,6 +146,18 @@ def test_asset_reference_index_keeps_legacy_character_variants_readable():
     assert [item.id for item in index.assets[0].variants] == ["legacy-full"]
 
 
+def test_asset_media_is_registered_at_write_boundary(tmp_path, monkeypatch):
+    from src.apps import media_registry
+
+    monkeypatch.chdir(tmp_path)
+    character = _character("hero", "Hero", "hero-view")
+    character.owner_profile_id = "owner"
+    ComicGenPipeline._register_asset_media(character, "owner")
+    variant = character.reference_sheet.image_variants[0]
+    assert variant.media_id
+    assert media_registry.get_media("owner", variant.media_id)["storage_key"] == "hero-view.png"
+
+
 def test_asset_library_index_projects_each_owned_container_without_effective_scope_shadowing():
     project = Script(
         id="standalone",

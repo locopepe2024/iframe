@@ -245,6 +245,8 @@ class VideoVariant(BaseModel):
     """A video variant for Motion Reference"""
     id: str = Field(..., description="Unique identifier for the video variant")
     url: str = Field(..., description="URL of the video")
+    storage_key: Optional[str] = Field(None, description="Durable media storage key")
+    media_id: Optional[str] = Field(None, description="Owner-scoped immutable media identity")
     created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
     prompt_used: Optional[str] = Field(None, description="Prompt used for this video generation")
     audio_url: Optional[str] = Field(None, description="URL of the driving audio (for lip-sync)")

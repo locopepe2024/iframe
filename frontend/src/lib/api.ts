@@ -1401,11 +1401,14 @@ export const api = {
         reference_package?: {
             revision?: number;
             first_frame_url?: string | null;
+            first_frame_media_id?: string | null;
             last_frame_url?: string | null;
+            last_frame_media_id?: string | null;
             references?: Array<{
                 id?: string;
                 kind: "scene" | "effect" | "upload" | "reference_video";
                 url: string;
+                media_id?: string | null;
                 label?: string | null;
                 source_asset_id?: string | null;
             }>;
