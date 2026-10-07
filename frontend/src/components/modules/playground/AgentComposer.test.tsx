@@ -68,7 +68,7 @@ it('shows four independently configurable companion skills only in Agent mode', 
     expect(within(dialog).getByLabelText('倾听与话题引导')).toBeChecked();
     fireEvent.click(within(dialog).getByLabelText('日程与备忘'));
     expect(toggle).toHaveBeenCalledWith('schedule');
-    expect(within(dialog).getByText(/暂不支持跨会话永久记忆/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/只有确认保存的记忆会跨会话使用/)).toBeInTheDocument();
 });
 
 it('switches video resolution to image tiers without submitting stale video parameters', () => {

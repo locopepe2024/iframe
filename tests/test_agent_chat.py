@@ -122,6 +122,41 @@ def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setu
     assert duplicate.value.status_code == 422
 
 
+def test_confirmed_memory_is_owner_scoped_and_injected_only_when_enabled(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    completion = Mock(return_value='好的')
+    monkeypatch.setattr(agent, 'complete', completion)
+    agent.send(sid, agent.MessageCreate(content='我喜欢听邓丽君的歌', companion_skills=[]), setup)
+    message = agent.messages(sid, setup)['messages'][0]
+    saved = agent.create_memory(agent.MemoryCreate(content='喜欢听邓丽君的歌', category='preference', source_session_id=sid, source_message_id=message['id'], source_quote='我喜欢听邓丽君的歌'), setup)
+    assert saved['memory']['owner'] == setup.owner_profile_id
+    next_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(next_sid, agent.MessageCreate(content='你还记得我喜欢什么吗？', companion_skills=['memory']), setup)
+    assert '喜欢听邓丽君的歌' in completion.call_args.args[2][0]['content']
+    agent.send(next_sid, agent.MessageCreate(content='继续', companion_skills=[]), setup)
+    assert '已确认的跨会话记忆' not in completion.call_args.args[2][0]['content']
+    other = UserContext('other', 'other-profile', 'other', 'token')
+    assert agent.memories(other)['memories'] == []
+    with pytest.raises(HTTPException):
+        agent.create_memory(agent.MemoryCreate(content='假记忆', source_session_id=sid, source_message_id=message['id'], source_quote='不存在的原文'), setup)
+    agent.delete_memory(saved['memory']['id'], setup)
+    assert agent.memories(setup)['memories'] == []
+
+
+def test_memory_candidate_requires_confirmation_and_source_deletion_removes_memory(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好呀'))
+    agent.send(sid, agent.MessageCreate(content='我喜欢下棋'), setup)
+    candidate = agent.extract_memories(setup)['candidates'][0]
+    assert candidate['content'] == '我喜欢下棋'
+    assert agent.memories(setup)['memories'] == []
+    saved = agent.create_memory(agent.MemoryCreate(**candidate), setup)['memory']
+    agent.patch_memory(saved['id'], agent.MemoryPatch(content='喜欢象棋'), setup)
+    assert agent.memories(setup)['memories'][0]['content'] == '喜欢象棋'
+    agent.delete_message(sid, candidate['source_message_id'], setup)
+    assert agent.memories(setup)['memories'] == []
+
+
 def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):
     ctx = setup
     sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']
