@@ -2396,6 +2396,14 @@ export const playgroundApi = {
 export interface ChatSession { id: string; title: string; model: string; updated_at: number }
 export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; created_at?: number; model?: string }
 export interface ChatModel { id: string; api_model_id: string; display_name: string; agent_capability?: string }
+export async function agentTranscribe(file: File): Promise<{ text: string; model: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await authenticatedFetch(`${API_URL}/agent/transcriptions`, { method: 'POST', body: form });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : '语音识别失败');
+  return payload as { text: string; model: string };
+}
 export async function agentRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await authenticatedFetch(`${API_URL}/agent${path}`, {
     method, headers: { 'Content-Type': 'application/json' },

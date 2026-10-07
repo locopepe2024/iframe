@@ -32,6 +32,7 @@ import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundM
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
 import type { AgentMemory, MemoryCandidate } from './useAgentConversation';
+import VoiceTranscriptionButton from './VoiceTranscriptionButton';
 
 type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
 
@@ -84,6 +85,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
   const prompt = usePlaygroundStore((state) => state.prompt);
+  const setPrompt = usePlaygroundStore((state) => state.setPrompt);
   usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
@@ -179,6 +181,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
         )}
 
         <div className="px-4 pt-3 md:px-5 md:pt-4">
+          {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           <PromptInput
             onSubmit={handleSubmit}
             onOpenReferences={() => togglePanel('reference')}
