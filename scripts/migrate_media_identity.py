@@ -45,7 +45,8 @@ def storage_key(value: object, output_root: Path) -> str | None:
     return value
 
 
-def migrate_store(path: Path, output_root: Path, apply: bool, report: dict) -> None:
+def migrate_store(path: Path, output_root: Path, apply: bool, report: dict,
+                  owner_overrides: dict[str, str] | None = None) -> None:
     if not path.exists():
         return
     original = json.loads(path.read_text())
@@ -54,6 +55,8 @@ def migrate_store(path: Path, output_root: Path, apply: bool, report: dict) -> N
     def walk(node, owner: str | None, location: str, parent_key: str = ""):
         if isinstance(node, dict):
             current_owner = node.get("owner_profile_id") or owner
+            if not current_owner and path.name == "series.json" and location.count(".") == 1:
+                current_owner = (owner_overrides or {}).get(location.split(".", 1)[1])
             # ImageVariant, VideoVariant, and StoryboardReference records are
             # the only URL-bearing objects migrated here.
             is_material = (
@@ -76,7 +79,7 @@ def migrate_store(path: Path, output_root: Path, apply: bool, report: dict) -> N
                     if media_id and get_media(current_owner, media_id):
                         pass
                     elif not apply:
-                        report["rejected"].append({"location": location, "reason": "missing_media_id"})
+                        report["pending"] += 1
                     else:
                         media_id = register_media(
                             current_owner,
@@ -93,13 +96,16 @@ def migrate_store(path: Path, output_root: Path, apply: bool, report: dict) -> N
             if "video_url" in node and node.get("video_url") and not node.get("video_media_id"):
                 key = storage_key(node.get("video_url"), output_root)
                 if key and current_owner:
-                    node["video_media_id"] = register_media(
-                        current_owner, key, kind="generated_video",
-                        display_name=node.get("id", "video"),
-                        metadata={"source_location": location},
-                    )
-                    report["registered"] += 1
-                    report["migrated"] += 1
+                    if apply:
+                        node["video_media_id"] = register_media(
+                            current_owner, key, kind="generated_video",
+                            display_name=node.get("id", "video"),
+                            metadata={"source_location": location},
+                        )
+                        report["registered"] += 1
+                        report["migrated"] += 1
+                    else:
+                        report["pending"] += 1
                 elif node.get("video_url"):
                     report["rejected"].append({"location": location + ".video_url", "reason": "unresolvable_url"})
             for key, value in list(node.items()):
@@ -127,9 +133,16 @@ def main() -> int:
         parser.error("choose exactly one of --check-only or --apply")
     root = args.root.resolve()
     os.chdir(root.parent)
-    report = {"registered": 0, "migrated": 0, "rejected": []}
+    report = {"registered": 0, "migrated": 0, "pending": 0, "rejected": []}
+    owner_overrides: dict[str, str] = {}
+    projects_path = root / "projects.json"
+    if projects_path.exists():
+        projects = json.loads(projects_path.read_text())
+        for project in projects.values() if isinstance(projects, dict) else []:
+            if project.get("series_id") and project.get("owner_profile_id"):
+                owner_overrides.setdefault(project["series_id"], project["owner_profile_id"])
     for name in STORE_NAMES:
-        migrate_store(root / name, root, args.apply, report)
+        migrate_store(root / name, root, args.apply, report, owner_overrides)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 1 if report["rejected"] else 0
 

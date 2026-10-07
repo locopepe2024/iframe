@@ -16,7 +16,7 @@ def test_media_identity_migration_registers_variants_and_is_idempotent(tmp_path,
             "image_variants": [{"id": "variant-1", "url": "hero.png"}]
         }}],
     }}))
-    report = {"registered": 0, "migrated": 0, "rejected": []}
+    report = {"registered": 0, "migrated": 0, "pending": 0, "rejected": []}
     migrate_store(store, output, True, report)
     data = json.loads(store.read_text())
     variant = data["episode"]["characters"][0]["reference_sheet"]["image_variants"][0]
@@ -24,6 +24,6 @@ def test_media_identity_migration_registers_variants_and_is_idempotent(tmp_path,
     assert variant["media_id"]
     assert get_media("owner", variant["media_id"])["storage_key"] == "hero.png"
 
-    second = {"registered": 0, "migrated": 0, "rejected": []}
+    second = {"registered": 0, "migrated": 0, "pending": 0, "rejected": []}
     migrate_store(store, output, True, second)
     assert second["rejected"] == []
