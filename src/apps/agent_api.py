@@ -20,6 +20,7 @@ from .user_config import get_user_config_store
 from .agent_skills import router as skills_router, creative_guidance
 from ..utils.uniart_catalog import normalize_uniart_catalog
 from ..utils.reference_files import AUDIO_EXTENSIONS, TEXT_EXTENSIONS, chat_audio, read_reference_text
+from .media_reference import normalize_managed_media_reference
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
@@ -217,14 +218,11 @@ def reference_path(ctx, reference):
     parsed = urlsplit(reference)
     storage = _storage_for(ctx)
     if parsed.scheme:
-        # Browser state can retain the absolute API URL after a refresh. The
-        # managed path remains owner-resolved below; arbitrary remote URLs do
-        # not become server fetch targets.
-        if parsed.path.startswith(("/playground/media/", "/playground/input-media/", "/studio/media/")):
-            reference = parsed.path + (f"?{parsed.query}" if parsed.query else "")
-            parsed = urlsplit(reference)
-        else:
+        normalized = normalize_managed_media_reference(reference)
+        if not normalized:
             raise HTTPException(422, "请从素材库选择或上传参考图片")
+        reference = normalized
+        parsed = urlsplit(reference)
     if parsed.path.startswith(("/playground/media/", "/playground/input-media/")):
         path = storage.resolve_media_reference(reference)
         root = os.path.realpath(os.path.dirname(storage.output_dir))
