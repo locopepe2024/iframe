@@ -1,6 +1,6 @@
 import json
 
-from scripts.migrate_media_identity import migrate_store
+from scripts.migrate_media_identity import migrate_store, storage_key
 
 
 def test_media_identity_migration_plans_variant_registration(tmp_path, monkeypatch):
@@ -23,3 +23,11 @@ def test_media_identity_migration_plans_variant_registration(tmp_path, monkeypat
     assert variant["media_id"] == "pending:hero.png"
 
     assert report["rejected"] == []
+
+
+def test_storage_key_accepts_owned_cos_locator_but_rejects_external_url(tmp_path):
+    assert storage_key(
+        "https://bucket.cos.ap-tokyo.myqcloud.com/lumenx/a.png?signature=expired",
+        tmp_path,
+    ) == "lumenx/a.png"
+    assert storage_key("https://example.com/a.png", tmp_path) is None

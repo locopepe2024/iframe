@@ -47,6 +47,8 @@ def storage_key(value: object, output_root: Path) -> str | None:
         candidate.relative_to(root)
     except ValueError:
         return None
+    if not candidate.is_file():
+        return None
     return value
 
 
@@ -83,8 +85,11 @@ def migrate_store(path: Path, output_root: Path, apply: bool, report: dict,
                     report["rejected"].append({"location": location, "reason": "missing_owner"})
                 else:
                     media_id = node.get("media_id")
-                    if media_id and get_media(current_owner, media_id):
+                    existing = get_media(current_owner, media_id) if media_id else None
+                    if existing and existing.get("storage_key") == key:
                         pass
+                    elif existing:
+                        report["rejected"].append({"location": location, "reason": "media_id_storage_mismatch"})
                     elif not apply:
                         report["pending"] += 1
                     else:
