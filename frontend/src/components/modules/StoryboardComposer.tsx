@@ -586,14 +586,6 @@ export default function StoryboardComposer() {
                                             >
                                                 <Upload size={14} />
                                             </button>
-                                            <button
-                                                onClick={(e) => handleImageClick(frame.id, e)}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-                                                title={t("openReferenceDesign")}
-                                            >
-                                                <ImageIcon size={14} />
-                                                <span>{t("referenceDesign")}</span>
-                                            </button>
                                             {index > 0 && (() => {
                                                 const prevFrame = currentProject.frames?.[index - 1];
                                                 const prevVideoCompleted = prevFrame?.selected_video_id && currentProject.video_tasks?.find(

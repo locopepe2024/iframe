@@ -1299,8 +1299,6 @@
     ,"confirmReferencePackage": "Confirm references"
     ,"referencePackageConfirmed": "References confirmed"
     ,"referencePackageSaveFailed": "Failed to save shot references"
-    ,"referenceDesign": "Reference design"
-    ,"openReferenceDesign": "Open shot reference design"
   },
   "video": {
     "taskQueue": "Task Queue",
