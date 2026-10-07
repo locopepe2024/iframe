@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus } from "lucide-react";
+import { Palette, Film, BookOpen, Users, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import PipelineSidebar from "@/components/layout/PipelineSidebar";
@@ -15,7 +15,6 @@ import Cast from "@/components/modules/Cast";
 import VideoAssembly from "@/components/modules/VideoAssembly";
 import ConsistencyVault from "@/components/modules/ConsistencyVault";
 import ArtDirection from "@/components/modules/ArtDirection";
-import StoryboardComposer from "@/components/modules/StoryboardComposer";
 import ModelSettingsModal from "@/components/common/ModelSettingsModal";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import PromptConfigModal from "@/components/project/PromptConfigModal";
@@ -36,21 +35,19 @@ const LEGACY_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "assets", label: "3. Assets", icon: Users },
-    { id: "storyboard", label: "4. Storyboard", icon: Layout },
-    { id: "shot_design", label: "5. Shot Design", icon: Video },
+    { id: "shot_design", label: "4. Storyboard / Shot Design", icon: Clapperboard },
     { id: "assembly", label: "6. Assembly", icon: Film },
 ];
 
 // Unified workflow: keep Cast as the character/voice surface, then expose
-// Assets, Storyboard scene references, and Shot Design as separate decisions.
-// The backend enum remains "r2v" for backward compatibility.
+// Assets and one combined Storyboard / Shot Design workbench. The backend
+// enum remains "r2v" for backward compatibility.
 const UNIFIED_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "cast", label: "3. Cast", icon: Users },
     { id: "assets", label: "4. Assets", icon: ImagePlus },
-    { id: "storyboard", label: "5. Storyboard", icon: Clapperboard },
-    { id: "shot_design", label: "6. Shot Design", icon: Video },
+    { id: "shot_design", label: "5. Storyboard / Shot Design", icon: Clapperboard },
     { id: "assembly", label: "7. Assembly", icon: Film },
 ];
 
@@ -124,7 +121,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                             ? { status: "ready", statusLabel: tp("railCastBound", { n: chars.length, m: bound }) }
                             : { status: "ready", statusLabel: tp("railCast", { n: chars.length }) })
                         : { status: "idle" };
-                case "storyboard":
                 case "shot_design":
                     return frameCount > 0 ? { status: "ready", statusLabel: tp("railShots", { n: frameCount }) } : { status: "idle" };
                 case "assembly":
@@ -279,7 +275,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                         {activeStep === "art_direction" && <ArtDirection />}
                         {activeStep === "cast" && <Cast />}
                         {activeStep === "assets" && <ConsistencyVault />}
-                        {activeStep === "storyboard" && <StoryboardComposer />}
                         {activeStep === "shot_design" && <StoryboardR2V />}
                         {activeStep === "assembly" && <VideoAssembly />}
                     </div>
