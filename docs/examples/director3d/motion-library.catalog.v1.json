@@ -1,0 +1,29 @@
+{
+  "schema": "director3d-motion-library.catalog.v1",
+  "entries": [
+    {
+      "motionId": "sample-martial-bvh-001",
+      "title": "Martial sample 001",
+      "format": "bvh",
+      "source": { "kind": "local", "label": "待放入 media host intake", "url": null },
+      "licenseId": "internal-approved-sample",
+      "licenseStatus": "needs_verification",
+      "actionTags": ["martial_arts", "strike", "foot_contact"],
+      "fps": 24,
+      "skeletonProfile": "unknown_bvh_skeleton",
+      "retargetStatus": "unmapped"
+    },
+    {
+      "motionId": "reference-cmu-bvh-001",
+      "title": "CMU reference placeholder",
+      "format": "bvh",
+      "source": { "kind": "external", "label": "CMU Motion Capture Database", "url": null },
+      "licenseId": "cmu-database-terms",
+      "licenseStatus": "needs_verification",
+      "actionTags": ["reference"],
+      "fps": 120,
+      "skeletonProfile": "cmu_bvh",
+      "retargetStatus": "unmapped"
+    }
+  ]
+}

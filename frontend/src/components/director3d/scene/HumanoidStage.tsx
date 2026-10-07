@@ -3,6 +3,10 @@ import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 
@@ -22,6 +26,34 @@ interface RigRuntime {
 function CanvasClearAlpha({ transparent }: { transparent: boolean }) {
   const { gl } = useThree();
   useEffect(() => { gl.setClearAlpha(transparent ? 0 : 1); }, [gl, transparent]);
+  return null;
+}
+
+function CameraDepthOfField({ focusDistanceM, aperture }: { focusDistanceM: number; aperture: number }) {
+  const { gl, scene, camera, size } = useThree();
+  const effects = useMemo(() => {
+    const composer = new EffectComposer(gl);
+    const bokeh = new BokehPass(scene, camera, { focus: focusDistanceM, aperture, maxblur: 0.015 });
+    const output = new OutputPass();
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(bokeh);
+    composer.addPass(output);
+    return { composer, bokeh, output };
+  }, [gl, scene, camera]);
+  useEffect(() => {
+    effects.composer.setSize(size.width, size.height);
+  }, [effects, size.width, size.height]);
+  useEffect(() => {
+    const uniforms = effects.bokeh.uniforms as Record<"focus" | "aperture", { value: number }>;
+    uniforms.focus.value = focusDistanceM;
+    uniforms.aperture.value = aperture;
+  }, [effects, focusDistanceM, aperture]);
+  useEffect(() => () => {
+    effects.bokeh.dispose();
+    effects.output.dispose();
+    effects.composer.dispose();
+  }, [effects]);
+  useFrame((_, delta) => effects.composer.render(delta), 1);
   return null;
 }
 
@@ -58,6 +90,14 @@ function PanoramaBackground({ inputId, checksum, rotationDeg }: { inputId: strin
 function PathEventMarkers() {
   const events = useWorkbenchStore((state) => state.pathEvents);
   return <>{events.map((event) => <group key={event.pathEventId} position={event.spatialAnchorM}><mesh renderOrder={18}><sphereGeometry args={[0.08, 16, 12]}/><meshBasicMaterial color={event.previewMarker.color} depthTest={false}/></mesh><mesh position={[0, 0, -0.08]}><ringGeometry args={[0.1, 0.13, 24]}/><meshBasicMaterial color={event.previewMarker.color} transparent opacity={0.75} side={THREE.DoubleSide}/></mesh></group>)}</>;
+}
+
+function PanoramaAnchorMarkers() {
+  const anchors = useWorkbenchStore((state) => state.panoramaScenePackage?.semanticAnchors ?? []);
+  return <>{anchors.map((anchor) => <group key={anchor.anchorId} position={anchor.positionM}>
+    <mesh><sphereGeometry args={[0.07, 12, 8]}/><meshBasicMaterial color="#fbbf24" depthTest={false}/></mesh>
+    <mesh rotation={[Math.PI / 2, 0, 0]}><ringGeometry args={[0.1, 0.14, 20]}/><meshBasicMaterial color="#fbbf24" side={THREE.DoubleSide} transparent opacity={0.7} depthTest={false}/></mesh>
+  </group>)}</>;
 }
 
 function PathLine({ points, color, opacity = 1 }: { points: THREE.Vector3[]; color: string; opacity?: number }) {
@@ -554,10 +594,12 @@ export function HumanoidStage() {
           <ActorPaths />
           <CameraPaths />
           <PathEventMarkers />
+          <PanoramaAnchorMarkers />
           {Object.values(cameras).map((camera) => <StageCameraFrustum key={camera.cameraId} composition={camera} selected={camera.cameraId === selectedCameraId} lookAtM={cameraTargetPosition(camera.lookAt, charactersRecord, sceneObjects)} followM={cameraTargetPosition(camera.follow, charactersRecord, sceneObjects)}/>)}
         </group>
         {playheadFrame === 1 && !selectedSceneObjectId && !selectedActorPathControlPointId && !selectedCameraPathControlPointId && selectedCharacter?.visible && !selectedCharacter.locked && <TransformGizmo target={targets[selectedCharacterId] ?? null} characterId={selectedCharacterId} mode={transformMode} />}
         <ViewCamera viewMode={viewMode} calibration={null} composition={cameraComposition} compositionTargetM={compositionTargetM} compositionPositionM={compositionPositionM} />
+        {viewMode === "camera" && cameraComposition.depthOfField?.enabled && <CameraDepthOfField focusDistanceM={cameraComposition.depthOfField.focusDistanceM} aperture={cameraComposition.depthOfField.aperture}/>}
       </Canvas>
       </div>
       {viewMode === "camera" && <div className="camera-framing-guides" aria-hidden="true">{cameraComposition.framingGuides.ruleOfThirds && <><span className="third vertical one"/><span className="third vertical two"/><span className="third horizontal one"/><span className="third horizontal two"/></>}{cameraComposition.framingGuides.centerCross && <><span className="center vertical"/><span className="center horizontal"/></>}{cameraComposition.framingGuides.safeArea && <span className="safe-area"/>}</div>}

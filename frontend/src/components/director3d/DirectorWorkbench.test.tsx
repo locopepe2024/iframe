@@ -6,15 +6,16 @@ import DirectorWorkbench from "./DirectorWorkbench";
 import { POSE_PRESETS } from "./pose/pose-presets";
 import { humanoidUrl } from "./data/humanoid";
 import { useWorkbenchStore } from "./state/workbench-store";
-import { DIRECTOR_DRAFT_STORAGE_KEY } from "./state/local-draft";
+import { DIRECTOR_DRAFT_STORAGE_KEY, restoreLocalDirectorDraft, saveLocalDirectorDraft } from "./state/local-draft";
 import { parseLocalAnimationManifest } from "./state/local-animation-import";
 import { CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID } from "./data/humanoid";
 import { evaluateDirectorFrame } from "./timeline/timeline-evaluation";
 import localAnimationExample from "../../../../docs/examples/director3d/local-animation-fight-15s.json";
 import { admittedPanoramaEntries } from "./scene/PanoramaEnvironmentPanel";
-import { imageEditorApi } from "@/lib/imageEditor";
+import { ACTION_STRUCTURES, validateActionStructure } from "./action/action-structures";
+import { panoramaAssetApi } from "@/lib/panoramaAssets";
 
-vi.mock("@/lib/imageEditor", () => ({ imageEditorApi: { list: vi.fn().mockResolvedValue([]) } }));
+vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
 
 vi.mock("./scene/HumanoidStage", () => ({
   HumanoidStage: () => <div id="director-viewport" role="tabpanel" aria-label="mock 3D stage" />,
@@ -22,22 +23,24 @@ vi.mock("./scene/HumanoidStage", () => ({
 
 const initialState = useWorkbenchStore.getState();
 
-it("admits only explicitly declared owned 2:1 panorama edits", () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200 };
-  expect(admittedPanoramaEntries([{ ...record, projection_type: "perspective_plane" }])).toHaveLength(0);
+it("admits only explicitly declared owned 2:1 panorama assets", () => {
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", height: 201 }])).toHaveLength(0);
   expect(admittedPanoramaEntries([{ ...record, projection_type: "equirectangular", path: "https://example.test/pano.png" }])).toHaveLength(0);
-  const [entry] = admittedPanoramaEntries([{ ...record, projection_type: "equirectangular" }]);
+  expect(admittedPanoramaEntries([{ ...record, panorama_quality: { status: "review", blocking_codes: ["black_pole_gap"] } }])).toHaveLength(0);
+  const [entry] = admittedPanoramaEntries([record]);
   expect(entry).toMatchObject({ inputId: record.path, projection: "equirectangular", environmentAllowed: true, admissionChecksum: record.sha256 });
 });
 
 it("loads an edited panorama and assigns it to the director stage", async () => {
-  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", source_reference: "", source_sha256: "", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const };
-  vi.mocked(imageEditorApi.list).mockResolvedValueOnce([record]);
+  const record = { id: "pano", path: "/playground/input-media/pano.png", title: "Room panorama", sha256: "a".repeat(64), width: 400, height: 200, projection_type: "equirectangular" as const, panorama_quality: { status: "pass" as const, blocking_codes: [] } };
+  vi.mocked(panoramaAssetApi.list).mockResolvedValueOnce([record]);
   render(<App />);
   const select = await screen.findByRole("combobox", { name: "选择全景素材" });
   await waitFor(() => expect(screen.getByRole("option", { name: record.title })).toBeInTheDocument());
   fireEvent.change(select, { target: { value: record.path } });
+  expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "导入全景素材" }));
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBe(record.path);
   fireEvent.click(screen.getByRole("button", { name: "移除全景" }));
   expect(useWorkbenchStore.getState().renderScene.panorama.inputId).toBeNull();
@@ -65,6 +68,32 @@ it("stages a camera path without replacing its easing and supports undo", () => 
   expect(useWorkbenchStore.getState().dialogueTimeline.tracks.filter(item => item.trackKind === "camera_path_progress" && item.target.targetId === `path-${cameraId}-motion`)).toHaveLength(1);
   act(() => useWorkbenchStore.getState().undo());
   expect(useWorkbenchStore.getState().dialogueTimeline.tracks.some(item => item.trackId === track?.trackId)).toBe(false);
+});
+
+it("edits per-camera depth of field with undo, immutable snapshots and draft recovery", () => {
+  const cameraId = useWorkbenchStore.getState().selectedCameraId;
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.enabled).toBe(false);
+  act(() => useWorkbenchStore.getState().setCameraDepthOfField(cameraId, { enabled: true, focusDistanceM: 2.5, aperture: 0.012 }));
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField).toEqual({ enabled: true, focusDistanceM: 2.5, aperture: 0.012 });
+  act(() => useWorkbenchStore.getState().createCameraSnapshot(cameraId, "近焦"));
+  const snapshot = useWorkbenchStore.getState().cameraSnapshots[0];
+  expect(snapshot.depthOfField).toEqual({ enabled: true, focusDistanceM: 2.5, aperture: 0.012 });
+  act(() => useWorkbenchStore.getState().setCameraDepthOfField(cameraId, { focusDistanceM: 8 }));
+  expect(useWorkbenchStore.getState().cameraSnapshots[0]).toEqual(snapshot);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.focusDistanceM).toBe(2.5);
+  saveLocalDirectorDraft();
+  useWorkbenchStore.setState(initialState, true);
+  expect(restoreLocalDirectorDraft()).not.toBeNull();
+  expect(useWorkbenchStore.getState().cameras[cameraId].depthOfField.focusDistanceM).toBe(2.5);
+});
+
+it("loads older drafts without depth of field enabled", () => {
+  const cameras = structuredClone(useWorkbenchStore.getState().cameras);
+  delete (cameras["camera-main"] as Partial<typeof cameras["camera-main"]>).depthOfField;
+  window.localStorage.setItem(DIRECTOR_DRAFT_STORAGE_KEY, JSON.stringify({ schemaVersion: "iframe.director3d.browser-draft.v1", savedAt: new Date().toISOString(), state: { cameras } }));
+  expect(restoreLocalDirectorDraft()).not.toBeNull();
+  expect(useWorkbenchStore.getState().cameras["camera-main"].depthOfField).toEqual({ enabled: false, focusDistanceM: 5, aperture: 0.005 });
 });
 
 beforeEach(() => {
@@ -115,6 +144,10 @@ it("uses the compact director checkbox contract for authoring toggles", () => {
   fireEvent.click(screen.getByRole("tab", { name: "路径事件" }));
   expect(screen.getByRole("checkbox", { name: "写入导出标记" })).toHaveClass("director-checkbox");
   fireEvent.click(screen.getByRole("tab", { name: "镜头视图" }));
+  const depthOfField = screen.getByRole("checkbox", { name: "启用镜头景深" });
+  expect(depthOfField).not.toBeChecked();
+  fireEvent.click(depthOfField);
+  expect(useWorkbenchStore.getState().cameras["camera-main"].depthOfField.enabled).toBe(true);
   for (const name of [
     "女性运动服白模 A",
     "女性运动服白模 B",
@@ -308,9 +341,9 @@ it("previews an illustrative action before one undoable timeline application", (
   fireEvent.click(screen.getByRole("tab", { name: "动作" }));
   fireEvent.change(screen.getByLabelText("动作描述"), { target: { value: "让 A 做一段鹤形拳" } });
   fireEvent.click(screen.getByRole("button", { name: "查找动作" }));
-  expect(screen.getByText("鹤形拳（示意动作结构）")).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "鹤形拳（示意动作结构）" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "应用到时间线" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "预览动作" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看分段" }));
   expect(screen.getByText(/待应用：5 段动作/)).toBeInTheDocument();
   expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
   fireEvent.click(screen.getByRole("button", { name: "应用到时间线" }));
@@ -322,6 +355,19 @@ it("previews an illustrative action before one undoable timeline application", (
   applied.undo();
   expect(useWorkbenchStore.getState().dialogueTimeline).toBe(before);
   expect(fetch).not.toHaveBeenCalled();
+});
+it("applies each martial action from the selected white model placement", () => {
+  expect(ACTION_STRUCTURES).toHaveLength(4);
+  for (const action of ACTION_STRUCTURES) expect(validateActionStructure(action)).toEqual([]);
+  for (const action of ACTION_STRUCTURES) {
+    useWorkbenchStore.setState(initialState, true);
+    useWorkbenchStore.getState().setTransformVector(CHARACTER_A_ID, "position", [1.2, 0.6, 0]);
+    useWorkbenchStore.getState().applyActionStructure({ actionId: action.actionId, characterId: CHARACTER_A_ID, opponentId: null, startSeconds: 0, durationSeconds: action.defaultDurationSeconds, includeContact: false });
+    const tracks = useWorkbenchStore.getState().dialogueTimeline.tracks;
+    expect(tracks.map(track => track.trackKind)).toEqual(["character_pose", "character_transform"]);
+    expect(tracks[1].keyframes[0].value).toEqual([1.2, 0.6, 0]);
+    expect(tracks[0].keyframes).toHaveLength(action.phases.length + 1);
+  }
 });
 it("adds an optional contact candidate only for an existing opponent", () => {
   const before = useWorkbenchStore.getState().dialogueTimeline;

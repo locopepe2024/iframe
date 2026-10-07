@@ -39,6 +39,7 @@ export interface ActionStructure {
 }
 
 type ActionStructureContent = Omit<ActionStructure, "checksum">;
+const r = (x = 0, y = 0, z = 0): Rotation => ({ x, y, z });
 
 const HEXINGQUAN_CONTENT: ActionStructureContent = {
   actionId: "martial.hexingquan.blocking.v1",
@@ -67,6 +68,60 @@ const HEXINGQUAN_CONTENT: ActionStructureContent = {
   limitations: ["仅白模示意动作结构；不代表特定门派拳谱或表演者动作。", "平衡、足底接触与触点需要人工校正；不含物理或 IK 求解。"],
 };
 
+const FIGHT_COMBO_CONTENT: ActionStructureContent = {
+  actionId: "martial.jab_cross.blocking.v1", catalogVersion: "director-action-structures.v1",
+  label: "直拳组合", aliases: ["直拳组合", "刺拳接后手直拳"], locale: "zh-CN",
+  category: "martial_blocking", reviewState: "curated",
+  intent: { description: "防守、前手刺拳、后手直拳与回防的白模分段。", derivation: "illustrative" },
+  durationRangeSeconds: [2, 12], defaultDurationSeconds: 4, defaultFps: 24,
+  phases: [
+    { phaseId: "guard", label: "防守站位", role: "setup", startFraction: 0, endFraction: 0.25, posePresetId: "action.guard", interpolation: "linear" },
+    { phaseId: "jab", label: "前手刺拳", role: "strike", startFraction: 0.25, endFraction: 0.45, posePresetId: "action.guard", jointOverrides: { upper_arm_l: r(-52, -22, 15), lower_arm_l: r(8, 0, 0), spine_chest: r(0, -12, 0) }, rootDisplacementM: [0, 0.12, 0], interpolation: "linear" },
+    { phaseId: "cross", label: "后手直拳", role: "contact", startFraction: 0.45, endFraction: 0.7, posePresetId: "action.guard", jointOverrides: { upper_arm_r: r(-62, 24, -12), lower_arm_r: r(10, 0, 0), pelvis: r(0, 18, 0), spine_chest: r(0, 20, 0) }, rootDisplacementM: [0, 0.24, 0], interpolation: "linear" },
+    { phaseId: "recover", label: "回防", role: "recovery", startFraction: 0.7, endFraction: 1, posePresetId: "action.guard", rootDisplacementM: [0, 0.18, 0], interpolation: "linear" },
+  ],
+  roles: { primary: "required", opponent: "optional" },
+  contacts: [{ phaseId: "cross", sourceJointId: "wrist_r", targetRole: "opponent", targetRegion: "upper_body", mode: "touch_candidate", limitation: "reference_constraint_not_physics" }],
+  cameraHints: ["中景侧前方"], source: "iFrame Director illustrative blocking", confidence: 0.6,
+  limitations: ["拳距与接触时间仅为参考。", "重心、脚步与命中位置需要人工复核。"],
+};
+
+const DODGE_COUNTER_CONTENT: ActionStructureContent = {
+  actionId: "martial.dodge_counter.blocking.v1", catalogVersion: "director-action-structures.v1",
+  label: "侧闪反击", aliases: ["侧闪反击", "闪避反击"], locale: "zh-CN",
+  category: "martial_blocking", reviewState: "curated",
+  intent: { description: "侧向闪避、调整站位和反击的白模动作参考。", derivation: "illustrative" },
+  durationRangeSeconds: [2, 12], defaultDurationSeconds: 4, defaultFps: 24,
+  phases: [
+    { phaseId: "ready", label: "警戒", role: "setup", startFraction: 0, endFraction: 0.25, posePresetId: "action.guard", interpolation: "linear" },
+    { phaseId: "dodge", label: "侧闪", role: "transfer", startFraction: 0.25, endFraction: 0.5, posePresetId: "standing.lean", rootDisplacementM: [0.45, 0, 0], interpolation: "bezier" },
+    { phaseId: "counter", label: "反击", role: "contact", startFraction: 0.5, endFraction: 0.75, posePresetId: "interaction.push", jointOverrides: { upper_arm_r: r(-60, 18, -18), lower_arm_r: r(12, 0, 0) }, rootDisplacementM: [0.45, 0.18, 0], interpolation: "linear" },
+    { phaseId: "reset", label: "回收", role: "recovery", startFraction: 0.75, endFraction: 1, posePresetId: "action.guard", rootDisplacementM: [0.45, 0.1, 0], interpolation: "linear" },
+  ],
+  roles: { primary: "required", opponent: "optional" },
+  contacts: [{ phaseId: "counter", sourceJointId: "wrist_r", targetRole: "opponent", targetRegion: "upper_body", mode: "touch_candidate", limitation: "reference_constraint_not_physics" }],
+  cameraHints: ["侧面全身"], source: "iFrame Director illustrative blocking", confidence: 0.55,
+  limitations: ["侧闪距离未按对手攻击轨迹求解。", "接触、平衡和足底需人工校正。"],
+};
+
+const FRONT_KICK_CONTENT: ActionStructureContent = {
+  actionId: "martial.front_kick.blocking.v1", catalogVersion: "director-action-structures.v1",
+  label: "前踢回防", aliases: ["前踢回防", "前踢"], locale: "zh-CN",
+  category: "martial_blocking", reviewState: "curated",
+  intent: { description: "提膝、前踢、落脚与回防的白模分段。", derivation: "illustrative" },
+  durationRangeSeconds: [2, 12], defaultDurationSeconds: 4, defaultFps: 24,
+  phases: [
+    { phaseId: "guard", label: "防守", role: "setup", startFraction: 0, endFraction: 0.25, posePresetId: "action.guard", interpolation: "linear" },
+    { phaseId: "chamber", label: "提膝", role: "transfer", startFraction: 0.25, endFraction: 0.45, posePresetId: "action.kick", jointOverrides: { upper_leg_l: r(64, 0, 4), lower_leg_l: r(65, 0, 0) }, interpolation: "linear" },
+    { phaseId: "kick", label: "踢出", role: "contact", startFraction: 0.45, endFraction: 0.7, posePresetId: "action.kick", rootDisplacementM: [0, 0.12, 0], interpolation: "linear" },
+    { phaseId: "recover", label: "落脚回防", role: "recovery", startFraction: 0.7, endFraction: 1, posePresetId: "action.guard", rootDisplacementM: [0, 0.12, 0], interpolation: "linear" },
+  ],
+  roles: { primary: "required", opponent: "optional" },
+  contacts: [{ phaseId: "kick", sourceJointId: "foot_l", targetRole: "opponent", targetRegion: "lower_body", mode: "touch_candidate", limitation: "reference_constraint_not_physics" }],
+  cameraHints: ["三分之二侧面全身"], source: "iFrame Director illustrative blocking", confidence: 0.55,
+  limitations: ["踢击高度与足底接触未经过 IK 验证。", "与对手距离需人工复核。"],
+};
+
 // FNV-1a over the canonical catalog content gives a stable local revision identity.
 export function actionStructureChecksum(content: ActionStructureContent | ActionStructure): string {
   const { checksum: _checksum, ...canonical } = content as ActionStructure;
@@ -80,6 +135,7 @@ export function actionStructureChecksum(content: ActionStructureContent | Action
 
 export const ACTION_STRUCTURES: readonly ActionStructure[] = [
   { ...HEXINGQUAN_CONTENT, checksum: actionStructureChecksum(HEXINGQUAN_CONTENT) },
+  ...[FIGHT_COMBO_CONTENT, DODGE_COUNTER_CONTENT, FRONT_KICK_CONTENT].map((content) => ({ ...content, checksum: actionStructureChecksum(content) })),
 ];
 
 export function validateActionStructure(action: ActionStructure): string[] {

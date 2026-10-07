@@ -14,6 +14,7 @@ import { createIdleMotionTrackImportState } from "./motion-track-import";
 import { compileReviewedMotionTrack as compileReviewedMotionTrackPure, createIdleMotionTrackReviewState } from "./motion-track-review";
 import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
+import { createManualPanoramaScenePackage, parsePanoramaScenePackage, type PanoramaScenePackage } from "./panorama-scene-package";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
 const jointById = new Map(rigProfile.joints.map((joint) => [joint.joint_id, joint]));
@@ -39,6 +40,7 @@ export interface AuthoringSnapshot {
   actorMappings: Record<string, ActorMappingState>;
   sceneObjects: Record<string, SceneObjectAuthoringState>;
   renderScene: RenderSceneState;
+  panoramaScenePackage: PanoramaScenePackage | null;
   dialogueTimeline: DialogueTimelineState;
   cameras: Record<string, CameraCompositionState>;
   actorPaths: Record<string, ActorPathState>;
@@ -312,7 +314,7 @@ export function createInitialDialogueTimeline(): DialogueTimelineState {
 }
 
 export function createInitialCameras(): Record<string, CameraCompositionState> {
-  return { "camera-main": { cameraId: "camera-main", label: "主机位", transform: { position: [0, -7, 2.5], rotationDeg: [72, 0, 0], scale: [1, 1, 1], groundSnap: false }, fovDeg: 50, focalLengthMm: 38.6, zoom: 1, aspectRatio: "16:9", compositionPresetId: "medium_wide", subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID], lookAt: { targetType: "character", targetId: CHARACTER_A_ID }, follow: null, framingGuides: { ruleOfThirds: true, centerCross: false, safeArea: true }, snapshotIds: [], visible: true, locked: false } };
+  return { "camera-main": { cameraId: "camera-main", label: "主机位", transform: { position: [0, -7, 2.5], rotationDeg: [72, 0, 0], scale: [1, 1, 1], groundSnap: false }, fovDeg: 50, focalLengthMm: 38.6, depthOfField: { enabled: false, focusDistanceM: 5, aperture: 0.005 }, zoom: 1, aspectRatio: "16:9", compositionPresetId: "medium_wide", subjectTargetIds: [CHARACTER_A_ID, CHARACTER_B_ID], lookAt: { targetType: "character", targetId: CHARACTER_A_ID }, follow: null, framingGuides: { ruleOfThirds: true, centerCross: false, safeArea: true }, snapshotIds: [], visible: true, locked: false } };
 }
 
 function snapshotChecksum(snapshot: Omit<CameraSnapshotState, "stateChecksum">): string {
@@ -748,6 +750,7 @@ export interface WorkbenchState {
   sceneTypeFilter: "all" | "character" | "camera" | "object" | "environment";
   objectAssetCatalog: ObjectAssetCatalogState;
   environmentInputCatalog: EnvironmentInputCatalogState;
+  panoramaScenePackage: PanoramaScenePackage | null;
   panoramaPreviewStatus: { state: "idle" | "loading" | "ready" | "error"; message: string };
   panoramaDiagnosticPreviewInputId: string | null;
   panoramaDiagnosticPreviewYawDeg: number;
@@ -793,6 +796,11 @@ export interface WorkbenchState {
   setObjectAssetCatalog: (catalog: ObjectAssetCatalogState) => void;
   insertAdmittedObjectAsset: (assetId: string) => void;
   setEnvironmentInputCatalog: (catalog: EnvironmentInputCatalogState) => void;
+  applyPanoramaScenePackage: (input: unknown) => { ok: true } | { ok: false; errors: string[] };
+  createManualPanoramaLayout: () => boolean;
+  addPanoramaAnchor: (kind: string, positionM: [number, number, number]) => boolean;
+  updatePanoramaAnchorPosition: (anchorId: string, positionM: [number, number, number]) => void;
+  removePanoramaAnchor: (anchorId: string) => void;
   setPanoramaPreviewStatus: (status: { state: "idle" | "loading" | "ready" | "error"; message: string }) => void;
   previewPanoramaDiagnostic: (inputId: string | null) => void;
   setPanoramaDiagnosticPreviewYawDeg: (yawDeg: number) => void;
@@ -865,6 +873,7 @@ export interface WorkbenchState {
   setCameraTransformAxis: (cameraId: string, field: "position" | "rotationDeg", axis: number, value: number) => void;
   setCameraFov: (cameraId: string, fovDeg: number) => void;
   setCameraZoom: (cameraId: string, zoom: number) => void;
+  setCameraDepthOfField: (cameraId: string, patch: Partial<CameraCompositionState["depthOfField"]>) => void;
   setCameraLookAt: (cameraId: string, target: CameraTargetState | null) => void;
   setCameraFollow: (cameraId: string, target: CameraTargetState | null) => void;
   applyCameraPathPreset: (cameraId: string, presetId: CameraPathPresetId, mode: CameraPathApplyMode, segmentDurationSeconds: number, easing: ActorPathEasing) => void;
@@ -996,6 +1005,7 @@ function snapshotAuthoring(state: WorkbenchState): AuthoringSnapshot {
     actorMappings: state.actorMappings,
     sceneObjects: state.sceneObjects,
     renderScene: state.renderScene,
+    panoramaScenePackage: state.panoramaScenePackage,
     dialogueTimeline: state.dialogueTimeline,
     cameras: state.cameras,
     actorPaths: state.actorPaths,
@@ -1155,6 +1165,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   sceneTypeFilter: "all",
   objectAssetCatalog: { status: "unavailable", message: "3D 与 Gaussian importer 尚未完成格式准入；当前只开放内置对象。", assets: [] },
   environmentInputCatalog: { status: "loading", message: "正在读取环境素材…", entries: [] },
+  panoramaScenePackage: null,
   panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" },
   panoramaDiagnosticPreviewInputId: null,
   panoramaDiagnosticPreviewYawDeg: 0,
@@ -1310,12 +1321,65 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   }),
   setEnvironmentInputCatalog: (environmentInputCatalog) => set((state) => {
     const panoramaDiagnosticPreviewInputId = state.panoramaDiagnosticPreviewInputId && environmentInputCatalog.entries.some((entry) => entry.inputId === state.panoramaDiagnosticPreviewInputId) ? state.panoramaDiagnosticPreviewInputId : null;
+    const activePackage = state.panoramaScenePackage;
+    const boundPanorama = activePackage && environmentInputCatalog.entries.find((entry) => entry.inputId === activePackage.panoramaInputId);
+    const boundDepth = activePackage?.depth && environmentInputCatalog.entries.find((entry) => entry.inputId === activePackage.depth?.inputId);
     return {
       environmentInputCatalog,
+      panoramaScenePackage: activePackage && boundPanorama && boundPanorama.checksum === activePackage.panoramaChecksum && boundPanorama.environmentAllowed && boundPanorama.admissionChecksum === boundPanorama.checksum && (!activePackage.depth || boundDepth?.checksum === activePackage.depth.checksum) ? activePackage : null,
       panoramaDiagnosticPreviewInputId,
       panoramaDiagnosticPreviewYawDeg: panoramaDiagnosticPreviewInputId ? state.panoramaDiagnosticPreviewYawDeg : 0,
       panoramaDiagnosticPreviewFlipVertical: panoramaDiagnosticPreviewInputId ? state.panoramaDiagnosticPreviewFlipVertical : false,
     };
+  }),
+  applyPanoramaScenePackage: (input) => {
+    const parsed = parsePanoramaScenePackage(input);
+    if (!parsed.ok) return parsed;
+    const scenePackage = parsed.package;
+    const catalog = get().environmentInputCatalog.entries;
+    const panorama = catalog.find((entry) => entry.inputId === scenePackage.panoramaInputId);
+    const errors: string[] = [];
+    if (get().renderScene.panorama.inputId !== scenePackage.panoramaInputId) errors.push("请先选中场景包对应的全景素材。");
+    if (!panorama || panorama.usage !== "panorama" || panorama.projection !== "equirectangular" || !panorama.environmentAllowed || panorama.admissionChecksum !== panorama.checksum) {
+      errors.push("全景输入尚未通过导演台环境准入。");
+    } else if (panorama.checksum !== scenePackage.panoramaChecksum) {
+      errors.push("全景 checksum 与场景包不匹配，拒绝应用深度包。");
+    }
+    if (scenePackage.depth) {
+      const depthSource = scenePackage.depth;
+      const depth = catalog.find((entry) => entry.inputId === depthSource.inputId);
+      if (!depth || depth.usage !== "calibration_depth" || depth.checksum !== depthSource.checksum) errors.push("深度输入 checksum 与场景包不匹配，拒绝应用深度包。");
+    }
+    if (scenePackage.ground.heightM < -10 || scenePackage.ground.heightM > 10) errors.push("地面高度超出导演台可编辑范围（-10 到 10 m）。");
+    if (get().renderScene.ground.locked && get().renderScene.ground.heightM !== scenePackage.ground.heightM) errors.push("请先解锁地面，再导入不同高度的场景包。");
+    if (errors.length) return { ok: false as const, errors };
+    get().setGroundHeightM(scenePackage.ground.heightM);
+    set((state) => mutateScene(state, "scene.panorama.package.import", { panoramaScenePackage: structuredClone(scenePackage) }));
+    return { ok: true as const };
+  },
+  createManualPanoramaLayout: () => {
+    const state = get();
+    const input = state.environmentInputCatalog.entries.find((entry) => entry.inputId === state.renderScene.panorama.inputId);
+    if (!input || input.usage !== "panorama" || !input.environmentAllowed || input.admissionChecksum !== input.checksum) return false;
+    set(mutateScene(state, "scene.panorama.layout.create", { panoramaScenePackage: createManualPanoramaScenePackage(input.inputId, input.checksum, state.renderScene.ground.heightM) }));
+    return true;
+  },
+  addPanoramaAnchor: (kind, positionM) => {
+    const state = get();
+    if (!state.panoramaScenePackage || !kind.trim() || !positionM.every(Number.isFinite)) return false;
+    const anchorId = `anchor-${crypto.randomUUID()}`;
+    set(mutateScene(state, "scene.panorama.anchor.add", { panoramaScenePackage: { ...state.panoramaScenePackage, semanticAnchors: [...state.panoramaScenePackage.semanticAnchors, { anchorId, kind: kind.trim(), positionM: [...positionM], confidence: 1 }], reviewStatus: "needs_director_review", ground: { ...state.panoramaScenePackage.ground, quality: "draft" } } }));
+    return true;
+  },
+  updatePanoramaAnchorPosition: (anchorId, positionM) => set((state) => {
+    const current = state.panoramaScenePackage;
+    if (!current || !positionM.every(Number.isFinite) || !current.semanticAnchors.some((anchor) => anchor.anchorId === anchorId)) return state;
+    return mutateScene(state, "scene.panorama.anchor.move", { panoramaScenePackage: { ...current, semanticAnchors: current.semanticAnchors.map((anchor) => anchor.anchorId === anchorId ? { ...anchor, positionM: [...positionM], confidence: 1 } : anchor), reviewStatus: "needs_director_review" } });
+  }),
+  removePanoramaAnchor: (anchorId) => set((state) => {
+    const current = state.panoramaScenePackage;
+    if (!current || !current.semanticAnchors.some((anchor) => anchor.anchorId === anchorId)) return state;
+    return mutateScene(state, "scene.panorama.anchor.remove", { panoramaScenePackage: { ...current, semanticAnchors: current.semanticAnchors.filter((anchor) => anchor.anchorId !== anchorId), reviewStatus: "needs_director_review" } });
   }),
   setPanoramaPreviewStatus: (panoramaPreviewStatus) => set({ panoramaPreviewStatus }),
   previewPanoramaDiagnostic: (inputId) => set((state) => {
@@ -1335,7 +1399,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   assignPanoramaInput: (inputId) => set((state) => {
     if (inputId === null) {
       if (state.renderScene.panorama.inputId === null) return state;
-      return { ...mutateScene(state, "scene.panorama.clear", { renderScene: { ...state.renderScene, panorama: { ...state.renderScene.panorama, inputId: null }, activePanoramaCalibrationId: null } }), panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" } };
+      return { ...mutateScene(state, "scene.panorama.clear", { renderScene: { ...state.renderScene, panorama: { ...state.renderScene.panorama, inputId: null }, activePanoramaCalibrationId: null } }), panoramaScenePackage: null, panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "idle", message: "尚未选择球面环境。" } };
     }
     const input = state.environmentInputCatalog.entries.find((entry) => entry.inputId === inputId);
     if (!input || input.projection !== "equirectangular" || !input.environmentAllowed || input.admissionChecksum !== input.checksum || state.renderScene.panorama.inputId === inputId) return state;
@@ -1346,7 +1410,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       panorama: { inputId, rotationDeg: panoramaRotationTuple(calibration), radiusM: calibration.radiusM, exposure: calibration.exposure },
       panoramaCalibrations: existing ? state.renderScene.panoramaCalibrations : [...state.renderScene.panoramaCalibrations, calibration],
       activePanoramaCalibrationId: calibration.calibrationId,
-    } }), panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "loading", message: calibration.confirmed ? "正在加载已确认球面环境纹理…" : "正在加载未确认方向的球面预览…" } };
+    } }), panoramaScenePackage: null, panoramaDiagnosticPreviewInputId: null, panoramaDiagnosticPreviewYawDeg: 0, panoramaDiagnosticPreviewFlipVertical: false, panoramaPreviewStatus: { state: "loading", message: calibration.confirmed ? "正在加载已确认球面环境纹理…" : "正在加载未确认方向的球面预览…" } };
   }),
   updatePanoramaCalibration: (calibrationId, update) => set((state) => revisePanoramaCalibration(state, calibrationId, "scene.calibration.panorama.update", update)),
   confirmPanoramaCalibration: (calibrationId) => set((state) => {
@@ -1845,7 +1909,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const camera = state.cameras[cameraId]; if (!camera) return state;
     const order = state.cameraSnapshots.filter((snapshot) => snapshot.cameraId === cameraId).length;
     const snapshotId = `snapshot-${cameraId.replace(/^camera-/, "")}-${String(order + 1).padStart(4, "0")}`;
-    const base: Omit<CameraSnapshotState, "stateChecksum"> = { snapshotId, cameraId, label: requestedLabel?.trim().slice(0, 80) || `${camera.label} 快照 ${order + 1}`, order, frame: state.playheadFrame, transform: structuredClone(camera.transform), fovDeg: camera.fovDeg, focalLengthMm: camera.focalLengthMm, zoom: camera.zoom, aspectRatio: camera.aspectRatio, compositionPresetId: camera.compositionPresetId, subjectTargetIds: [...camera.subjectTargetIds], lookAt: camera.lookAt ? { ...camera.lookAt } : null, follow: camera.follow ? { ...camera.follow } : null, actorMappingIds: camera.subjectTargetIds.flatMap((targetId) => state.characters[targetId]?.actorMappingId ? [state.characters[targetId].actorMappingId] : []), framingGuides: { ...camera.framingGuides }, dimensionsPx: snapshotDimensions(camera.aspectRatio) };
+    const base: Omit<CameraSnapshotState, "stateChecksum"> = { snapshotId, cameraId, label: requestedLabel?.trim().slice(0, 80) || `${camera.label} 快照 ${order + 1}`, order, frame: state.playheadFrame, transform: structuredClone(camera.transform), fovDeg: camera.fovDeg, focalLengthMm: camera.focalLengthMm, depthOfField: { ...camera.depthOfField }, zoom: camera.zoom, aspectRatio: camera.aspectRatio, compositionPresetId: camera.compositionPresetId, subjectTargetIds: [...camera.subjectTargetIds], lookAt: camera.lookAt ? { ...camera.lookAt } : null, follow: camera.follow ? { ...camera.follow } : null, actorMappingIds: camera.subjectTargetIds.flatMap((targetId) => state.characters[targetId]?.actorMappingId ? [state.characters[targetId].actorMappingId] : []), framingGuides: { ...camera.framingGuides }, dimensionsPx: snapshotDimensions(camera.aspectRatio) };
     const snapshot: CameraSnapshotState = { ...base, stateChecksum: snapshotChecksum(base) };
     return { cameraSnapshots: [...state.cameraSnapshots, snapshot], cameras: { ...state.cameras, [cameraId]: { ...camera, snapshotIds: [...camera.snapshotIds, snapshotId] } }, unsavedChanges: true, commandHistory: [...state.commandHistory, "camera.snapshot.create"].slice(-100) };
   }),
@@ -1873,6 +1937,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       transform: sourceCamera ? structuredClone(sourceCamera.transform) : { position: [...navigation.positionM], rotationDeg: cameraRotationFromNavigation(navigation), scale: [1, 1, 1], groundSnap: false },
       fovDeg,
       focalLengthMm: sourceCamera?.focalLengthMm ?? Number((18 / Math.tan(fovDeg * Math.PI / 360)).toFixed(2)),
+      depthOfField: { ...(sourceCamera?.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 }) },
       zoom: sourceCamera?.zoom ?? navigation.zoom,
       aspectRatio: sourceCamera?.aspectRatio ?? "16:9",
       compositionPresetId: sourceCamera?.compositionPresetId ?? "medium_wide",
@@ -1922,6 +1987,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const camera = state.cameras[cameraId]; if (!camera || camera.locked) return state;
     const zoom = finiteBounded(value, 0.1, 10); if (zoom === camera.zoom) return state;
     return mutateScene(state, "camera.zoom.set", { cameras: { ...state.cameras, [cameraId]: { ...camera, zoom } } });
+  }),
+  setCameraDepthOfField: (cameraId, patch) => set((state) => {
+    const camera = state.cameras[cameraId]; if (!camera || camera.locked) return state;
+    const current = camera.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 };
+    const depthOfField = {
+      enabled: typeof patch.enabled === "boolean" ? patch.enabled : current.enabled,
+      focusDistanceM: patch.focusDistanceM === undefined ? current.focusDistanceM : finiteBounded(patch.focusDistanceM, 0.1, 100),
+      aperture: patch.aperture === undefined ? current.aperture : finiteBounded(patch.aperture, 0.001, 0.02),
+    };
+    if (JSON.stringify(depthOfField) === JSON.stringify(current)) return state;
+    return mutateScene(state, "camera.depth_of_field.set", { cameras: { ...state.cameras, [cameraId]: { ...camera, depthOfField } } });
   }),
   setCameraLookAt: (cameraId, lookAt) => set((state) => {
     const camera = state.cameras[cameraId]; if (!camera || camera.locked || !cameraTargetExists(state, lookAt)) return state;
@@ -2388,11 +2464,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         ? { ...sceneObject, transform: { ...sceneObject.transform, position: [sceneObject.transform.position[0], sceneObject.transform.position[1], heightM] as [number, number, number] } }
         : sceneObject,
     ]));
-    return mutateScene(state, "scene.ground.height", {
+    return { ...mutateScene(state, "scene.ground.height", {
       characters,
       sceneObjects,
       renderScene: { ...state.renderScene, ground: { ...state.renderScene.ground, heightM } },
-    });
+    }), panoramaScenePackage: state.panoramaScenePackage ? { ...state.panoramaScenePackage, ground: { heightM, quality: "draft" as const }, reviewStatus: "needs_director_review" as const } : null };
   }),
   setGroundOpacity: (value) => set((state) => {
     if (state.renderScene.ground.locked) return state;
@@ -2488,6 +2564,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   }),
   loadRenderScene: (renderScene) => set({
     renderScene: structuredClone(renderScene),
+    panoramaScenePackage: null,
     panoramaDiagnosticPreviewInputId: null,
     panoramaDiagnosticPreviewYawDeg: 0,
     panoramaDiagnosticPreviewFlipVertical: false,

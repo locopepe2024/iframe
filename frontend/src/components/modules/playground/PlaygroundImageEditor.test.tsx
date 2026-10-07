@@ -121,12 +121,13 @@ it('opens the standalone page directly into the editor workbench', () => {
   expect(screen.getByText('Generated result')).toBeInTheDocument();
   expect(screen.queryByText('open')).not.toBeInTheDocument();
 });
-it('keeps a saved panorama entry to the director in the left list', async () => {
-  mocks.list.mockResolvedValue([{ ...saved, projection_type: 'equirectangular' }]);
+it('keeps a saved panorama in image assets without navigating to the director', async () => {
+  mocks.list.mockResolvedValue([{ ...saved, width: 800, height: 400, sha256: 'a'.repeat(64), projection_type: 'equirectangular', panorama_quality: { status: 'pass', blocking_codes: [] } }]);
   render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
   fireEvent.click(screen.getByText('title'));
-  fireEvent.click(await screen.findByRole('button', { name: 'openDirector Edited' }));
-  expect(window.location.hash).toBe('#/director');
+  expect(await screen.findByRole('button', { name: 'Edited' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'openDirector Edited' })).not.toBeInTheDocument();
+  expect(window.location.hash).toBe('');
 });
 it('does not insert a delayed save into a different session', async () => {
   let finish!: (value: typeof saved) => void;

@@ -503,6 +503,13 @@ def image_edits(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=
     return ImageEditStore(_storage_for(identity)).list(limit, offset)
 
 
+@router.get("/panorama-assets")
+def panorama_assets(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                    identity: UserContext = Depends(require_user_context)):
+    from .image_editor import ImageEditStore
+    return ImageEditStore(_storage_for(identity)).list_panorama_assets(limit, offset)
+
+
 @router.post("/image-edits", status_code=201)
 def save_image_edit(file: UploadFile = File(...), reference: str = Form(max_length=2000),
                     source_sha256: str = Form(pattern=r"^[0-9a-f]{64}$"), operation_key: str = Form(min_length=8, max_length=200),

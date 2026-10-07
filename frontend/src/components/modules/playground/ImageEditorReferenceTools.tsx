@@ -12,7 +12,7 @@ import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferenceProm
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
 export type GeneratedResultOptions = { panoramaCandidate: true };
-export const PANORAMA_PROMPT_PREFIX = 'Create a seamless 360-degree equirectangular panorama with a level horizon and a 2:1 composition. The left and right edges must join continuously. ';
+export const PANORAMA_PROMPT_PREFIX = 'Create a production-ready 360-degree equirectangular panorama in exact 2:1 format. Fill the complete sphere: continuous sky through the zenith, continuous ground through the nadir, no black/transparent holes, no empty bands, no missing ceiling or floor, level horizon, and seamless left/right edge continuity. Keep architectural lines and lighting consistent across the wrap. ';
 
 export function generationInputMedia(references: EditorReference[]): string[] {
   return references.map(reference => reference.path);
@@ -119,6 +119,7 @@ export default function ImageEditorReferenceTools({ references, onAdd, onRemove,
       const result = await playgroundApi.generate({ mode: taskMode, model_id: modelId, prompt: instruction,
         input_media: inputMedia.length ? inputMedia : undefined,
         media_names: Object.fromEntries(references.map(reference => [reference.path, reference.title])),
+        parameters: mode === 'panorama' ? { size: '4k', aspect_ratio: '2:1' } : undefined,
         batch_size: 1 });
       setGeneration(result); onGenerationChange?.(result);
     } catch { setError(t('generationFailed')); }

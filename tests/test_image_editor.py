@@ -17,6 +17,14 @@ def panorama_png():
     out = BytesIO(); Image.new('RGB', (64, 32), 'teal').save(out, format='PNG'); return out.getvalue()
 
 
+def panorama_with_pole_gap():
+    image = Image.new('RGBA', (64, 32), 'teal')
+    for y in range(2):
+        for x in range(64):
+            image.putpixel((x, y), (0, 0, 0, 0))
+    out = BytesIO(); image.save(out, format='PNG'); return out.getvalue()
+
+
 @pytest.fixture
 def editor(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -103,10 +111,52 @@ def test_panorama_projection_requires_explicit_declaration_and_exact_ratio(edito
     assert exc.value.status_code == 422
     panorama = store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'equirectangular')
     assert panorama['projection_type'] == 'equirectangular'
+    assert panorama['panorama_quality']['status'] == 'pass'
     assert ImageEditStore(store.storage).list()[0] == panorama
     with pytest.raises(HTTPException) as exc:
         store.save(source['reference'], source['sha256'], panorama_png(), 'pano.png', 'panorama-key-2', 'perspective_plane')
-    assert exc.value.status_code == 409
+        assert exc.value.status_code == 409
+
+
+def test_panorama_projection_rejects_pole_gaps(editor):
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    with pytest.raises(HTTPException) as exc:
+        store.save(source['reference'], source['sha256'], panorama_with_pole_gap(), 'bad-pano.png', 'panorama-gap-key', 'equirectangular')
+    assert exc.value.status_code == 422
+    assert 'gap' in str(exc.value.detail)
+
+
+def test_panorama_asset_catalog_filters_before_paging_and_is_owner_scoped(editor, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.playground import api
+    from src.apps.identity import require_user_context, UserContext
+
+    store, _ = editor
+    source = store.source('/playground/input-media/source.png')
+    first = store.save(source['reference'], source['sha256'], panorama_png(), 'first.png', 'catalog-first', 'equirectangular')
+    store.save(source['reference'], source['sha256'], png(), 'ordinary.png', 'catalog-ordinary')
+    second = store.save(source['reference'], source['sha256'], panorama_png(), 'second.png', 'catalog-second', 'equirectangular')
+    invalid = store.save(source['reference'], source['sha256'], panorama_png(), 'invalid.png', 'catalog-invalid', 'equirectangular')
+    rejected = store.save(source['reference'], source['sha256'], panorama_png(), 'rejected.png', 'catalog-rejected', 'equirectangular')
+    with store.db() as db:
+        damaged = dict(invalid, panorama_quality='bad legacy value')
+        db.execute('UPDATE edits SET data=? WHERE id=?', (json.dumps(damaged), invalid['id']))
+        failed = dict(rejected, panorama_quality={'status': 'fail', 'blocking_codes': ['black_pole_gap']})
+        db.execute('UPDATE edits SET data=? WHERE id=?', (json.dumps(failed), rejected['id']))
+    other = ImageEditStore(PlaygroundStorage(owner_user_id='b', owner_profile_id='b'))
+    monkeypatch.setattr(api, '_storage_for', lambda identity: store.storage if identity.owner_profile_id == 'a' else other.storage)
+    app = FastAPI()
+    app.include_router(api.router, prefix='/playground')
+    client = TestClient(app)
+    assert client.get('/playground/panorama-assets').json() == []
+    app.dependency_overrides[require_user_context] = lambda: UserContext('a', 'a', '', '')
+    assert [item['id'] for item in client.get('/playground/panorama-assets', params={'limit': 1, 'offset': 0}).json()] == [invalid['id']]
+    assert [item['id'] for item in client.get('/playground/panorama-assets', params={'limit': 1, 'offset': 1}).json()] == [second['id']]
+    assert [item['id'] for item in client.get('/playground/panorama-assets', params={'limit': 1, 'offset': 2}).json()] == [first['id']]
+    app.dependency_overrides[require_user_context] = lambda: UserContext('b', 'b', '', '')
+    assert client.get('/playground/panorama-assets').json() == []
 
 
 def test_pre_projection_save_key_still_replays_a_standard_edit(editor):

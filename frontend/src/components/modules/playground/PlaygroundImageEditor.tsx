@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { Box, ImagePlus, Plus, RefreshCw } from 'lucide-react';
+import { ImagePlus, Plus, RefreshCw } from 'lucide-react';
 import { playgroundApi, type PlaygroundGenerationResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource, type ImageProjectionType, type SavedImageEdit } from '@/lib/imageEditor';
 import { usePlaygroundStore } from './usePlaygroundStore';
@@ -119,10 +119,11 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   };
   const isPanoramaCandidate = Boolean(loaded && selected === panoramaCandidatePath);
   const hasPanoramaRatio = Boolean(loaded && loaded.source.width === 2 * loaded.source.height);
+  const panoramaQualityStatus = loaded?.source.panorama_quality?.status;
   const queuedOutputs = history.flatMap(item => item.outputs
     .filter(output => output.media_type === 'image' && output.media_path !== selected)
     .map(output => ({ generation: item, output })));
-  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate}
+  return <ImageEditor source={loaded?.url} title={name} onClose={onClose} initialView={isPanoramaCandidate ? 'panorama' : 'preview'} panoramaCandidate={isPanoramaCandidate} panoramaQualityStatus={isPanoramaCandidate ? panoramaQualityStatus : undefined}
     onModified={() => setHasUnsavedEdit(true)}
     onDiscard={() => setHasUnsavedEdit(false)}
     panoramaEligible={hasPanoramaRatio || isPanoramaCandidate} panoramaSaveEligible={hasPanoramaRatio}
@@ -147,7 +148,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
       {copies.map(copy => <div key={copy.id} className="flex min-w-0 items-center gap-1">
         <button type="button" onClick={() => useResult(copy.path, copy.title)} title={copy.title} className="min-h-10 min-w-0 flex-1 truncate rounded px-2 text-left hover:bg-hover-bg">{copy.title}</button>
         {sessionId && <button type="button" title={t('use')} aria-label={`${t('use')} ${copy.title}`} onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Plus size={15}/></button>}
-        {copy.projection_type === 'equirectangular' && <button type="button" title={t('openDirector')} aria-label={`${t('openDirector')} ${copy.title}`} onClick={() => { onClose(); window.location.hash = '#/director'; }} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-hover-bg"><Box size={15}/></button>}
+        {copy.projection_type === 'equirectangular' && copy.panorama_quality?.status === 'pass' && <span className="shrink-0 text-[10px] text-text-muted">{t('panoramaGeneration')}</span>}
       </div>)}
     </div>}
     toolPanel={referenceTools}

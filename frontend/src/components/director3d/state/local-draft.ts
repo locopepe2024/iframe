@@ -1,4 +1,4 @@
-import { useWorkbenchStore, type WorkbenchState } from "./workbench-store";
+import { createInitialCameras, useWorkbenchStore, type WorkbenchState } from "./workbench-store";
 import { createIdleFrameManifestImportState } from "./frame-manifest-import";
 import { createIdleLocalAnimationImportState } from "./local-animation-import";
 import { createIdleMotionTrackReviewState } from "./motion-track-review";
@@ -58,6 +58,7 @@ function projectSerializableState(state: WorkbenchState): Partial<WorkbenchState
       panoramaCalibrations: [],
       activePanoramaCalibrationId: null,
     },
+    panoramaScenePackage: null,
   };
 }
 
@@ -81,6 +82,10 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
     if (envelope.schemaVersion !== "iframe.director3d.browser-draft.v1" || !envelope.state || typeof envelope.savedAt !== "string") return null;
     useWorkbenchStore.setState({
       ...envelope.state,
+      cameras: Object.fromEntries(Object.entries(envelope.state.cameras ?? createInitialCameras()).map(([id, camera]) => [id, {
+        ...camera,
+        depthOfField: camera.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 },
+      }])),
       frameManifestImport: envelope.state.frameManifestImport ?? createIdleFrameManifestImportState(),
       motionTrackReview: envelope.state.motionTrackReview ?? createIdleMotionTrackReviewState(),
       motionTrackReviewUndo: [],
@@ -100,6 +105,7 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
       dialogueReferenceInputs: [],
       objectAssetCatalog: { status: "unavailable", message: "浏览器核心仅开放内置对象。", assets: [] },
       environmentInputCatalog: { status: "ready", message: "环境素材将在 iFrame Core 资产契约接入后开放。", entries: [] },
+      panoramaScenePackage: null,
       panoramaDiagnosticPreviewInputId: null,
       unsavedChanges: false,
     });
