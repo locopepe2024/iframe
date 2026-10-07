@@ -31,6 +31,7 @@ import { getOutputType } from './ModeSelector';
 import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
+import type { AgentMemory, MemoryCandidate } from './useAgentConversation';
 
 type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
 
@@ -38,7 +39,7 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -162,7 +163,13 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
                     {skill.title}
                   </label>
                 ))}
-                <p className="border-t border-border-subtle pt-3 text-xs leading-5 text-text-muted">仅使用本次会话内容；暂不支持跨会话永久记忆、闹钟提醒或媒体播放。</p>
+                {agent?.companionSkills?.includes('memory') && <div className="border-t border-border-subtle pt-3">
+                  <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-medium text-foreground">已确认记忆</span><button type="button" onClick={agent.extractMemories} className="min-h-9 rounded-lg border border-glass-border px-2 text-xs text-text-secondary hover:text-primary">从历史提取候选</button></div>
+                  {agent.memoryCandidates?.map((candidate) => <div key={`${candidate.source_message_id}-${candidate.source_quote}`} className="mb-2 rounded-lg bg-surface-inset p-2 text-xs"><p>{candidate.content}</p><p className="mt-1 text-text-muted">来源：{candidate.source_quote}</p><button type="button" onClick={() => agent.saveMemory?.(candidate)} className="mt-2 min-h-8 rounded-md bg-primary/15 px-2 text-primary">确认保存</button></div>)}
+                  {agent.memories?.map((memory) => <div key={memory.id} className="mb-2 flex items-center gap-2 rounded-lg bg-surface-inset p-2 text-xs"><input aria-label="编辑记忆" defaultValue={memory.content} onBlur={(event) => { if (event.target.value.trim() && event.target.value !== memory.content) agent.editMemory?.(memory.id, event.target.value.trim()); }} className="min-w-0 flex-1 bg-transparent text-foreground outline-none focus:ring-1 focus:ring-primary" /><button type="button" onClick={() => agent.deleteMemory?.(memory.id)} className="min-h-8 px-2 text-text-muted hover:text-status-failed-fg">删除</button></div>)}
+                  {agent.memoryError && <p role="alert" className="text-xs text-status-failed-fg">{agent.memoryError}</p>}
+                </div>}
+                <p className="border-t border-border-subtle pt-3 text-xs leading-5 text-text-muted">只有确认保存的记忆会跨会话使用；真实闹钟提醒和媒体播放尚未接入。</p>
               </div>
             )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
