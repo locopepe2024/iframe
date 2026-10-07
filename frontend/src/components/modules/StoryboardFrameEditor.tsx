@@ -132,6 +132,26 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         // Let's assume prompt is saved on generation for now.
     };
 
+    const saveReferencePackage = async (changes: Record<string, unknown>) => {
+        if (!currentProject) return;
+        const current = frame.reference_package || { revision: 1, references: [], confirmed: false };
+        try {
+            const updatedProject = await api.updateFrame(currentProject.id, frame.id, {
+                reference_package: {
+                    ...current,
+                    ...changes,
+                    revision: current.revision || 1,
+                },
+            });
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to save storyboard reference package:", error);
+            alert(ts("referencePackageSaveFailed"));
+        }
+    };
+
+    const currentReferenceImage = frame.rendered_image_url || frame.image_url || "";
+
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
             <motion.div
@@ -181,6 +201,44 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                     <span className="font-bold text-text-muted not-italic">{ts("dialogue")}:</span> "{frame.dialogue}"
                                 </p>
                             )}
+                        </div>
+
+                        <div className="p-4 border-b border-border-subtle space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-bold text-sm uppercase tracking-wider text-text-secondary">
+                                    {ts("referencePackage")}
+                                </h3>
+                                <span className="text-[0.6875rem] text-text-muted">
+                                    v{frame.reference_package?.revision || 1}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    disabled={!currentReferenceImage}
+                                    onClick={() => saveReferencePackage({ first_frame_url: currentReferenceImage, confirmed: false })}
+                                    className="rounded-lg border border-glass-border bg-surface px-2 py-2 text-xs text-text-secondary hover:border-primary hover:text-foreground disabled:opacity-40"
+                                >
+                                    {ts("setFirstFrame")}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={!currentReferenceImage}
+                                    onClick={() => saveReferencePackage({ last_frame_url: currentReferenceImage, confirmed: false })}
+                                    className="rounded-lg border border-glass-border bg-surface px-2 py-2 text-xs text-text-secondary hover:border-primary hover:text-foreground disabled:opacity-40"
+                                >
+                                    {ts("setLastFrame")}
+                                </button>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => saveReferencePackage({ confirmed: true })}
+                                className={`w-full rounded-lg px-3 py-2 text-xs font-medium ${frame.reference_package?.confirmed
+                                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
+                                    : "bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25"}`}
+                            >
+                                {frame.reference_package?.confirmed ? ts("referencePackageConfirmed") : ts("confirmReferencePackage")}
+                            </button>
                         </div>
 
                         <div className="flex-1 p-4 flex flex-col">

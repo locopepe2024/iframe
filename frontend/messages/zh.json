@@ -1293,6 +1293,12 @@
     "usePrevEndFrame": "使用上一帧尾帧",
     "dialogueLabel": "台词",
     "actionLabel": "动作"
+    ,"referencePackage": "镜头参考包"
+    ,"setFirstFrame": "设为首帧"
+    ,"setLastFrame": "设为尾帧"
+    ,"confirmReferencePackage": "确认参考素材"
+    ,"referencePackageConfirmed": "参考素材已确认"
+    ,"referencePackageSaveFailed": "保存镜头参考素材失败"
   },
   "video": {
     "taskQueue": "任务队列",
