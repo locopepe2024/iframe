@@ -5768,13 +5768,27 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         if reference_mode
         else ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     )
+    def has_field(text: Any, field: str) -> bool:
+        """Accept the model's harmless Markdown decoration around contract fields.
+
+        The prompt contract is still field based; models commonly render a
+        valid field as ``1. **subject_definitions:**`` or
+        ``subject_definitions:``.  Requiring the raw token at column zero
+        made those responses fail despite containing every required section.
+        """
+        if not isinstance(text, str):
+            return False
+        normalized = re.sub(r"[\s_-]+", "_", field.strip().lower())
+        pattern = re.compile(
+            rf"(?im)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:`|\*\*)?"
+            rf"{re.escape(normalized)}(?:`|\*\*)?\s*[:：]"
+        )
+        return pattern.search(text) is not None
+
     invalid_languages = []
     for key in ("prompt_cn", "prompt_en"):
         text = result.get(key, "")
-        if not isinstance(text, str) or any(
-            re.search(rf"(?im)^\s*{re.escape(field)}\s*[:：]", text) is None
-            for field in fields
-        ):
+        if any(not has_field(text, field) for field in fields):
             invalid_languages.append(key)
     if invalid_languages:
         from .llm import PolishError

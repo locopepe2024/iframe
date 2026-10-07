@@ -78,6 +78,30 @@ def test_h3_polish_accepts_required_structure(monkeypatch, r2v, fields):
     assert result == {'prompt_cn': structured, 'prompt_en': structured}
 
 
+def test_h3_polish_accepts_markdown_field_headings(monkeypatch):
+    structured = '\n'.join([
+        '1. **subject_definitions:** value',
+        '2. **summary:** value',
+        '3. **retention_analysis:** value',
+        '4. **detailed_description:** value',
+        '5. **overall_soundscape:** N/A',
+        '6. **non_diegetic_music:** N/A',
+    ])
+    processor = Mock()
+    processor.polish_r2v_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(
+        draft_prompt='主播举起药盒',
+        slots=[],
+        target_video_model='uniart/minimax-h3-vip',
+    ))
+
+    assert result == {'prompt_cn': structured, 'prompt_en': structured}
+
+
 def test_seedance_polish_does_not_require_h3_fields(monkeypatch):
     processor = Mock()
     result = {'prompt_cn': '场景与动作描述', 'prompt_en': 'Scene and action description'}
