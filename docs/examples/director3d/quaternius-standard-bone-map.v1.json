@@ -1,11 +1,12 @@
 {
   "schema": "director3d-bone-map.v1",
-  "revision": "quaternius-standard-to-white-model-glb-candidate-1",
+  "revision": "quaternius-standard-to-white-model-candidate-2",
   "sourceRig": "Quaternius Universal Animation Library Standard",
   "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
   "sourceBufferSha256": "6e65377d81558333c4093dbb144a48fd19019343d82b1a3a7992a98ec0e0543c",
   "targetRig": "white-model-neutral-female-v1.glb",
   "targetSha256": "d31319921ff0cc8600ccc2aa822a17503483f192a32dda2fc2a5f5ce61f111cf",
+  "targetBlendSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
   "retargetStatus": "unmapped",
   "pairs": [
     { "source": "DEF-hips", "target": "pelvis" },
