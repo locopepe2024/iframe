@@ -12,7 +12,6 @@ import type { BreadcrumbSegment } from "@/components/layout/BreadcrumbBar";
 // have their own SidePanelHeader-driven side columns.
 import ScriptProcessor from "@/components/modules/ScriptProcessor";
 import Cast from "@/components/modules/Cast";
-import VideoGenerator from "@/components/modules/VideoGenerator";
 import VideoAssembly from "@/components/modules/VideoAssembly";
 import ConsistencyVault from "@/components/modules/ConsistencyVault";
 import ArtDirection from "@/components/modules/ArtDirection";
@@ -38,7 +37,7 @@ const LEGACY_STEPS = [
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "assets", label: "3. Assets", icon: Users },
     { id: "storyboard", label: "4. Storyboard", icon: Layout },
-    { id: "motion", label: "5. Motion", icon: Video },
+    { id: "shot_design", label: "5. Shot Design", icon: Video },
     { id: "assembly", label: "6. Assembly", icon: Film },
 ];
 
@@ -282,7 +281,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                         {activeStep === "assets" && <ConsistencyVault />}
                         {activeStep === "storyboard" && <StoryboardComposer />}
                         {activeStep === "shot_design" && <StoryboardR2V />}
-                        {activeStep === "motion" && <VideoGenerator />}
                         {activeStep === "assembly" && <VideoAssembly />}
                     </div>
                 </div>
