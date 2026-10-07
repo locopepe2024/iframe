@@ -238,6 +238,26 @@ def test_agent_resolves_only_owned_library_object_keys(setup, monkeypatch):
         agent.reference_content(setup, foreign)
 
 
+def test_agent_resolves_owned_library_local_variant_path(setup, tmp_path, monkeypatch):
+    """Library references may be local paths when managed object storage is off."""
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api as studio_api
+    from src.models import uniart
+
+    monkeypatch.chdir(tmp_path)
+    local_path = 'output/users/owner/studio/assets/character.png'
+    image = tmp_path / local_path
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b'image')
+    index = SimpleNamespace(assets=[SimpleNamespace(variants=[SimpleNamespace(url=local_path)])])
+    monkeypatch.setattr(studio_api.pipeline, 'get_asset_library_reference_index', Mock(return_value=index))
+    monkeypatch.setattr(uniart, '_image_reference_url', lambda value: 'https://media.example/character.png')
+
+    result = agent.reference_content(setup, local_path)
+
+    assert result == {'type': 'image_url', 'image_url': {'url': 'https://media.example/character.png'}}
+
+
 def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkeypatch):
     from src.models import uniart
     files = []

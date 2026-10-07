@@ -249,19 +249,32 @@ def image_reference(ctx, reference):
 
 
 def owned_library_image_key(ctx, reference):
-    """Resolve a selected library image through the owner's asset index."""
+    """Resolve a selected library image through the owner's asset index.
+
+    The index is the ownership boundary.  Its variants can be represented as
+    an OSS object key, a signed delivery URL, or a local ``output/...`` path
+    depending on the storage configuration and when the asset was created.
+    Do not require one storage representation before consulting the owner
+    scoped index.
+    """
     from .comic_gen.api import pipeline
-    from ..utils.oss_utils import is_object_key
 
     parsed = urlsplit(reference)
     candidate = unquote(parsed.path).lstrip("/") if parsed.scheme in ("http", "https") else reference
-    if not is_object_key(candidate):
-        return None
     index = pipeline.get_asset_library_reference_index(ctx.owner_profile_id)
     for asset in index.assets:
         for variant in asset.variants:
-            if variant.url == candidate:
-                return candidate
+            stored = variant.url
+            # External delivery URLs identify an object by their path, while
+            # local and Studio references need an exact value match.  The
+            # index lookup proves owner scope before any value is sent onward.
+            if stored == reference or stored == candidate:
+                return stored
+            stored_parsed = urlsplit(stored)
+            if stored_parsed.scheme in ("http", "https"):
+                stored_candidate = unquote(stored_parsed.path).lstrip("/")
+                if stored_candidate == candidate:
+                    return stored
     return None
 
 
