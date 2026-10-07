@@ -105,6 +105,23 @@ def test_multiturn_owner_and_model(setup, monkeypatch):
     assert agent.sessions(ctx)['sessions'] == []
 
 
+def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    complete = Mock(return_value='我听着呢。')
+    monkeypatch.setattr(agent, 'complete', complete)
+    agent.send(sid, agent.MessageCreate(content='今天有点孤单', companion_skills=['listening', 'memory']), setup)
+    system = complete.call_args.args[2][0]['content']
+    assert agent.COMPANION_SKILL_INSTRUCTIONS['listening'] in system
+    assert agent.COMPANION_SKILL_INSTRUCTIONS['memory'] in system
+    assert 'companion_skills' not in agent.messages(sid, setup)['messages'][0]
+    with pytest.raises(HTTPException) as invalid:
+        agent.send(sid, agent.MessageCreate(content='你好', companion_skills=['unknown']), setup)
+    assert invalid.value.status_code == 422
+    with pytest.raises(HTTPException) as duplicate:
+        agent.send(sid, agent.MessageCreate(content='你好', companion_skills=['memory', 'memory']), setup)
+    assert duplicate.value.status_code == 422
+
+
 def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):
     ctx = setup
     sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']

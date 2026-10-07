@@ -17,6 +17,7 @@ import {
   Volume2,
   Workflow,
   SlidersHorizontal,
+  HeartHandshake,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -29,14 +30,15 @@ import PromptInput from './PromptInput';
 import { getOutputType } from './ModeSelector';
 import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
+import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
 
-type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | ComposerControl | null;
+type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
 
 interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -97,7 +99,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   useEffect(() => { setActivePanel(null); }, [agent?.active]);
 
   const panelTitle = activePanel
-    ? activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
+    ? activePanel === 'companion' ? '陪护技能' : activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
     : '';
 
   const togglePanel = (panel: Exclude<ComposerPanel, null>) => {
@@ -142,6 +144,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
               activePanel === 'model' && 'max-w-[680px]',
               activePanel === 'reference' && 'max-w-[620px]',
               activePanel === 'resolution' && 'max-w-[520px]',
+              activePanel === 'companion' && 'max-w-[420px]',
               ['ratio', 'quality', 'method', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
             )}
           >
@@ -153,6 +156,17 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             {activePanel === 'method' && <CreationMethodSelector />}
             {activePanel === 'reference' && (
               <MediaInput agentMode={agent?.active} />
+            )}
+            {activePanel === 'companion' && (
+              <div className="space-y-3">
+                {COMPANION_SKILLS.map((skill) => (
+                  <label key={skill.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm text-foreground hover:bg-hover-bg">
+                    <input type="checkbox" checked={agent?.companionSkills?.includes(skill.id) ?? false} onChange={() => agent?.toggleCompanionSkill?.(skill.id)} className="h-4 w-4 accent-primary" />
+                    {skill.title}
+                  </label>
+                ))}
+                <p className="border-t border-border-subtle pt-3 text-xs leading-5 text-text-muted">仅使用本次会话内容；暂不支持跨会话永久记忆、闹钟提醒或媒体播放。</p>
+              </div>
             )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
               <ComposerControls control={activePanel as ComposerControl} />
@@ -181,6 +195,12 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={agent?.active ? (agent.models.find(m => m.api_model_id === agent.model)?.display_name || (agent.modelsLoading ? '加载模型中…' : agent.modelsError ? '模型加载失败' : t('agent.selectSku'))) : model?.displayName || modelId || t('agent.selectSku')}
             onClick={() => togglePanel('model')}
           />
+          {agent?.active && <ToolButton
+            active={activePanel === 'companion'}
+            icon={HeartHandshake}
+            label={`陪护技能${agent.companionSkills?.length ? ` ${agent.companionSkills.length}` : ''}`}
+            onClick={() => togglePanel('companion')}
+          />}
           {!agent?.active && <>
           <ToolButton
             active={activePanel === 'method'}
