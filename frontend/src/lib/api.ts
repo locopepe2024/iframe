@@ -2443,7 +2443,7 @@ export const playgroundApi = {
       }
       throw new Error(detail);
     }
-    return response.json() as Promise<{ path: string }>;
+    return response.json() as Promise<{ media_id: string; path: string }>;
   },
 };
 

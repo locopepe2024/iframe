@@ -7,6 +7,7 @@ import { playgroundApi } from '@/lib/api';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import { getModelsForMode } from './playgroundModels';
 import AssetPickerModal from './AssetPickerModal';
+import { mediaReferenceLabel } from './referenceMedia';
 
 // ---------------------------------------------------------------------------
 // Mode config
@@ -170,7 +171,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     setUploadError('');
     try {
       // Bound in-flight requests without limiting how many references can be added.
-      const results: PromiseSettledResult<{ path: string }>[] = [];
+      const results: PromiseSettledResult<{ path: string; media_id: string }>[] = [];
       for (let index = 0; index < toUpload.length; index += 4) {
         results.push(...await Promise.allSettled(toUpload.slice(index, index + 4).map((file) => playgroundApi.uploadMedia(file))));
       }
@@ -179,7 +180,11 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           newPaths.push(result.value.path);
-          usePlaygroundStore.getState().rememberMediaName(result.value.path, toUpload[index].name);
+          const sessionId = usePlaygroundStore.getState().activeSessionId;
+          usePlaygroundStore.getState().rememberMediaName(
+            result.value.path,
+            mediaReferenceLabel(sessionId, new Date().toISOString(), result.value.media_id || result.value.path.split('/').pop() || 'media'),
+          );
         } else {
           failed.push(toUpload[index].name);
         }

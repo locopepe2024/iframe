@@ -17,6 +17,16 @@ it('appends Agent uploads beyond sixteen references without dropping any', async
   fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['a'], 'voice.wav'), new File(['v'], 'clip.mp4')] } });
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, '/voice.wav', '/clip.mp4']));
 });
+it('names a new upload from session, time and media id rather than the filename', async () => {
+  usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', activeSessionId: 'session-123', inputMedia: [], mediaNames: {} });
+  upload.mockResolvedValueOnce({ path: '/playground/input-media/opaque.jpeg', media_id: 'media-456' });
+  const { container } = render(<MediaInput agentMode />);
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(['a'], '@优化@images.jpeg')] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/playground/input-media/opaque.jpeg']));
+  const name = usePlaygroundStore.getState().mediaNames['/playground/input-media/opaque.jpeg'];
+  expect(name).toMatch(/^素材-session--\d{8}T\d{6}Z-media-456$/);
+  expect(name).not.toContain('@');
+});
 it('uploads mixed Agent references without changing the media generation mode', async () => {
   upload.mockResolvedValueOnce({ path: '/playground/input-media/clip.mp4' }).mockResolvedValueOnce({ path: '/playground/input-media/voice.wav' });
   usePlaygroundStore.setState({ mode: 't2v', modelId: 'test', inputMedia: ['/old.png'] });
