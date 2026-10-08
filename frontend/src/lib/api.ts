@@ -2121,7 +2121,10 @@ export const api = {
     // Series Episodes
     getSeriesEpisodes: async (seriesId: string) => {
         const response = await axios.get(`${API_URL}/series/${seriesId}/episodes`);
-        return response.data;
+        return response.data.map((episode: any) => ({
+            ...episode,
+            originalText: episode.original_text,
+        }));
     },
     addEpisodeToSeries: async (seriesId: string, scriptId: string, episodeNumber?: number) => {
         const response = await axios.post(`${API_URL}/series/${seriesId}/episodes`, { script_id: scriptId, episode_number: episodeNumber });
