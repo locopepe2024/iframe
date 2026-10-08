@@ -452,6 +452,28 @@ def test_style_save_preserves_episode_assets_and_director_profile():
     assert updated.art_direction.director_profile == profile_before
 
 
+def test_adopting_new_director_interpretation_creates_new_plan_revision():
+    pipeline, script = make_pipeline()
+    old_plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, old_plan)
+    pipeline.apply_director_shooting_plan("film", old_plan, 0, 1)
+
+    script.art_direction.director_profile.revision = 4
+    script.art_direction.director_profile.content_hash = "director-hash-v4"
+    lineage = pipeline.director_shooting_plan_lineage("film")
+    aligned_plan = old_plan.model_copy(update={
+        "director_profile_revision": lineage["director_profile_revision"],
+        "director_profile_hash": lineage["director_profile_hash"],
+        "effective_style_hash": lineage["effective_style_hash"],
+    })
+    pipeline.save_director_shooting_plan_draft("film", 1, 1, aligned_plan)
+    pipeline.apply_director_shooting_plan("film", aligned_plan, 1, 2)
+
+    assert [item.revision for item in script.director_shooting_plan_revisions] == [1, 2]
+    assert script.director_shooting_plan_revisions[0].plan.director_profile_revision == 3
+    assert script.director_shooting_plan_revisions[1].plan.director_profile_revision == 4
+
+
 def test_confirmation_allows_missing_performance_physics_or_lighting_for_later_editing():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline).model_dump()
