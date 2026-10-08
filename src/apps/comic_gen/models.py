@@ -2584,6 +2584,24 @@ class AssemblyEditPlan(BaseModel):
                 )
         return self
 
+class EpisodeUnderstandingHandoff(BaseModel):
+    """Reviewable episode-level narrative summary and cross-episode handoff.
+
+    Chunk metadata remains an internal source/compute index. This object is
+    the user-facing projection boundary and is populated only by a confirmed
+    Episode Director understanding.
+    """
+
+    status: Literal["not_generated", "draft", "confirmed", "stale"] = "not_generated"
+    episode_summary: Optional[str] = None
+    incoming_handoff: Dict[str, Any] = Field(default_factory=dict)
+    outgoing_handoff: Dict[str, Any] = Field(default_factory=dict)
+    source_refs: List[str] = Field(default_factory=list)
+    series_director_revision: Optional[int] = Field(None, ge=1)
+    episode_director_revision: Optional[int] = Field(None, ge=1)
+    generated_at: Optional[float] = None
+
+
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
     owner_user_id: Optional[str] = Field(None, description="Authenticated UniArt user owner")
@@ -2623,6 +2641,10 @@ class Script(BaseModel):
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
     director_style_hash: Optional[str] = Field(None, description="Effective visual style when this episode Director version was confirmed")
     director_series_revision: Optional[int] = Field(None, description="Confirmed Series Director revision referenced by this episode version")
+    episode_understanding: Optional[EpisodeUnderstandingHandoff] = Field(
+        None,
+        description="Confirmed episode summary and incoming/outgoing narrative handoff",
+    )
     director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)

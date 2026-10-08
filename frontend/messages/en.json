@@ -1082,6 +1082,8 @@
     "seriesContext": "Series Context",
     "episodeSummary": "Episode Summary",
     "understandingNotReady": "Not generated",
+    "understandingConfirmed": "Adopted",
+    "handoffReady": "Handed off",
     "seriesContextNotReady": "Series understanding has not been adopted yet. Open the editor to view the episode source.",
     "episodeSummaryNotReady": "Episode Director understanding has not been generated. Open the editor to view the episode source.",
     "noScript": "Episode Director understanding has not been generated",

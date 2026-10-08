@@ -260,6 +260,17 @@ export interface DirectorProfile {
     confirmed_at: number;
 }
 
+export interface EpisodeUnderstandingHandoff {
+    status: "not_generated" | "draft" | "confirmed" | "stale";
+    episode_summary?: string | null;
+    incoming_handoff?: Record<string, unknown>;
+    outgoing_handoff?: Record<string, unknown>;
+    source_refs?: string[];
+    series_director_revision?: number | null;
+    episode_director_revision?: number | null;
+    generated_at?: number | null;
+}
+
 export type DirectorEvidenceStatus = "explicit" | "interpretation" | "uncertain" | "conflicted";
 
 export interface DirectorStoryPerson {
@@ -490,6 +501,7 @@ export interface Project {
     assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
+    episode_understanding?: EpisodeUnderstandingHandoff | null;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
     starred?: boolean;
 }

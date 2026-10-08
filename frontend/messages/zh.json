@@ -1082,6 +1082,8 @@
     "seriesContext": "全剧上下文",
     "episodeSummary": "本集概要",
     "understandingNotReady": "尚未生成",
+    "understandingConfirmed": "已采用",
+    "handoffReady": "已交接",
     "seriesContextNotReady": "尚未采用全剧理解。本集原文和编辑入口在“进入编辑器”中查看。",
     "episodeSummaryNotReady": "尚未生成本集导演理解。本集原文和编辑入口在“进入编辑器”中查看。",
     "noScript": "尚未生成本集导演理解",

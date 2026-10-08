@@ -541,7 +541,8 @@ function EpisodeContentPanel({
   const scenes = episode.scenes || [];
   const seriesDirector = series?.art_direction?.director_profile;
   const episodeDirector = episode.art_direction?.director_profile;
-  const episodeSummary = episodeDirector?.execution_summary
+  const handoff = episode.episode_understanding;
+  const episodeSummary = handoff?.episode_summary || episodeDirector?.execution_summary
     || (typeof episodeDirector?.setting?.story_summary === "string" ? episodeDirector.setting.story_summary : "");
   const contextSummary = seriesDirector?.execution_summary
     || (typeof seriesDirector?.setting?.premise === "string" ? seriesDirector.setting.premise : "");
@@ -588,20 +589,26 @@ function EpisodeContentPanel({
           <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground">{t("seriesContext")}</h3>
-              <span className="text-[0.6875rem] text-text-muted">{seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
+              <span className="text-[0.6875rem] text-text-muted">{handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 ? t("handoffReady") : seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
             </div>
             <p className="text-xs leading-relaxed text-text-secondary">
               {contextSummary || t("seriesContextNotReady")}
             </p>
+            {handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 && (
+              <p className="text-[0.6875rem] leading-5 text-text-muted">{JSON.stringify(handoff.incoming_handoff)}</p>
+            )}
           </div>
           <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground">{t("episodeSummary")}</h3>
-              <span className="text-[0.6875rem] text-text-muted">{episodeDirector ? `r${episodeDirector.revision}` : t("understandingNotReady")}</span>
+              <span className="text-[0.6875rem] text-text-muted">{handoff?.status === "confirmed" ? t("understandingConfirmed") : episodeDirector ? `r${episodeDirector.revision}` : t("understandingNotReady")}</span>
             </div>
             <p className="text-xs leading-relaxed text-text-secondary">
               {episodeSummary || t("episodeSummaryNotReady")}
             </p>
+            {handoff?.outgoing_handoff && Object.keys(handoff.outgoing_handoff).length > 0 && (
+              <p className="text-[0.6875rem] leading-5 text-text-muted">{JSON.stringify(handoff.outgoing_handoff)}</p>
+            )}
           </div>
         </div>
 
