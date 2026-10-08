@@ -475,6 +475,8 @@ export interface Project {
     style_preset?: string;
     style_prompt?: string;
     art_direction?: ArtDirection;
+    director_style_review_required?: boolean;
+    series_director_review_required?: boolean;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
     workflow_mode?: "i2v_legacy" | "r2v";

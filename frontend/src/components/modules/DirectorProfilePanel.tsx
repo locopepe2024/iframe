@@ -499,6 +499,17 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 </div>
             )}
 
+            {currentProject?.director_style_review_required && (
+                <p role="status" className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                    {t("directorStyleReview")}
+                </p>
+            )}
+            {currentProject?.series_director_review_required && (
+                <p role="status" className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                    {t("seriesDirectorReview")}
+                </p>
+            )}
+
             {draftText ? (
                 <div className="space-y-3">
                     {revisions.length > 0 && (

@@ -14,6 +14,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   const [sourceAudit, setSourceAudit] = useState<Record<string, unknown> | null>(null);
   const [draftRevision, setDraftRevision] = useState(0);
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
+  const [styleReviewRequired, setStyleReviewRequired] = useState(false);
   const [busy, setBusy] = useState<"analyze" | "save" | "saveContext" | "confirm" | null>(null);
   const [error, setError] = useState("");
   const dirty = draftText !== savedText;
@@ -24,6 +25,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
     const text = value ? JSON.stringify(value, null, 2) : "";
     setDraftText(text); setSavedText(text); setDraftRevision(state.draft_revision ?? 0);
     setConfirmedRevision(state.confirmed_revisions?.at(-1)?.revision ?? null);
+    setStyleReviewRequired(state.style_review_required ?? false);
     const context = state.source_context ?? {};
     const contextValue = typeof context.text === "string" ? context.text : (typeof context.preamble === "string" ? context.preamble : "");
     setContextText(contextValue); setSavedContextText(contextValue);
@@ -62,7 +64,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   };
   const confirm = async () => {
     setBusy("confirm"); setError("");
-    try { const result = await api.confirmSeriesDirectorProfile(seriesId); setConfirmedRevision(result.revision); onSaved(); }
+    try { const result = await api.confirmSeriesDirectorProfile(seriesId); setConfirmedRevision(result.revision); setStyleReviewRequired(false); onSaved(); }
     catch (e) { setError(String((e as any)?.message || e)); } finally { setBusy(null); }
   };
 
@@ -74,6 +76,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
       <WorkflowActionButton variant="secondary" leftIcon={<RotateCcw />} loading={busy === "analyze"} disabled={busy !== null} onClick={analyze}>{t("seriesDirectorAnalyze")}</WorkflowActionButton>
     </header>
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
+    {styleReviewRequired && <p role="status" className="mx-8 mt-4 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">{t("seriesDirectorStyleReview")}</p>}
     <div className="min-h-0 flex-1 overflow-y-auto p-8">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
         <div className="flex flex-col gap-3 rounded-lg border border-glass-border bg-background/30 p-5">
