@@ -8004,6 +8004,49 @@ class ComicGenPipeline(StudioOwnerMixin):
             del self.series_store[series_id]
             self._save_series_data_unlocked()
 
+    def delete_series_asset(self, series_id: str, asset_type: str, asset_id: str,
+                            owner_profile_id: Optional[str] = None, force: bool = False) -> None:
+        """Delete an unreferenced shared asset without changing episode plans."""
+        collections = {"character": "characters", "scene": "scenes", "prop": "props"}
+        if asset_type not in collections:
+            raise ValueError("Invalid asset type")
+        with self._save_lock:
+            series = self.get_series(series_id, owner_profile_id)
+            if not series:
+                raise ValueError("Series not found")
+            collection = getattr(series, collections[asset_type])
+            if not any(item.id == asset_id for item in collection):
+                raise ValueError("Series asset not found")
+            references = []
+            for episode in self.get_series_episodes(series_id):
+                for frame in episode.frames:
+                    used = (frame.scene_id == asset_id if asset_type == "scene" else
+                            asset_id in (frame.character_ids if asset_type == "character" else frame.prop_ids))
+                    if used:
+                        references.append({"owner_kind": "project", "owner_id": episode.id,
+                                           "owner_title": episode.title, "frame_id": frame.id})
+                for binding in episode.episode_asset_bindings:
+                    if binding.asset_type == asset_type and binding.asset_id == asset_id and binding.status != "stale":
+                        references.append({"owner_kind": "project", "owner_id": episode.id,
+                                           "owner_title": episode.title, "binding_id": asset_id})
+            if references and not force:
+                raise LibraryAssetInUseError(asset_type, asset_id, references)
+            if references:
+                for episode in self.get_series_episodes(series_id):
+                    for frame in episode.frames:
+                        if asset_type == "character":
+                            frame.character_ids = [item for item in frame.character_ids if item != asset_id]
+                        elif asset_type == "scene" and frame.scene_id == asset_id:
+                            frame.scene_id = ""
+                        elif asset_type == "prop":
+                            frame.prop_ids = [item for item in frame.prop_ids if item != asset_id]
+                    episode.episode_asset_bindings = [binding for binding in episode.episode_asset_bindings
+                                                      if not (binding.asset_type == asset_type and binding.asset_id == asset_id)]
+                self._save_data()
+            setattr(series, collections[asset_type], [item for item in collection if item.id != asset_id])
+            series.updated_at = time.time()
+            self._save_series_data_unlocked()
+
     def add_episode_to_series(
         self,
         series_id: str,

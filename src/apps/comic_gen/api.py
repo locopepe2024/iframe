@@ -1227,6 +1227,22 @@ def get_series_assets(series_id: str):
     })
 
 
+@app.delete("/series/{series_id}/assets/{asset_type}/{asset_id}")
+def delete_series_asset(series_id: str, asset_type: Literal["character", "scene", "prop"], asset_id: str,
+                        force: bool = False, user: UserContext = Depends(require_studio_user)):
+    try:
+        pipeline.delete_series_asset(series_id, asset_type, asset_id, user.owner_profile_id, force)
+        return {"status": "deleted", "asset_type": asset_type, "id": asset_id}
+    except LibraryAssetInUseError as exc:
+        raise HTTPException(status_code=409, detail={
+            "error": "series_asset_in_use",
+            "message": "Asset is referenced by an episode; remove its references before deleting it.",
+            "references": exc.references,
+        }) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
@@ -5546,7 +5562,7 @@ def clear_project_art_direction(script_id: str):
     script.updated_at = time.time()
     pipeline.scripts[script_id] = script
     pipeline._save_data()
-    return signed_response(script)
+    return get_project(script_id)
 
 
 @app.put("/projects/{script_id}/last_episode_summary")
@@ -5592,7 +5608,7 @@ def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
             request.custom_styles,
             request.ai_recommendations
         )
-        return signed_response(updated_script)
+        return get_project(updated_script.id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

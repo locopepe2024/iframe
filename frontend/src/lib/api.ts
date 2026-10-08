@@ -2128,6 +2128,10 @@ export const api = {
         const response = await axios.get(`${API_URL}/series/${seriesId}/assets`);
         return response.data;
     },
+    deleteSeriesAsset: async (seriesId: string, assetType: "character" | "scene" | "prop", assetId: string, force = false) => {
+        const response = await axios.delete(`${API_URL}/series/${seriesId}/assets/${assetType}/${assetId}`, { params: { force } });
+        return response.data;
+    },
     importSeriesAssets: async (seriesId: string, sourceSeriesId: string, assetIds: string[]) => {
         const response = await axios.post(`${API_URL}/series/${seriesId}/assets/import`, { source_series_id: sourceSeriesId, asset_ids: assetIds });
         return response.data;

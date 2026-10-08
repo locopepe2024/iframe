@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, ChevronRight } from "lucide-react";
+import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, ChevronRight, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Series, Character, Scene, Prop, Project } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
@@ -138,6 +138,25 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
     }
   };
 
+  const handleDeleteAsset = async (tab: AssetTab, asset: Character | Scene | Prop) => {
+    if (!window.confirm(t("confirmDeleteAsset", { name: asset.name }))) return;
+    try {
+      const assetType = tab.slice(0, -1) as "character" | "scene" | "prop";
+      try {
+        await api.deleteSeriesAsset(seriesId, assetType, asset.id);
+      } catch (error) {
+        const detail = (error as any)?.response?.data?.detail;
+        if (detail?.error !== "series_asset_in_use" || !window.confirm(t("confirmDeleteAssetInUse"))) throw error;
+        await api.deleteSeriesAsset(seriesId, assetType, asset.id, true);
+      }
+      await refreshSeriesData();
+    } catch (error) {
+      const detail = (error as any)?.response?.data?.detail;
+      window.alert(detail?.error === "series_asset_in_use"
+        ? t("deleteAssetInUse") : extractErrorDetail(error, t("deleteAssetFailed")));
+    }
+  };
+
   // ── Loading ──
   if (loading) {
     return (
@@ -224,6 +243,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
               tab={activeItem.tab}
               assets={getAssets(activeItem.tab)}
               label={ASSET_LABELS[activeItem.tab]}
+              onDelete={asset => handleDeleteAsset(activeItem.tab, asset)}
             />
           ) : selectedEpisode ? (
             <EpisodeContentPanel
@@ -416,10 +436,12 @@ function AssetContentPanel({
   tab,
   assets,
   label,
+  onDelete,
 }: {
   tab: AssetTab;
   assets: (Character | Scene | Prop)[];
   label: string;
+  onDelete: (asset: Character | Scene | Prop) => void;
 }) {
   const t = useTranslations("series");
 
@@ -480,7 +502,15 @@ function AssetContentPanel({
                   },
                 }}
               >
-                <AssetCard asset={asset} type={tab} />
+                <div className="relative">
+                  <AssetCard asset={asset} type={tab} />
+                  <button type="button" onClick={() => onDelete(asset)}
+                    aria-label={t("deleteAsset", { name: asset.name })}
+                    title={t("deleteAsset", { name: asset.name })}
+                    className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded border border-border bg-background text-text-secondary hover:text-red-500">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </motion.div>
             ))}
           </motion.div>

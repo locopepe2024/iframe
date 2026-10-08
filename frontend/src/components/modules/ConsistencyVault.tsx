@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference } from "@/lib/api";
-import { getAssetUrl } from "@/lib/utils";
+import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -237,7 +237,18 @@ export default function ConsistencyVault() {
         if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
 
         try {
-            if (type === "character") {
+            const asset = (type === "character" ? currentProject.characters :
+                type === "scene" ? currentProject.scenes : currentProject.props)
+                ?.find((item: any) => item.id === assetId);
+            if (asset?.source === "series" && currentProject.series_id) {
+                try {
+                    await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId);
+                } catch (error) {
+                    const detail = (error as any)?.response?.data?.detail;
+                    if (detail?.error !== "series_asset_in_use" || !confirm("该资产仍被分集引用。删除并解除这些引用？")) throw error;
+                    await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId, true);
+                }
+            } else if (type === "character") {
                 await crudApi.deleteCharacter(currentProject.id, assetId);
             } else if (type === "scene") {
                 await crudApi.deleteScene(currentProject.id, assetId);
@@ -249,7 +260,10 @@ export default function ConsistencyVault() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete asset:", error);
-            alert("Failed to delete asset");
+            const detail = (error as any)?.response?.data?.detail;
+            alert(detail?.error === "series_asset_in_use"
+                ? "该资产仍被分集镜头或资产绑定引用，请先解除引用。"
+                : extractErrorDetail(error, "Failed to delete asset"));
         }
     };
 
@@ -401,6 +415,8 @@ export default function ConsistencyVault() {
             const diff = await api.syncEpisodeAssetsFromShootingPlan(currentProject.id);
             setEpisodeAssetSync(diff);
             setEpisodeAssetState({ context: diff.context, bindings: diff.bindings });
+            const updatedProject = await api.getProject(currentProject.id);
+            updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             alert(error?.response?.data?.detail || error?.message || "请先确认拍摄计划");
         } finally {
