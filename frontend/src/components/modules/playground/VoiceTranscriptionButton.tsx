@@ -84,13 +84,13 @@ export default function VoiceTranscriptionButton({ onTranscribed }: { onTranscri
   };
 
   if (!available) return null;
-  return <div className="mb-2 flex items-center gap-2">
+  return <div className="flex shrink-0 items-center gap-2">
     <button type="button" onClick={() => recording ? recorder.current?.stop() : void start()} disabled={busy}
       aria-label={recording ? '停止录音并识别' : '开始语音输入'} title={recording ? '停止录音并识别' : '开始语音输入'}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50">
       {busy ? <Loader2 size={18} className="animate-spin" /> : recording ? <Square size={16} /> : <Mic size={18} />}
     </button>
-    <span role="status" className="text-xs text-text-muted">{recording ? '正在录音，点击停止' : busy ? '正在识别语音…' : '语音输入'}</span>
+    {(recording || busy) && <span role="status" className="whitespace-nowrap text-xs text-text-muted">{recording ? '正在录音，点击停止' : '正在识别语音…'}</span>}
     {error && <span role="alert" className="text-xs text-status-failed-fg">{error}</span>}
   </div>;
 }
