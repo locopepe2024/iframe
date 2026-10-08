@@ -54,6 +54,41 @@ export interface AvatarCharacterAssetClient {
   listReferenceAssets(characterId: string, role?: ReferenceRole): Promise<AvatarReferenceAsset[]>;
 }
 
+/** iFrame-owned adoption record. It points at Avatar; it owns no media. */
+export interface ProjectCharacterBinding {
+  binding_id: string;
+  project_id: string;
+  project_character_id: string;
+  avatar_character_id: string;
+  identity_revision: number;
+  base_reference_asset_ids: string[];
+  review_status: "draft" | "confirmed" | "stale";
+}
+
+export function confirmProjectCharacterBinding(
+  binding: ProjectCharacterBinding,
+  identity: DigitalAvatarCharacter,
+): ProjectCharacterBinding {
+  if (binding.avatar_character_id !== identity.character_id
+      || binding.identity_revision !== identity.identity_revision) {
+    throw new AvatarRevisionConflictError(
+      binding.avatar_character_id,
+      binding.identity_revision,
+      identity.identity_revision,
+    );
+  }
+  if (identity.review_status !== "confirmed") {
+    throw new Error("Avatar identity must be confirmed before project adoption");
+  }
+  const allowed = new Set(identity.reference_assets
+    .filter((asset) => asset.role === "identity")
+    .map((asset) => asset.id));
+  if (binding.base_reference_asset_ids.some((id) => !allowed.has(id))) {
+    throw new Error("Project base references must belong to the confirmed Avatar identity");
+  }
+  return { ...binding, base_reference_asset_ids: [...binding.base_reference_asset_ids], review_status: "confirmed" };
+}
+
 export class AvatarRevisionConflictError extends Error {
   readonly characterId: string;
   readonly expectedRevision: number;
@@ -78,21 +113,28 @@ function clone<T>(value: T): T {
 export function createInMemoryAvatarCharacterAssetClient(
   seed: DigitalAvatarCharacter[] = [],
 ): AvatarCharacterAssetClient {
-  const current = new Map(seed.map((character) => [character.character_id, clone(character)]));
+  const history = new Map(seed.map((character) => [
+    character.character_id,
+    new Map([[character.identity_revision, clone(character)]]),
+  ]));
+
+  function latest(characterId: string): DigitalAvatarCharacter {
+    const revisions = history.get(characterId);
+    if (!revisions) throw new Error(`Avatar character not found: ${characterId}`);
+    return revisions.get(Math.max(...Array.from(revisions.keys())))!;
+  }
 
   return {
     async getCharacter(characterId, revision) {
-      const character = current.get(characterId);
-      if (!character) throw new Error(`Avatar character not found: ${characterId}`);
-      if (revision !== undefined && revision !== character.identity_revision) {
-        throw new AvatarRevisionConflictError(characterId, revision, character.identity_revision);
-      }
+      const character = revision === undefined
+        ? latest(characterId)
+        : history.get(characterId)?.get(revision);
+      if (!character) throw new Error(`Avatar identity revision not found: ${characterId}@${revision}`);
       return clone(character);
     },
 
     async updateIdentity(characterId, patch) {
-      const character = current.get(characterId);
-      if (!character) throw new Error(`Avatar character not found: ${characterId}`);
+      const character = latest(characterId);
       if (patch.expected_revision !== character.identity_revision) {
         throw new AvatarRevisionConflictError(
           characterId,
@@ -106,13 +148,12 @@ export function createInMemoryAvatarCharacterAssetClient(
         identity: { ...character.identity, ...patch.identity },
         review_status: "needs_user_review",
       };
-      current.set(characterId, next);
+      history.get(characterId)!.set(next.identity_revision, clone(next));
       return clone(next);
     },
 
     async listReferenceAssets(characterId, role) {
-      const character = current.get(characterId);
-      if (!character) throw new Error(`Avatar character not found: ${characterId}`);
+      const character = latest(characterId);
       return clone(role
         ? character.reference_assets.filter((asset) => asset.role === role)
         : character.reference_assets);

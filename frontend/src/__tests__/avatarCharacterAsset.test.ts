@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AvatarRevisionConflictError,
+  confirmProjectCharacterBinding,
   createInMemoryAvatarCharacterAssetClient,
   type DigitalAvatarCharacter,
 } from "@/lib/avatarCharacterAsset";
@@ -28,7 +29,7 @@ describe("Avatar identity contract", () => {
     expect((await client.getCharacter("person_123", 3)).identity.face).toBe("oval");
   });
 
-  it("increments identity revision without rewriting the previous snapshot", async () => {
+  it("increments identity revision and retains the previous snapshot", async () => {
     const client = createInMemoryAvatarCharacterAssetClient([seed]);
     const updated = await client.updateIdentity("person_123", {
       expected_revision: 3,
@@ -38,7 +39,7 @@ describe("Avatar identity contract", () => {
 
     expect(updated.identity_revision).toBe(4);
     expect(updated.review_status).toBe("needs_user_review");
-    await expect(client.getCharacter("person_123", 3)).rejects.toBeInstanceOf(AvatarRevisionConflictError);
+    expect((await client.getCharacter("person_123", 3)).identity).toEqual(seed.identity);
   });
 
   it("rejects stale writes at the Avatar boundary", async () => {
@@ -52,5 +53,21 @@ describe("Avatar identity contract", () => {
       expectedRevision: 3,
       actualRevision: 4,
     });
+  });
+
+  it("confirms only an exact, reviewed Avatar identity and identity-role references", () => {
+    const binding = {
+      binding_id: "binding_1",
+      project_id: "project_1",
+      project_character_id: "cast_1",
+      avatar_character_id: "person_123",
+      identity_revision: 3,
+      base_reference_asset_ids: ["face-front"],
+      review_status: "draft" as const,
+    };
+    expect(confirmProjectCharacterBinding(binding, seed).review_status).toBe("confirmed");
+    expect(() => confirmProjectCharacterBinding({ ...binding, base_reference_asset_ids: ["coat"] }, seed)).toThrow(/identity/);
+    expect(() => confirmProjectCharacterBinding(binding, { ...seed, review_status: "needs_user_review" })).toThrow(/confirmed/);
+    expect(() => confirmProjectCharacterBinding(binding, { ...seed, identity_revision: 4 })).toThrow(AvatarRevisionConflictError);
   });
 });
