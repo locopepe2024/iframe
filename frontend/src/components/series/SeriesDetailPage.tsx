@@ -13,6 +13,7 @@ import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
 import { buildDraftSeriesAssemblyPlan, hasAssemblyPlanChanges } from "@/components/modules/assemblyEditPlan";
 import type { AssemblyEditPlan } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
+import { episodeReadableSummary } from "./episodeReadableSummary";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -546,8 +547,10 @@ function EpisodeContentPanel({
     && handoff.source_revision === episode.source_revision
     && handoff.series_director_revision === (seriesDirector?.revision ?? null)
     && handoff.episode_director_revision === (episodeDirector?.revision ?? null);
-  const episodeSummary = handoff?.episode_summary || episodeDirector?.execution_summary
-    || (typeof episodeDirector?.setting?.story_summary === "string" ? episodeDirector.setting.story_summary : "");
+  const episodeSummary = handoffCurrent && handoff?.status === "confirmed"
+    && handoff.episode_summary && !handoff.episode_summary.includes('CURRENT_DIRECTOR_EDITS:')
+    ? handoff.episode_summary || ''
+    : episodeReadableSummary(episodeDirector);
   const contextSummary = seriesDirector?.execution_summary
     || (typeof seriesDirector?.setting?.premise === "string" ? seriesDirector.setting.premise : "");
 
