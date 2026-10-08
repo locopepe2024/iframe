@@ -1,6 +1,5 @@
 """Authenticated UniArt chat; generation remains an explicit Playground action."""
 import json
-import re
 import os
 import sqlite3
 import time
@@ -99,6 +98,50 @@ class CharacterDesignRequest(BaseModel):
     confirmed_design: str = Field(default="", max_length=4000)
 
 
+def _parse_character_design_draft(answer: str) -> dict:
+    decoder = json.JSONDecoder()
+    result = None
+    for offset, char in enumerate(answer):
+        if char != "{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(answer[offset:])
+        except ValueError:
+            continue
+        if isinstance(candidate, dict) and "identity" in candidate and "look" in candidate:
+            result = candidate
+            break
+    if result is None:
+        raise ValueError("missing_design_object")
+
+    def visual_notes(section: object) -> str:
+        if not isinstance(section, dict):
+            raise ValueError("invalid_design_section")
+        direct = section.get("visual_notes")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        if isinstance(direct, dict) and isinstance(direct.get("value"), str) and direct["value"].strip():
+            return direct["value"].strip()
+        details = []
+        for key, value in section.items():
+            if key in {"visual_notes", "basis", "source", "status", "field_status", "route", "age_stage"}:
+                continue
+            if isinstance(value, dict):
+                value = next((value[name] for name in ("value", "text", "visual_notes") if isinstance(value.get(name), str)), None)
+            if isinstance(value, str) and value.strip():
+                details.append(value.strip())
+        return "；".join(details)
+
+    identity_notes = visual_notes(result["identity"])
+    look_notes = visual_notes(result["look"])
+    unresolved = result.get("unresolved") or []
+    if not identity_notes:
+        raise ValueError("missing_identity_visual_notes")
+    if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+        raise ValueError("invalid_unresolved")
+    return {"identity": {"visual_notes": identity_notes}, "look": {"visual_notes": look_notes}, "unresolved": unresolved}
+
+
 @router.post("/character-design/draft")
 def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
     validate_model(ctx, body.model)
@@ -109,33 +152,21 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     identity_skill = packages["character-identity-design"]
     route_skill = packages["character-style-routes"]
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
-              + "\n\n只返回 JSON 对象：identity.visual_notes、look.visual_notes、unresolved（字符串数组）。"
+              + "\n\n最终输出契约优先于上文技能的逐字段输出描述。只返回一个 JSON 对象，严格使用以下结构："
+              + '{"identity":{"visual_notes":"具体、可观察的长期身份视觉特征"},'
+              + '"look":{"visual_notes":"具体、可观察的本集服饰妆造；无依据可为空字符串"},'
+              + '"unresolved":["仍需确认的设计项"]}。不要输出 Markdown、basis 字段或解释。'
               + "每段具体视觉值要可观察。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "所有模型补充的具体外貌只能标为创意设计选择，不能称为剧本事实。")
     user = json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)
     answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user}])
     try:
-        match = re.search(r"\{[\s\S]*\}", answer)
-        result = json.loads(match.group(0) if match else answer)
-        identity = result.get("identity") or {}
-        look = result.get("look") or {}
-        if not isinstance(identity, dict) or not isinstance(look, dict):
-            raise ValueError("Invalid design sections")
-        identity_notes = identity.get("visual_notes")
-        look_notes = look.get("visual_notes")
-        if not isinstance(identity_notes, str) or not identity_notes.strip():
-            raise ValueError("Missing concrete identity design")
-        if not isinstance(look_notes, str):
-            look_notes = ""
-        unresolved = result.get("unresolved") or []
-        if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
-            raise ValueError("Invalid unresolved list")
-    except (ValueError, TypeError, json.JSONDecodeError):
+        draft = _parse_character_design_draft(answer)
+    except (ValueError, TypeError) as error:
+        logger.warning("Character design draft parse rejected model=%s reason=%s answer_length=%d", body.model, error, len(answer))
         raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
     return {
-        "identity": {"visual_notes": identity_notes.strip()},
-        "look": {"visual_notes": look_notes.strip()},
-        "unresolved": unresolved,
+        **draft,
         "skill_revision": route_skill["revision"],
         "identity_skill_revision": identity_skill["revision"],
     }

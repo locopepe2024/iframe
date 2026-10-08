@@ -53,4 +53,4 @@
 
 ## 输出
 
-输出 `identity`、`look`、`unresolved` 三部分。每个非空字段带 `basis`，值只写具体、可编辑的设计文本。把路由名称、通用质量词和“保持一致”等说明留在元数据，不作为角色字段。用户确认后才可编译图片 Prompt，并记录本 Skill 的 revision。
+输出 `identity`、`look`、`unresolved` 三部分。逐字段设计任务为每个非空字段附 `basis`；角色工作台草稿 API 则按其明确契约将具体视觉值汇总到 `identity.visual_notes` 与 `look.visual_notes`，不输出逐字段对象。把路由名称、通用质量词和“保持一致”等说明留在元数据，不作为角色字段。用户确认后才可编译图片 Prompt，并记录本 Skill 的 revision。

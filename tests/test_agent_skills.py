@@ -69,6 +69,26 @@ def test_character_design_draft_uses_curated_skills_without_saving(ctx, monkeypa
     assert result['look']['visual_notes'] == '黑色劲装'
 
 
+def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '''```json
+{"identity":{"hair":{"value":"黑发束起","basis":"剧本事实"},"face_shape":{"value":"清瘦脸型","basis":"创意设计选择"}},"look":{"costume":{"value":"素黑劲装","basis":"剧本事实"}},"unresolved":["肤色未指定"]}
+```''')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '黑发束起；清瘦脸型'
+    assert result['look']['visual_notes'] == '素黑劲装'
+    assert result['unresolved'] == ['肤色未指定']
+
+
+def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"visual_notes":{"value":"黑发束起","basis":"创意设计选择"}},"look":{"visual_notes":""},"unresolved":[]}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '黑发束起'
+
+
 def test_character_design_draft_rejects_incomplete_model_result(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
     monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{},"look":{}}')
