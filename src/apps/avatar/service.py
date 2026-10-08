@@ -37,6 +37,7 @@ class CharacterDesign(BaseModel):
     skill_id: str | None = None
     skill_revision: str | None = None
     basis: dict[str, str] = Field(default_factory=dict)
+    reference_asset_id: str | None = None
 
 
 class CreateCharacterRequest(BaseModel):

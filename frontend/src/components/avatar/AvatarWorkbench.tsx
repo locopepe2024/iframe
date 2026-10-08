@@ -27,6 +27,9 @@ export default function AvatarWorkbench() {
   const [characters, setCharacters] = useState<DigitalAvatarCharacter[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [historical, setHistorical] = useState<DigitalAvatarCharacter | null>(null);
+  const [libraryCharacters, setLibraryCharacters] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+  const [libraryBusy, setLibraryBusy] = useState(false);
+  const [libraryQuery, setLibraryQuery] = useState("");
   const [models, setModels] = useState<ChatModel[]>([]);
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,6 +41,9 @@ export default function AvatarWorkbench() {
     void api.listAvatarCharacters().then((result: { characters: DigitalAvatarCharacter[] }) => {
       if (active) setCharacters(result.characters);
     }).catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : String(cause)); });
+    void api.listLibraryAssets().then((result: { characters?: Array<{ id: string; name: string; description?: string }> }) => {
+      if (active) setLibraryCharacters(result.characters || []);
+    }).catch(() => { if (active) setLibraryCharacters([]); });
     void agentRequest<{ models: ChatModel[] }>("/models").then(({ models: available }) => {
       if (!active) return;
       const chat = available.filter((item) => item.agent_capability !== "h3_prompt_optimization");
@@ -89,13 +95,26 @@ export default function AvatarWorkbench() {
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   }
 
+  async function writeToLibrary() {
+    if (!selected || selected.review_status !== "confirmed" || libraryBusy) return;
+    const confirmed = selected.character_design.design_revisions.at(-1)?.design;
+    if (!confirmed) return;
+    setLibraryBusy(true);
+    try {
+      const description = [confirmed.identity.visual_notes, ...Object.values(confirmed.identity).filter((value) => typeof value === "string" && value !== confirmed.identity.visual_notes), confirmed.look?.visual_notes].filter(Boolean).join("\n");
+      const asset = await api.createLibraryAsset("character", { name: selected.name, description, persona: selected.profile });
+      setLibraryCharacters((current) => [...current, { id: asset.id, name: asset.name, description: asset.description }]);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setLibraryBusy(false); }
+  }
+
   async function generateDraft() {
     if (!name.trim() || !profile.trim() || !model || busy) return;
     setBusy(true);
     setError("");
     try {
       const result = await agentRequest<{ identity: { visual_notes: string }; look: { visual_notes: string }; unresolved: string[]; skill_revision: string }>("/character-design/draft", "POST", {
-        model, character_name: name.trim(), profile: profile.trim(), route: design.route || "realistic-modern",
+        model, character_name: name.trim(), profile: [profile.trim(), libraryCharacters.find((item) => item.id === design.reference_asset_id)?.description ? `Reference material: ${libraryCharacters.find((item) => item.id === design.reference_asset_id)?.description}` : ""].filter(Boolean).join("\n\n"), route: design.route || "realistic-modern",
         age_stage: design.age_stage || "", style: "",
         confirmed_design: selected?.character_design.design_revisions.at(-1)?.design.identity.visual_notes || "",
       });
@@ -128,6 +147,11 @@ export default function AvatarWorkbench() {
           <button type="button" onClick={() => setHistorical(null)} className="block w-full py-1 text-left text-xs text-primary">{zh ? "当前编辑版" : "Current draft"} · v{selected.design_revision}</button>
           {(selected.revision_history || []).slice().reverse().map((entry) => <button type="button" key={entry.design_revision} onClick={() => void viewRevision(entry.design_revision)} className="block w-full py-1 text-left text-xs text-text-secondary hover:text-foreground">v{entry.design_revision} · {entry.review_status}</button>)}
         </div>}
+        <div className="mt-6 border-t border-glass-border pt-4">
+          <h3 className="mb-2 text-xs font-semibold text-text-secondary">{zh ? "素材库参考" : "Library references"}</h3>
+          <input className="glass-input mb-2 min-h-9 w-full text-xs" aria-label={zh ? "搜索人物素材" : "Search character materials"} value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} />
+          {libraryCharacters.length ? <div className="max-h-36 space-y-1 overflow-y-auto">{libraryCharacters.filter((item) => item.name.toLowerCase().includes(libraryQuery.trim().toLowerCase())).map((item) => <button type="button" key={item.id} aria-pressed={design.reference_asset_id === item.id} onClick={() => setDesign((current) => ({ ...current, reference_asset_id: current.reference_asset_id === item.id ? undefined : item.id }))} className="block w-full truncate text-left text-xs text-text-secondary hover:text-foreground aria-pressed:text-primary">{item.name}</button>)}</div> : <p className="text-xs text-text-muted">{zh ? "暂无人物素材" : "No character materials"}</p>}
+        </div>
       </aside>
       <section className="min-w-0" aria-label={zh ? "人物角色设计" : "Character design"}>
         {error && <div role="alert" className="mb-5 border-l-2 border-red-400 bg-red-400/5 px-4 py-3 text-sm text-red-300">{error}</div>}
@@ -164,6 +188,7 @@ export default function AvatarWorkbench() {
         <div className="mt-6 flex flex-wrap gap-3 border-t border-glass-border pt-4">{selected ? <>
           <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2 px-4 text-sm disabled:opacity-50" disabled={busy} onClick={() => void saveDesign(false)}><Save size={16} />{zh ? "保存草稿" : "Save draft"}</button>
           <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2 px-4 text-sm disabled:opacity-50" disabled={busy || !Object.values(design.identity).some((value) => typeof value === "string" && value.trim())} onClick={() => void saveDesign(true)}><Check size={16} />{zh ? "确认设计" : "Confirm design"}</button>
+          {selected.review_status === "confirmed" && !!selected.character_design.design_revisions.length && <button type="button" className="glass-button min-h-10 px-4 text-sm disabled:opacity-50" disabled={libraryBusy} onClick={() => void writeToLibrary()}>{libraryBusy ? (zh ? "写入中…" : "Writing…") : (zh ? "新增人物素材" : "Add character material")}</button>}
         </> : <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2 px-4 text-sm disabled:opacity-50" disabled={busy || !name.trim()} onClick={() => void createCharacter()}><Plus size={16} />{zh ? "创建人物" : "Create character"}</button>}</div>
       </section>
     </div>

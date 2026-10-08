@@ -21,6 +21,7 @@ export interface CharacterDesign {
   skill_id?: string;
   skill_revision?: string;
   basis?: Record<string, string>;
+  reference_asset_id?: string;
 }
 
 export interface DigitalAvatarCharacter {
