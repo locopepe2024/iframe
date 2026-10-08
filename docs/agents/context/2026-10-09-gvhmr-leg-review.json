@@ -1,0 +1,55 @@
+{
+  "schema": "gvhmr-leg-human-review.v1",
+  "source_video_sha256": "ba4a4dc38a7fbaad1ab3e3b1aa8bf9d1c5b8123659423128393b6a2a5f1f6671",
+  "fps": 30,
+  "image_size": [720, 854],
+  "coordinate_space": "source_image_pixels",
+  "review_policy": {
+    "visible": "Enter a 2D pixel coordinate only when the joint can be directly located in the source image.",
+    "inferred": "Record an estimate from adjacent frames separately; never treat it as measured ground truth.",
+    "indeterminate": "Leave coordinates null when visibility or left/right identity cannot be resolved.",
+    "3d_ground_truth": false,
+    "gvhmr_output_mutated": false
+  },
+  "frames": [
+    {
+      "source_frame": 383,
+      "contact_sheet_item": 7,
+      "status": "pending",
+      "user_observation": "large leg-information loss",
+      "automated_leg_confidence": {"left_hip": 0.395, "right_hip": 0.419, "left_knee": 0.332, "right_knee": 0.363, "left_ankle": 0.081, "right_ankle": 0.065},
+      "joint_review": {},
+      "note": ""
+    },
+    {
+      "source_frame": 387,
+      "contact_sheet_item": 8,
+      "status": "pending",
+      "user_observation": "large leg-information loss",
+      "automated_leg_confidence": {"left_hip": 0.663, "right_hip": 0.246, "left_knee": 0.098, "right_knee": 0.049, "left_ankle": 0.040, "right_ankle": 0.045},
+      "joint_review": {},
+      "note": ""
+    },
+    {
+      "source_frame": 400,
+      "contact_sheet_item": 9,
+      "status": "pending",
+      "user_observation": "large leg-information loss",
+      "automated_leg_confidence": {"left_hip": 0.438, "right_hip": 0.376, "left_knee": 0.140, "right_knee": 0.084, "left_ankle": 0.094, "right_ankle": 0.099},
+      "joint_review": {},
+      "note": ""
+    },
+    {
+      "source_frame": 420,
+      "contact_sheet_item": 10,
+      "status": "pending",
+      "user_observation": "large leg-information loss",
+      "automated_leg_confidence": {"left_hip": 0.426, "right_hip": 0.394, "left_knee": 0.069, "right_knee": 0.071, "left_ankle": 0.131, "right_ankle": 0.213},
+      "joint_review": {},
+      "note": ""
+    }
+  ],
+  "joint_review_example": {
+    "left_knee": {"visibility": "visible|inferred|indeterminate", "xy": null, "evidence_frames": [], "note": ""}
+  }
+}
