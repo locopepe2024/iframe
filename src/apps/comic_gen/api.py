@@ -46,6 +46,7 @@ from .pipeline import (
     AssetGenerationInProgress,
     LibraryAssetInUseError,
     InvalidAssetReference,
+    InvalidAssetName,
     AssemblyPlanValidationError,
     AssemblyPlanConflictError,
     StaleStoryboardDraftError,
@@ -1322,6 +1323,8 @@ def update_series_asset_attributes(series_id: str, request: UpdateAssetAttribute
             series_id, request.asset_id, request.asset_type, request.attributes
         )
         return signed_response(series)
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1577,6 +1580,8 @@ def update_library_asset(asset_type: str, asset_id: str, request: UpdateLibraryA
         patch = request.model_dump(exclude_unset=True)
         asset = pipeline.update_library_asset(asset_type, asset_id, patch)
         return signed_response(asset.model_dump())
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -3558,6 +3563,8 @@ def update_asset_attributes(script_id: str, request: UpdateAssetAttributesReques
             request.attributes
         )
         return signed_response(updated_script)
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

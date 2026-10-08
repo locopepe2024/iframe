@@ -150,6 +150,10 @@ class InvalidAssetReference(ValueError):
     """Raised when a requested asset-library reference cannot be resolved."""
 
 
+class InvalidAssetName(ValueError):
+    """Raised when an asset rename contains no valid display name."""
+
+
 class AssetGenerationInProgress(ValueError):
     """Raised when an asset already has an active image-generation task."""
 
@@ -2159,6 +2163,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+
+        if "name" in attributes:
+            attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
 
         if "character_design" in attributes:
             if asset_type != "character":
@@ -7676,6 +7683,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found in library")
         return asset
 
+    @staticmethod
+    def _validated_asset_name(name: Any) -> str:
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
+            raise InvalidAssetName("Asset name must be between 1 and 200 characters")
+        return name.strip()
+
     def list_library_assets(self) -> GlobalAssetLibrary:
         """Return the global shared asset pool container (characters /
         scenes / props). Mirrors get_series for the library scope."""
@@ -7778,6 +7791,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         those)."""
         with self._save_lock:
             asset = self._find_library_asset(asset_type, asset_id)
+            if "name" in patch:
+                patch = {**patch, "name": self._validated_asset_name(patch["name"])}
             for key, value in (patch or {}).items():
                 if hasattr(asset, key) and key not in (
                     "id",
@@ -8673,6 +8688,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Updates arbitrary attributes of a Series asset."""
         with self._save_lock:
             series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
+            if "name" in attributes:
+                attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
             for key, value in attributes.items():
                 if hasattr(target_asset, key) and key not in ("id", "status", "locked"):
                     setattr(target_asset, key, value)
