@@ -3,6 +3,8 @@
 状态：调研与计划；不代表已选定模型或已完成生产接入  
 日期：2026-10-08
 
+> 2026-10-08 修订：下文原始 P1-P4 方案将参考素材、候选和跨项目采用误划给 Avatar，已被 `2026-10-08-avatar-identity-service-v1.md` 的责任边界取代。GitHub 项目调研仍可用，实施计划以本文件末尾的修订计划为准。
+
 ## 结论摘要
 
 没有找到一个开源仓库同时提供以下完整能力：
@@ -213,3 +215,12 @@ pytest -q tests/test_avatar_service.py
 cd frontend && npm run typecheck
 cd frontend && npm run test:ui -- src/components/avatar/AvatarWorkbench.test.tsx
 ```
+
+## 修订开发计划
+
+1. Avatar 完成人物创建、设计路线、稳定身份字段、造型说明、设计依据、未决项及人工确认的设计 revision。独立入口已接入现有设计草稿生成 API。
+2. 将人物档案与设计草稿输入持久化，完善字段级依据与已确认值冲突提示；模型建议默认标为创意设计选择。
+3. 设计规格只读输出给 iFrame 资产生成流程。素材库继续管理参考图、候选、图片版本和确认；项目工作流管理采用绑定。
+4. 对 InstantID、PuLID、PhotoMaker 等仅做生成适配器评测，不把这些仓库当人物设计数据源。3D 运行时作为消费方。
+
+验收重点：Avatar 中能独立完成可编辑的人物角色设计；没有素材库依赖或媒体生命周期复制；确认版本可复现；项目角色接入由后续 iFrame 工作流单独实现。
