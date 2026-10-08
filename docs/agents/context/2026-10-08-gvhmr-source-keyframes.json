@@ -13,20 +13,21 @@
     {"index": 0, "seconds": 0.0, "visual_phase": "standing_start"},
     {"index": 45, "seconds": 1.5, "visual_phase": "low_wide_stance"},
     {"index": 89, "seconds": 2.966667, "visual_phase": "overhead_swing_setup"},
-    {"index": 112, "seconds": 3.733333, "visual_phase": "turning_transition"},
-    {"index": 135, "seconds": 4.5, "visual_phase": "first_aerial_phase"},
+    {"index": 112, "seconds": 3.733333, "visual_phase": "turning_transition", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [108, 116]},
+    {"index": 135, "seconds": 4.5, "visual_phase": "first_aerial_phase", "review_status": "leg_joints_uncertain_against_dark_sky", "adjacent_candidates": [131, 139]},
     {"index": 150, "seconds": 5.0, "visual_phase": "first_descent"},
     {"index": 165, "seconds": 5.5, "visual_phase": "low_recovery"},
     {"index": 300, "seconds": 10.0, "visual_phase": "later_lunge"},
     {"index": 352, "seconds": 11.733333, "visual_phase": "second_aerial_phase"},
-    {"index": 368, "seconds": 12.266667, "visual_phase": "airborne_turn"},
-    {"index": 383, "seconds": 12.766667, "visual_phase": "second_landing_transition"},
+    {"index": 368, "seconds": 12.266667, "visual_phase": "airborne_turn", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [364, 372]},
+    {"index": 383, "seconds": 12.766667, "visual_phase": "second_landing_transition", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [379, 387], "candidate_note": "Frame 387 is clearer but represents a later action phase"},
     {"index": 420, "seconds": 14.0, "visual_phase": "overhead_swing_recovery"}
   ],
   "review_required": [
     "confirm frame content and exact action boundaries",
     "record left-right and occlusion annotations",
     "compare original ViTPose estimate with human review",
-    "do not infer 3D pose accuracy from phase labels"
+    "do not infer 3D pose accuracy from phase labels",
+    "do not assign hidden or indistinct knee and ankle coordinates from contrast-enhanced images"
   ]
 }
