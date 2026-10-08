@@ -9,6 +9,7 @@ import {
 
 const seed: DigitalAvatarCharacter = {
   character_id: "person_123",
+  name: "Mira",
   identity_revision: 3,
   identity: { face: "oval", skin: "warm neutral", body: "slim" },
   reference_assets: [
@@ -19,6 +20,12 @@ const seed: DigitalAvatarCharacter = {
 };
 
 describe("Avatar identity contract", () => {
+  it("creates a draft identity in the explicit test adapter", async () => {
+    const client = createInMemoryAvatarCharacterAssetClient();
+    const created = await client.createCharacter({ name: "Mira", identity: { face: "oval" }, source: "user" });
+    expect(created).toMatchObject({ name: "Mira", identity_revision: 1, review_status: "draft" });
+    expect((await client.getCharacter(created.character_id)).identity.face).toBe("oval");
+  });
   it("reads an immutable revision and filters reference responsibilities", async () => {
     const client = createInMemoryAvatarCharacterAssetClient([seed]);
     const character = await client.getCharacter("person_123", 3);

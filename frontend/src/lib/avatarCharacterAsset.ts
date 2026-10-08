@@ -35,6 +35,7 @@ export interface AvatarReferenceAsset {
 
 export interface DigitalAvatarCharacter {
   character_id: string;
+  name: string;
   identity_revision: number;
   identity: IdentityDesign;
   reference_assets: AvatarReferenceAsset[];
@@ -48,7 +49,14 @@ export interface IdentityPatch {
   source?: "user" | "migration" | "avatar";
 }
 
+export interface CreateAvatarCharacterInput {
+  name: string;
+  identity: IdentityDesign;
+  source: "user";
+}
+
 export interface AvatarCharacterAssetClient {
+  createCharacter(input: CreateAvatarCharacterInput): Promise<DigitalAvatarCharacter>;
   getCharacter(characterId: string, revision?: number): Promise<DigitalAvatarCharacter>;
   updateIdentity(characterId: string, patch: IdentityPatch): Promise<DigitalAvatarCharacter>;
   listReferenceAssets(characterId: string, role?: ReferenceRole): Promise<AvatarReferenceAsset[]>;
@@ -125,6 +133,18 @@ export function createInMemoryAvatarCharacterAssetClient(
   }
 
   return {
+    async createCharacter(input) {
+      const character: DigitalAvatarCharacter = {
+        character_id: `test_${crypto.randomUUID()}`,
+        name: input.name.trim(),
+        identity_revision: 1,
+        identity: clone(input.identity),
+        reference_assets: [],
+        review_status: "draft",
+      };
+      history.set(character.character_id, new Map([[1, clone(character)]]));
+      return clone(character);
+    },
     async getCharacter(characterId, revision) {
       const character = revision === undefined
         ? latest(characterId)
