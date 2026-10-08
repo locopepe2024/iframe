@@ -1087,6 +1087,7 @@
     "understandingStale": "来源已变化 · 待复核",
     "handoffReady": "已交接",
     "seriesContextNotReady": "尚未采用全剧理解。本集原文和编辑入口在“进入编辑器”中查看。",
+    "seriesContextReadableNotReady": "已采用全剧理解，暂无可读的全剧故事背景。",
     "episodeSummaryNotReady": "尚未生成本集导演理解。本集原文和编辑入口在“进入编辑器”中查看。",
     "noScript": "尚未生成本集导演理解",
     "storyboardOverview": "分镜概览",

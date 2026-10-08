@@ -33,3 +33,13 @@ export function episodeReadableSummary(profile: DirectorProfile | null | undefin
     .join('，');
   return `${context ? `${sentence(context)}。` : ''}${sentences.join('。')}。`;
 }
+
+export function seriesReadableContext(profile: DirectorProfile | null | undefined): string[] {
+  if (!profile) return [];
+  const setting = profile.setting || {};
+  const fields = ['premise', 'world_overview', 'story_summary'];
+  return Array.from(new Set(fields.map(key => setting[key])
+    .filter((value): value is string => typeof value === 'string' && !!value.trim())
+    .map(value => value.trim())
+    .filter(value => !value.startsWith('{') && !value.startsWith('[') && !value.includes('CURRENT_DIRECTOR_EDITS:'))));
+}

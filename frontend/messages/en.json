@@ -1087,6 +1087,7 @@
     "understandingStale": "Source changed · Review required",
     "handoffReady": "Handed off",
     "seriesContextNotReady": "Series understanding has not been adopted yet. Open the editor to view the episode source.",
+    "seriesContextReadableNotReady": "Series understanding is adopted, but no readable story context is available yet.",
     "episodeSummaryNotReady": "Episode Director understanding has not been generated. Open the editor to view the episode source.",
     "noScript": "Episode Director understanding has not been generated",
     "storyboardOverview": "Storyboard Overview",

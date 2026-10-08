@@ -96,6 +96,8 @@ Series 的 `scene_summaries` 只能是跨集索引或宏观叙事阶段摘要；
 
 系列层的 `series_context`（世界规则、全剧主线、跨集人物与故事线）作为只读背景显示，不替代 `incoming_handoff`。原文只通过“进入编辑器/查看原文”访问。未生成理解产物时，界面显示“尚未生成”，不引导用户重复添加已有剧本。
 
+当前全剧卡片的兼容投影只读取已采用 Series Director 中明确的故事前提、世界背景等可读字段；字段缺失时显示“暂无可读全剧背景”。`execution_summary`、风格指令与 `CURRENT_DIRECTOR_EDITS` 是执行上下文，不得直接充当面向创作者的全剧概览。全剧上下文与跨集 `incoming_handoff` 应分别标识来源和版本。
+
 当前兼容投影只从已确认 Director 的有序剧情事件和必要的时间地点生成可读概要；`execution_summary` 中的 `CURRENT_DIRECTOR_EDITS`、结构化约束和风格指令仍供下游执行，不能直接展示为本集概要。没有可定位事件时显示待补充，不从风格说明推断剧情。兼容投影必须标记为兼容内容；在完整的 `episode_summary/incoming_handoff/outgoing_handoff` 落地前，不得宣称已完成跨集交接分析。
 
 已采用 Series 内容仅作只读约束和索引，不复制成当前集 `timeline`/`story_map` 事实。单集明确出现但与 Series 草稿不同的事实，先保留本集证据并形成冲突 finding；不自动修改全剧或其他集。

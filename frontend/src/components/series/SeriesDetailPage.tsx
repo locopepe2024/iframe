@@ -13,7 +13,7 @@ import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
 import { buildDraftSeriesAssemblyPlan, hasAssemblyPlanChanges } from "@/components/modules/assemblyEditPlan";
 import type { AssemblyEditPlan } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
-import { episodeReadableSummary } from "./episodeReadableSummary";
+import { episodeReadableSummary, seriesReadableContext } from "./episodeReadableSummary";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -551,8 +551,7 @@ function EpisodeContentPanel({
     && handoff.episode_summary && !handoff.episode_summary.includes('CURRENT_DIRECTOR_EDITS:')
     ? handoff.episode_summary || ''
     : episodeReadableSummary(episodeDirector);
-  const contextSummary = seriesDirector?.execution_summary
-    || (typeof seriesDirector?.setting?.premise === "string" ? seriesDirector.setting.premise : "");
+  const contextParagraphs = seriesReadableContext(seriesDirector);
 
   return (
     <motion.div
@@ -598,9 +597,9 @@ function EpisodeContentPanel({
               <h3 className="text-sm font-semibold text-foreground">{t("seriesContext")}</h3>
               <span className="text-[0.6875rem] text-text-muted">{handoffCurrent && handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 ? t("handoffReady") : seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
             </div>
-            <p className="text-xs leading-relaxed text-text-secondary">
-              {contextSummary || t("seriesContextNotReady")}
-            </p>
+            {contextParagraphs.length ? contextParagraphs.map((paragraph, index) => (
+              <p key={index} className="text-xs leading-relaxed text-text-secondary">{paragraph}</p>
+            )) : <p className="text-xs leading-relaxed text-text-secondary">{seriesDirector ? t("seriesContextReadableNotReady") : t("seriesContextNotReady")}</p>}
             {handoffCurrent && handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 && (
               <p className="text-[0.6875rem] leading-5 text-text-muted">{JSON.stringify(handoff.incoming_handoff)}</p>
             )}
