@@ -21,8 +21,8 @@
     {"index": 300, "seconds": 10.0, "visual_phase": "later_lunge"},
     {"index": 352, "seconds": 11.733333, "visual_phase": "second_aerial_phase", "review_status": "automated_projection_reviewed"},
     {"index": 368, "seconds": 12.266667, "visual_phase": "airborne_turn", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [364, 372]},
-    {"index": 383, "seconds": 12.766667, "visual_phase": "second_landing_transition", "review_status": "low_confidence_leg_joints", "adjacent_candidates": [379, 387], "candidate_note": "Frame 387 is clearer but represents a later action phase"},
-    {"index": 420, "seconds": 14.0, "visual_phase": "overhead_swing_recovery", "review_status": "projection_failure_boundary"}
+    {"index": 383, "seconds": 12.766667, "visual_phase": "second_landing_transition", "review_status": "low_confidence_leg_joints", "user_review_status": "contact_sheet_item_7_leg_loss_high", "adjacent_candidates": [379, 387], "candidate_note": "Frame 387 is clearer but represents a later action phase"},
+    {"index": 420, "seconds": 14.0, "visual_phase": "overhead_swing_recovery", "review_status": "projection_failure_boundary", "user_review_status": "contact_sheet_item_10_leg_loss_high"}
   ],
   "review_required": [
     "confirm frame content and exact action boundaries",
@@ -32,6 +32,7 @@
     "do not assign hidden or indistinct knee and ankle coordinates from contrast-enhanced images",
     "review source frames 344-346 for rapid-step mismatch",
     "review source frames 381-389 for airborne/landing blur",
+    "treat source frames 383, 387, 400, 420 as high-leg-loss frames",
     "treat source frames 407-420 as low-confidence upper-limb/projection output"
   ]
 }
