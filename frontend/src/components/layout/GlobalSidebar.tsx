@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus, ScanFace } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import IFrameBranding from "./IFrameBranding";
@@ -8,7 +8,7 @@ import { isTauri } from "@/lib/transport";
 import PlaygroundSessionSubnav from "@/components/modules/playground/PlaygroundSessionSubnav";
 import { APP_VERSION_LABEL } from "@/generated/appVersion";
 
-export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "imageEditor" | "recreation" | "director3d" | "settings";
+export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "imageEditor" | "recreation" | "avatar" | "director3d" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
@@ -24,6 +24,7 @@ export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: s
   { id: "playground", icon: Wand2, hash: "#/playground" },
   { id: "imageEditor", icon: ImagePlus, hash: "#/image-editor" },
   { id: "recreation", icon: Film, hash: "#/recreation" },
+  { id: "avatar", icon: ScanFace, hash: "#/avatar" },
   { id: "director3d", icon: Box, hash: "#/director" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];

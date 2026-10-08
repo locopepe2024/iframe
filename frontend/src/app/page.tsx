@@ -29,6 +29,7 @@ const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibrary
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const ImageEditorPage = dynamic(() => import("@/components/modules/playground/PlaygroundImageEditor").then(mod => mod.StandaloneImageEditorPage), { ssr: false });
 const RecreationPage = dynamic(() => import("@/components/modules/recreation/RecreationPage"), { ssr: false });
+const AvatarWorkbench = dynamic(() => import("@/components/avatar/AvatarWorkbench"), { ssr: false });
 const DirectorWorkbench = dynamic(() => import("@/components/director3d/DirectorWorkbench"), {
   ssr: false,
   loading: () => <div className="grid h-full place-items-center text-sm text-text-secondary" role="status">正在加载 3D 导演台…</div>,
@@ -468,7 +469,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'avatar' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -493,7 +494,7 @@ export default function Home() {
   // Defer the normal workspace sync until the user leaves that route.
   useEffect(() => {
     const syncWorkspaceData = () => {
-      if (window.location.hash === "#/director" || workspaceDataSyncedRef.current) return;
+      if (["#/director", "#/avatar"].includes(window.location.hash) || workspaceDataSyncedRef.current) return;
       workspaceDataSyncedRef.current = true;
       void syncProjects();
       void fetchSeriesList();
@@ -648,6 +649,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/avatar') {
+        setCurrentView('avatar');
+        setActiveTab('avatar');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       if (hash === '#/settings') {
         setCurrentView('settings');
         setActiveTab('settings');
@@ -737,6 +746,9 @@ export default function Home() {
     }
     if (currentView === 'director3d') {
       return <DirectorWorkbench />;
+    }
+    if (currentView === 'avatar') {
+      return <AvatarWorkbench />;
     }
     if (currentView === 'library') {
       return <AssetLibraryPage />;
