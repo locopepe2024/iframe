@@ -1,0 +1,32 @@
+{
+  "schema": "gvhmr-source-keyframe-review.v1",
+  "source": {
+    "path_on_media": "/home/ubuntu/motion-track/input-white-model.mp4",
+    "sha256": "ba4a4dc38a7fbaad1ab3e3b1aa8bf9d1c5b8123659423128393b6a2a5f1f6671",
+    "fps": 30,
+    "frame_count": 556,
+    "width": 720,
+    "height": 854
+  },
+  "selection_status": "provisional_visual_samples_not_manual_pose_labels",
+  "frames": [
+    {"index": 0, "seconds": 0.0, "visual_phase": "standing_start"},
+    {"index": 45, "seconds": 1.5, "visual_phase": "low_wide_stance"},
+    {"index": 89, "seconds": 2.966667, "visual_phase": "overhead_swing_setup"},
+    {"index": 112, "seconds": 3.733333, "visual_phase": "turning_transition"},
+    {"index": 135, "seconds": 4.5, "visual_phase": "first_aerial_phase"},
+    {"index": 150, "seconds": 5.0, "visual_phase": "first_descent"},
+    {"index": 165, "seconds": 5.5, "visual_phase": "low_recovery"},
+    {"index": 300, "seconds": 10.0, "visual_phase": "later_lunge"},
+    {"index": 352, "seconds": 11.733333, "visual_phase": "second_aerial_phase"},
+    {"index": 368, "seconds": 12.266667, "visual_phase": "airborne_turn"},
+    {"index": 383, "seconds": 12.766667, "visual_phase": "second_landing_transition"},
+    {"index": 420, "seconds": 14.0, "visual_phase": "overhead_swing_recovery"}
+  ],
+  "review_required": [
+    "confirm frame content and exact action boundaries",
+    "record left-right and occlusion annotations",
+    "compare original ViTPose estimate with human review",
+    "do not infer 3D pose accuracy from phase labels"
+  ]
+}
