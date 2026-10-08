@@ -51,6 +51,7 @@ from .pipeline import (
     AssemblyPlanConflictError,
     StaleStoryboardDraftError,
     DIRECTOR_PLAN_STABLE_LINEAGE_KEYS,
+    _director_style_hash,
 )
 from .structured_evidence import (
     query_asset_mentions,
@@ -2050,6 +2051,19 @@ def get_project(script_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
 
     payload = _script_response_dump(script)
+    local_director = script.art_direction.director_profile if script.art_direction else None
+    effective_style = pipeline.effective_art_direction(script)
+    payload["director_style_review_required"] = bool(
+        local_director and script.director_style_hash
+        and script.director_style_hash != _director_style_hash(
+            effective_style.style_config if effective_style else {}
+        )
+    )
+    series_profile = pipeline.effective_series_director_profile(script.series_id) if script.series_id else None
+    payload["series_director_review_required"] = bool(
+        local_director and script.director_series_revision is not None
+        and script.director_series_revision != (series_profile.revision if series_profile else None)
+    )
 
     # Episode-local entries always carry source="episode".
     for asset_list in (payload.get("characters", []),
@@ -4994,7 +5008,7 @@ def list_director_profile_revisions(
     # Legacy confirmed profiles were embedded in art_direction before the
     # revision archive was introduced. Expose that immutable profile as a
     # migration snapshot without rewriting project data on read.
-    legacy = pipeline.effective_director_profile(script)
+    legacy = script.art_direction.director_profile if script.art_direction else None
     if legacy is None:
         return []
     return [DirectorProfileRevision(
@@ -5022,7 +5036,7 @@ def get_director_profile_draft(
     if draft is None:
         # Keep the pre-revision Director profile editable after upgrading an
         # existing workspace. This is a read-only compatibility projection.
-        draft = pipeline.effective_director_profile(script)
+        draft = script.art_direction.director_profile if script.art_direction else None
         if draft is not None:
             # The confirmed profile revision is not the optimistic-concurrency
             # revision of the separate draft resource. A migrated profile is
@@ -5041,7 +5055,7 @@ def get_director_profile_draft(
         }))
         pipeline._bind_director_story_map(
             script,
-            pipeline.resolve_episode_assets(script),
+            pipeline.director_source_assets(script),
             projected,
         )
         draft_payload = projected
@@ -5072,6 +5086,12 @@ def get_series_director_profile(
         "series_id": series_id,
         "source_context": series.source_context,
         "profile": profile.model_dump() if profile else None,
+        "style_review_required": bool(
+            profile and series.director_style_hash
+            and series.director_style_hash != _director_style_hash(
+                series.art_direction.style_config if series.art_direction else {}
+            )
+        ),
         "confirmed_revisions": [item.model_dump() for item in series.director_profile_revisions],
         "draft": series.director_profile_draft.model_dump() if series.director_profile_draft else None,
         "draft_revision": series.director_profile_draft_revision,
@@ -5558,13 +5578,14 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
 
 @app.post("/projects/{script_id}/art_direction/clear")
 def clear_project_art_direction(script_id: str):
-    """R2V v2 Phase 2 — clear project-level art_direction so the
-    episode falls back to series baseline (inherit). Used by the
-    Style step '重置为系列' button."""
+    """Remove the episode style override while retaining its Director profile."""
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
-    script.art_direction = None
+    profile = script.art_direction.director_profile if script.art_direction else None
+    script.art_direction = ArtDirection(
+        selected_style_id="director-profile", style_config={}, director_profile=profile,
+    ) if profile else None
     script.updated_at = time.time()
     pipeline.scripts[script_id] = script
     pipeline._save_data()

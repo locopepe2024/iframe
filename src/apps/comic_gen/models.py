@@ -2621,6 +2621,8 @@ class Script(BaseModel):
     director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
     director_profile_draft_updated_at: Optional[float] = None
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_style_hash: Optional[str] = Field(None, description="Effective visual style when this episode Director version was confirmed")
+    director_series_revision: Optional[int] = Field(None, description="Confirmed Series Director revision referenced by this episode version")
     director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)
@@ -2722,6 +2724,7 @@ class Series(BaseModel):
     director_profile_draft: Optional[DirectorProfile] = None
     director_profile_draft_revision: int = Field(0, ge=0)
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_style_hash: Optional[str] = Field(None, description="Series visual style when its Director version was confirmed")
 
     # Shared asset library
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")

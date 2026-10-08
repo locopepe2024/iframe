@@ -337,6 +337,20 @@ def test_director_binding_resolves_semantic_character_and_person_refs():
     assert arc["unresolved_person_refs"] == ["未知人物"]
 
 
+def test_director_binding_accepts_source_entity_projection_dicts():
+    pipeline, script = make_pipeline()
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["source_revision_id"] = ""
+    payload["story_map"]["phases"][0]["events"][0]["character_ids"] = []
+    payload["story_map"]["phases"][0]["events"][0]["character_refs"] = ["沈夏"]
+
+    pipeline._bind_director_story_map(script, {"characters": [{"id": "shen", "name": "沈夏"}]}, payload)
+
+    assert payload["story_map"]["people"][0]["person_id"] == "shen"
+    assert payload["story_map"]["phases"][0]["events"][0]["character_ids"] == ["shen"]
+
+
 def test_director_binding_keeps_extra_relationship_refs_for_review():
     pipeline, _ = make_pipeline()
     script = pipeline.scripts["film"]
@@ -1221,7 +1235,7 @@ def test_apply_director_profile_archives_only_changed_confirmations():
     assert changed.director_profile_revisions[-1].profile.pacing == changed_draft["pacing"]
 
 
-def test_episode_director_profile_preserves_inherited_series_visual_style():
+def test_episode_director_profile_keeps_series_visual_style_live():
     pipeline, script = make_pipeline()
     script.art_direction = None
     script.series_id = "series"
@@ -1237,8 +1251,9 @@ def test_episode_director_profile_preserves_inherited_series_visual_style():
 
     pipeline.apply_director_profile("film", profile_payload())
 
-    assert script.art_direction.selected_style_id == "jp-live-action"
-    assert script.art_direction.style_config["positive_prompt"] == "restrained"
+    assert script.art_direction.style_config == {}
+    assert pipeline.effective_art_direction(script).selected_style_id == "jp-live-action"
+    assert pipeline.effective_art_direction(script).style_config["positive_prompt"] == "restrained"
     assert script.art_direction.director_profile.revision == 1
 
 

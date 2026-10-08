@@ -112,6 +112,12 @@ def _director_profile_content(value: Any) -> Dict[str, Any]:
     return content
 
 
+def _director_style_hash(style: Dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(
+        style, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+
+
 def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
     """Resolve *untrusted_rel* under *base_dir* and ensure the result stays inside it.
 
@@ -867,6 +873,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         new_script.director_profile_draft_revision = existing_script.director_profile_draft_revision
         new_script.director_profile_draft_source_revision = existing_script.director_profile_draft_source_revision
         new_script.director_profile_draft_updated_at = existing_script.director_profile_draft_updated_at
+        new_script.director_style_hash = existing_script.director_style_hash
+        new_script.director_series_revision = existing_script.director_series_revision
         new_script.director_shooting_plan_revisions = [
             item.model_copy(deep=True) for item in existing_script.director_shooting_plan_revisions
         ]
@@ -1006,13 +1014,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         director_execution = None
 
         # Resolve art_direction: episode own > series inherited
-        resolved_art_direction = script.art_direction
-        if not resolved_art_direction and script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series and series.art_direction:
-                resolved_art_direction = series.art_direction
-        if isinstance(resolved_art_direction, dict):
-            resolved_art_direction = ArtDirection(**resolved_art_direction)
+        resolved_art_direction = self.effective_art_direction(script)
 
         if apply_style:
             if resolved_art_direction and resolved_art_direction.style_config:
@@ -2357,14 +2359,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
-        effective_before_save = self.effective_art_direction(script)
+        local_director_profile = script.art_direction.director_profile if script.art_direction else None
         # Create Art Direction object
         art_direction = ArtDirection(
             selected_style_id=selected_style_id,
             style_config=style_config,
             custom_styles=custom_styles or [],
             ai_recommendations=ai_recommendations or [],
-            director_profile=effective_before_save.director_profile if effective_before_save else None,
+            director_profile=local_director_profile,
         )
         
         script.art_direction = art_direction
@@ -2373,11 +2375,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         return script
 
     def effective_art_direction(self, script: Script) -> Optional[ArtDirection]:
-        resolved = script.art_direction
-        if not resolved and script.series_id:
-            series = self.series_store.get(script.series_id)
-            resolved = series.art_direction if series else None
-        return ArtDirection(**resolved) if isinstance(resolved, dict) else resolved
+        local = script.art_direction
+        if isinstance(local, dict):
+            local = ArtDirection(**local)
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        inherited = series.art_direction if series else None
+        if isinstance(inherited, dict):
+            inherited = ArtDirection(**inherited)
+        if not local:
+            return inherited
+        if local.style_config or not inherited or not inherited.style_config:
+            return local
+        # A local Director profile is not a visual style override. Resolve
+        # the current series style at use time while keeping the local profile.
+        return local.model_copy(update={
+            "selected_style_id": inherited.selected_style_id,
+            "style_config": inherited.style_config,
+        })
 
     def effective_director_profile(self, script: Script) -> Optional[DirectorProfile]:
         """Resolve episode profile first, then adopted Series profile.
@@ -2389,10 +2403,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if art_direction and art_direction.director_profile:
             return art_direction.director_profile
         if script.series_id:
-            series = self.series_store.get(script.series_id)
-            if series:
-                if series.director_profile_revisions:
-                    return series.director_profile_revisions[-1].profile
+            return self.effective_series_director_profile(script.series_id)
         return None
 
     def effective_series_director_profile(self, series_id: str) -> Optional[DirectorProfile]:
@@ -2412,12 +2423,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         source = "\n\n".join(
             part for part in [context, *[episode.original_text for episode in episodes]] if part
         )
-        entities = {
-            "characters": [item.model_dump() for item in series.characters],
-            "scenes": [item.model_dump() for item in series.scenes],
-            "props": [item.model_dump() for item in series.props],
-            "scope": "series",
-        }
+        # Series assets are reusable visual references, not evidence that a
+        # character, place or prop occurs in the submitted story.
+        entities = {kind: [] for kind in ("characters", "scenes", "props")}
+        for episode in episodes:
+            source_entities = self.director_source_assets(episode)
+            for kind in ("characters", "scenes", "props"):
+                known = {item["id"] for item in entities[kind]}
+                for item in source_entities[kind]:
+                    if item.id in known:
+                        continue
+                    fields = ("id", "name", "description", "persona", "base_character_id") if kind == "characters" else ("id", "name", "description")
+                    entities[kind].append({field: getattr(item, field, None) for field in fields})
+                    known.add(item.id)
+        entities["scope"] = "series"
         style = series.art_direction.style_config if series.art_direction else {}
         try:
             analyzed = self.script_processor.analyze_director_profile_with_audit(
@@ -2494,6 +2513,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             confirmed_at=confirmed.confirmed_at,
         ))
         series.director_profile_draft = confirmed.model_copy(deep=True)
+        series.director_style_hash = _director_style_hash(
+            series.art_direction.style_config if series.art_direction else {}
+        )
         if series.art_direction:
             series.art_direction.director_profile = confirmed
         else:
@@ -2710,7 +2732,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         return first, first + len(text)
 
     def director_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], Dict[str, Any]]:
-        script, entities, _ = self.storyboard_analysis_context(script_id)
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        # Director interpretation is grounded in this episode's extracted
+        # entities. The storyboard asset resolver also includes the entire
+        # shared library, which is only a pool of visual references.
+        source_entities = self.director_source_assets(script)
+        entities = {
+            "characters": [{
+                "id": item.id, "name": item.name, "description": item.description,
+                "persona": item.persona, "base_character_id": item.base_character_id,
+                "person_id": item.base_character_id or item.id,
+            } for item in source_entities["characters"]],
+            "scenes": [{"id": item.id, "name": item.name, "description": item.description} for item in source_entities["scenes"]],
+            "props": [{"id": item.id, "name": item.name, "description": item.description} for item in source_entities["props"]],
+        }
         if script.series_id:
             series = self.series_store.get(script.series_id)
             if series:
@@ -2725,6 +2762,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         art_direction = self.effective_art_direction(script)
         style = art_direction.style_config if art_direction else {}
         return script, entities, style
+
+    @staticmethod
+    def director_source_assets(script: Script) -> Dict[str, List]:
+        """Only entities extracted into this script can bind Director facts."""
+        return {"characters": script.characters, "scenes": script.scenes, "props": script.props}
 
     def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
         analyzed = self.preview_director_profile_with_audit(script_id)
@@ -2794,21 +2836,26 @@ class ComicGenPipeline(StudioOwnerMixin):
         return normalized_result
 
     @staticmethod
+    def _director_entity_field(item: Any, field: str, default: Any = None) -> Any:
+        return item.get(field, default) if isinstance(item, dict) else getattr(item, field, default)
+
+    @staticmethod
     def _director_story_people(characters: List[Any]) -> List[Dict[str, Any]]:
         """Group visual character variants under their stable base character ID."""
-        by_id = {str(getattr(item, "id", "")): item for item in characters if getattr(item, "id", None)}
+        field = ComicGenPipeline._director_entity_field
+        by_id = {str(field(item, "id", "")): item for item in characters if field(item, "id")}
         grouped: Dict[str, Dict[str, Any]] = {}
         for character in characters:
-            character_id = str(getattr(character, "id", "") or "")
+            character_id = str(field(character, "id", "") or "")
             if not character_id:
                 continue
-            person_id = str(getattr(character, "base_character_id", None) or character_id)
+            person_id = str(field(character, "base_character_id") or character_id)
             base = by_id.get(person_id, character)
             display_name = (
-                getattr(base, "persona", "")
-                or getattr(base, "name", "")
-                or getattr(character, "persona", "")
-                or getattr(character, "name", "")
+                field(base, "persona", "")
+                or field(base, "name", "")
+                or field(character, "persona", "")
+                or field(character, "name", "")
                 or person_id
             )
             entry = grouped.setdefault(person_id, {
@@ -2854,8 +2901,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         }
         character_lookup: Dict[str, List[str]] = {}
         for character in entities.get("characters", []):
-            character_id = str(getattr(character, "id", "") or "")
-            labels = [character_id, getattr(character, "name", ""), getattr(character, "persona", "")]
+            character_id = str(self._director_entity_field(character, "id", "") or "")
+            labels = [character_id, self._director_entity_field(character, "name", ""), self._director_entity_field(character, "persona", "")]
             for label in labels:
                 key = str(label or "").strip().casefold()
                 if key:
@@ -2950,7 +2997,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         projected = self._legacy_story_map_for_planning(raw)
         if projected is None:
             return None
-        self._bind_director_story_map(script, self.resolve_episode_assets(script), projected)
+        self._bind_director_story_map(script, self.director_source_assets(script), projected)
         return projected
 
     @staticmethod
@@ -2984,7 +3031,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if story_map.get("source_revision_id") != expected_source_id:
             raise ValueError("Story map source revision identity does not match the current script")
 
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.director_source_assets(script)
         available_characters = resolved.get("characters", [])
         valid_people = {
             item["person_id"]: set(item["variant_character_ids"])
@@ -3845,7 +3892,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             normalized = normalize_director_profile_draft(draft)
             self._bind_director_story_map(
                 script,
-                self.resolve_episode_assets(script),
+                self.director_source_assets(script),
                 normalized,
             )
             self._validate_director_story_map(script, normalized.get("story_map"))
@@ -3898,7 +3945,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         normalized = normalize_director_profile_draft(draft)
         self._bind_director_story_map(
             script,
-            self.resolve_episode_assets(script),
+            self.director_source_assets(script),
             normalized,
         )
         self._validate_director_story_map(script, normalized.get("story_map"))
@@ -3924,14 +3971,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         confirmed = DirectorProfile(
             **clean, revision=revision, content_hash=content_hash, confirmed_at=time.time()
         )
-        if script.art_direction:
-            script.art_direction.director_profile = confirmed
-        else:
-            inherited = self.effective_art_direction(script)
-            script.art_direction = inherited.model_copy(deep=True) if inherited else ArtDirection(
-                selected_style_id="director-profile", style_config={}
-            )
-            script.art_direction.director_profile = confirmed
+        if not script.art_direction:
+            script.art_direction = ArtDirection(selected_style_id="director-profile", style_config={})
+        script.art_direction.director_profile = confirmed
+        style_at_confirmation = self.effective_art_direction(script)
+        script.director_style_hash = _director_style_hash(
+            style_at_confirmation.style_config if style_at_confirmation else {}
+        )
+        series_profile = self.effective_series_director_profile(script.series_id) if script.series_id else None
+        script.director_series_revision = (series_profile.revision if series_profile else 0) if script.series_id else None
         changed = not current or current.content_hash != content_hash
         if changed:
             # Keep the active profile as the compatibility read model, while
@@ -8016,6 +8064,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
                         value = ArtDirection(**value)
+                    if key == "art_direction" and series.art_direction and series.art_direction.director_profile:
+                        if value is None:
+                            value = ArtDirection(
+                                selected_style_id="series-director", style_config={},
+                                director_profile=series.art_direction.director_profile,
+                            )
+                        else:
+                            value.director_profile = series.art_direction.director_profile
                     setattr(series, key, value)
             series.updated_at = time.time()
             self.series_store[series_id] = series
