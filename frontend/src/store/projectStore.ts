@@ -822,11 +822,7 @@ export const useProjectStore = create<ProjectStore>()(
                     }));
                 } catch (error) {
                     console.error('Failed to delete project from backend:', error);
-                    // Still remove from local state for UX, but warn user
-                    set((state) => ({
-                        projects: state.projects.filter((p) => p.id !== id),
-                        currentProject: state.currentProject?.id === id ? null : state.currentProject
-                    }));
+                    throw error;
                 }
             },
 

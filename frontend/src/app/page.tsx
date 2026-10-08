@@ -4,13 +4,14 @@ import { useState, useEffect, useRef, useId } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, Library, FileUp, X, ChevronDown, FileText,
-  Zap, Film, Sparkles, Search, Clock, MoreVertical,
+  Zap, Film, Sparkles, Search, Clock,
 } from "lucide-react";
 import { useProjectStore, Project } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
 import { useOnline } from "@/lib/useOnline";
 import { rovingKeyDown } from "@/lib/a11y";
 import ProjectCard, { deriveStatus, deriveCover, type DerivedStatus } from "@/components/project/ProjectCard";
+import WorkspaceActionsMenu from "@/components/project/WorkspaceActionsMenu";
 import CreateProjectDialog from "@/components/project/CreateProjectDialog";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import CreativeCanvas from "@/components/canvas/CreativeCanvas";
@@ -341,8 +342,9 @@ const WS_VIEW_KEY = "lumenx_workspace_view";
 // deriveCover is imported from ProjectCard (single source of truth).
 
 // ── Project Row (Line B list-view item) ──
-function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
+function ProjectRow({ project, crumb, onDelete }: { project: Project; crumb: string; onDelete: (id: string) => void }) {
   const t = useTranslations("project");
+  const tc = useTranslations("common");
   const cover = deriveCover(project);
   const status = deriveStatus(project);
   const frameCount = project.frames?.length || 0;
@@ -412,14 +414,11 @@ function ProjectRow({ project, crumb }: { project: Project; crumb: string }) {
         </span>
       </div>
 
-      {/* More */}
-      <button
-        onClick={(e) => e.stopPropagation()}
-        className="w-8 h-8 rounded-lg grid place-items-center text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors flex-shrink-0"
-        aria-label={t("moreActions")}
-      >
-        <MoreVertical size={15} />
-      </button>
+      <WorkspaceActionsMenu label={`${project.title} ${t("moreActions")}`}
+        renameLabel="" deleteLabel={tc("delete")}
+        onDelete={() => {
+          if (window.confirm(t("confirmDelete", { title: project.title }))) onDelete(project.id);
+        }} />
     </div>
   );
 }
@@ -484,6 +483,7 @@ export default function Home() {
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
+  const deleteSeries = useProjectStore((state) => state.deleteSeries);
   const setProjects = useProjectStore((state) => state.setProjects);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
@@ -565,6 +565,43 @@ export default function Home() {
 
   const syncAll = async () => {
     await Promise.all([syncProjects(), fetchSeriesList()]);
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    try {
+      await deleteProject(id);
+      setSeriesEpisodes(previous => Object.fromEntries(
+        Object.entries(previous).map(([seriesId, episodes]) => [seriesId, episodes.filter(ep => ep.id !== id)])
+      ));
+    } catch (error) {
+      toast.error(t("toastProjectDeleteFailed"), { body: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleRenameSeries = async (id: string, title: string) => {
+    const next = window.prompt(t("renameSeriesPrompt"), title)?.trim();
+    if (!next || next === title) return;
+    try {
+      await api.updateSeries(id, { title: next });
+      await fetchSeriesList();
+    } catch (error) {
+      toast.error(t("toastSeriesUpdateFailed"), { body: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleDeleteSeries = async (id: string, title: string) => {
+    if (!window.confirm(t("confirmDeleteSeries", { title }))) return;
+    try {
+      await deleteSeries(id);
+      setSeriesEpisodes(previous => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      await syncProjects();
+    } catch (error) {
+      toast.error(t("toastSeriesDeleteFailed"), { body: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   // Close dropdown when clicking outside
@@ -1005,6 +1042,10 @@ export default function Home() {
                         {t("series")} · {t("frames", { count: eps.length })}
                       </span>
                       <span className="atelier-group-line h-px flex-1 bg-glass-border" />
+                      <WorkspaceActionsMenu label={`${s.title} ${t("seriesActions")}`}
+                        renameLabel={t("rename")} deleteLabel={tc("delete")} placement="below"
+                        onRename={() => void handleRenameSeries(s.id, s.title)}
+                        onDelete={() => void handleDeleteSeries(s.id, s.title)} />
                     </div>
                     {viewMode === "list" ? (
                       <div className="flex flex-col gap-1.5">
@@ -1017,6 +1058,7 @@ export default function Home() {
                             <ProjectRow
                               project={ep}
                               crumb={`${s.title}${ep.episode_number ? ` · EP.${String(ep.episode_number).padStart(2, "0")}` : ""}`}
+                              onDelete={handleDeleteProject}
                             />
                           </div>
                         ))}
@@ -1040,7 +1082,7 @@ export default function Home() {
                             className="atelier-reveal"
                             style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                           >
-                            <ProjectCard project={ep} onDelete={deleteProject} />
+                            <ProjectCard project={ep} onDelete={handleDeleteProject} />
                           </div>
                         ))}
                         {!wsFiltering && <NewProjectTile episode onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }} />}
@@ -1074,7 +1116,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectRow project={p} crumb="" />
+                          <ProjectRow project={p} crumb="" onDelete={handleDeleteProject} />
                         </div>
                       ))}
                       {!wsFiltering && (
@@ -1097,7 +1139,7 @@ export default function Home() {
                           className="atelier-reveal"
                           style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
                         >
-                          <ProjectCard project={p} onDelete={deleteProject} />
+                          <ProjectCard project={p} onDelete={handleDeleteProject} />
                         </div>
                       ))}
                       {!wsFiltering && <NewProjectTile onClick={() => setIsDialogOpen(true)} />}
