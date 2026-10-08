@@ -82,7 +82,7 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, director_preset_identity
-from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
+from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_key_from_url, sign_oss_urls_in_data
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -1548,11 +1548,9 @@ def upload_library_asset_image(
 ):
     """Upload an image to use as a global library asset's master image.
 
-    Saves the file under output/uploads/ (served via the /files static mount)
-    and returns {"image_url": <path-or-URL the frontend can load>}. When OSS
-    is configured the returned URL is the (signed) OSS URL; otherwise a local
-    relative path "uploads/<name>" resolvable through the frontend's
-    getAssetUrl helper. The caller then passes this image_url to
+    Saves the file under the owner's managed output tree. The returned
+    image_url is a durable local storage path even when an OSS mirror exists.
+    The caller then passes this image_url to
     POST /library/assets (image_url=...) or PATCH /library/assets/{type}/{id}
     to attach it to a library asset. Mirrors the generic /upload endpoint but
     returns the {image_url} contract the library UI expects.
@@ -1563,11 +1561,7 @@ def upload_library_asset_image(
         file_path, stored_path = _studio_upload_target(user, filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        # Prefer OSS when configured (signed), else fall back to local path.
-        oss_url = OSSImageUploader().upload_image(file_path)
-        if oss_url:
-            return signed_response({"image_url": oss_url})
-        return signed_response({"image_url": stored_path})
+        return {"image_url": stored_path}
     except Exception as e:
         logger.exception("upload_library_asset_image failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2145,14 +2139,19 @@ def get_asset_library_preview(
         raise HTTPException(status_code=404, detail="Asset variant not found")
 
     raw = image_variant_storage_key(variant)
+    if not raw:
+        raise HTTPException(status_code=404, detail="Asset image not found")
     uploader = OSSImageUploader()
     remote = False
     if is_object_key(raw):
         source = uploader.sign_url_for_api(raw)
         remote = True
     elif raw.startswith(("http://", "https://")):
-        # External URLs are not fetched through the authenticated preview endpoint.
-        raise HTTPException(status_code=422, detail="External image preview is unavailable")
+        managed_key = managed_object_key_from_url(raw, uploader)
+        if not managed_key:
+            raise HTTPException(status_code=422, detail="External image preview is unavailable")
+        source = uploader.sign_url_for_api(managed_key)
+        remote = True
     else:
         try:
             source = pipeline._resolve_stored_reference_value(raw, user.owner_profile_id)
