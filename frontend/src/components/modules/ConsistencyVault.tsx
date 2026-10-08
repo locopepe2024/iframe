@@ -117,6 +117,12 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleRenameAsset = async (assetId: string, type: string, name: string) => {
+        if (!currentProject) return;
+        const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, { name });
+        updateProject(currentProject.id, updatedProject);
+    };
+
     const handleClearGenerationState = async (assetId: string, type: string) => {
         if (!currentProject) return;
         try {
@@ -593,6 +599,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
+                            onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
                             onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}

@@ -1389,6 +1389,15 @@ export const api = {
         return res.data;
     },
 
+    updateSeriesAssetAttributes: async (seriesId: string, assetId: string, assetType: string, attributes: Record<string, unknown>) => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/update_attributes`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            attributes,
+        });
+        return res.data;
+    },
+
     toggleFrameLock: async (scriptId: string, frameId: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/toggle_lock`, {
             frame_id: frameId

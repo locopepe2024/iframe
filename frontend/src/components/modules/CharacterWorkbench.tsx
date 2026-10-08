@@ -26,6 +26,7 @@ import ReferencePromptEditor, {
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
+import AssetNameEditor from "@/components/common/AssetNameEditor";
 
 type DesignDraft = {
     route?: string;
@@ -71,6 +72,7 @@ interface CharacterWorkbenchProps {
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
     onUpdateAttributes?: (attributes: Record<string, unknown>) => void | Promise<void>;
+    onRename?: (name: string) => Promise<void>;
     onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
@@ -81,7 +83,7 @@ interface CharacterWorkbenchProps {
     planEntries?: AssetPlanEntry[];
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
@@ -552,7 +554,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             >
                 <div className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-glass-border bg-surface px-4 md:px-6">
                     <div className="flex min-w-0 items-center gap-3">
-                        <h2 className="min-w-0 truncate text-lg font-bold text-foreground md:text-xl">{asset.name} <span className="text-text-muted font-normal text-sm ml-2">{tc("workbench")}</span></h2>
+                        <div role="heading" aria-level={2} className="min-w-0 text-lg font-bold text-foreground md:text-xl"><AssetNameEditor key={asset.id} name={asset.name} onRename={onRename} className="font-bold" /></div>
+                        <span className="hidden shrink-0 text-sm text-text-muted sm:inline">{tc("workbench")}</span>
                         <div className="hidden shrink-0 items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full lg:flex">
                             <span className="text-xs text-blue-400 font-medium">{tc("tipConsistency")}</span>
                         </div>

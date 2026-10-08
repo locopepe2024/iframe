@@ -12,6 +12,7 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
 import { getAssetUrl } from "@/lib/utils";
+import AssetNameEditor from "@/components/common/AssetNameEditor";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -39,6 +40,7 @@ interface AssetInspectorProps {
   onCoverUpdated?: (result: AssetCoverSelectionResult) => void;
   /** 提升到全局成功后回调（父层刷新库以显示新入池资产）。可选。 */
   onPromoted?: () => void;
+  onRename?: (name: string) => Promise<void>;
 }
 
 /** Character 走 characterImageAsset（reference_sheet→full_body，归一化成 ImageAsset 形状）；scene/prop 用 image_asset。 */
@@ -96,6 +98,7 @@ export default function AssetInspector({
   onToggleStar,
   onCoverUpdated,
   onPromoted,
+  onRename,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -398,9 +401,7 @@ export default function AssetInspector({
 
       <div className="p-5 flex flex-col gap-5">
         <div>
-          <div className="font-display atelier-display text-xl font-semibold text-foreground tracking-tight">
-            {asset.name}
-          </div>
+          <AssetNameEditor key={asset.id} name={asset.name} onRename={onRename} className="font-display atelier-display text-xl font-semibold text-foreground" />
           <div className="font-mono text-[0.59375rem] text-text-muted tracking-[0.06em] uppercase mt-1.5">
             {TYPE_LABEL[type]} · {sourceName} · {t("variantCount", { count: variants.length })}
           </div>

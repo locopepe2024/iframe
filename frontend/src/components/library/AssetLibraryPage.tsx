@@ -14,6 +14,7 @@ import { rovingKeyDown } from "@/lib/a11y";
 import RecreationMediaLibrary from "./RecreationMediaLibrary";
 import AssetInspector from "./AssetInspector";
 import NewLibraryAssetDialog from "./NewLibraryAssetDialog";
+import { useProjectStore } from "@/store/projectStore";
 
 type AssetTab = "characters" | "scenes" | "props";
 type TypeFilter = AssetTab | "all";
@@ -184,6 +185,7 @@ export default function AssetLibraryPage() {
 function SemanticAssetLibrary() {
   const t = useTranslations("library");
   const tc = useTranslations("common");
+  const updateProject = useProjectStore((state) => state.updateProject);
   const [sources, setSources] = useState<AssetSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeType, setActiveType] = useState<TypeFilter>("all");
@@ -269,6 +271,19 @@ function SemanticAssetLibrary() {
       const status = (error as { response?: { status?: number } }).response?.status;
       toast.error(status === 409 ? t("deleteInUse") : t("deleteFailed"));
     } finally { setDeleting(null); }
+  };
+
+  const renameAsset = async (source: AssetSource, type: AssetTab, assetId: string, name: string) => {
+    const assetType = SINGULAR[type];
+    if (source.kind === "global") {
+      await api.updateLibraryAsset(assetType, assetId, { name });
+    } else if (source.kind === "series") {
+      await api.updateSeriesAssetAttributes(source.rawId, assetId, assetType, { name });
+    } else {
+      const updatedProject = await api.updateAssetAttributes(source.rawId, assetId, assetType, { name });
+      updateProject(source.rawId, updatedProject);
+    }
+    await loadAssets();
   };
 
   // 全局计数（facet 总览；不受搜索/星标过滤影响，与分组标题里的计数互补）。
@@ -741,6 +756,7 @@ function SemanticAssetLibrary() {
             onToggleStar={() => toggleStar(selected.sourceId, selected.assetId, selected.type)}
             onCoverUpdated={(result) => updateCoverSelection(selected.sourceId, selected.type, result)}
             onPromoted={loadAssets}
+            onRename={(name) => renameAsset(selectedSource, selected.type, selected.assetId, name)}
           />
         )}
       </div>

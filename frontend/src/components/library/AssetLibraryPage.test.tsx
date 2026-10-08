@@ -3,23 +3,51 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import AssetLibraryPage from './AssetLibraryPage';
 const mocked = vi.hoisted(() => ({
   getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), error: vi.fn(),
+  updateLibraryAsset: vi.fn(), updateSeriesAssetAttributes: vi.fn(), updateAssetAttributes: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
 vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
-vi.mock('./AssetInspector', () => ({ default: ({ onCoverUpdated }: { onCoverUpdated: (result: any) => void }) => (
+vi.mock('./AssetInspector', () => ({ default: ({ onCoverUpdated, onRename }: { onCoverUpdated: (result: any) => void; onRename: (name: string) => Promise<void> }) => (<>
   <button type="button" onClick={() => onCoverUpdated({
     asset_type: 'character', asset_id: 'character-1', cover_variant_id: 'candidate-2',
     variant: { id: 'candidate-2', url: 'assets/candidate.png' },
   })}>apply cover selection</button>
-) }));
+  <button type="button" onClick={() => void onRename('Renamed character')}>rename selected asset</button>
+</>) }));
 vi.mock('./NewLibraryAssetDialog', () => ({ default: () => null }));
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal('IntersectionObserver', undefined);
   mocked.authenticatedFetch.mockRejectedValue(new Error('preview unavailable'));
+  mocked.updateLibraryAsset.mockResolvedValue({});
+  mocked.updateSeriesAssetAttributes.mockResolvedValue({});
+  mocked.updateAssetAttributes.mockResolvedValue({});
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
+});
+
+it.each([
+  ['global', null, 'updateLibraryAsset'],
+  ['series', 'series-1', 'updateSeriesAssetAttributes'],
+  ['project', 'project-1', 'updateAssetAttributes'],
+] as const)('renames an asset in its %s owner', async (sourceScope, sourceId, method) => {
+  const entry = {
+    asset_type: 'character', asset_id: 'character-1', name: 'Test character',
+    source_scope: sourceScope, source_container_id: sourceId, variants: [],
+  };
+  mocked.getAssetLibraryIndex
+    .mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [entry] })
+    .mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ ...entry, name: 'Renamed character' }] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(await screen.findByText('Test character'));
+  fireEvent.click(screen.getByRole('button', { name: 'rename selected asset' }));
+  await waitFor(() => expect(mocked[method]).toHaveBeenCalledWith(
+    ...(sourceScope === 'global'
+      ? ['character', 'character-1', { name: 'Renamed character' }]
+      : [sourceId, 'character-1', 'character', { name: 'Renamed character' }]),
+  ));
+  expect(await screen.findByText('Renamed character')).toBeInTheDocument();
 });
 it('deletes a library character without selecting its card', async () => {
   mocked.deleteLibraryAsset.mockResolvedValue({ status: 'deleted' });
@@ -39,7 +67,7 @@ it('retains referenced assets and explains the deletion conflict', async () => {
   expect(screen.getByText('Test character')).toBeInTheDocument();
 });
 
-it('resolves local variant paths before rendering library previews', async () => {
+it('requests an owner-scoped preview for a local variant path', async () => {
   mocked.getAssetLibraryIndex.mockResolvedValue({
     schema_version: 1,
     project_id: 'library',
@@ -55,12 +83,12 @@ it('resolves local variant paths before rendering library previews', async () =>
     }],
   });
   render(<AssetLibraryPage />);
-  expect(await screen.findByRole('img', { name: '夜间火车车厢' })).toHaveAttribute(
-    'src',
-    '/files/assets/scenes/night-train.png',
-  );
-  expect(screen.getByRole('img', { name: '夜间火车车厢' })).toHaveAttribute('loading', 'lazy');
-  expect(screen.getByRole('img', { name: '夜间火车车厢' })).toHaveAttribute('decoding', 'async');
+  await screen.findByText('夜间火车车厢');
+  await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
+    expect.stringContaining('scope=series&container_id=series-1&asset_type=scene&asset_id=night-train&variant_id=variant-1'),
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  ));
+  expect(screen.queryByRole('img', { name: '夜间火车车厢' })).not.toBeInTheDocument();
 });
 
 it('opens recreation media from the library and returns to semantic assets', async () => {
@@ -92,12 +120,16 @@ it('patches a cover from the mutation response without reloading the library ind
     }],
   });
   render(<AssetLibraryPage />);
-  const cardImage = await screen.findByRole('img', { name: 'Test character' });
-  expect(cardImage).toHaveAttribute('src', '/files/assets/cover.png');
-  expect(cardImage).toHaveAttribute('loading', 'lazy');
+  await screen.findByText('Test character');
+  await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
+    expect.stringContaining('variant_id=cover-1'), expect.any(Object),
+  ));
   fireEvent.click(screen.getByText('Test character'));
   fireEvent.click(await screen.findByRole('button', { name: 'apply cover selection' }));
-  await waitFor(() => expect(screen.getByRole('img', { name: 'Test character' })).toHaveAttribute('src', '/files/assets/candidate.png'));
+  await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
+    expect.stringContaining('variant_id=candidate-2'), expect.any(Object),
+  ));
+  expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(1);
   expect(mocked.getAssetLibraryIndex).toHaveBeenCalledTimes(1);
 });
 

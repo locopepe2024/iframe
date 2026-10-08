@@ -123,6 +123,17 @@ it("does not offer direct image upload from the character panel", () => {
     expect(screen.getByText("Full body · 图片变体")).toBeInTheDocument();
 });
 
+it("offers inline asset rename in the character workbench", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onRename={onRename} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "renameAsset" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "assetName" }), { target: { value: "雪痕客" } });
+    fireEvent.click(screen.getByRole("button", { name: "saveName" }));
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("雪痕客"));
+});
+
 it("preserves each task prompt while switching views", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
