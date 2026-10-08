@@ -60,7 +60,7 @@ def require_release_authority(repo, expected):
         raise RuntimeError("Provide the full 40-character --revision")
     current = revision(repo, expected)
     branch = run("git", "-C", str(repo), "branch", "--show-current")
-    if branch != "feature/iframe-3d-director-v1":
+    if not branch.startswith(("feature/", "fix/")):
         raise RuntimeError(f"Unexpected release branch: {branch}")
     remote = github_branch_revision(repo, branch)
     if not remote or remote.split()[0] != current:
