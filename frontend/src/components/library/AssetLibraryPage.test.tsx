@@ -27,6 +27,26 @@ beforeEach(() => {
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
 });
 
+function renderFlatLibrary() {
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'viewByType' }));
+}
+
+it('opens a project folder and returns to the folder list', async () => {
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [
+    { asset_type: 'character', asset_id: 'a', name: 'Character A', source_scope: 'project', source_container_id: 'p1', source_name: 'Project A', variants: [] },
+    { asset_type: 'character', asset_id: 'b', name: 'Character B', source_scope: 'project', source_container_id: 'p2', source_name: 'Project B', variants: [] },
+  ] });
+  render(<AssetLibraryPage />);
+  expect(await screen.findByRole('button', { name: /Project A/ })).toBeInTheDocument();
+  expect(screen.queryByText('Character A')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Project A/ }));
+  expect(screen.getByText('Character A')).toBeInTheDocument();
+  expect(screen.queryByText('Character B')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /allFolders/ }));
+  expect(screen.getByRole('button', { name: /Project B/ })).toBeInTheDocument();
+});
+
 it.each([
   ['global', null, 'updateLibraryAsset'],
   ['series', 'series-1', 'updateSeriesAssetAttributes'],
@@ -39,8 +59,8 @@ it.each([
   mocked.getAssetLibraryIndex
     .mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [entry] })
     .mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ ...entry, name: 'Renamed character' }] });
-  render(<AssetLibraryPage />);
-  fireEvent.click(await screen.findByText('Test character'));
+  renderFlatLibrary();
+  fireEvent.click((await screen.findByText('Test character')).closest('[role="button"]')!);
   fireEvent.click(screen.getByRole('button', { name: 'rename selected asset' }));
   await waitFor(() => expect(mocked[method]).toHaveBeenCalledWith(
     ...(sourceScope === 'global'
@@ -49,9 +69,25 @@ it.each([
   ));
   expect(await screen.findByText('Renamed character')).toBeInTheDocument();
 });
+
+it('renames directly from the asset card without opening details', async () => {
+  mocked.getAssetLibraryIndex.mockResolvedValueOnce({ schema_version: 1, project_id: 'library', assets: [
+    { asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, variants: [] },
+  ] }).mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [
+    { asset_type: 'character', asset_id: 'character-1', name: 'New name', source_scope: 'global', source_container_id: null, variants: [] },
+  ] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(await screen.findByRole('button', { name: /globalGroup/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'renameAsset' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'assetName' }), { target: { value: 'New name' } });
+  fireEvent.click(screen.getByRole('button', { name: 'saveName' }));
+  await waitFor(() => expect(mocked.updateLibraryAsset).toHaveBeenCalledWith('character', 'character-1', { name: 'New name' }));
+  expect(await screen.findByText('New name')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'rename selected asset' })).not.toBeInTheDocument();
+});
 it('deletes a library character without selecting its card', async () => {
   mocked.deleteLibraryAsset.mockResolvedValue({ status: 'deleted' });
-  render(<AssetLibraryPage />);
+  renderFlatLibrary();
   const button = await screen.findByRole('button', { name: 'deleteNamed Test character' });
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [] });
   fireEvent.click(button);
@@ -61,7 +97,7 @@ it('deletes a library character without selecting its card', async () => {
 });
 it('retains referenced assets and explains the deletion conflict', async () => {
   mocked.deleteLibraryAsset.mockRejectedValue({ response: { status: 409 } });
-  render(<AssetLibraryPage />);
+  renderFlatLibrary();
   fireEvent.click(await screen.findByRole('button', { name: 'deleteNamed Test character' }));
   await waitFor(() => expect(mocked.error).toHaveBeenCalledWith('deleteInUse'));
   expect(screen.getByText('Test character')).toBeInTheDocument();
@@ -82,7 +118,7 @@ it('requests an owner-scoped preview for a local variant path', async () => {
       variants: [{ id: 'variant-1', url: 'assets/scenes/night-train.png' }],
     }],
   });
-  render(<AssetLibraryPage />);
+  renderFlatLibrary();
   await screen.findByText('夜间火车车厢');
   await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
     expect.stringContaining('scope=series&container_id=series-1&asset_type=scene&asset_id=night-train&variant_id=variant-1'),
@@ -92,12 +128,13 @@ it('requests an owner-scoped preview for a local variant path', async () => {
 });
 
 it('opens recreation media from the library and returns to semantic assets', async () => {
-  render(<AssetLibraryPage />);
+  renderFlatLibrary();
   await screen.findByText('Test character');
   fireEvent.click(screen.getByRole('button', { name: 'media' }));
   expect(screen.getByText('recreation media browser')).toBeInTheDocument();
   expect(screen.queryByText('Test character')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'assets' }));
+  fireEvent.click(await screen.findByRole('button', { name: /globalGroup/ }));
   expect(await screen.findByText('Test character')).toBeInTheDocument();
 });
 
@@ -119,12 +156,12 @@ it('patches a cover from the mutation response without reloading the library ind
       ],
     }],
   });
-  render(<AssetLibraryPage />);
+  renderFlatLibrary();
   await screen.findByText('Test character');
   await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
     expect.stringContaining('variant_id=cover-1'), expect.any(Object),
   ));
-  fireEvent.click(screen.getByText('Test character'));
+  fireEvent.click(screen.getByText('Test character').closest('[role="button"]')!);
   fireEvent.click(await screen.findByRole('button', { name: 'apply cover selection' }));
   await waitFor(() => expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
     expect.stringContaining('variant_id=candidate-2'), expect.any(Object),
@@ -141,7 +178,7 @@ it('loads a cover preview using the authenticated asset reference', async () => 
     source_container_id: null, selected_variant_id: 'v1', variants: [{ id: 'v1', url: 'assets/room.png' }],
   }] });
   try {
-    render(<AssetLibraryPage />);
+    renderFlatLibrary();
     expect(await screen.findByRole('img', { name: 'Room' })).toHaveAttribute('src', 'blob:cover-preview');
     expect(mocked.authenticatedFetch).toHaveBeenCalledWith(
       expect.stringContaining('/asset-index/preview?scope=global'), expect.objectContaining({ signal: expect.any(AbortSignal) }),

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2 } from "lucide-react";
+import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2, Folder, ArrowLeft } from "lucide-react";
 import { api, API_URL, authenticatedFetch } from "@/lib/api";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import type { AssetCoverSelectionResult, AssetReferenceIndexEntry } from "@/lib/api";
@@ -14,6 +14,7 @@ import { rovingKeyDown } from "@/lib/a11y";
 import RecreationMediaLibrary from "./RecreationMediaLibrary";
 import AssetInspector from "./AssetInspector";
 import NewLibraryAssetDialog from "./NewLibraryAssetDialog";
+import AssetNameEditor from "@/components/common/AssetNameEditor";
 import { useProjectStore } from "@/store/projectStore";
 
 type AssetTab = "characters" | "scenes" | "props";
@@ -192,7 +193,8 @@ function SemanticAssetLibrary() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [sortOpen, setSortOpen] = useState(false);
-  const [viewAxis, setViewAxis] = useState<ViewAxis>("type");
+  const [viewAxis, setViewAxis] = useState<ViewAxis>("source");
+  const [openSourceId, setOpenSourceId] = useState<string | null>(null);
   const [starredOnly, setStarredOnly] = useState(false);
   const [selected, setSelected] = useState<{ sourceId: string; assetId: string; type: AssetTab } | null>(null);
   const [newAssetOpen, setNewAssetOpen] = useState(false);
@@ -377,17 +379,25 @@ function SemanticAssetLibrary() {
   }, [sources, activeType, searchQuery, starredOnly, sortMode, viewAxis, t]);
 
   const visibleCount = groups.reduce((acc, g) => acc + g.items.length, 0);
+  const openSource = sources.find((source) => source.id === openSourceId);
+  const displayedGroups = viewAxis === "source" && openSourceId
+    ? groups.filter((group) => group.key === openSourceId)
+    : groups;
+
+  useEffect(() => {
+    if (openSourceId && !sources.some((source) => source.id === openSourceId)) setOpenSourceId(null);
+  }, [openSourceId, sources]);
 
   // 选中的资产被筛掉后自动关 inspector（避免残留指向已隐藏资产）。
   useEffect(() => {
     if (!selected) return;
-    const stillVisible = groups.some((grp) =>
+    const stillVisible = displayedGroups.some((grp) =>
       grp.items.some(
         (it) => it.src.id === selected.sourceId && it.asset.id === selected.assetId && it.type === selected.type
       )
     );
     if (!stillVisible) setSelected(null);
-  }, [groups, selected]);
+  }, [displayedGroups, selected]);
 
   const toggleStar = async (sourceId: string, assetId: string, type: AssetTab) => {
     const src = sources.find((s) => s.id === sourceId);
@@ -423,11 +433,15 @@ function SemanticAssetLibrary() {
       {/* Header */}
       <header className="px-4 md:px-7 pt-5 md:pt-6 pb-3 flex items-end gap-5">
         <div className="flex-1 min-w-0">
+          {viewAxis === "source" && openSource && <button type="button" onClick={() => { setOpenSourceId(null); setSelected(null); }}
+            className="mb-2 inline-flex items-center gap-2 text-sm text-text-secondary hover:text-foreground">
+            <ArrowLeft size={16} /> {t("allFolders")}
+          </button>}
           <div className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.2em] text-text-muted">
             ASSET LIBRARY · <span className="text-primary font-semibold">{t("gallery") || "画廊"}</span>
           </div>
           <h1 className="text-[1.625rem] md:text-[2.125rem] font-display atelier-display font-semibold text-foreground leading-tight tracking-tight mt-1">
-            {t("title")}
+            {openSource && viewAxis === "source" ? openSource.name : t("title")}
           </h1>
         </div>
         <div className="flex items-center gap-2.5 pb-1">
@@ -463,7 +477,7 @@ function SemanticAssetLibrary() {
                 key={v.id}
                 type="button"
                 aria-pressed={on}
-                onClick={() => setViewAxis(v.id)}
+                onClick={() => { setViewAxis(v.id); setOpenSourceId(null); setSelected(null); }}
                 className={`px-3.5 py-1.5 rounded-full text-[0.6875rem] font-semibold transition-colors ${
                   on ? "text-foreground atelier-pill-tab-active bg-surface shadow-sm" : "text-text-muted hover:text-foreground"
                 }`}
@@ -627,9 +641,22 @@ function SemanticAssetLibrary() {
                 {tc("clearFilters")}
               </button>
             </div>
+          ) : viewAxis === "source" && !openSourceId ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {groups.map((group) => <button key={group.key} type="button"
+                onClick={() => { setOpenSourceId(group.key); setSelected(null); }}
+                className="flex min-h-24 items-center gap-4 rounded-md border border-glass-border bg-surface-inset p-4 text-left hover:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                <Folder size={26} className="shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-foreground">{group.title}</span>
+                  <span className="block text-xs text-text-muted">{group.meta}</span>
+                </span>
+                <ChevronDown size={16} className="-rotate-90 text-text-muted" aria-hidden="true" />
+              </button>)}
+            </div>
           ) : (
             <div className="space-y-6">
-              {groups.map((grp) => (
+              {displayedGroups.map((grp) => (
                 <div key={grp.key}>
                   {/* 分组标题 + 尾线 + 计数 */}
                   <div className="flex items-baseline gap-3 mb-4">
@@ -719,7 +746,11 @@ function SemanticAssetLibrary() {
                             )}
                           </div>
                           <div className="p-3">
-                            <div className="text-sm font-medium text-foreground truncate">{asset.name}</div>
+                            <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                              <AssetNameEditor key={`${src.id}-${asset.id}`} name={asset.name}
+                                onRename={(name) => renameAsset(src, type, asset.id, name)}
+                                className="text-sm font-medium text-foreground" />
+                            </div>
                             {viewAxis === "type" || src.kind === "global" ? (
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-[0.6875rem] text-text-muted truncate">{src.name}</span>

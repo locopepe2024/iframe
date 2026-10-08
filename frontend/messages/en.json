@@ -2063,6 +2063,7 @@
     "viewLabel": "View",
     "viewByType": "By Type",
     "viewByProject": "By Project",
+    "allFolders": "All asset folders",
     "assetTypeAria": "Asset type",
     "starredOnlyAria": "Starred only",
     "sortLabel": "Sort",
