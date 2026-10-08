@@ -137,11 +137,13 @@ from ..playground.api import _storage_for as playground_storage_for, router as p
 from ...utils.media_thumbnails import create_media_thumbnail
 from ..agent_api import router as agent_router
 from ..recreation.api import router as recreation_router
+from ..avatar.service import router as avatar_router
 app.include_router(identity_router)
 app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
 app.include_router(agent_router)
 app.include_router(recreation_router)
+app.include_router(avatar_router)
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
@@ -216,6 +218,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/series"
         or path.startswith("/series/")
         or path.startswith("/recreation/")
+        or path == "/avatar"
+        or path.startswith("/avatar/")
         or path == "/library"
         or path.startswith("/library/")
         or path == "/asset-index"

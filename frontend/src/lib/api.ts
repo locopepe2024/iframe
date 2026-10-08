@@ -1874,6 +1874,14 @@ export const api = {
         const res = await axios.get(`${API_URL}/library/assets`);
         return res.data;
     },
+    listAvatarCharacters: async () => {
+        const res = await axios.get(`${API_URL}/avatar/characters`);
+        return res.data;
+    },
+    createAvatarCharacter: async (data: { name: string; identity: import("@/lib/avatarCharacterAsset").IdentityDesign }) => {
+        const res = await axios.post(`${API_URL}/avatar/characters`, data);
+        return res.data as import("@/lib/avatarCharacterAsset").DigitalAvatarCharacter;
+    },
     importLibraryAssetToSeries: async (seriesId: string, assetType: "character" | "scene" | "prop", libraryAssetId: string) => {
         const res = await axios.post(`${API_URL}/series/${seriesId}/assets/import-from-library`, {
             asset_type: assetType, library_asset_id: libraryAssetId,

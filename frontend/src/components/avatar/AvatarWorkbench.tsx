@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
-import { ScanFace } from "lucide-react";
+import { ScanFace, Plus } from "lucide-react";
 
-import type { IdentityDesign } from "@/lib/avatarCharacterAsset";
+import { api } from "@/lib/api";
+import type { DigitalAvatarCharacter, IdentityDesign } from "@/lib/avatarCharacterAsset";
 
 const fields: { key: keyof Omit<IdentityDesign, "identity_anchors">; zh: string; en: string }[] = [
   { key: "face", zh: "脸部结构", en: "Face structure" },
@@ -20,6 +21,35 @@ export default function AvatarWorkbench() {
   const zh = useLocale().startsWith("zh");
   const [name, setName] = useState("");
   const [identity, setIdentity] = useState<IdentityDesign>({});
+  const [characters, setCharacters] = useState<DigitalAvatarCharacter[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void api.listAvatarCharacters().then((result: { characters: DigitalAvatarCharacter[] }) => {
+      if (active) setCharacters(result.characters);
+    }).catch((cause: unknown) => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { active = false; };
+  }, []);
+
+  async function createCharacter() {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const created = await api.createAvatarCharacter({ name: name.trim(), identity });
+      setCharacters((current) => [...current, created]);
+      setName("");
+      setIdentity({});
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="min-h-full bg-background text-foreground">
@@ -31,11 +61,7 @@ export default function AvatarWorkbench() {
       </header>
 
       <div className="mx-auto max-w-5xl px-5 py-6 sm:px-8">
-        <div className="mb-6 border-l-2 border-amber-400 bg-amber-400/5 px-4 py-3 text-sm leading-6 text-text-secondary" role="status">
-          {zh
-            ? "Avatar 人物创建服务尚未连接。你可以整理身份设计，但目前无法创建或保存人物；刷新页面会清除未保存内容。"
-            : "Avatar character creation is not connected. You can prepare an identity design, but cannot create or save a character yet. Unsaved fields disappear on refresh."}
-        </div>
+        {error && <div role="alert" className="mb-6 border-l-2 border-red-400 bg-red-400/5 px-4 py-3 text-sm text-red-300">{error}</div>}
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
           <section className="min-w-0" aria-label={zh ? "创建人物" : "Create character"}>
@@ -64,21 +90,23 @@ export default function AvatarWorkbench() {
               </label>
             </div>
             <div className="mt-6 border-t border-glass-border pt-4">
-              <button type="button" disabled title={zh ? "等待 Avatar 创建接口" : "Avatar creation API required"}
-                className="glass-button min-h-11 px-4 text-sm font-medium opacity-50">
-                {zh ? "创建人物" : "Create character"}
+              <button type="button" onClick={() => void createCharacter()} disabled={!name.trim() || busy}
+                className="glass-button min-h-11 px-4 text-sm font-medium disabled:opacity-50">
+                {busy ? (zh ? "创建中…" : "Creating…") : (zh ? "创建人物" : "Create character")}
               </button>
             </div>
           </section>
 
           <aside className="border-t border-glass-border pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0" aria-label={zh ? "创建范围" : "Creation scope"}>
-            <h2 className="mb-3 text-sm font-semibold">{zh ? "人物身份" : "Character identity"}</h2>
-            <p className="text-sm leading-6 text-text-secondary">
-              {zh ? "此处创建的是可跨项目使用的人物身份。服装、妆容、场景状态和镜头表演由后续设计层处理。" : "This identity can be used across projects. Costume, makeup, scene state, and shot performance belong to later design stages."}
-            </p>
-            <p className="mt-4 text-xs leading-5 text-text-muted">
-              {zh ? "iFrame 资产库仅可在后续显式选择时提供参考图，不作为人物身份来源或存储。" : "The iFrame asset library may later supply explicitly selected references; it does not own or store Avatar identities."}
-            </p>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus size={15} />{zh ? "已创建人物" : "Created characters"} · {characters.length}</h2>
+            <div className="space-y-2">
+              {characters.map((character) => <div key={character.character_id} className="border-b border-glass-border py-2">
+                <strong className="block text-sm font-medium">{character.name}</strong>
+                <span className="block break-all font-mono text-xs text-text-muted">{character.character_id}</span>
+                <span className="text-xs text-text-secondary">v{character.identity_revision} · {character.review_status}</span>
+              </div>)}
+              {characters.length === 0 && <p className="text-sm text-text-muted">{zh ? "暂无人物" : "No characters yet"}</p>}
+            </div>
           </aside>
         </div>
       </div>

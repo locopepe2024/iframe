@@ -1,8 +1,7 @@
 /**
  * Avatar identity contract used by iFrame.
  *
- * This module deliberately contains no HTTP paths. Avatar owns the durable
- * identity asset and its revisions; iFrame only consumes the contract.
+ * Avatar owns the durable identity asset and its revisions.
  */
 
 export type ReviewStatus = "draft" | "needs_user_review" | "confirmed" | "stale";
@@ -57,6 +56,7 @@ export interface CreateAvatarCharacterInput {
 
 export interface AvatarCharacterAssetClient {
   createCharacter(input: CreateAvatarCharacterInput): Promise<DigitalAvatarCharacter>;
+  listCharacters(): Promise<DigitalAvatarCharacter[]>;
   getCharacter(characterId: string, revision?: number): Promise<DigitalAvatarCharacter>;
   updateIdentity(characterId: string, patch: IdentityPatch): Promise<DigitalAvatarCharacter>;
   listReferenceAssets(characterId: string, role?: ReferenceRole): Promise<AvatarReferenceAsset[]>;
@@ -133,6 +133,9 @@ export function createInMemoryAvatarCharacterAssetClient(
   }
 
   return {
+    async listCharacters() {
+      return Array.from(history.keys()).map((id) => clone(latest(id)));
+    },
     async createCharacter(input) {
       const character: DigitalAvatarCharacter = {
         character_id: `test_${crypto.randomUUID()}`,
