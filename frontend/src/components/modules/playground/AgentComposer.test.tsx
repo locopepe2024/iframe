@@ -58,6 +58,19 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     expect(send).toHaveBeenCalledOnce();
 });
 
+it('shows four independently configurable companion skills only in Agent mode', () => {
+    const toggle = vi.fn();
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()}
+        agent={{ active: true, model: 'chat', models: [], setModel: vi.fn(), companionSkills: ['listening'], toggleCompanionSkill: toggle }} />);
+    fireEvent.click(screen.getByRole('button', { name: '陪护技能 1' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getAllByRole('checkbox')).toHaveLength(4);
+    expect(within(dialog).getByLabelText('倾听与话题引导')).toBeChecked();
+    fireEvent.click(within(dialog).getByLabelText('日程与备忘'));
+    expect(toggle).toHaveBeenCalledWith('schedule');
+    expect(within(dialog).getByText(/只有确认保存的记忆会跨会话使用/)).toBeInTheDocument();
+});
+
 it('switches video resolution to image tiers without submitting stale video parameters', () => {
     usePlaygroundStore.setState({ mode: 't2v', modelId: 'video-model', modelPreferences: {}, parameters: { resolution: '720p', duration: 5, audio: true }, prompt: 'keep me' });
     render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);

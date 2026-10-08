@@ -291,7 +291,7 @@ function PlaygroundContent() {
       <SessionRail compact sessions={sessions} activeSessionId={activeSessionId} onSelect={handleOpenSession} onCreate={handleCreateSession} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <SessionTimeline messages={agent.messages} busy={agent.busy} error={agent.error} onDeleteMessage={agent.removeMessage} />
-        <AgentComposer canGenerate={chatMode ? !!prompt.trim() && !agent.busy && !agent.loading && agent.models.some(m => m.api_model_id === agent.model) : canGenerate} batchSize={batchSize} onGenerate={chatMode ? agent.send : handleGenerate} agent={{ active: chatMode, model: agent.model, models: agent.models, setModel: agent.setModel, modelsLoading: agent.modelsLoading, modelsError: agent.modelsError, reloadModels: agent.reloadModels }} onAgentChange={setChatMode} />
+        <AgentComposer canGenerate={chatMode ? !!prompt.trim() && !agent.busy && !agent.loading && agent.models.some(m => m.api_model_id === agent.model) : canGenerate} batchSize={batchSize} onGenerate={chatMode ? agent.send : handleGenerate} agent={{ active: chatMode, model: agent.model, models: agent.models, setModel: agent.setModel, modelsLoading: agent.modelsLoading, modelsError: agent.modelsError, reloadModels: agent.reloadModels, companionSkills: agent.companionSkills, toggleCompanionSkill: agent.toggleCompanionSkill, memories: agent.memories, memoryCandidates: agent.memoryCandidates, memoryError: agent.memoryError, extractMemories: agent.extractMemories, saveMemory: agent.saveMemory, editMemory: agent.editMemory, deleteMemory: agent.deleteMemory }} onAgentChange={setChatMode} />
       </main>
     </div>
   );

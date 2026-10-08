@@ -1,11 +1,52 @@
 from unittest.mock import Mock
+from io import BytesIO
 
 import pytest
 import httpx
 from openai import APIStatusError, APITimeoutError
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from src.apps import agent_api as agent
 from src.apps.identity import UserContext
+
+
+def test_asr_requires_catalog_access_and_valid_audio(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: False)
+    with pytest.raises(HTTPException, match='尚未开放'):
+        agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.wav'), setup)
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: True)
+    with pytest.raises(HTTPException, match='格式不支持'):
+        agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.webm'), setup)
+
+
+def test_asr_returns_draft_without_creating_chat_message(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'asr_available', lambda ctx: True)
+    monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={
+        'api_key': 'test', 'base_url': 'https://example.test/v1',
+    })))
+    captured = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.audio = Mock(transcriptions=Mock(create=self.create))
+
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return Mock(text=' 明天下午去公园 ')
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    import openai
+    monkeypatch.setattr(openai, 'OpenAI', Client)
+    result = agent.transcribe_audio(UploadFile(file=BytesIO(b'voice'), filename='voice.wav', headers={'content-type': 'audio/wav'}), setup)
+    assert result == {'text': '明天下午去公园', 'model': 'asr-1.0'}
+    assert captured['model'] == 'asr-1.0'
+    assert captured['file'][0] == 'voice.wav'
+    with agent.database() as db:
+        assert db.execute('SELECT COUNT(*) FROM sessions').fetchone()[0] == 0
 
 
 @pytest.mark.parametrize('status,expected', [(502, '对话网关返回'), (401, '鉴权'), (429, '请求受限'), (400, '拒绝对话请求')])
@@ -103,6 +144,58 @@ def test_multiturn_owner_and_model(setup, monkeypatch):
     assert agent.sessions(ctx)['sessions'][0]['title'] == '新的标题'
     agent.delete(sid, ctx)
     assert agent.sessions(ctx)['sessions'] == []
+
+
+def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    complete = Mock(return_value='我听着呢。')
+    monkeypatch.setattr(agent, 'complete', complete)
+    agent.send(sid, agent.MessageCreate(content='今天有点孤单', companion_skills=['listening', 'memory']), setup)
+    system = complete.call_args.args[2][0]['content']
+    assert agent.COMPANION_SKILL_INSTRUCTIONS['listening'] in system
+    assert agent.COMPANION_SKILL_INSTRUCTIONS['memory'] in system
+    assert 'companion_skills' not in agent.messages(sid, setup)['messages'][0]
+    with pytest.raises(HTTPException) as invalid:
+        agent.send(sid, agent.MessageCreate(content='你好', companion_skills=['unknown']), setup)
+    assert invalid.value.status_code == 422
+    with pytest.raises(HTTPException) as duplicate:
+        agent.send(sid, agent.MessageCreate(content='你好', companion_skills=['memory', 'memory']), setup)
+    assert duplicate.value.status_code == 422
+
+
+def test_confirmed_memory_is_owner_scoped_and_injected_only_when_enabled(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    completion = Mock(return_value='好的')
+    monkeypatch.setattr(agent, 'complete', completion)
+    agent.send(sid, agent.MessageCreate(content='我喜欢听邓丽君的歌', companion_skills=[]), setup)
+    message = agent.messages(sid, setup)['messages'][0]
+    saved = agent.create_memory(agent.MemoryCreate(content='喜欢听邓丽君的歌', category='preference', source_session_id=sid, source_message_id=message['id'], source_quote='我喜欢听邓丽君的歌'), setup)
+    assert saved['memory']['owner'] == setup.owner_profile_id
+    next_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(next_sid, agent.MessageCreate(content='你还记得我喜欢什么吗？', companion_skills=['memory']), setup)
+    assert '喜欢听邓丽君的歌' in completion.call_args.args[2][0]['content']
+    agent.send(next_sid, agent.MessageCreate(content='继续', companion_skills=[]), setup)
+    assert '已确认的跨会话记忆' not in completion.call_args.args[2][0]['content']
+    other = UserContext('other', 'other-profile', 'other', 'token')
+    assert agent.memories(other)['memories'] == []
+    with pytest.raises(HTTPException):
+        agent.create_memory(agent.MemoryCreate(content='假记忆', source_session_id=sid, source_message_id=message['id'], source_quote='不存在的原文'), setup)
+    agent.delete_memory(saved['memory']['id'], setup)
+    assert agent.memories(setup)['memories'] == []
+
+
+def test_memory_candidate_requires_confirmation_and_source_deletion_removes_memory(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好呀'))
+    agent.send(sid, agent.MessageCreate(content='我喜欢下棋'), setup)
+    candidate = agent.extract_memories(setup)['candidates'][0]
+    assert candidate['content'] == '我喜欢下棋'
+    assert agent.memories(setup)['memories'] == []
+    saved = agent.create_memory(agent.MemoryCreate(**candidate), setup)['memory']
+    agent.patch_memory(saved['id'], agent.MemoryPatch(content='喜欢象棋'), setup)
+    assert agent.memories(setup)['memories'][0]['content'] == '喜欢象棋'
+    agent.delete_message(sid, candidate['source_message_id'], setup)
+    assert agent.memories(setup)['memories'] == []
 
 
 def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):

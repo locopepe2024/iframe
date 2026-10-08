@@ -7,7 +7,24 @@ import { usePlaygroundStore } from './usePlaygroundStore';
 vi.mock('@/lib/api', () => ({ agentRequest: vi.fn() }));
 afterEach(() => {
     vi.resetAllMocks();
+    window.localStorage.clear();
     usePlaygroundStore.setState({ prompt: '', inputMedia: [] });
+});
+
+it('sends only enabled companion skill IDs with a chat request', async () => {
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({ prompt: '今天心情不好' });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    act(() => hook.result.current.toggleCompanionSkill('listening'));
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        companion_skills: ['listening'],
+    })));
+    await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
 });
 
 const models = [{ id: 'sol', api_model_id: 'gpt-5.6-sol', display_name: 'GPT 5.6 Sol' }];
