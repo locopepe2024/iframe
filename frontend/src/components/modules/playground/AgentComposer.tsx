@@ -17,6 +17,7 @@ import {
   Volume2,
   Workflow,
   SlidersHorizontal,
+  HeartHandshake,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -29,14 +30,17 @@ import PromptInput from './PromptInput';
 import { getOutputType } from './ModeSelector';
 import { getModelDisplayInfo, usePlaygroundCatalogRevision } from './playgroundModels';
 import { usePlaygroundStore } from './usePlaygroundStore';
+import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
+import type { AgentMemory, MemoryCandidate } from './useAgentConversation';
+import VoiceTranscriptionButton from './VoiceTranscriptionButton';
 
-type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | ComposerControl | null;
+type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
 
 interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -81,6 +85,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   const modelId = usePlaygroundStore((state) => state.modelId);
   const parameters = usePlaygroundStore((state) => state.parameters);
   const prompt = usePlaygroundStore((state) => state.prompt);
+  const setPrompt = usePlaygroundStore((state) => state.setPrompt);
   usePlaygroundCatalogRevision();
   const setShowHistoryDrawer = usePlaygroundStore((state) => state.setShowHistoryDrawer);
   const setShowTemplateModal = usePlaygroundStore((state) => state.setShowTemplateModal);
@@ -97,7 +102,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   useEffect(() => { setActivePanel(null); }, [agent?.active]);
 
   const panelTitle = activePanel
-    ? activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
+    ? activePanel === 'companion' ? '陪护技能' : activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
     : '';
 
   const togglePanel = (panel: Exclude<ComposerPanel, null>) => {
@@ -142,6 +147,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
               activePanel === 'model' && 'max-w-[680px]',
               activePanel === 'reference' && 'max-w-[620px]',
               activePanel === 'resolution' && 'max-w-[520px]',
+              activePanel === 'companion' && 'max-w-[420px]',
               ['ratio', 'quality', 'method', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
             )}
           >
@@ -154,6 +160,23 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             {activePanel === 'reference' && (
               <MediaInput agentMode={agent?.active} />
             )}
+            {activePanel === 'companion' && (
+              <div className="space-y-3">
+                {COMPANION_SKILLS.map((skill) => (
+                  <label key={skill.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm text-foreground hover:bg-hover-bg">
+                    <input type="checkbox" checked={agent?.companionSkills?.includes(skill.id) ?? false} onChange={() => agent?.toggleCompanionSkill?.(skill.id)} className="h-4 w-4 accent-primary" />
+                    {skill.title}
+                  </label>
+                ))}
+                {agent?.companionSkills?.includes('memory') && <div className="border-t border-border-subtle pt-3">
+                  <div className="mb-2 flex items-center justify-between gap-3"><span className="text-xs font-medium text-foreground">已确认记忆</span><button type="button" onClick={agent.extractMemories} className="min-h-9 rounded-lg border border-glass-border px-2 text-xs text-text-secondary hover:text-primary">从历史提取候选</button></div>
+                  {agent.memoryCandidates?.map((candidate) => <div key={`${candidate.source_message_id}-${candidate.source_quote}`} className="mb-2 rounded-lg bg-surface-inset p-2 text-xs"><p>{candidate.content}</p><p className="mt-1 text-text-muted">来源：{candidate.source_quote}</p><button type="button" onClick={() => agent.saveMemory?.(candidate)} className="mt-2 min-h-8 rounded-md bg-primary/15 px-2 text-primary">确认保存</button></div>)}
+                  {agent.memories?.map((memory) => <div key={memory.id} className="mb-2 flex items-center gap-2 rounded-lg bg-surface-inset p-2 text-xs"><input aria-label="编辑记忆" defaultValue={memory.content} onBlur={(event) => { if (event.target.value.trim() && event.target.value !== memory.content) agent.editMemory?.(memory.id, event.target.value.trim()); }} className="min-w-0 flex-1 bg-transparent text-foreground outline-none focus:ring-1 focus:ring-primary" /><button type="button" onClick={() => agent.deleteMemory?.(memory.id)} className="min-h-8 px-2 text-text-muted hover:text-status-failed-fg">删除</button></div>)}
+                  {agent.memoryError && <p role="alert" className="text-xs text-status-failed-fg">{agent.memoryError}</p>}
+                </div>}
+                <p className="border-t border-border-subtle pt-3 text-xs leading-5 text-text-muted">只有确认保存的记忆会跨会话使用；真实闹钟提醒和媒体播放尚未接入。</p>
+              </div>
+            )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
               <ComposerControls control={activePanel as ComposerControl} />
             )}
@@ -161,6 +184,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
         )}
 
         <div className="px-4 pt-3 md:px-5 md:pt-4">
+          {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           <PromptInput
             onSubmit={handleSubmit}
             onOpenReferences={() => togglePanel('reference')}
@@ -181,6 +205,12 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={agent?.active ? (agent.models.find(m => m.api_model_id === agent.model)?.display_name || (agent.modelsLoading ? '加载模型中…' : agent.modelsError ? '模型加载失败' : t('agent.selectSku'))) : model?.displayName || modelId || t('agent.selectSku')}
             onClick={() => togglePanel('model')}
           />
+          {agent?.active && <ToolButton
+            active={activePanel === 'companion'}
+            icon={HeartHandshake}
+            label={`陪护技能${agent.companionSkills?.length ? ` ${agent.companionSkills.length}` : ''}`}
+            onClick={() => togglePanel('companion')}
+          />}
           {!agent?.active && <>
           <ToolButton
             active={activePanel === 'method'}
