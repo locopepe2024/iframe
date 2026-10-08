@@ -807,6 +807,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             created_at=time.time(),
         ))
         script.director_review_required = True
+        if script.episode_understanding:
+            script.episode_understanding.status = "stale"
+            script.episode_understanding.incoming_handoff = {}
+            script.episode_understanding.outgoing_handoff = {}
+            script.episode_understanding.source_refs = []
         return True
 
     def update_script_text(self, script_id: str, text: str) -> Script:
@@ -3985,12 +3990,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         # episode summary. Cross-episode handoffs are populated only by an
         # analysis that emits them; do not infer them from free-text fields.
         existing_handoff = script.episode_understanding
+        same_lineage = bool(
+            existing_handoff
+            and existing_handoff.status == "confirmed"
+            and existing_handoff.source_revision == script.source_revision
+            and existing_handoff.series_director_revision == (series_profile.revision if series_profile else None)
+            and existing_handoff.episode_director_revision == confirmed.revision
+            and existing_handoff.episode_summary == (confirmed.execution_summary or None)
+            and bool(existing_handoff.source_refs)
+            and bool(existing_handoff.incoming_handoff or existing_handoff.outgoing_handoff)
+        )
         script.episode_understanding = EpisodeUnderstandingHandoff(
-            status="confirmed",
+            status="confirmed" if same_lineage else "compatibility",
             episode_summary=confirmed.execution_summary or None,
-            incoming_handoff=(existing_handoff.incoming_handoff if existing_handoff else {}),
-            outgoing_handoff=(existing_handoff.outgoing_handoff if existing_handoff else {}),
-            source_refs=(existing_handoff.source_refs if existing_handoff else []),
+            incoming_handoff=(existing_handoff.incoming_handoff if same_lineage else {}),
+            outgoing_handoff=(existing_handoff.outgoing_handoff if same_lineage else {}),
+            source_refs=(existing_handoff.source_refs if same_lineage else []),
+            source_revision=script.source_revision,
             series_director_revision=(series_profile.revision if series_profile else None),
             episode_director_revision=confirmed.revision,
             generated_at=confirmed.confirmed_at,

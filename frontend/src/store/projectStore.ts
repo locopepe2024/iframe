@@ -261,11 +261,12 @@ export interface DirectorProfile {
 }
 
 export interface EpisodeUnderstandingHandoff {
-    status: "not_generated" | "draft" | "confirmed" | "stale";
+    status: "not_generated" | "draft" | "compatibility" | "confirmed" | "stale";
     episode_summary?: string | null;
     incoming_handoff?: Record<string, unknown>;
     outgoing_handoff?: Record<string, unknown>;
     source_refs?: string[];
+    source_revision?: number | null;
     series_director_revision?: number | null;
     episode_director_revision?: number | null;
     generated_at?: number | null;

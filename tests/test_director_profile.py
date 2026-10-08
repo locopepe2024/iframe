@@ -12,6 +12,7 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    EpisodeUnderstandingHandoff,
     DirectorStoryMap,
     DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
@@ -1233,6 +1234,55 @@ def test_apply_director_profile_archives_only_changed_confirmations():
     assert len(changed.director_profile_revisions) == 2
     assert [item.revision for item in changed.director_profile_revisions] == [1, 2]
     assert changed.director_profile_revisions[-1].profile.pacing == changed_draft["pacing"]
+
+
+def test_episode_director_confirmation_marks_legacy_summary_as_compatibility():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "execution_summary": "本集核心事件"}
+
+    confirmed = pipeline.apply_director_profile("film", draft)
+    understanding = confirmed.episode_understanding
+    assert understanding.status == "compatibility"
+    assert understanding.episode_summary.startswith("本集核心事件")
+    assert understanding.episode_summary == confirmed.art_direction.director_profile.execution_summary
+    assert understanding.source_revision == script.source_revision
+    assert understanding.episode_director_revision == 1
+    assert understanding.incoming_handoff == {}
+    assert understanding.outgoing_handoff == {}
+
+
+def test_episode_director_reconfirmation_preserves_only_matching_analyzed_handoff():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "execution_summary": "本集核心事件"}
+    first = pipeline.apply_director_profile("film", draft)
+    script.episode_understanding = EpisodeUnderstandingHandoff(
+        status="confirmed", episode_summary=first.episode_understanding.episode_summary,
+        source_revision=script.source_revision, episode_director_revision=1,
+        source_refs=["episode:film:r1:0-5"], outgoing_handoff={"state": "离开村庄"},
+    )
+
+    same = pipeline.apply_director_profile("film", draft).episode_understanding
+    assert same.status == "confirmed"
+    assert same.outgoing_handoff == {"state": "离开村庄"}
+
+    revised = pipeline.apply_director_profile("film", {**draft, "pacing": "加快"}).episode_understanding
+    assert revised.status == "compatibility"
+    assert revised.outgoing_handoff == {}
+    assert revised.source_refs == []
+
+
+def test_source_change_stales_and_clears_episode_handoff():
+    pipeline, script = make_pipeline()
+    script.episode_understanding = EpisodeUnderstandingHandoff(
+        status="confirmed", episode_summary="旧摘要", source_revision=1,
+        episode_director_revision=1, source_refs=["old"],
+        incoming_handoff={"state": "旧状态"},
+    )
+
+    pipeline.update_script_text("film", "场景21至45")
+    assert script.episode_understanding.status == "stale"
+    assert script.episode_understanding.incoming_handoff == {}
+    assert script.episode_understanding.source_refs == []
 
 
 def test_episode_director_profile_keeps_series_visual_style_live():

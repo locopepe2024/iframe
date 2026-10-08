@@ -1083,6 +1083,8 @@
     "episodeSummary": "Episode Summary",
     "understandingNotReady": "Not generated",
     "understandingConfirmed": "Adopted",
+    "understandingCompatibility": "Adopted · Compatibility summary",
+    "understandingStale": "Source changed · Review required",
     "handoffReady": "Handed off",
     "seriesContextNotReady": "Series understanding has not been adopted yet. Open the editor to view the episode source.",
     "episodeSummaryNotReady": "Episode Director understanding has not been generated. Open the editor to view the episode source.",

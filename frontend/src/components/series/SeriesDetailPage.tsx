@@ -542,6 +542,10 @@ function EpisodeContentPanel({
   const seriesDirector = series?.art_direction?.director_profile;
   const episodeDirector = episode.art_direction?.director_profile;
   const handoff = episode.episode_understanding;
+  const handoffCurrent = !!handoff && handoff.status !== "stale"
+    && handoff.source_revision === episode.source_revision
+    && handoff.series_director_revision === (seriesDirector?.revision ?? null)
+    && handoff.episode_director_revision === (episodeDirector?.revision ?? null);
   const episodeSummary = handoff?.episode_summary || episodeDirector?.execution_summary
     || (typeof episodeDirector?.setting?.story_summary === "string" ? episodeDirector.setting.story_summary : "");
   const contextSummary = seriesDirector?.execution_summary
@@ -589,24 +593,24 @@ function EpisodeContentPanel({
           <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground">{t("seriesContext")}</h3>
-              <span className="text-[0.6875rem] text-text-muted">{handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 ? t("handoffReady") : seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
+              <span className="text-[0.6875rem] text-text-muted">{handoffCurrent && handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 ? t("handoffReady") : seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
             </div>
             <p className="text-xs leading-relaxed text-text-secondary">
               {contextSummary || t("seriesContextNotReady")}
             </p>
-            {handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 && (
+            {handoffCurrent && handoff?.incoming_handoff && Object.keys(handoff.incoming_handoff).length > 0 && (
               <p className="text-[0.6875rem] leading-5 text-text-muted">{JSON.stringify(handoff.incoming_handoff)}</p>
             )}
           </div>
           <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground">{t("episodeSummary")}</h3>
-              <span className="text-[0.6875rem] text-text-muted">{handoff?.status === "confirmed" ? t("understandingConfirmed") : episodeDirector ? `r${episodeDirector.revision}` : t("understandingNotReady")}</span>
+              <span className="text-[0.6875rem] text-text-muted">{handoff && !handoffCurrent ? t("understandingStale") : handoff?.status === "confirmed" ? t("understandingConfirmed") : episodeDirector ? t("understandingCompatibility") : t("understandingNotReady")}</span>
             </div>
             <p className="text-xs leading-relaxed text-text-secondary">
               {episodeSummary || t("episodeSummaryNotReady")}
             </p>
-            {handoff?.outgoing_handoff && Object.keys(handoff.outgoing_handoff).length > 0 && (
+            {handoffCurrent && handoff?.outgoing_handoff && Object.keys(handoff.outgoing_handoff).length > 0 && (
               <p className="text-[0.6875rem] leading-5 text-text-muted">{JSON.stringify(handoff.outgoing_handoff)}</p>
             )}
           </div>

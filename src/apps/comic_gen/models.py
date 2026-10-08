@@ -2592,11 +2592,12 @@ class EpisodeUnderstandingHandoff(BaseModel):
     Episode Director understanding.
     """
 
-    status: Literal["not_generated", "draft", "confirmed", "stale"] = "not_generated"
+    status: Literal["not_generated", "draft", "compatibility", "confirmed", "stale"] = "not_generated"
     episode_summary: Optional[str] = None
     incoming_handoff: Dict[str, Any] = Field(default_factory=dict)
     outgoing_handoff: Dict[str, Any] = Field(default_factory=dict)
     source_refs: List[str] = Field(default_factory=list)
+    source_revision: Optional[int] = Field(None, ge=1)
     series_director_revision: Optional[int] = Field(None, ge=1)
     episode_director_revision: Optional[int] = Field(None, ge=1)
     generated_at: Optional[float] = None

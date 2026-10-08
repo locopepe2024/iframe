@@ -8,7 +8,7 @@
 - 当前全剧分析把投稿前言与各集正文拼接输入；全剧 `story_map` 在归一化后被清空。全剧页面仍以 JSON 文本框审阅草稿，不能证明逐集事件、来源范围和跨集状态覆盖。
 - 单集 Director 已有可视编辑、草稿与已采用 revision；本集分析可读取已采用的 Series Director 作为只读背景。Series revision 变化会提示本集复核。
 - 系列分集概览曾因 `original_text` 未映射到 `originalText` 误显示“暂未添加剧本内容”；该字段映射已修复。概览不再把原文前 300 字称为剧本概要。
-- 已新增可选的 `Script.episode_understanding` 契约。采用本集 Director 后写入 `confirmed` 状态、`episode_summary` 和 Series/Episode revision；未产生真实分析的 `incoming_handoff`、`outgoing_handoff` 保持空值。
+- 已新增可选的 `Script.episode_understanding` 契约。采用本集 Director 后写入 `compatibility` 状态、兼容摘要及剧本/Series/Episode revision；未产生真实分析的 `incoming_handoff`、`outgoing_handoff` 保持空值。来源变更会标记 `stale`；旧 handoff 只有来源和 Director lineage 完全匹配时才保留。
 
 ## Direct implication
 
