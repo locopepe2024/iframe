@@ -1,5 +1,6 @@
 """Authenticated UniArt chat; generation remains an explicit Playground action."""
 import json
+import re
 import os
 import sqlite3
 import time
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from .identity import UserContext, require_user_context
 from .user_config import get_user_config_store
-from .agent_skills import router as skills_router, creative_guidance
+from .agent_skills import router as skills_router, creative_guidance, catalog as skill_catalog
 from ..utils.uniart_catalog import normalize_uniart_catalog
 from ..utils.reference_files import AUDIO_EXTENSIONS, TEXT_EXTENSIONS, chat_audio, read_reference_text
 from .media_reference import normalize_managed_media_reference
@@ -86,6 +87,58 @@ class MessageCreate(BaseModel):
     context: str = Field(default="")
     duration: int = Field(default=5, ge=4, le=15)
     ratio: str = Field(default="16:9", min_length=3, max_length=16)
+
+
+class CharacterDesignRequest(BaseModel):
+    model: str
+    character_name: str = Field(min_length=1, max_length=200)
+    profile: str = Field(min_length=1, max_length=12000)
+    route: str
+    age_stage: str = ""
+    style: str = Field(default="", max_length=4000)
+    confirmed_design: str = Field(default="", max_length=4000)
+
+
+@router.post("/character-design/draft")
+def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
+    if body.route not in allowed_routes:
+        raise HTTPException(422, "不支持的角色设计路由")
+    packages = {item["id"]: item for item in skill_catalog()}
+    identity_skill = packages["character-identity-design"]
+    route_skill = packages["character-style-routes"]
+    system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
+              + "\n\n只返回 JSON 对象：identity.visual_notes、look.visual_notes、unresolved（字符串数组）。"
+              + "每段具体视觉值要可观察。不得把角色性格、镜头动作或通用质量词写入视觉值。"
+              + "所有模型补充的具体外貌只能标为创意设计选择，不能称为剧本事实。")
+    user = json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)
+    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+    try:
+        match = re.search(r"\{[\s\S]*\}", answer)
+        result = json.loads(match.group(0) if match else answer)
+        identity = result.get("identity") or {}
+        look = result.get("look") or {}
+        if not isinstance(identity, dict) or not isinstance(look, dict):
+            raise ValueError("Invalid design sections")
+        identity_notes = identity.get("visual_notes")
+        look_notes = look.get("visual_notes")
+        if not isinstance(identity_notes, str) or not identity_notes.strip():
+            raise ValueError("Missing concrete identity design")
+        if not isinstance(look_notes, str):
+            look_notes = ""
+        unresolved = result.get("unresolved") or []
+        if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+            raise ValueError("Invalid unresolved list")
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
+    return {
+        "identity": {"visual_notes": identity_notes.strip()},
+        "look": {"visual_notes": look_notes.strip()},
+        "unresolved": unresolved,
+        "skill_revision": route_skill["revision"],
+        "identity_skill_revision": identity_skill["revision"],
+    }
 
 
 def catalog(ctx):

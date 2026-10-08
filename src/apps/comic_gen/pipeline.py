@@ -2160,6 +2160,25 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
 
+        if "character_design" in attributes:
+            if asset_type != "character":
+                raise ValueError("Character design can only be saved for a character")
+            design = attributes["character_design"]
+            if not isinstance(design, dict):
+                raise ValueError("Character design must be an object")
+            notes = design.get("identity", {}).get("visual_notes") if isinstance(design.get("identity"), dict) else None
+            if design.get("confirmed") and (not isinstance(notes, str) or not notes.strip()):
+                raise ValueError("Confirm a concrete visual design before saving a revision")
+            character_design = dict(target_asset.character_design or {})
+            character_design["design_draft"] = design
+            if design.get("confirmed"):
+                revisions = list(character_design.get("design_revisions") or [])
+                confirmed = {key: value for key, value in design.items() if key != "confirmed"}
+                revisions.append({"revision": len(revisions) + 1, "design": confirmed})
+                character_design["design_revisions"] = revisions
+            target_asset.character_design = character_design
+            attributes = {key: value for key, value in attributes.items() if key != "character_design"}
+
         # Update attributes
         for key, value in attributes.items():
             if hasattr(target_asset, key):

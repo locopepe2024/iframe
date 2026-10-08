@@ -16,7 +16,7 @@ def ctx(tmp_path, monkeypatch):
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 7
+    assert len(packages) == len({p['id'] for p in packages}) == 8
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -32,6 +32,50 @@ def test_h3_skill_keeps_ethnicity_skin_tone_and_skin_condition_independent():
     assert '单数人物定义只建立一个人物身份' in instructions
     assert '它本身不等于活动性痤疮，也不等于大面积重度凹坑' in instructions
     assert 'No skin smoothing, beauty filter, airbrushing, skin lightening, or skin darkening.' in instructions
+
+
+def test_character_identity_skill_designs_fields_before_prompt_compilation():
+    package = next(p for p in skills.catalog() if p['id'] == 'character-identity-design')
+    assert package['version'] == '1.1.0'
+    assert '角色档案' in package['instructions']
+    assert '`identity`' in package['instructions']
+    assert '`look`' in package['instructions']
+    assert '`unresolved`' in package['instructions']
+    assert '用户确认后，由项目角色资产保存设计 revision' in package['instructions']
+    assert '不要把创意选择写成剧本事实' in package['instructions']
+
+
+def test_character_style_routes_keep_confirmation_and_anchor_rules():
+    package = next(p for p in skills.catalog() if p['id'] == 'character-style-routes')
+    assert package['version'] == '1.0.0'
+    assert 'stated' in package['instructions']
+    assert 'inferred' in package['instructions']
+    assert '用户选定的正面身份图' in package['instructions']
+    assert 'design_revision' in package['instructions']
+    assert '不能覆盖历史图片' in package['instructions']
+
+
+def test_character_design_draft_uses_curated_skills_without_saving(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"深棕眼，黑发束起"},"look":{"visual_notes":"黑色劲装"},"unresolved":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客，沉静', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '深棕眼，黑发束起'
+    assert len(result['skill_revision']) == 64
+    system = complete.call_args.args[2][0]['content']
+    assert 'Character identity design skill' in system
+    assert 'Character style routes' in system
+    assert result['look']['visual_notes'] == '黑色劲装'
+
+
+def test_character_design_draft_rejects_incomplete_model_result(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{},"look":{}}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    with pytest.raises(HTTPException) as exc:
+        agent.character_design_draft(body, ctx)
+    assert exc.value.status_code == 502
 
 
 def test_install_update_toggle_uninstall_owner_isolation(ctx, monkeypatch):

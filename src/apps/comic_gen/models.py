@@ -458,6 +458,10 @@ class Character(BaseModel):
         default_factory=dict,
         description="Structured digital-avatar identity, look variants, continuity locks and review state",
     )
+    character_design: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Project character workbench visual design draft and confirmed revisions",
+    )
     
     # === R2V v2 Phase 5: Unified reference sheet ===
     # Single master sheet (multi-view or single portrait both OK) replaces
