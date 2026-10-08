@@ -23,6 +23,7 @@ from .models import (
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
+    EpisodeUnderstandingHandoff,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
     DirectorPlanSceneBinding,
@@ -3980,6 +3981,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         )
         series_profile = self.effective_series_director_profile(script.series_id) if script.series_id else None
         script.director_series_revision = (series_profile.revision if series_profile else 0) if script.series_id else None
+        # The confirmed profile is the authoritative source for the bounded
+        # episode summary. Cross-episode handoffs are populated only by an
+        # analysis that emits them; do not infer them from free-text fields.
+        existing_handoff = script.episode_understanding
+        script.episode_understanding = EpisodeUnderstandingHandoff(
+            status="confirmed",
+            episode_summary=confirmed.execution_summary or None,
+            incoming_handoff=(existing_handoff.incoming_handoff if existing_handoff else {}),
+            outgoing_handoff=(existing_handoff.outgoing_handoff if existing_handoff else {}),
+            source_refs=(existing_handoff.source_refs if existing_handoff else []),
+            series_director_revision=(series_profile.revision if series_profile else None),
+            episode_director_revision=confirmed.revision,
+            generated_at=confirmed.confirmed_at,
+        )
         changed = not current or current.content_hash != content_hash
         if changed:
             # Keep the active profile as the compatibility read model, while
