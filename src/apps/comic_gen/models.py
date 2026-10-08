@@ -1759,6 +1759,42 @@ def build_director_execution_summary(profile: Dict[str, Any]) -> str:
     )
 
 
+def build_episode_readable_summary(profile: "DirectorProfile | Dict[str, Any]") -> Optional[str]:
+    """Project confirmed story events for readers without execution-only fields."""
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else profile
+    events = []
+    def event_order(item: Any) -> int:
+        value = item.get("order", 0) if isinstance(item, dict) else 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    story_map = raw.get("story_map") or {}
+    if isinstance(story_map, dict):
+        for phase in sorted(story_map.get("phases") or [], key=event_order):
+            for event in sorted(phase.get("events") or [], key=event_order):
+                if isinstance(event, dict):
+                    events.append(event.get("description") or event.get("title"))
+    if not events:
+        for item in sorted(raw.get("timeline") or [], key=event_order):
+            if isinstance(item, dict):
+                events.append(next((item[key] for key in ("event", "description", "change", "summary")
+                                    if isinstance(item.get(key), str) and item[key].strip()), None))
+    if not events:
+        for item in raw.get("key_events") or []:
+            if isinstance(item, dict):
+                events.append(next((item[key] for key in ("event", "description", "summary", "function")
+                                    if isinstance(item.get(key), str) and item[key].strip()), None))
+    sentences = [value.strip().rstrip("。.!！") for value in events if isinstance(value, str) and value.strip()]
+    if not sentences:
+        return None
+    setting = raw.get("setting") or {}
+    setting = setting if isinstance(setting, dict) else {}
+    time_place = [setting.get(key, "") for key in ("season_time", "primary_location")]
+    context = "，".join(value.strip() for value in time_place if isinstance(value, str) and value.strip())
+    return (f"{context}。" if context else "") + "。".join(sentences) + "。"
+
+
 def _director_first_text(item: Dict[str, Any], keys: tuple[str, ...]) -> str:
     """Return the first non-empty scalar value from a scene-memory item."""
     for key in keys:

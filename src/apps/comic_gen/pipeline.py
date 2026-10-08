@@ -42,6 +42,7 @@ from .models import (
     ScriptFactLedgerRevision,
     AssemblyEditPlan,
     director_execution_payload,
+    build_episode_readable_summary,
     GlobalAssetLibrary,
     AssetLibraryReference,
     AssetReferenceIndex,
@@ -3989,6 +3990,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # The confirmed profile is the authoritative source for the bounded
         # episode summary. Cross-episode handoffs are populated only by an
         # analysis that emits them; do not infer them from free-text fields.
+        readable_summary = build_episode_readable_summary(confirmed)
         existing_handoff = script.episode_understanding
         same_lineage = bool(
             existing_handoff
@@ -3996,13 +3998,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             and existing_handoff.source_revision == script.source_revision
             and existing_handoff.series_director_revision == (series_profile.revision if series_profile else None)
             and existing_handoff.episode_director_revision == confirmed.revision
-            and existing_handoff.episode_summary == (confirmed.execution_summary or None)
+            and existing_handoff.episode_summary == readable_summary
             and bool(existing_handoff.source_refs)
             and bool(existing_handoff.incoming_handoff or existing_handoff.outgoing_handoff)
         )
         script.episode_understanding = EpisodeUnderstandingHandoff(
             status="confirmed" if same_lineage else "compatibility",
-            episode_summary=confirmed.execution_summary or None,
+            episode_summary=readable_summary,
             incoming_handoff=(existing_handoff.incoming_handoff if same_lineage else {}),
             outgoing_handoff=(existing_handoff.outgoing_handoff if same_lineage else {}),
             source_refs=(existing_handoff.source_refs if same_lineage else []),

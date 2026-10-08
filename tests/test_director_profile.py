@@ -12,6 +12,7 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    build_episode_readable_summary,
     EpisodeUnderstandingHandoff,
     DirectorStoryMap,
     DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS,
@@ -1243,12 +1244,27 @@ def test_episode_director_confirmation_marks_legacy_summary_as_compatibility():
     confirmed = pipeline.apply_director_profile("film", draft)
     understanding = confirmed.episode_understanding
     assert understanding.status == "compatibility"
-    assert understanding.episode_summary.startswith("本集核心事件")
-    assert understanding.episode_summary == confirmed.art_direction.director_profile.execution_summary
+    assert understanding.episode_summary == "异地开始。"
+    assert "CURRENT_DIRECTOR_EDITS" in confirmed.art_direction.director_profile.execution_summary
     assert understanding.source_revision == script.source_revision
     assert understanding.episode_director_revision == 1
     assert understanding.incoming_handoff == {}
     assert understanding.outgoing_handoff == {}
+
+
+def test_episode_readable_summary_projects_ordered_story_events_without_execution_metadata():
+    profile = {
+        "execution_summary": "真人动漫。\nCURRENT_DIRECTOR_EDITS: GUARDRAILS: {\"prohibitions\": []}",
+        "setting": {"season_time": "暮秋残阳", "primary_location": "青溪镇长街"},
+        "timeline": [
+            {"order": 2, "event": "苏砚出手制服匪寇", "source_ref": "scene-2"},
+            {"order": 1, "event": "粮铺遭劫", "source_ref": "scene-1"},
+        ],
+    }
+    summary = build_episode_readable_summary(profile)
+    assert summary == "暮秋残阳，青溪镇长街。粮铺遭劫。苏砚出手制服匪寇。"
+    assert "CURRENT_DIRECTOR_EDITS" not in summary
+    assert "GUARDRAILS" not in summary
 
 
 def test_episode_director_reconfirmation_preserves_only_matching_analyzed_handoff():
