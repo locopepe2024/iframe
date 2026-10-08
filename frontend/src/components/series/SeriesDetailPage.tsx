@@ -249,6 +249,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
             <EpisodeContentPanel
               key={`episode-${selectedEpisode.id}`}
               episode={selectedEpisode}
+              series={series}
               seriesId={seriesId}
               onOpenEditor={() => handleOpenEpisode(selectedEpisode.id)}
             />
@@ -524,10 +525,12 @@ function AssetContentPanel({
 
 function EpisodeContentPanel({
   episode,
+  series,
   seriesId,
   onOpenEditor,
 }: {
   episode: Project;
+  series: Series | null;
   seriesId: string;
   onOpenEditor: () => void;
 }) {
@@ -536,7 +539,12 @@ function EpisodeContentPanel({
   const frames = episode.frames || [];
   const characters = episode.characters || [];
   const scenes = episode.scenes || [];
-  const originalText = episode.originalText || "";
+  const seriesDirector = series?.art_direction?.director_profile;
+  const episodeDirector = episode.art_direction?.director_profile;
+  const episodeSummary = episodeDirector?.execution_summary
+    || (typeof episodeDirector?.setting?.story_summary === "string" ? episodeDirector.setting.story_summary : "");
+  const contextSummary = seriesDirector?.execution_summary
+    || (typeof seriesDirector?.setting?.premise === "string" ? seriesDirector.setting.premise : "");
 
   return (
     <motion.div
@@ -575,16 +583,26 @@ function EpisodeContentPanel({
 
       {/* Episode Overview */}
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-        {/* Script Summary */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">{t("scriptSummary")}</h3>
-          {originalText ? (
-            <p className="text-xs text-text-secondary leading-relaxed line-clamp-4 bg-surface rounded-lg p-3 border border-glass-border">
-              {originalText.slice(0, 300)}{originalText.length > 300 ? "..." : ""}
+        {/* Director understanding handoff. The source text remains in the editor. */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-foreground">{t("seriesContext")}</h3>
+              <span className="text-[0.6875rem] text-text-muted">{seriesDirector ? `r${seriesDirector.revision}` : t("understandingNotReady")}</span>
+            </div>
+            <p className="text-xs leading-relaxed text-text-secondary">
+              {contextSummary || t("seriesContextNotReady")}
             </p>
-          ) : (
-            <p className="text-xs text-text-muted italic">{t("noScript")}</p>
-          )}
+          </div>
+          <div className="space-y-2 rounded-lg border border-glass-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-foreground">{t("episodeSummary")}</h3>
+              <span className="text-[0.6875rem] text-text-muted">{episodeDirector ? `r${episodeDirector.revision}` : t("understandingNotReady")}</span>
+            </div>
+            <p className="text-xs leading-relaxed text-text-secondary">
+              {episodeSummary || t("episodeSummaryNotReady")}
+            </p>
+          </div>
         </div>
 
         {/* Storyboard Overview */}

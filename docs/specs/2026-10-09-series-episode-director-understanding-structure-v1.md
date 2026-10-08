@@ -86,6 +86,18 @@ Series 的 `scene_summaries` 只能是跨集索引或宏观叙事阶段摘要；
 7. `director_interpretation`：表演、节奏、镜头、声音及可选导演补充；新增内容标为解释或用户要求。
 8. `review_findings`：与已采用 Series 上下文冲突、原文矛盾、身份歧义或证据不足的项目。
 
+### Episode 概览与上下文交接
+
+`chunk` 是传输、计算和来源定位单位，不是面向创作者的概览单位。系列页不得直接把 chunk 列表或原文截断片段称为“本集概要”。本集概览由 Episode Director 产物投影，固定分为：
+
+1. `incoming_handoff`：上一集已采用的结束状态；第一集使用全剧初始状态。包含人物目标/认知、关系、道具/伤势、时间地点和待解决线索。
+2. `episode_summary`：本集核心冲突、主要事件、人物变化、故事线推进和开放问题；每项引用本集事件与 source refs。
+3. `outgoing_handoff`：本集结束后传给下一集的状态和连续性约束；最后一集仍保留为全剧开放结尾。
+
+系列层的 `series_context`（世界规则、全剧主线、跨集人物与故事线）作为只读背景显示，不替代 `incoming_handoff`。原文只通过“进入编辑器/查看原文”访问。未生成理解产物时，界面显示“尚未生成”，不引导用户重复添加已有剧本。
+
+当前兼容投影可以从 `DirectorProfile.execution_summary` 和有限的 `setting` 字段填充摘要，但必须标记为兼容内容；在 `episode_summary/incoming_handoff/outgoing_handoff` 落地前，不得宣称已完成跨集交接分析。
+
 已采用 Series 内容仅作只读约束和索引，不复制成当前集 `timeline`/`story_map` 事实。单集明确出现但与 Series 草稿不同的事实，先保留本集证据并形成冲突 finding；不自动修改全剧或其他集。
 
 ## 6. 长文本处理与请求准入
