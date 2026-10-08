@@ -9,12 +9,13 @@
     "height": 854
   },
   "selection_status": "provisional_visual_samples_not_manual_pose_labels",
+  "user_review_note": "User reports contact-sheet items 4 and 5 (source frames 112 and 135) remain visually identifiable in both original and enhanced views; this is a visibility judgment, not per-joint ground truth.",
   "frames": [
     {"index": 0, "seconds": 0.0, "visual_phase": "standing_start"},
     {"index": 45, "seconds": 1.5, "visual_phase": "low_wide_stance"},
     {"index": 89, "seconds": 2.966667, "visual_phase": "overhead_swing_setup"},
-    {"index": 112, "seconds": 3.733333, "visual_phase": "turning_transition", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [108, 116]},
-    {"index": 135, "seconds": 4.5, "visual_phase": "first_aerial_phase", "review_status": "leg_joints_uncertain_against_dark_sky", "adjacent_candidates": [131, 139]},
+    {"index": 112, "seconds": 3.733333, "visual_phase": "turning_transition", "review_status": "leg_visibility_needs_confirmation", "adjacent_candidates": [108, 116], "user_review_status": "visually_identifiable_but_not_joint_ground_truth"},
+    {"index": 135, "seconds": 4.5, "visual_phase": "first_aerial_phase", "review_status": "leg_joints_uncertain_against_dark_sky", "adjacent_candidates": [131, 139], "user_review_status": "visually_identifiable_but_not_joint_ground_truth"},
     {"index": 150, "seconds": 5.0, "visual_phase": "first_descent"},
     {"index": 165, "seconds": 5.5, "visual_phase": "low_recovery"},
     {"index": 300, "seconds": 10.0, "visual_phase": "later_lunge"},
