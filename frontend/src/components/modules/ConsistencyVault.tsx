@@ -251,7 +251,7 @@ export default function ConsistencyVault() {
                     await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId);
                 } catch (error) {
                     const detail = (error as any)?.response?.data?.detail;
-                    if (detail?.error !== "series_asset_in_use" || !confirm("该资产仍被分集引用。删除并解除这些引用？")) throw error;
+                    if (detail?.error !== "series_asset_in_use" || !confirm("该资产仍被分集引用。强制删除将解除当前分镜和资产绑定；已确认拍摄计划的历史 ID 会保留，需在新版本中重新关联。继续删除？")) throw error;
                     await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId, true);
                 }
             } else if (type === "character") {
@@ -268,7 +268,7 @@ export default function ConsistencyVault() {
             console.error("Failed to delete asset:", error);
             const detail = (error as any)?.response?.data?.detail;
             alert(detail?.error === "series_asset_in_use"
-                ? "该资产仍被分集镜头或资产绑定引用，请先解除引用。"
+                ? "资产仍被分集引用，删除未完成。请刷新后重试或检查引用。"
                 : extractErrorDetail(error, "Failed to delete asset"));
         }
     };

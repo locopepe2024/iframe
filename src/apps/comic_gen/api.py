@@ -1238,7 +1238,7 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
     except LibraryAssetInUseError as exc:
         raise HTTPException(status_code=409, detail={
             "error": "series_asset_in_use",
-            "message": "Asset is referenced by an episode; remove its references before deleting it.",
+            "message": "Asset is referenced by an episode. Force deletion removes current frame and asset bindings; confirmed shooting plan history retains its original IDs.",
             "references": exc.references,
         }) from exc
     except ValueError as exc:

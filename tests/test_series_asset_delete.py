@@ -50,7 +50,7 @@ def test_force_delete_removes_episode_references():
     pipeline._save_data.assert_called_once()
 
 
-def test_confirmed_shooting_plan_references_block_delete_even_with_force():
+def test_confirmed_shooting_plan_references_require_force_and_survive_deletion():
     pipeline, series, episode = make_pipeline()
     series.scenes.append(Scene(id="scene-shared", name="Room", description="Room"))
     series.props.append(Prop(id="prop-shared", name="Key", description="Key"))
@@ -72,13 +72,19 @@ def test_confirmed_shooting_plan_references_block_delete_even_with_force():
         DirectorShootingPlanRevision(revision=3, content_hash="old", plan=plan, confirmed_at=1),
         DirectorShootingPlanRevision(revision=4, content_hash="new", plan=plan.model_copy(update={"scenes": []}), confirmed_at=2),
     ]
+    original_plan = plan.model_copy(deep=True)
 
-    for force in (False, True):
-        for asset_type, asset_id in (("character", "shared"), ("scene", "scene-shared"), ("prop", "prop-shared")):
-            with pytest.raises(LibraryAssetInUseError) as exc_info:
-                pipeline.delete_series_asset(series.id, asset_type, asset_id, force=force)
-            assert any(ref.get("revision") == 3 for ref in exc_info.value.references)
+    for asset_type, asset_id in (("character", "shared"), ("scene", "scene-shared"), ("prop", "prop-shared")):
+        with pytest.raises(LibraryAssetInUseError) as exc_info:
+            pipeline.delete_series_asset(series.id, asset_type, asset_id)
+        assert any(ref.get("revision") == 3 for ref in exc_info.value.references)
 
-    assert [item.id for item in series.characters] == ["shared"]
-    assert [item.id for item in series.scenes] == ["scene-shared"]
-    assert [item.id for item in series.props] == ["prop-shared"]
+    pipeline._save_data = Mock()
+    for asset_type, asset_id in (("character", "shared"), ("scene", "scene-shared"), ("prop", "prop-shared")):
+        pipeline.delete_series_asset(series.id, asset_type, asset_id, force=True)
+
+    assert series.characters == []
+    assert series.scenes == []
+    assert series.props == []
+    assert episode.director_shooting_plan_revisions[0].plan == original_plan
+    assert pipeline._save_series_data_unlocked.call_count == 3

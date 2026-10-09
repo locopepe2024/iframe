@@ -8131,9 +8131,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                             owner_profile_id: Optional[str] = None, force: bool = False) -> None:
         """Delete a shared asset while preserving confirmed shooting-plan references.
 
-        Confirmed plan revisions are immutable history, so ``force`` may remove
-        storyboard/current-binding references but must never leave a confirmed
-        plan pointing at a deleted asset.
+        Confirmed plan revisions are immutable history. ``force`` removes
+        current storyboard/binding references while retaining historical plan
+        IDs for later explicit replacement in a new revision.
         """
         collections = {"character": "characters", "scene": "scenes", "prop": "props"}
         if asset_type not in collections:
@@ -8190,7 +8190,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                                                                 "owner_title": episode.title, "revision": revision.revision,
                                                                 "plan_path": f"shot:{shot.shot_id}.prop_ids"})
             references.extend(plan_references)
-            if references and (not force or plan_references):
+            if references and not force:
                 raise LibraryAssetInUseError(asset_type, asset_id, references)
             if references:
                 for episode in self.get_series_episodes(series_id):
