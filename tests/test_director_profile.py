@@ -1659,6 +1659,47 @@ def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
     assert refs == [chunk["source_ref"] for chunk in split_director_source(source)]
 
 
+def test_long_director_source_reduces_many_chunks_without_losing_audit_ranges():
+    from contextvars import ContextVar
+
+    request_owner = ContextVar("test_director_reduce_owner", default=None)
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+    source = "".join(f"第{i}段：人物经历转折并留下线索。\n" for i in range(26000))
+    chunks = split_director_source(source)
+    assert len(chunks) > 50
+    seen_owners = []
+
+    def chat_side_effect(**kwargs):
+        seen_owners.append(request_owner.get())
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_note_batch>" in prompt:
+            return json.dumps({"summary": "连续事件与人物关系变化", "continuity_in": "此前线索未解", "continuity_out": "新的线索出现"}, ensure_ascii=False)
+        return json.dumps({"summary": "本段事件与关系变化", "continuity_in": "此前线索未解", "continuity_out": "新的线索出现"}, ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    token = request_owner.set("owner-a")
+    try:
+        digest = processor._director_source_digest(source)
+    finally:
+        request_owner.reset(token)
+    payload = json.loads(digest.removeprefix("<source_digest>").removesuffix("</source_digest>"))
+    audit = processor._last_director_source_audit
+    assert len(payload["chunk_summaries"]) < len(chunks)
+    assert len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))) <= 3000
+    assert audit["reduction_rounds"] >= 1
+    assert seen_owners and all(owner == "owner-a" for owner in seen_owners)
+    assert len(audit["chunk_ranges"]) == len(chunks)
+    assert len(audit["mapped_notes"]) == len(chunks)
+    assert payload["chunk_summaries"][0]["char_start"] == 0
+    assert payload["chunk_summaries"][-1]["char_end"] == len(source)
+    call_count = processor.llm.chat.call_count
+    assert processor._director_source_digest(source) == digest
+    assert processor.llm.chat.call_count == call_count
+    assert len(processor._last_director_source_audit["chunk_ranges"]) == len(chunks)
+
+
 def test_long_director_source_propagates_request_context_to_map_workers(monkeypatch):
     from contextvars import ContextVar
 
