@@ -7,6 +7,28 @@ export interface AssetPlanEntry {
     prompt: string;
 }
 
+export interface UnboundCharacterRequirement {
+    personId: string;
+    sceneIds: string[];
+    shotIds: string[];
+    lookCount: number;
+}
+
+export function getUnboundCharacterRequirements(context: EpisodeVisualContext | null): UnboundCharacterRequirement[] {
+    const people = new Map<string, UnboundCharacterRequirement>();
+    for (const character of context?.characters ?? []) {
+        if (character.character_asset_ids.length) continue;
+        const item = people.get(character.person_id) ?? {
+            personId: character.person_id, sceneIds: [], shotIds: [], lookCount: 0,
+        };
+        item.sceneIds = Array.from(new Set([...item.sceneIds, ...character.scene_ids]));
+        item.shotIds = Array.from(new Set([...item.shotIds, ...character.shot_ids]));
+        item.lookCount += 1;
+        people.set(character.person_id, item);
+    }
+    return Array.from(people.values());
+}
+
 function isReadableLabel(value: string): boolean {
     return !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value);
 }

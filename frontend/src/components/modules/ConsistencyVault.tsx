@@ -22,8 +22,8 @@ import {
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { toast } from "@/store/toastStore";
-import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
-import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
+import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
+import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
@@ -513,9 +513,11 @@ export default function ConsistencyVault() {
                 </div>
             )}
 
-            {(episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 && currentProject && (
+            {((episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 ||
+                getUnboundCharacterRequirements(episodeAssetState.context).length > 0) && currentProject && (
                 <ShootingPlanAssetRequirements
                     bindings={episodeAssetSync?.bindings || episodeAssetState.bindings}
+                    context={episodeAssetState.context}
                     project={currentProject}
                     onOpenAsset={(assetType, assetId) => {
                         setActiveTab(assetType);
@@ -666,13 +668,16 @@ export default function ConsistencyVault() {
 
 function ShootingPlanAssetRequirements({
     bindings,
+    context,
     project,
     onOpenAsset,
 }: {
     bindings: EpisodeVisualContextState["bindings"];
+    context: EpisodeVisualContext | null;
     project: any;
     onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
 }) {
+    const unboundCharacters = getUnboundCharacterRequirements(context);
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
         { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character") },
         { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
@@ -686,20 +691,20 @@ function ShootingPlanAssetRequirements({
 
     return (
         <section className="mx-6 mt-3 rounded-lg border border-glass-border bg-surface px-4 py-3" aria-label="拍摄计划资产需求">
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
                     <p className="mt-1 text-xs text-text-secondary">这里展示分镜前置需求。打开已有基础资产后再生成场景变体，系统不会自动生成图片。</p>
                 </div>
-                <span className="shrink-0 text-xs text-text-muted">{bindings.length} 条绑定</span>
+                <span className="text-xs text-text-muted">{bindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
                 {groups.map(group => (
                     <div key={group.type} className="min-w-0 rounded-md border border-glass-border bg-glass/40 p-3">
                         <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
-                            <span>{group.label}</span><span>{group.items.length}</span>
+                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? unboundCharacters.length : 0)}</span>
                         </div>
-                        {group.items.length === 0 ? (
+                        {group.items.length === 0 && (group.type !== "character" || unboundCharacters.length === 0) ? (
                             <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
                         ) : (
                             <div className="mt-2 max-h-32 space-y-2 overflow-y-auto">
@@ -715,6 +720,12 @@ function ShootingPlanAssetRequirements({
                                         </div>
                                     );
                                 })}
+                                {group.type === "character" && unboundCharacters.map((requirement, index) => (
+                                    <div key={`unbound:${requirement.personId}`} className="rounded border border-glass-border/70 px-2 py-1.5" title={requirement.personId}>
+                                        <p className="truncate text-xs text-foreground">人物 {index + 1} · {requirement.personId.slice(0, 8)}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · 待关联角色资产</p>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>

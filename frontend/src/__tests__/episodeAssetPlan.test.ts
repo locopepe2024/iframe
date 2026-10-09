@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAssetPlanEntries } from "../lib/episodeAssetPlan";
+import { getAssetPlanEntries, getUnboundCharacterRequirements } from "../lib/episodeAssetPlan";
 import type { EpisodeVisualContext } from "../lib/directorShootingPlan";
 
 describe("episode asset plan context", () => {
@@ -22,5 +22,18 @@ describe("episode asset plan context", () => {
         expect(entries[1].prompt).toContain("removed");
         expect(entries[1].prompt).toContain("室内");
         expect(getAssetPlanEntries(context, "character", "other")).toEqual([]);
+    });
+});
+
+describe("unbound shooting plan characters", () => {
+    it("shows unique people even when no character asset can be linked", () => {
+        const context = { characters: [
+            { person_id: "person-a", character_asset_ids: [], scene_ids: ["scene-1"], shot_ids: ["shot-1"] },
+            { person_id: "person-a", character_asset_ids: [], scene_ids: ["scene-1", "scene-2"], shot_ids: ["shot-2"] },
+            { person_id: "person-b", character_asset_ids: ["asset-b"], scene_ids: ["scene-1"], shot_ids: ["shot-3"] },
+        ] } as unknown as EpisodeVisualContext;
+        expect(getUnboundCharacterRequirements(context)).toEqual([{
+            personId: "person-a", sceneIds: ["scene-1", "scene-2"], shotIds: ["shot-1", "shot-2"], lookCount: 2,
+        }]);
     });
 });
