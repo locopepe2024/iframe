@@ -78,6 +78,11 @@ def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     series_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "Series 全剧导演理解" in series_prompt
     assert "不要把梗概中的结局当作第一集事实" in series_prompt
+    assert "逐集事件映射和来源覆盖是分析任务" in series_prompt
+    assert "角色年龄、脸型、服色、兵器规格等视觉设计选择交给资产设计" in series_prompt
+    assert "制作媒介和风格 preset 的关系交给风格定调" in series_prompt
+    assert "虚构纪年不必对应真实历史朝代" in series_prompt
+    assert "摘要未提及不能证明原文未交代" in series_prompt
 
     processor.llm.chat.reset_mock()
     processor.analyze_director_profile(
