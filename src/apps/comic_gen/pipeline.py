@@ -8129,7 +8129,12 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def delete_series_asset(self, series_id: str, asset_type: str, asset_id: str,
                             owner_profile_id: Optional[str] = None, force: bool = False) -> None:
-        """Delete an unreferenced shared asset without changing episode plans."""
+        """Delete a shared asset while preserving confirmed shooting-plan references.
+
+        Confirmed plan revisions are immutable history, so ``force`` may remove
+        storyboard/current-binding references but must never leave a confirmed
+        plan pointing at a deleted asset.
+        """
         collections = {"character": "characters", "scene": "scenes", "prop": "props"}
         if asset_type not in collections:
             raise ValueError("Invalid asset type")
@@ -8141,6 +8146,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not any(item.id == asset_id for item in collection):
                 raise ValueError("Series asset not found")
             references = []
+            plan_references = []
             for episode in self.get_series_episodes(series_id):
                 for frame in episode.frames:
                     used = (frame.scene_id == asset_id if asset_type == "scene" else
@@ -8152,7 +8158,39 @@ class ComicGenPipeline(StudioOwnerMixin):
                     if binding.asset_type == asset_type and binding.asset_id == asset_id and binding.status != "stale":
                         references.append({"owner_kind": "project", "owner_id": episode.id,
                                            "owner_title": episode.title, "binding_id": asset_id})
-            if references and not force:
+                for revision in episode.director_shooting_plan_revisions:
+                    plan = revision.plan
+                    for scene in plan.scenes:
+                        if asset_type == "scene" and scene.scene_asset_id == asset_id:
+                            plan_references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                    "owner_title": episode.title, "revision": revision.revision,
+                                                    "plan_path": f"scene:{scene.scene_id}.scene_asset_id"})
+                        if asset_type == "prop" and asset_id in scene.prop_ids:
+                            plan_references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                    "owner_title": episode.title, "revision": revision.revision,
+                                                    "plan_path": f"scene:{scene.scene_id}.prop_ids"})
+                        for beat in scene.beats:
+                            for shot in beat.shots:
+                                if asset_type == "character":
+                                    cast_ids = [binding.person_id for binding in shot.cast_bindings]
+                                    if asset_id in shot.character_ids or asset_id in cast_ids:
+                                        plan_references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                                "owner_title": episode.title, "revision": revision.revision,
+                                                                "plan_path": f"shot:{shot.shot_id}.character_ids"})
+                                elif asset_type == "scene":
+                                    binding = shot.scene_binding
+                                    if binding and binding.scene_asset_id == asset_id:
+                                        plan_references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                                "owner_title": episode.title, "revision": revision.revision,
+                                                                "plan_path": f"shot:{shot.shot_id}.scene_binding.scene_asset_id"})
+                                elif asset_type == "prop":
+                                    binding_ids = [binding.prop_id for binding in shot.prop_bindings]
+                                    if asset_id in shot.prop_ids or asset_id in binding_ids:
+                                        plan_references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                                "owner_title": episode.title, "revision": revision.revision,
+                                                                "plan_path": f"shot:{shot.shot_id}.prop_ids"})
+            references.extend(plan_references)
+            if references and (not force or plan_references):
                 raise LibraryAssetInUseError(asset_type, asset_id, references)
             if references:
                 for episode in self.get_series_episodes(series_id):

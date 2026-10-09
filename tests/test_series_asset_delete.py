@@ -3,7 +3,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.apps.comic_gen.models import Character, Script, Series, StoryboardFrame
+from src.apps.comic_gen.models import (
+    Character, DirectorShootingPlan, DirectorShootingPlanRevision, Prop, Scene, Script, Series, StoryboardFrame,
+)
 from src.apps.comic_gen.pipeline import ComicGenPipeline, LibraryAssetInUseError
 
 
@@ -46,3 +48,37 @@ def test_force_delete_removes_episode_references():
     assert series.characters == []
     assert episode.frames[0].character_ids == []
     pipeline._save_data.assert_called_once()
+
+
+def test_confirmed_shooting_plan_references_block_delete_even_with_force():
+    pipeline, series, episode = make_pipeline()
+    series.scenes.append(Scene(id="scene-shared", name="Room", description="Room"))
+    series.props.append(Prop(id="prop-shared", name="Key", description="Key"))
+    plan = DirectorShootingPlan.model_validate({
+        "source_revision": 1, "director_profile_revision": 1,
+        "director_profile_hash": "profile", "effective_style_hash": "style",
+        "scenes": [{
+            "scene_id": "plan-scene", "order": 0,
+            "scene_asset_id": "scene-shared", "prop_ids": ["prop-shared"],
+            "beats": [{"beat_id": "beat", "order": 0, "shots": [{
+                "shot_id": "plan-shot", "order": 0, "character_ids": ["shared"],
+                "cast_bindings": [{"person_id": "shared"}],
+                "scene_binding": {"scene_asset_id": "scene-shared"},
+                "prop_bindings": [{"prop_id": "prop-shared"}],
+            }]}],
+        }],
+    })
+    episode.director_shooting_plan_revisions = [
+        DirectorShootingPlanRevision(revision=3, content_hash="old", plan=plan, confirmed_at=1),
+        DirectorShootingPlanRevision(revision=4, content_hash="new", plan=plan.model_copy(update={"scenes": []}), confirmed_at=2),
+    ]
+
+    for force in (False, True):
+        for asset_type, asset_id in (("character", "shared"), ("scene", "scene-shared"), ("prop", "prop-shared")):
+            with pytest.raises(LibraryAssetInUseError) as exc_info:
+                pipeline.delete_series_asset(series.id, asset_type, asset_id, force=force)
+            assert any(ref.get("revision") == 3 for ref in exc_info.value.references)
+
+    assert [item.id for item in series.characters] == ["shared"]
+    assert [item.id for item in series.scenes] == ["scene-shared"]
+    assert [item.id for item in series.props] == ["prop-shared"]
