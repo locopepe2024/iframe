@@ -243,6 +243,21 @@ describe('SeriesDetailPage', () => {
     // ── Episode list in sidebar ──
 
     describe('Episode list', () => {
+        it('shows readable series context without exposing Director execution metadata', async () => {
+            mockGetSeries.mockResolvedValue({
+                ...mockSeries,
+                art_direction: { director_profile: {
+                    revision: 2,
+                    setting: { premise: '苏砚追查旧案。' },
+                    execution_summary: 'Chinese Ink Fantasy\nCURRENT_DIRECTOR_EDITS: GUARDRAILS: {}',
+                } },
+            });
+            renderPage();
+            fireEvent.click(await screen.findByText('第一集'));
+            expect(await screen.findByText('苏砚追查旧案。')).toBeInTheDocument();
+            expect(screen.queryByText(/CURRENT_DIRECTOR_EDITS/)).not.toBeInTheDocument();
+        });
+
         it('shows episode list with titles in sidebar', async () => {
             renderPage();
             await waitFor(() => {

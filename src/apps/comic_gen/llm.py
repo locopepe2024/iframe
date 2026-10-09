@@ -1054,26 +1054,9 @@ class ScriptProcessor:
             self._director_source_cache = cache
         cache_key = self._director_source_cache_key(text)
         cached = cache.get(cache_key)
-        if isinstance(cached, str) and cached:
-            try:
-                rendered_cached = cached[len("<source_digest>"):-len("</source_digest>")]
-                payload_cached = json.loads(rendered_cached)
-                chunks_cached = payload_cached.get("chunk_summaries", [])
-                self._last_director_source_audit = {
-                    "source_mode": "map_reduce",
-                    "source_char_count": len(text),
-                    "chunk_count": len(chunks_cached),
-                    "chunk_ranges": [
-                        {"source_ref": item.get("source_ref"), "char_start": item.get("char_start"), "char_end": item.get("char_end")}
-                        for item in chunks_cached
-                    ],
-                    "mapped_notes": chunks_cached,
-                    "digest": rendered_cached,
-                    "digest_sha256": hashlib.sha256(rendered_cached.encode("utf-8")).hexdigest(),
-                }
-            except (ValueError, TypeError, json.JSONDecodeError):
-                pass
-            return cached
+        if isinstance(cached, dict) and cached.get("digest"):
+            self._last_director_source_audit = cached["audit"]
+            return cached["digest"]
 
         chunks = split_director_source(text)
 
@@ -1152,32 +1135,59 @@ class ScriptProcessor:
                 "text": text[tail_start:],
             },
         }
+        audit_notes = [dict(note) for note in notes]
+        reduction_round = 0
         rendered = json.dumps(digest_payload, ensure_ascii=False, separators=(",", ":"))
         if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
-            # Keep provenance and anchors intact while shrinking the least
-            # important map fields. In normal operation the per-note budgets
-            # already keep this branch below the envelope limit.
-            for note in notes:
-                note.pop("facts", None)
-                note.pop("open_threads", None)
-            rendered = json.dumps(
-                digest_payload, ensure_ascii=False, separators=(",", ":")
-            )
-        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
-            for note in notes:
-                note["summary"] = _bounded_source_text(
-                    note.get("summary"), DIRECTOR_SOURCE_CHUNK_SUMMARY_MAX_CHARS // 2
-                )
-            rendered = json.dumps(
-                digest_payload, ensure_ascii=False, separators=(",", ":")
-            )
-        if len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
-            raise RuntimeError("长文本 Director 来源摘要超过输入预算")
+            # Reduce full map notes before discarding any facts or threads.
+            # Each merged source range is owned by the server.
+            while len(rendered) > DIRECTOR_SOURCE_DIGEST_MAX_CHARS:
+                current = digest_payload["chunk_summaries"]
+                if len(current) <= 1:
+                    raise RuntimeError("长文本 Director 来源摘要超过输入预算")
+                reduction_round += 1
+                groups = [current[offset:offset + 8] for offset in range(0, len(current), 8)]
+
+                def reduce_group(group: List[Dict[str, Any]]) -> Dict[str, Any]:
+                    merged_chunk = {
+                        "source_ref": f"source:chars-{group[0]['char_start']}-{group[-1]['char_end']}",
+                        "char_start": group[0]["char_start"],
+                        "char_end": group[-1]["char_end"],
+                    }
+                    if len(group) == 1:
+                        return group[0]
+                    reduce_prompt = (
+                        "按原文顺序归并以下连续剧本摘要。仅保留有来源的关键事件、人物关系变化、"
+                        "进入和离开状态及未解决线索。不要新增事实。输出纯 JSON 对象，包含 "
+                        "summary（不超过 360 字符）、continuity_in 和 continuity_out"
+                        "（各不超过 64 字符）；不要输出来源编号或区间。\n"
+                        f"<source_note_batch>{json.dumps(group, ensure_ascii=False, separators=(',', ':'))}</source_note_batch>"
+                    )
+                    try:
+                        content = (self.llm.chat(
+                            messages=[{"role": "user", "content": reduce_prompt}],
+                            response_format={"type": "json_object"},
+                            timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                            max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                        ) or "").strip()
+                        payload = json.loads(_strip_markdown_json(content))
+                    except Exception as exc:
+                        raise RuntimeError(f"长文本 Director 第 {reduction_round} 层来源归并失败：{exc}") from exc
+                    return self._normalize_director_source_note(payload, merged_chunk)
+
+                parent_context = copy_context()
+                with ThreadPoolExecutor(
+                    max_workers=min(4, len(groups)), thread_name_prefix="director-source-reduce"
+                ) as executor:
+                    futures = [
+                        executor.submit(parent_context.copy().run, reduce_group, group)
+                        for group in groups
+                    ]
+                    reduced = [future.result() for future in futures]
+                digest_payload["chunk_summaries"] = reduced
+                rendered = json.dumps(digest_payload, ensure_ascii=False, separators=(",", ":"))
 
         result = f"<source_digest>{rendered}</source_digest>"
-        while len(cache) >= DIRECTOR_SOURCE_CACHE_MAX_ENTRIES:
-            cache.pop(next(iter(cache)))
-        cache[cache_key] = result
         self._last_director_source_audit = {
             "source_mode": "map_reduce",
             "source_char_count": len(text),
@@ -1186,10 +1196,14 @@ class ScriptProcessor:
                 {"source_ref": item["source_ref"], "char_start": item["char_start"], "char_end": item["char_end"]}
                 for item in chunks
             ],
-            "mapped_notes": digest_payload["chunk_summaries"],
+            "mapped_notes": audit_notes if reduction_round else digest_payload["chunk_summaries"],
+            "reduction_rounds": reduction_round,
             "digest": rendered,
             "digest_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
         }
+        while len(cache) >= DIRECTOR_SOURCE_CACHE_MAX_ENTRIES:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = {"digest": result, "audit": self._last_director_source_audit}
         return result
 
     def _director_source_context(self, text: str, source_mode: str = "auto") -> tuple[str, bool]:
@@ -1577,6 +1591,12 @@ class ScriptProcessor:
             "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
             "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 可留空，"
             "因为分集事件地图由 Episode Director 分别建立。"
+            "全剧 unresolved_questions 只收录会影响故事事实、人物关系或因果连续性的真实冲突和歧义；"
+            "不得把摘要未提及的内容写成原文未明确。当前来源摘要不足以核验的结论，写成‘来源覆盖待核验’，"
+            "不要要求创作者补写剧本中可能已有的事实。逐集事件映射和来源覆盖是分析任务，"
+            "不属于剧情待确认问题。角色年龄、脸型、服色、兵器规格等视觉设计选择交给资产设计，"
+            "除非原文明确冲突且影响故事；制作媒介和风格 preset 的关系交给风格定调，"
+            "不属于剧情待确认问题。虚构纪年不必对应真实历史朝代。"
             if analysis_scope == "series" else
             "本次是 Episode 分集导演理解。只记录当前分集实际发生的事件、出场人物和场景；"
             "系列级梗概与已确认的 Series Director 仅用于背景和连续性约束。"
@@ -1610,7 +1630,8 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 <visual_style_summary>{style_summary}</visual_style_summary>
 
 视觉风格只描述摄影、表演、色彩、材质和声音语言，不得据此改变故事国家、城市、年代或文化。
-剧本未明确的年代、季节或事实必须放进 unresolved_questions，不得猜成事实。
+只有来源已充分覆盖、仍存在且会影响剧情的年代、季节或事实歧义，才放进 unresolved_questions；
+摘要未提及不能证明原文未交代，不得据此制造待确认问题，也不得猜成事实。
 梳理人物关系变化、因果链、关键事件的叙事功能与权重、情绪弧线、节奏、连续性和禁用项。
 不得发明对白、剧情、文化符号或人物动机。
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, expect, it, vi } from "vitest";
 import messages from "../../../messages/en.json";
@@ -54,4 +54,30 @@ it("provides keyboard-operable Director tabs and keeps sample notes in the refer
     fireEvent.keyDown(tabs, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Style selection" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Built-in Presets" })).toBeVisible();
+});
+
+it("shows Series Director context and keeps an inherited style unsaved", async () => {
+    const style = { id: "series-style", name: "Series style", positive_prompt: "ink", negative_prompt: "", is_custom: false };
+    vi.spyOn(api, "getSeries").mockResolvedValue({
+        art_direction: { selected_style_id: style.id, style_config: style },
+        director_profile_revisions: [{ revision: 4 }],
+    } as never);
+    const save = vi.spyOn(api, "saveArtDirection");
+    const project = useProjectStore.getState().currentProject!;
+    useProjectStore.setState({
+        currentProject: {
+            ...project,
+            series_id: "series-1",
+            art_direction: { ...project.art_direction!, selected_style_id: "director-profile", style_config: {} },
+        } as never,
+    });
+
+    render(<NextIntlClientProvider locale="en" messages={messages}><ArtDirection /></NextIntlClientProvider>);
+
+    expect(await screen.findByText(/confirmed Series Director understanding v4/)).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Style selection" }));
+    expect(await screen.findByText(/Inherits series baseline/)).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Apply & Continue/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Apply & Continue/ }));
+    expect(save).not.toHaveBeenCalled();
 });

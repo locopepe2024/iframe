@@ -69,6 +69,7 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
     // Series baseline (inherit source)
     const [seriesBaseline, setSeriesBaseline] = useState<StyleConfig | null>(null);
+    const [seriesDirectorRevision, setSeriesDirectorRevision] = useState<number | null>(null);
     const [seriesBaselineLoading, setSeriesBaselineLoading] = useState(false);
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
@@ -85,18 +86,23 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
         const seriesId = currentProject?.series_id;
         if (!seriesId) {
             setSeriesBaseline(null);
+            setSeriesDirectorRevision(null);
             return;
         }
         setSeriesBaselineLoading(true);
         api.getSeries(seriesId)
             .then((s: any) => {
-                setSeriesBaseline(s?.art_direction?.style_config ?? null);
+                const style = s?.art_direction?.style_config;
+                setSeriesBaseline(style && Object.keys(style).length > 0 ? style : null);
+                setSeriesDirectorRevision(s?.director_profile_revisions?.at(-1)?.revision
+                    ?? s?.art_direction?.director_profile?.revision ?? null);
             })
-            .catch(() => setSeriesBaseline(null))
+            .catch(() => { setSeriesBaseline(null); setSeriesDirectorRevision(null); })
             .finally(() => setSeriesBaselineLoading(false));
     }, [currentProject?.series_id, currentProject?.id]);
 
-    const projectStyle = currentProject?.art_direction?.style_config ?? null;
+    const storedProjectStyle = currentProject?.art_direction?.style_config;
+    const projectStyle = storedProjectStyle && Object.keys(storedProjectStyle).length > 0 ? storedProjectStyle : null;
     const inSeries = !!currentProject?.series_id;
     const isInherit = inSeries && !!seriesBaseline && !projectStyle;
     const isOverridden = inSeries && !!seriesBaseline && !!projectStyle;
@@ -131,11 +137,16 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
     };
 
     const handlePromoteToSeries = async () => {
-        if (!currentProject?.series_id || !currentProject?.art_direction) return;
+        if (!currentProject?.series_id || !currentProject?.art_direction || !projectStyle) return;
         setBannerBusy(true);
         try {
             await api.updateSeries(currentProject.series_id, {
-                art_direction: currentProject.art_direction as any,
+                art_direction: {
+                    selected_style_id: currentProject.art_direction.selected_style_id,
+                    style_config: projectStyle,
+                    custom_styles: currentProject.art_direction.custom_styles,
+                    ai_recommendations: currentProject.art_direction.ai_recommendations,
+                } as any,
             });
             const s = await api.getSeries(currentProject.series_id);
             setSeriesBaseline(s?.art_direction?.style_config ?? null);
@@ -162,7 +173,8 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
     useEffect(() => {
         const projectAD = currentProject?.art_direction;
-        const projectStyleConfig = projectAD?.style_config ?? null;
+        const styleConfig = projectAD?.style_config;
+        const projectStyleConfig = styleConfig && Object.keys(styleConfig).length > 0 ? styleConfig : null;
         if (projectStyleConfig) {
             setSelectedStyle(projectStyleConfig);
             setEditingName(projectStyleConfig.name || "");
@@ -375,6 +387,19 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
             negative_prompt: editingNegative
         };
 
+        if (isInherit && seriesBaseline && !overrideAccepted) {
+            const sameAsBaseline = finalConfig.id === seriesBaseline.id
+                && finalConfig.name === seriesBaseline.name
+                && finalConfig.positive_prompt === resolvePositivePrompt(seriesBaseline)
+                && finalConfig.negative_prompt === (seriesBaseline.negative_prompt || "");
+            if (sameAsBaseline) {
+                toast.info(ta("styleInheritedNoSave"));
+                return;
+            }
+            setPendingOverrideStyle(finalConfig);
+            return;
+        }
+
         setIsSaving(true);
         try {
             const updated = await api.saveArtDirection(
@@ -512,6 +537,13 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                         hidden={activeDirectorTab !== "understanding"}
                         className="space-y-8"
                     >
+                        {inSeries && !seriesBaselineLoading && (
+                            <p className="rounded-lg border border-border bg-background/40 px-4 py-3 text-xs text-text-secondary">
+                                {seriesDirectorRevision
+                                    ? ta("seriesDirectorInherited", { revision: seriesDirectorRevision })
+                                    : ta("seriesDirectorMissing")}
+                            </p>
+                        )}
                         <DirectorProfilePanel onApplied={() => setActiveDirectorTab("shooting_plan")} />
                     </section>
                     <section

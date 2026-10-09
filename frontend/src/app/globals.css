@@ -441,6 +441,27 @@ body {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+/* The creation timeline is the primary vertical scroll region. Keep its
+   handle visible against the dark canvas, including when it is idle. */
+.playground-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-text-muted) var(--color-border-default);
+}
+.playground-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+.playground-scrollbar::-webkit-scrollbar-track {
+  background: var(--color-border-default);
+  border-radius: 8px;
+}
+.playground-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-text-muted);
+  border: 2px solid var(--color-bg-surface);
+  border-radius: 8px;
+}
+.playground-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
 /* Firefox — both properties inherit, so html cascades to every scroll region */
 html {
   /* T11 global type-scale knob — responsive scaling.

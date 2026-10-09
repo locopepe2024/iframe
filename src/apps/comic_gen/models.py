@@ -1759,6 +1759,42 @@ def build_director_execution_summary(profile: Dict[str, Any]) -> str:
     )
 
 
+def build_episode_readable_summary(profile: "DirectorProfile | Dict[str, Any]") -> Optional[str]:
+    """Project confirmed story events for readers without execution-only fields."""
+    raw = profile.model_dump() if isinstance(profile, DirectorProfile) else profile
+    events = []
+    def event_order(item: Any) -> int:
+        value = item.get("order", 0) if isinstance(item, dict) else 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    story_map = raw.get("story_map") or {}
+    if isinstance(story_map, dict):
+        for phase in sorted(story_map.get("phases") or [], key=event_order):
+            for event in sorted(phase.get("events") or [], key=event_order):
+                if isinstance(event, dict):
+                    events.append(event.get("description") or event.get("title"))
+    if not events:
+        for item in sorted(raw.get("timeline") or [], key=event_order):
+            if isinstance(item, dict):
+                events.append(next((item[key] for key in ("event", "description", "change", "summary")
+                                    if isinstance(item.get(key), str) and item[key].strip()), None))
+    if not events:
+        for item in raw.get("key_events") or []:
+            if isinstance(item, dict):
+                events.append(next((item[key] for key in ("event", "description", "summary", "function")
+                                    if isinstance(item.get(key), str) and item[key].strip()), None))
+    sentences = [value.strip().rstrip("。.!！") for value in events if isinstance(value, str) and value.strip()]
+    if not sentences:
+        return None
+    setting = raw.get("setting") or {}
+    setting = setting if isinstance(setting, dict) else {}
+    time_place = [setting.get(key, "") for key in ("season_time", "primary_location")]
+    context = "，".join(value.strip() for value in time_place if isinstance(value, str) and value.strip())
+    return (f"{context}。" if context else "") + "。".join(sentences) + "。"
+
+
 def _director_first_text(item: Dict[str, Any], keys: tuple[str, ...]) -> str:
     """Return the first non-empty scalar value from a scene-memory item."""
     for key in keys:
@@ -2584,6 +2620,25 @@ class AssemblyEditPlan(BaseModel):
                 )
         return self
 
+class EpisodeUnderstandingHandoff(BaseModel):
+    """Reviewable episode-level narrative summary and cross-episode handoff.
+
+    Chunk metadata remains an internal source/compute index. This object is
+    the user-facing projection boundary and is populated only by a confirmed
+    Episode Director understanding.
+    """
+
+    status: Literal["not_generated", "draft", "compatibility", "confirmed", "stale"] = "not_generated"
+    episode_summary: Optional[str] = None
+    incoming_handoff: Dict[str, Any] = Field(default_factory=dict)
+    outgoing_handoff: Dict[str, Any] = Field(default_factory=dict)
+    source_refs: List[str] = Field(default_factory=list)
+    source_revision: Optional[int] = Field(None, ge=1)
+    series_director_revision: Optional[int] = Field(None, ge=1)
+    episode_director_revision: Optional[int] = Field(None, ge=1)
+    generated_at: Optional[float] = None
+
+
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
     owner_user_id: Optional[str] = Field(None, description="Authenticated UniArt user owner")
@@ -2621,6 +2676,12 @@ class Script(BaseModel):
     director_profile_draft_source_revision: Optional[int] = Field(None, ge=1)
     director_profile_draft_updated_at: Optional[float] = None
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_style_hash: Optional[str] = Field(None, description="Effective visual style when this episode Director version was confirmed")
+    director_series_revision: Optional[int] = Field(None, description="Confirmed Series Director revision referenced by this episode version")
+    episode_understanding: Optional[EpisodeUnderstandingHandoff] = Field(
+        None,
+        description="Confirmed episode summary and incoming/outgoing narrative handoff",
+    )
     director_shooting_plan_revisions: List[DirectorShootingPlanRevision] = Field(default_factory=list)
     director_shooting_plan_draft: Optional[DirectorShootingPlan] = None
     director_shooting_plan_draft_revision: int = Field(0, ge=0)
@@ -2722,6 +2783,7 @@ class Series(BaseModel):
     director_profile_draft: Optional[DirectorProfile] = None
     director_profile_draft_revision: int = Field(0, ge=0)
     director_profile_draft_name: Optional[str] = Field(None, max_length=160)
+    director_style_hash: Optional[str] = Field(None, description="Series visual style when its Director version was confirmed")
 
     # Shared asset library
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")

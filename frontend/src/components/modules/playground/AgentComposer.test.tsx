@@ -10,6 +10,7 @@ vi.mock('./ModelSelector', () => ({ default: () => null }));
 vi.mock('./MediaInput', () => ({ default: () => <div>Media selection panel</div> }));
 vi.mock('./PromptTemplateModal', () => ({ default: () => null }));
 vi.mock('./PromptHistoryDrawer', () => ({ default: () => null }));
+vi.mock('./VoiceTranscriptionButton', () => ({ default: () => <button type="button" aria-label="开始语音输入">录音</button> }));
 
 beforeEach(() => {
     installUniArtCatalog([{ id: 'uniart/gpt-image-2', api_model_id: 'gpt-image-2', display_name: 'GPT Image', description: '', family: 'gpt-image', provider: 'uniart', capabilities: ['t2i', 'i2i'], duration: null, params: { size: { options: ['1k', '2k', '4k'], default: '1k' } }, inputs: {} }]);
@@ -45,6 +46,7 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     const send = vi.fn();
     render(<AgentComposer canGenerate batchSize={4} onGenerate={send} onAgentChange={change}
         agent={{ active: true, model: 'chat-real', models: [{ api_model_id: 'chat-real', display_name: 'GPT 6' }], setModel: vi.fn() }} />);
+    expect(screen.getByRole('button', { name: '开始语音输入' }).parentElement).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'true');
@@ -56,6 +58,19 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     expect(screen.getByRole('button', { name: 'sessions.allHistory' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     expect(send).toHaveBeenCalledOnce();
+});
+
+it('shows four independently configurable companion skills only in Agent mode', () => {
+    const toggle = vi.fn();
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()}
+        agent={{ active: true, model: 'chat', models: [], setModel: vi.fn(), companionSkills: ['listening'], toggleCompanionSkill: toggle }} />);
+    fireEvent.click(screen.getByRole('button', { name: '陪护技能 1' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getAllByRole('checkbox')).toHaveLength(4);
+    expect(within(dialog).getByLabelText('倾听与话题引导')).toBeChecked();
+    fireEvent.click(within(dialog).getByLabelText('日程与备忘'));
+    expect(toggle).toHaveBeenCalledWith('schedule');
+    expect(within(dialog).getByText(/只有确认保存的记忆会跨会话使用/)).toBeInTheDocument();
 });
 
 it('switches video resolution to image tiers without submitting stale video parameters', () => {
