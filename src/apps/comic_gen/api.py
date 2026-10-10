@@ -5361,6 +5361,25 @@ def sync_episode_visual_context(script_id: str, user: UserContext = Depends(requ
         raise HTTPException(status, str(exc)) from exc
 
 
+class EpisodePersonAssetBindingRequest(BaseModel):
+    person_id: str = Field(..., min_length=1)
+    asset_id: Optional[str] = None
+    expected_plan_revision: int = Field(..., ge=1)
+
+
+@app.put("/projects/{script_id}/episode-visual-context/person-asset")
+def bind_episode_person_asset(script_id: str, request: EpisodePersonAssetBindingRequest,
+                              user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(404, "Project not found")
+    try:
+        return pipeline.bind_episode_person_asset(
+            script_id, request.person_id, request.asset_id, request.expected_plan_revision)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(409 if "revision changed" in message else 422, message) from exc
+
+
 @app.get("/projects/{script_id}/storyboard/{frame_id}/asset-context")
 def get_storyboard_asset_context(script_id: str, frame_id: str, user: UserContext = Depends(require_studio_user)):
     del user

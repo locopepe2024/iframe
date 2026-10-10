@@ -1316,6 +1316,7 @@ class EpisodeVisualSceneContext(BaseModel):
 
 class EpisodeVisualCharacterContext(BaseModel):
     person_id: str
+    person_label: Optional[str] = None
     character_asset_ids: List[str] = Field(default_factory=list)
     era_variant_id: Optional[str] = None
     scene_look_id: Optional[str] = None
@@ -2722,6 +2723,9 @@ class Script(BaseModel):
     )
     episode_asset_bindings: List[EpisodeAssetBinding] = Field(
         default_factory=list, description="Reviewable scene/shot asset handoff bindings"
+    )
+    episode_person_asset_bindings: Dict[str, str] = Field(
+        default_factory=dict, description="Explicit episode person-to-Character asset choices"
     )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
