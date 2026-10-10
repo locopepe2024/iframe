@@ -1,6 +1,6 @@
 # iFrame Knowledge: Agent Search Slice v1
 
-Status: base slice deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`; companion compatibility amendment pending release. Date: 2026-10-10.
+Status: companion compatibility deployed at `3fac70732a2022f8f3cbab894828a0ae512194f1`. Date: 2026-10-10.
 
 ## Observed
 
@@ -33,3 +33,4 @@ Status: base slice deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`; compa
 - PR #69 passed backend, media and frontend CI and was merged. Release `9ac09355d18289b75f9b231faf0fcec9a5ec6508` passed isolated candidate preparation and was deployed with matching backend/static revisions.
 - In the new production container, a direct read-only call to `agent_tools.search_knowledge` connected to TencentDB and returned an empty list for a fresh test identity. This verifies the runtime search path and owner argument, not a complete user conversation or answer attribution.
 - Local targeted checks: 40 backend tests, 9 Playground conversation tests and frontend typecheck/build passed. A real model-backed conversation with a configured user and a curated public source remains an acceptance item.
+- PR #75 removed the companion-skill restriction for normal Chat and kept H3 Context-IR unsupported. Its backend, frontend and media CI checks passed. Release `3fac70732a2022f8f3cbab894828a0ae512194f1` passed isolated candidate preparation and deployed with matching source, backend, static and public manifest revisions. A read-only production search for “英伟达” with a fresh owner returned zero public hits; this does not test an existing user's private library or a model-backed answer.
