@@ -141,12 +141,14 @@ from ..playground.api import _storage_for as playground_storage_for, router as p
 from ...utils.media_thumbnails import create_media_thumbnail
 from ...utils.asset_previews import create_asset_preview
 from ..agent_api import router as agent_router
+from ..knowledge.api import router as knowledge_router
 from ..recreation.api import router as recreation_router
 from ..director_depth import router as director_depth_router
 app.include_router(identity_router)
 app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
 app.include_router(agent_router)
+app.include_router(knowledge_router)
 app.include_router(recreation_router)
 app.include_router(director_depth_router)
 
