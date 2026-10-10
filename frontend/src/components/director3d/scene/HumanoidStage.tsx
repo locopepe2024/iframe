@@ -1,3 +1,4 @@
+import { bakeDepthMeshes, installDepthCapture } from "../state/depth-snapshot";
 import { Canvas, type ThreeEvent, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -21,6 +22,37 @@ import { getAssetUrl } from "@/lib/utils";
 interface RigRuntime {
   bones: Map<string, THREE.Bone>;
   restQuaternions: Map<string, THREE.Quaternion>;
+}
+
+function DepthCapture() {
+  const { scene, camera } = useThree();
+  useEffect(() => installDepthCapture((nearM, farM) => {
+    const state = useWorkbenchStore.getState();
+    const evaluated = evaluateDirectorFrame({ frame: state.playheadFrame,
+      durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
+      tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
+      selectedCameraId: state.selectedCameraId, characters: state.characters, cameras: state.cameras,
+      sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths });
+    camera.updateMatrixWorld(true);
+    const perspective = camera as THREE.PerspectiveCamera;
+    const ortho = camera as THREE.OrthographicCamera;
+    const isPerspective = perspective.isPerspectiveCamera;
+    const aspect = isPerspective ? perspective.aspect : (ortho.right - ortho.left) / (ortho.top - ortho.bottom);
+    const width = aspect >= 1 ? 640 : Math.round(640 * aspect);
+    const height = aspect >= 1 ? Math.round(640 / aspect) : 640;
+    return {
+      schema_version: 'director-scene-depth-snapshot.v1', frame: state.playheadFrame,
+      fps: state.dialogueTimeline.fps, cameraLabel: state.viewMode === 'camera' ? (state.cameras[evaluated.activeCameraId]?.label ?? '镜头') : state.viewMode === 'top' ? '俯视舞台' : '导演视图',
+      nearM, farM, width, height,
+      camera: {type: isPerspective ? 'PERSP' : 'ORTHO',
+        matrixWorld: [0,1,2,3].map(row => [0,1,2,3].map(column => camera.matrixWorld.elements[column * 4 + row])),
+        near: perspective.near, far: perspective.far, aspect,
+        verticalFovDeg: isPerspective ? perspective.getEffectiveFOV() : 42,
+        orthoHeight: isPerspective ? 10 : (ortho.top - ortho.bottom) / ortho.zoom},
+      meshes: bakeDepthMeshes(scene),
+    };
+  }), [scene, camera]);
+  return null;
 }
 
 function CanvasClearAlpha({ transparent }: { transparent: boolean }) {
@@ -431,7 +463,7 @@ function HumanoidModel({
         }}
       >
         <group position={character.poseRootOffsetM} rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={model} />
+          <primitive object={model} userData={{ directorDepthGeometry: true }} />
         </group>
       </group>
       {selected && !character.locked && showJointHandles && rigProfile.joints.filter((joint) => joint.control_class === "product_joint").map((joint) => {
@@ -509,7 +541,7 @@ function StageSceneObject({ sceneObject }: { sceneObject: SceneObjectAuthoringSt
         : [width, depth, height];
   return (
     <group position={sceneObject.transform.position} rotation={sceneObject.transform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={sceneObject.transform.scale}>
-      {sceneObject.objectKind === "empty" ? <group onClick={(event) => { event.stopPropagation(); selectSceneObject(sceneObject.sceneObjectId); }}><axesHelper args={[0.35]}/><mesh><sphereGeometry args={[0.08, 12, 8]}/><meshBasicMaterial transparent opacity={0.08}/></mesh></group> : <mesh
+      {sceneObject.objectKind === "empty" ? <group onClick={(event) => { event.stopPropagation(); selectSceneObject(sceneObject.sceneObjectId); }}><axesHelper args={[0.35]}/><mesh><sphereGeometry args={[0.08, 12, 8]}/><meshBasicMaterial transparent opacity={0.08}/></mesh></group> : <mesh userData={{ directorDepthGeometry: true }}
         position={sceneObject.pivotM.map((value) => -value) as [number, number, number]}
         rotation={isVerticalRadial ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
         scale={geometryScale}
@@ -575,6 +607,7 @@ export function HumanoidStage() {
         role="img"
       >
         <CanvasClearAlpha transparent={false}/>
+        <DepthCapture />
         <color attach="background" args={[skyColor]} />
         {panoramaEntry && panoramaEntry.environmentAllowed && panoramaEntry.admissionChecksum === panoramaEntry.checksum && <PanoramaBackground inputId={panoramaEntry.inputId} checksum={panoramaEntry.checksum} rotationDeg={panorama.rotationDeg}/>}
         <hemisphereLight args={["#ffffff", "#263247", 2.2]} />
@@ -582,7 +615,7 @@ export function HumanoidStage() {
         <group position={sceneRootTransform.position} rotation={sceneRootTransform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={sceneRootTransform.scale}>
           {ground.visible && <>
             <gridHelper args={[8, Math.max(1, Math.round(8 / ground.gridSpacingM)), "#52617a", "#263247"]} position={[0, 0, ground.heightM]} rotation={[Math.PI / 2, 0, 0]} />
-            <mesh receiveShadow position={[0, 0, ground.heightM]}>
+            <mesh userData={{ directorDepthGeometry: true }} receiveShadow position={[0, 0, ground.heightM]}>
               <planeGeometry args={[10, 10]} />
               <meshStandardMaterial color="#111827" roughness={0.95} transparent opacity={ground.opacity} />
             </mesh>
