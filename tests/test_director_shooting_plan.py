@@ -370,6 +370,58 @@ def test_unbound_plan_scene_id_does_not_resolve_as_scene_asset():
     assert pipeline._episode_asset_context_prompt(script, "scene", "cinema") == ""
 
 
+def test_distinct_shot_scene_bindings_are_synced_and_visible_to_storyboard():
+    from src.apps.comic_gen.models import Scene
+
+    pipeline, script = make_pipeline()
+    room = Scene(id="room", name="室内", description="室内")
+    script.scenes.append(room)
+    pipeline.resolve_episode_assets.return_value["scenes"].append(room)
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.scene_binding = DirectorPlanSceneBinding(scene_asset_id="cinema")
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-room"
+    second.order = 1
+    second.scene_binding = DirectorPlanSceneBinding(scene_asset_id="room")
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    scenes = {item["asset_id"]: item for item in result["bindings"]
+              if item["asset_type"] == "scene" and item["status"] != "stale"}
+    assert {asset_id: item["shot_ids"] for asset_id, item in scenes.items()} == {
+        "cinema": ["shot-entry"], "room": ["shot-room"]}
+    assert [(item["shot_id"], item["scene_asset_id"])
+            for item in result["context"]["shots"]] == [
+                ("shot-entry", "cinema"), ("shot-room", "room")]
+    assert pipeline._episode_asset_context_prompt(script, "scene", "room")
+
+
+def test_unbound_shot_scene_remains_visible_beside_bound_shot():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.scene_binding = DirectorPlanSceneBinding(scene_asset_id="cinema")
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-unbound"
+    second.order = 1
+    second.scene_binding = None
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    assert [(item["asset_id"], item["shot_ids"]) for item in result["bindings"]
+            if item["asset_type"] == "scene"] == [("cinema", ["shot-entry"])]
+    assert [(item["scene_id"], item.get("shot_id")) for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"] == [
+                ("scene-cinema", "shot-unbound")]
+
+
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline)

@@ -165,7 +165,7 @@ export interface EpisodeVisualContext {
     scenes: Array<{ scene_id: string; scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; prop_ids: string[] }>;
     characters: Array<{ person_id: string; character_asset_ids: string[]; era_variant_id?: string | null; scene_look_id?: string | null; continuity_state: Record<string, unknown>; scene_ids: string[]; shot_ids: string[] }>;
     props: Array<{ prop_id: string; state: string; scene_ids: string[]; shot_ids: string[] }>;
-    shots: Array<{ scene_id: string; beat_id: string; shot_id: string; character_ids: string[]; person_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;
+    shots: Array<{ scene_id: string; beat_id: string; shot_id: string; scene_asset_id?: string | null; character_ids: string[]; person_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;
 }
 
 export interface EpisodeVisualContextState {

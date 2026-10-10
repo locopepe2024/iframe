@@ -1306,6 +1306,7 @@ class EpisodeVisualShotContext(BaseModel):
     scene_id: str
     beat_id: str
     shot_id: str
+    scene_asset_id: Optional[str] = None
     character_ids: List[str] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)

@@ -3659,7 +3659,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 binding = DirectorPlanSceneBinding.model_validate(binding)
             scenes.append(EpisodeVisualSceneContext(
                 scene_id=scene.scene_id,
-                scene_asset_id=scene.scene_asset_id or (binding.scene_asset_id if binding else None),
+                scene_asset_id=scene.scene_asset_id,
                 scene_ref=scene.scene_ref,
                 location=scene.location,
                 time_anchor=scene.time_anchor,
@@ -3679,8 +3679,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                                               for asset_id in matching_character_assets(
                                                   cast.person_id, cast.era_variant_id)]))
                     shot_prop_ids = list(dict.fromkeys(shot.prop_ids + [b.prop_id for b in prop_items]))
+                    shot_scene_binding = shot.scene_binding
+                    if isinstance(shot_scene_binding, dict):
+                        shot_scene_binding = DirectorPlanSceneBinding.model_validate(shot_scene_binding)
                     shots.append(EpisodeVisualShotContext(
                         scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
+                        scene_asset_id=(shot_scene_binding.scene_asset_id if shot_scene_binding
+                                        and shot_scene_binding.scene_asset_id else scene.scene_asset_id),
                         character_ids=shot_char_ids,
                         person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
                         prop_ids=shot_prop_ids,
@@ -3743,19 +3748,37 @@ class ComicGenPipeline(StudioOwnerMixin):
             previous = {(b.asset_type, b.asset_id): b for b in script.episode_asset_bindings}
             desired: List[EpisodeAssetBinding] = []
             unbound_scenes = []
+            scene_bindings: Dict[str, EpisodeAssetBinding] = {}
+            def add_scene_binding(asset_id: str, scene_id: str,
+                                  shot_id: Optional[str] = None) -> None:
+                item = scene_bindings.get(asset_id)
+                if item is None:
+                    item = EpisodeAssetBinding(
+                        asset_type="scene", asset_id=asset_id,
+                        source_plan_revision=context.shooting_plan_revision,
+                        source_plan_hash=context.shooting_plan_hash,
+                        context_status=context.context_status,
+                    )
+                    scene_bindings[asset_id] = item
+                    desired.append(item)
+                if scene_id not in item.scene_ids:
+                    item.scene_ids.append(scene_id)
+                if shot_id and shot_id not in item.shot_ids:
+                    item.shot_ids.append(shot_id)
+
             for scene in context.scenes:
-                asset_id = scene.scene_asset_id
-                if not asset_id:
+                scene_shots = [shot for shot in context.shots if shot.scene_id == scene.scene_id]
+                if scene.scene_asset_id:
+                    add_scene_binding(scene.scene_asset_id, scene.scene_id)
+                if not scene.scene_asset_id and not scene_shots:
                     unbound_scenes.append({"asset_type": "scene", "scene_id": scene.scene_id,
                                            "reason": "scene_asset_unbound"})
-                    continue
-                existing_scene = next((item for item in desired if item.asset_type == "scene" and item.asset_id == asset_id), None)
-                if existing_scene:
-                    existing_scene.scene_ids.append(scene.scene_id)
-                else:
-                    desired.append(EpisodeAssetBinding(asset_type="scene", asset_id=asset_id,
-                        scene_ids=[scene.scene_id], source_plan_revision=context.shooting_plan_revision,
-                        source_plan_hash=context.shooting_plan_hash, context_status=context.context_status))
+                for shot in scene_shots:
+                    if shot.scene_asset_id:
+                        add_scene_binding(shot.scene_asset_id, scene.scene_id, shot.shot_id)
+                    else:
+                        unbound_scenes.append({"asset_type": "scene", "scene_id": scene.scene_id,
+                                               "shot_id": shot.shot_id, "reason": "scene_asset_unbound"})
             for asset_type, items, id_field in (("character", context.characters, "person_id"),
                                                 ("prop", context.props, "prop_id")):
                 grouped: Dict[str, EpisodeAssetBinding] = {}
@@ -3881,7 +3904,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         elif asset_type == "prop":
             matches = [item.model_dump(exclude_none=True) for item in context.props if item.prop_id == asset_id]
         else:
-            matches = [item.model_dump(exclude_none=True) for item in context.scenes if item.scene_asset_id == asset_id]
+            scene_ids = {item.scene_id for item in context.scenes if item.scene_asset_id == asset_id}
+            scene_ids.update(item.scene_id for item in context.shots if item.scene_asset_id == asset_id)
+            matches = [item.model_dump(exclude_none=True) for item in context.scenes
+                       if item.scene_id in scene_ids]
         if not matches:
             return ""
         # A generic asset generation has no scene selection. Mixing distinct looks
@@ -4406,13 +4432,17 @@ class ComicGenPipeline(StudioOwnerMixin):
 
             shot_id = frame_data.get("shot_id")
             if not shot_id and script.episode_visual_context:
-                context_scene_ids = {scene_id}
-                context_scene_ids.update(
+                context_scene_ids = {
                     item.scene_id for item in script.episode_visual_context.scenes
+                    if item.scene_asset_id == scene_id
+                }
+                context_scene_ids.update(
+                    item.scene_id for item in script.episode_visual_context.shots
                     if item.scene_asset_id == scene_id
                 )
                 candidate = next((item for item in script.episode_visual_context.shots
                                   if item.scene_id in context_scene_ids and
+                                  (item.scene_asset_id is None or item.scene_asset_id == scene_id) and
                                   (not item.character_ids or set(item.character_ids) & set(character_ids))), None)
                 shot_id = candidate.shot_id if candidate else None
             

@@ -12,6 +12,18 @@ describe("episode asset plan context", () => {
         expect(getAssetPlanEntries(context, "scene", "cinema")).toEqual([]);
     });
 
+    it("shows a Scene asset bound only to a later shot", () => {
+        const context = {
+            scenes: [{ scene_id: "plan-scene", scene_asset_id: null, scene_ref: "室内切换",
+                location: "西安", time_anchor: "白天", atmosphere: "", prop_ids: [] }],
+            characters: [], props: [],
+            shots: [{ scene_id: "plan-scene", shot_id: "first", scene_asset_id: "cinema" },
+                { scene_id: "plan-scene", shot_id: "second", scene_asset_id: "room" }],
+        } as unknown as EpisodeVisualContext;
+        expect(getAssetPlanEntries(context, "scene", "room")).toHaveLength(1);
+        expect(getAssetPlanEntries(context, "scene", "plan-scene")).toEqual([]);
+    });
+
     it("keeps indoor and outdoor looks separate for the same character asset", () => {
         const context = {
             scenes: [

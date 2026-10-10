@@ -13,6 +13,13 @@ remaining identity and revision rules below are still target contracts.
 The episode Assets prompt projection in the frontend also matches Scene assets
 only by `scene_asset_id`; a coincidentally equal plan `scene_id` is not a match.
 
+Implementation note (2026-10-10, shot Scene bindings): a projected shot carries
+its own `scene_asset_id`, falling back to the plan scene's explicit
+`scene_asset_id`. Sync collects all distinct Scene assets used by the shots and
+returns unbound shots as typed requirements. Assets prompt lookup and
+Storyboard shot matching use those explicit links; a plan-scene ID collision
+does not establish a Scene asset relationship.
+
 Implementation note (2026-10-10, shot context): projected
 `EpisodeVisualShotContext.character_ids` now contains only Character asset IDs;
 `person_ids` carries narrative cast identities. An unresolved cast person does
