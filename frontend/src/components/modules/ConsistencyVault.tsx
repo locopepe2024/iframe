@@ -726,8 +726,9 @@ function ShootingPlanAssetRequirements({
         item.lookCount += 1;
         people.set(character.person_id, item);
     }
+    const representedCharacterIds = new Set(Array.from(people.values()).flatMap(item => item.assetIds));
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
-        { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character") },
+        { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character" && !representedCharacterIds.has(item.asset_id)) },
         { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
         { type: "prop", label: "道具", items: bindings.filter(item => item.asset_type === "prop") },
     ];
@@ -750,9 +751,9 @@ function ShootingPlanAssetRequirements({
                 {groups.map(group => (
                     <div key={group.type} className="min-w-0 rounded-md border border-glass-border bg-glass/40 p-3">
                         <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
-                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? unboundCharacters.length : 0)}</span>
+                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? people.size : 0)}</span>
                         </div>
-                        {group.items.length === 0 && (group.type !== "character" || unboundCharacters.length === 0) ? (
+                        {group.items.length === 0 && (group.type !== "character" || people.size === 0) ? (
                             <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
                         ) : (
                             <div className={`mt-2 space-y-2 overflow-y-auto ${group.type === "character" ? "max-h-80" : "max-h-32"}`}>
@@ -768,10 +769,15 @@ function ShootingPlanAssetRequirements({
                                         </div>
                                     );
                                 })}
-                                {group.type === "character" && Array.from(people.entries()).map(([personId, requirement], index) => (
+                                {group.type === "character" && Array.from(people.entries()).map(([personId, requirement]) => (
                                     <div key={`person:${personId}`} className="rounded border border-glass-border/70 px-2 py-1.5" title={personId}>
-                                        <p className="truncate text-xs text-foreground">{requirement.label} · {personId.slice(0, 8)}</p>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? "已关联" : "待关联角色资产"}</p>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="truncate text-xs text-foreground">{requirement.label} · {personId.slice(0, 8)}</p>
+                                            {requirement.assetIds.length === 1 && project.characters.some((asset: { id: string }) => asset.id === requirement.assetIds[0]) && (
+                                                <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", requirement.assetIds[0])}>打开资产</button>
+                                            )}
+                                        </div>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (bindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "待生成") : "待关联角色资产"}</p>
                                         <select aria-label={`关联人物 ${personId} 的角色资产`}
                                             value={project.episode_person_asset_bindings?.[personId] ?? ""}
                                             disabled={bindingPersonId !== null}
