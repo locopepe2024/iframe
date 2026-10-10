@@ -1633,6 +1633,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 只有来源已充分覆盖、仍存在且会影响剧情的年代、季节或事实歧义，才放进 unresolved_questions；
 摘要未提及不能证明原文未交代，不得据此制造待确认问题，也不得猜成事实。
 梳理人物关系变化、因果链、关键事件的叙事功能与权重、情绪弧线、节奏、连续性和禁用项。
+逐场核对剧情发生顺序与剧本呈现顺序，以及场景之间的地点、时段、人物和道具状态承接；
+在 story_map 中保持事件时序，在 scene_summaries 的 state_in/state_out 中保留有依据的跨场变化。
+同名地点或同一时间词不足以证明同一物理地点、同一连续时段；证据不足时保留为待核验关系，
+不要用导演推测填补剧本的时空空白，也不要生成尚未确认的连续性 ID。
 不得发明对白、剧情、文化符号或人物动机。
 
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events, story_map,
@@ -1661,6 +1665,8 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
+场景之间存在明确承接时，state_out 与下一场相关的 state_in 应能对应；发生时间跳跃、地点转换
+或状态变化时记录其原文依据，无法判断时留空或标记待核验，不要把不同拍摄场次强行合并。
 只要剧本存在可定位的事件或场景，就至少输出 1 条 scene_summary；每个事件至少归入一个叙事场景候选。没有明确的入场/出场状态时留空，不要因此省略场景记录。scene_summary 是叙事场景候选，不是 Assets 场景实体，也不是最终拍摄场次。
 只写原文支持的事实；没有明确状态就留空，不要为了填字段而猜测。
 canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
