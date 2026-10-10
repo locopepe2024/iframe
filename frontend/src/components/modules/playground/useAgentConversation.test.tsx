@@ -1,10 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useAgentConversation } from './useAgentConversation';
-import { agentRequest } from '@/lib/api';
+import { agentRequest, knowledgeRequest } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
-vi.mock('@/lib/api', () => ({ agentRequest: vi.fn() }));
+vi.mock('@/lib/api', () => ({ agentRequest: vi.fn(), knowledgeRequest: vi.fn().mockResolvedValue({ enabled: false }) }));
+beforeEach(() => { vi.mocked(knowledgeRequest).mockResolvedValue({ enabled: false }); });
 afterEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
@@ -39,6 +40,24 @@ it('sends an explicit owner-scoped knowledge search request', async () => {
     await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
         knowledge_search: true,
         knowledge_query: '印刷政策',
+    })));
+    await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
+});
+
+it('sends live research only after capability is available and selected', async () => {
+    vi.mocked(knowledgeRequest).mockResolvedValue({ enabled: true });
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({ prompt: '英伟达 2026 年 3 月近况' });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.liveResearchAvailable).toBe(true));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    act(() => { hook.result.current.setKnowledgeSearch(true); hook.result.current.setLiveResearch(true); });
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        knowledge_search: true, live_research: true,
     })));
     await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
     hook.unmount();

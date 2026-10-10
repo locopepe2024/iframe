@@ -1,6 +1,7 @@
 """PostgreSQL ownership boundary for shared and personal collections."""
 
 from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import ssl
@@ -50,7 +51,7 @@ def migrate(connection):
     cursor = connection.cursor()
     cursor.execute("SELECT pg_advisory_xact_lock(42820101)")
     cursor.execute("CREATE TABLE IF NOT EXISTS knowledge_schema_versions (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())")
-    for version, filename in ((1, "schema.sql"), (2, "schema_v2.sql")):
+    for version, filename in ((1, "schema.sql"), (2, "schema_v2.sql"), (3, "schema_v3.sql")):
         cursor.execute("SELECT 1 FROM knowledge_schema_versions WHERE version = %s", (version,))
         if cursor.fetchone():
             continue
@@ -101,6 +102,224 @@ def _owner_collection(connection, collection_id: str, owner_profile_id: str):
     )
     if not cursor.fetchone():
         raise KnowledgeAccessDenied("Collection is not available")
+
+
+def create_research_run(connection, owner: str, session_id: str, query: str,
+                        collection_id: str, intent: dict | None = None):
+    _owner_collection(connection, collection_id, owner)
+    run_id = str(uuid.uuid4())
+    cursor = connection.cursor()
+    cursor.execute(
+        """INSERT INTO knowledge_research_runs
+           (id, owner_profile_id, session_id, query, intent, collection_id, status)
+           VALUES (%s, %s, %s, %s, %s::jsonb, %s, 'discovering')""",
+        (run_id, owner, session_id, query, json.dumps(intent or {}), collection_id),
+    )
+    return run_id
+
+
+def ensure_research_collection(connection, owner: str):
+    cursor = connection.cursor()
+    cursor.execute(
+        """SELECT id::text FROM knowledge_collections
+           WHERE scope = 'owner' AND owner_profile_id = %s AND domain = 'research'
+             AND status = 'active' ORDER BY created_at, id LIMIT 1""", (owner,),
+    )
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+    return create_owner_collection(connection, owner, "研究资料", "research")["id"]
+
+
+def get_research_run(connection, owner: str, run_id: str):
+    cursor = connection.cursor()
+    cursor.execute(
+        """SELECT id::text, session_id, query, intent, collection_id::text, status,
+                  candidates, error_code, created_at, updated_at
+           FROM knowledge_research_runs WHERE id = %s AND owner_profile_id = %s""",
+        (run_id, owner),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise KnowledgeAccessDenied("Research run is not available")
+    keys = ("id", "session_id", "query", "intent", "collection_id", "status", "candidates",
+            "error_code", "created_at", "updated_at")
+    result = dict(zip(keys, row))
+    if isinstance(result["candidates"], str):
+        result["candidates"] = json.loads(result["candidates"])
+    if isinstance(result["intent"], str):
+        result["intent"] = json.loads(result["intent"])
+    cursor.execute(
+        """SELECT id::text, source_url, state, attempts, source_id::text,
+                  revision_id::text, error_code
+           FROM knowledge_capture_jobs WHERE run_id = %s AND owner_profile_id = %s
+           ORDER BY created_at, id""",
+        (run_id, owner),
+    )
+    result["jobs"] = [dict(zip(("id", "source_url", "state", "attempts", "source_id",
+                                "revision_id", "error_code"), item)) for item in cursor.fetchall()]
+    return result
+
+
+def finish_discovery(connection, owner: str, run_id: str, candidates: list[dict], error_code: str | None = None):
+    cursor = connection.cursor()
+    cursor.execute(
+        """UPDATE knowledge_research_runs SET candidates = %s::jsonb, error_code = %s,
+                  status = %s, updated_at = now()
+           WHERE id = %s AND owner_profile_id = %s AND status = 'discovering'""",
+        (json.dumps(candidates), error_code,
+         "failed" if error_code else "awaiting_selection", run_id, owner),
+    )
+    if cursor.rowcount != 1:
+        raise KnowledgeAccessDenied("Research run is not available")
+
+
+def select_research_sources(connection, owner: str, run_id: str, urls: list[str]):
+    cursor = connection.cursor()
+    cursor.execute(
+        """SELECT id FROM knowledge_research_runs
+           WHERE id = %s AND owner_profile_id = %s FOR UPDATE""", (run_id, owner),
+    )
+    if not cursor.fetchone():
+        raise KnowledgeAccessDenied("Research run is not available")
+    run = get_research_run(connection, owner, run_id)
+    if run["status"] != "awaiting_selection":
+        raise ValueError("Research run is not awaiting source selection")
+    allowed = {item["url"] for item in run["candidates"] if item.get("access_status") == "public"}
+    if not urls or len(urls) > 5 or len(set(urls)) != len(urls) or any(url not in allowed for url in urls):
+        raise ValueError("Selected sources are not available candidates")
+    for url in urls:
+        cursor.execute(
+            """INSERT INTO knowledge_capture_jobs
+               (id, run_id, owner_profile_id, source_url, state)
+               VALUES (%s, %s, %s, %s, 'queued')""",
+            (str(uuid.uuid4()), run_id, owner, url),
+        )
+    cursor.execute(
+        """UPDATE knowledge_research_runs SET status = 'capturing', updated_at = now()
+           WHERE id = %s AND owner_profile_id = %s""", (run_id, owner),
+    )
+    return get_research_run(connection, owner, run_id)
+
+
+def reserve_discovery(connection, owner: str) -> bool:
+    cursor = connection.cursor()
+    cursor.execute("SELECT pg_advisory_xact_lock(42820102)")
+    for key, daily_limit in (("provider:gdelt", 200), ("owner:" + owner, 20)):
+        cursor.execute(
+            """SELECT CASE WHEN day = current_date THEN used ELSE 0 END,
+                      next_at > now() FROM knowledge_discovery_limits WHERE key = %s""", (key,),
+        )
+        row = cursor.fetchone()
+        if row and (row[0] >= daily_limit or row[1]):
+            return False
+    for key, delay in (("provider:gdelt", "5 seconds"), ("owner:" + owner, "0 seconds")):
+        cursor.execute(
+            """INSERT INTO knowledge_discovery_limits (key, day, used, next_at)
+               VALUES (%s, current_date, 1, now() + %s::interval)
+               ON CONFLICT (key) DO UPDATE SET
+                 day = current_date,
+                 used = CASE WHEN knowledge_discovery_limits.day = current_date
+                             THEN knowledge_discovery_limits.used + 1 ELSE 1 END,
+                 next_at = now() + %s::interval""", (key, delay, delay),
+        )
+    return True
+
+
+def claim_capture_job(connection):
+    cursor = connection.cursor()
+    cursor.execute(
+        """SELECT j.id::text, j.run_id::text, j.owner_profile_id, j.source_url,
+                  r.collection_id::text, r.candidates, j.attempts
+           FROM knowledge_capture_jobs j
+           JOIN knowledge_research_runs r ON r.id = j.run_id
+           WHERE j.state = 'queued' OR
+                 (j.state = 'running' AND j.lease_until < now() AND j.attempts < 3)
+           ORDER BY j.created_at, j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1"""
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    keys = ("id", "run_id", "owner", "source_url", "collection_id", "candidates", "attempts")
+    job = dict(zip(keys, row))
+    if isinstance(job["candidates"], str):
+        job["candidates"] = json.loads(job["candidates"])
+    cursor.execute(
+        """UPDATE knowledge_capture_jobs
+           SET state = 'running', attempts = attempts + 1,
+               lease_until = now() + interval '90 seconds', updated_at = now()
+           WHERE id = %s""", (job["id"],),
+    )
+    return job
+
+
+def fail_exhausted_jobs(connection):
+    cursor = connection.cursor()
+    cursor.execute(
+        """UPDATE knowledge_capture_jobs SET state = 'failed', error_code = 'lease_exhausted',
+                  lease_until = NULL, updated_at = now()
+           WHERE state = 'running' AND lease_until < now() AND attempts >= 3
+           RETURNING run_id::text"""
+    )
+    for run_id in {row[0] for row in cursor.fetchall()}:
+        cursor.execute(
+            """UPDATE knowledge_research_runs SET status = CASE
+                 WHEN EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                              WHERE run_id = %s AND state IN ('queued', 'running')) THEN 'capturing'
+                 WHEN EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                              WHERE run_id = %s AND state = 'ready') THEN 'partial'
+                 ELSE 'failed' END, updated_at = now() WHERE id = %s""",
+            (run_id, run_id, run_id),
+        )
+
+
+def finish_capture_job(connection, job: dict, source_id: str | None = None,
+                       revision_id: str | None = None, error_code: str | None = None):
+    cursor = connection.cursor()
+    cursor.execute(
+        """UPDATE knowledge_capture_jobs SET state = %s, source_id = %s,
+                  revision_id = %s, error_code = %s, lease_until = NULL,
+                  updated_at = now()
+           WHERE id = %s AND state = 'running' AND lease_until > now()""",
+        ("failed" if error_code else "ready", source_id, revision_id, error_code, job["id"]),
+    )
+    if cursor.rowcount != 1:
+        raise RuntimeError("Capture job lease expired")
+    cursor.execute(
+        """UPDATE knowledge_research_runs SET status = CASE
+               WHEN EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                            WHERE run_id = %s AND state IN ('queued', 'running')) THEN 'capturing'
+               WHEN EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                            WHERE run_id = %s AND state = 'ready')
+                    AND EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                                WHERE run_id = %s AND state = 'failed') THEN 'partial'
+               WHEN EXISTS (SELECT 1 FROM knowledge_capture_jobs
+                            WHERE run_id = %s AND state = 'ready') THEN 'ready'
+               ELSE 'failed' END, updated_at = now() WHERE id = %s""",
+        (job["run_id"], job["run_id"], job["run_id"], job["run_id"], job["run_id"]),
+    )
+
+
+def research_evidence(connection, owner: str, run_id: str):
+    run = get_research_run(connection, owner, run_id)
+    if run["status"] not in ("ready", "partial"):
+        raise ValueError("Research capture is not complete")
+    cursor = connection.cursor()
+    cursor.execute(
+           """SELECT u.id::text, j.revision_id::text, j.source_id::text,
+                  u.kind, u.locator, left(coalesce(u.body, ''), 1200),
+                  j.source_url, s.title, r.captured_at
+           FROM knowledge_capture_jobs j
+           JOIN knowledge_sources s ON s.id = j.source_id
+           JOIN knowledge_source_revisions r ON r.id = j.revision_id AND r.source_id = s.id
+           JOIN knowledge_content_units u ON u.source_revision_id = r.id
+           WHERE j.run_id = %s AND j.owner_profile_id = %s AND j.state = 'ready'
+           ORDER BY j.created_at, u.created_at LIMIT 20""", (run_id, owner),
+    )
+    columns = ("unit_id", "revision_id", "source_id", "kind", "locator", "excerpt",
+               "source_uri", "title", "captured_at")
+    return run, [{**dict(zip(columns, row)), "captured_at": row[-1].isoformat()}
+                 for row in cursor.fetchall()]
 
 
 def import_source(connection, owner_profile_id: str, collection_id: str, source: dict,

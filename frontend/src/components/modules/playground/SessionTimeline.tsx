@@ -3,7 +3,7 @@
 import { ArrowUpLeft, GitBranch, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { playgroundApi, type ChatMessage } from '@/lib/api';
+import { agentRequest, knowledgeRequest, playgroundApi, type ChatMessage, type ResearchRun } from '@/lib/api';
 import ResultCard from './ResultCard';
 import OverflowActions from './OverflowActions';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
@@ -141,7 +141,61 @@ function GenerationTurn({ generation }: { generation: PlaygroundGeneration }) {
   );
 }
 
-function ChatCard({ message, onDelete }: { message: ChatMessage; onDelete: (id: string) => void }) {
+function ResearchTask({ runId, answered }: { runId: string; answered: boolean }) {
+  const sessionId = usePlaygroundStore((state) => state.activeSessionId);
+  const [run, setRun] = useState<ResearchRun | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const answering = useRef(false);
+  async function answer() {
+    if (!sessionId || answering.current) return;
+    answering.current = true;
+    setError('');
+    try { await agentRequest(`/sessions/playground-${sessionId}/research/${runId}/answer`, 'POST'); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '生成简报失败'); }
+  }
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const current = await knowledgeRequest<ResearchRun>(`/research/${runId}`);
+        if (cancelled) return;
+        setRun(current);
+        if ((current.status === 'ready' || current.status === 'partial') && !answered && sessionId && !answering.current) {
+          await answer();
+        }
+      } catch (cause) { if (!cancelled) setError(cause instanceof Error ? cause.message : '读取研究任务失败'); }
+      finally { if (!cancelled && !answered) timer = setTimeout(refresh, 2500); }
+    }
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [runId, answered, sessionId]);
+  async function collect() {
+    if (!selected.length) return;
+    try {
+      const next = await knowledgeRequest<ResearchRun>(`/research/${runId}/sources`, 'POST', { urls: selected });
+      setRun(next); setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '提交来源失败'); }
+  }
+  if (!run) return <p role="status" className="mt-3 text-xs text-text-muted">正在读取研究任务…</p>;
+  return <div className="mt-3 border-t border-border-subtle pt-3 text-xs text-text-secondary">
+    <div className="font-medium text-foreground">研究任务 · {run.status === 'awaiting_selection' ? '选择来源' : run.status === 'capturing' ? '采集中' : run.status === 'ready' ? '资料已入库' : run.status === 'partial' ? '部分资料已入库' : run.status === 'failed' ? '未完成' : '检索中'}</div>
+    {run.status === 'awaiting_selection' && <>
+      <div className="mt-2 space-y-2">{run.candidates.map(candidate => <label key={candidate.url} className="flex items-start gap-2 break-all">
+        <input type="checkbox" checked={selected.includes(candidate.url)} disabled={candidate.access_status !== 'public'} onChange={event => setSelected(current => event.target.checked ? [...current, candidate.url] : current.filter(url => url !== candidate.url))} className="mt-0.5 h-4 w-4 accent-primary" />
+        <span><span className="font-medium text-foreground">{candidate.title}</span> · {candidate.publisher} · 发现时间 {candidate.seen_at || '未知'}{candidate.access_status !== 'public' && ' · 不在采集范围'}</span>
+      </label>)}</div>
+      <button type="button" disabled={!selected.length} onClick={() => { void collect(); }} className="mt-3 min-h-9 rounded border border-glass-border px-3 text-xs text-foreground disabled:opacity-50">采集所选来源</button>
+    </>}
+    {!!run.jobs.length && <p className="mt-2">{run.jobs.filter(job => job.state === 'ready').length}/{run.jobs.length} 个来源已入库{run.jobs.some(job => job.state === 'failed') && '，部分失败'}</p>}
+    {run.status === 'failed' && <p className="mt-2">{run.error_code || run.jobs.find(job => job.error_code)?.error_code || '采集失败'}</p>}
+    {error && <p role="alert" className="mt-2 text-status-failed-fg">{error}</p>}
+    {error && (run.status === 'ready' || run.status === 'partial') && <button type="button" onClick={() => { answering.current = false; void answer(); }} className="mt-2 min-h-9 rounded border border-glass-border px-3 text-xs text-foreground">重试生成简报</button>}
+  </div>;
+}
+
+function ChatCard({ message, onDelete, answered }: { message: ChatMessage; onDelete: (id: string) => void; answered: boolean }) {
   const [error, setError] = useState('');
   const restore = () => {
     const state = usePlaygroundStore.getState();
@@ -165,6 +219,7 @@ function ChatCard({ message, onDelete }: { message: ChatMessage; onDelete: (id: 
           <span className="text-text-muted">{citation.source_uri}</span>
         </li>)}</ul>
       </div>}
+      {message.research_run_id && <ResearchTask runId={message.research_run_id} answered={answered} />}
       {!!message.asset_names?.length && <div className="mt-3 flex flex-wrap gap-2">{message.asset_names.map((name, i) => <span key={i} title={name} className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">@{shortReferenceLabel(name)}</span>)}</div>}
       <button type="button" onClick={restore} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-glass-border px-3 text-xs text-text-secondary hover:text-primary"><ArrowUpLeft size={14} />{message.role === 'assistant' ? '填入输入框' : '编辑继续'}</button>
       <div className="mt-2 flex items-center text-xs text-text-muted"><time>{message.created_at ? new Date(message.created_at * 1000).toLocaleString() : '历史消息'}</time><OverflowActions label="消息操作" actions={[
@@ -221,7 +276,7 @@ export default function SessionTimeline({ messages = [], busy = false, error = '
       className="playground-scrollbar flex-1 overflow-y-auto px-4 py-5 md:px-6"
     >
       <div className="mx-auto max-w-5xl">
-        {sorted.map(entry => entry.kind === 'generation' ? <GenerationTurn key={'generation-' + entry.id} generation={entry.generation} /> : <ChatCard key={'chat-' + entry.id} message={entry.message} onDelete={onDeleteMessage} />)}
+        {sorted.map(entry => entry.kind === 'generation' ? <GenerationTurn key={'generation-' + entry.id} generation={entry.generation} /> : <ChatCard key={'chat-' + entry.id} message={entry.message} onDelete={onDeleteMessage} answered={!!entry.message.research_run_id && messages.some(item => item.research_answer_id === entry.message.research_run_id)} />)}
         {busy && <p role="status" className="pl-9 py-3 text-sm text-text-muted">Agent 正在回复…</p>}
         {error && <p role="alert" className="pl-9 py-3 text-sm text-status-failed-fg">{error}</p>}
       </div>
