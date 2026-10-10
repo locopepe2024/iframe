@@ -109,6 +109,22 @@ it('opens the knowledge panel and changes the search setting', () => {
     expect(within(dialog).getByDisplayValue('印刷政策')).toBeInTheDocument();
 });
 
+it('only enables live research when a provider is configured', () => {
+    function ResearchComposer() {
+        const [liveResearch, setLiveResearch] = useState(false);
+        return <AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} agent={{
+            active: true, model: 'chat', models: [], setModel: vi.fn(),
+            knowledgeSearch: true, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn(),
+            liveResearch, setLiveResearch, liveResearchAvailable: true,
+        }} />;
+    }
+    render(<ResearchComposer />);
+    fireEvent.click(screen.getByRole('button', { name: '知识库已开启' }));
+    const checkbox = within(screen.getByRole('dialog')).getByRole('checkbox', { name: '联网研究' });
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+});
+
 it('explains that H3 prompt optimization cannot search the knowledge base', () => {
     render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} agent={{
         active: true, model: 'minimax-h3-ir', models: [], setModel: vi.fn(),

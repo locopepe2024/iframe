@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
+import { agentRequest, knowledgeRequest } from '@/lib/api';
 import SessionTimeline, { mergeTimeline } from './SessionTimeline';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('./ResultCard', () => ({ default: ({ generation, onRetry }: { generation: PlaygroundGeneration; onRetry?: (g: PlaygroundGeneration) => void }) => <button onClick={() => onRetry?.(generation)}>重试</button> }));
+vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', agentRequest: vi.fn(), knowledgeRequest: vi.fn(), playgroundApi: {} }));
 
 it('orders chat and media by time and keeps legacy chat order', () => {
   const generation = { id: 'image', created_at: new Date(2000).toISOString() } as PlaygroundGeneration;
@@ -59,4 +61,24 @@ it('reports a missing session instead of silently ignoring retry', () => {
   fireEvent.click(screen.getByRole('button', { name: '重试' }));
   expect(screen.getByRole('alert')).toHaveTextContent('当前会话不可用');
   expect(usePlaygroundStore.getState().queue).toEqual([]);
+});
+
+it('shows discovery leads and submits only selected sources', async () => {
+  usePlaygroundStore.setState({ history: [], activeSessionId: 'session-a' });
+  vi.mocked(knowledgeRequest).mockResolvedValue({ id: 'run-a', status: 'awaiting_selection',
+    candidates: [{ url: 'https://example.org/a', title: 'Article A', publisher: 'Example', seen_at: '20260301', published_at: null, access_status: 'public' }], jobs: [] });
+  render(<SessionTimeline messages={[{ id: 'm', role: 'assistant', content: '候选来源', research_run_id: 'run-a' }]} />);
+  await screen.findByText('Article A');
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: '采集所选来源' }));
+  await waitFor(() => expect(vi.mocked(knowledgeRequest)).toHaveBeenCalledWith('/research/run-a/sources', 'POST', { urls: ['https://example.org/a'] }));
+});
+
+it('requests one cited answer after a durable run is ready', async () => {
+  usePlaygroundStore.setState({ history: [], activeSessionId: 'session-a' });
+  vi.mocked(knowledgeRequest).mockResolvedValue({ id: 'run-b', status: 'ready', candidates: [], jobs: [] });
+  vi.mocked(agentRequest).mockResolvedValue({ assistant_message: { id: 'answer' } });
+  render(<SessionTimeline messages={[{ id: 'm', role: 'assistant', content: '采集中', research_run_id: 'run-b' }]} />);
+  await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/playground-session-a/research/run-b/answer', 'POST'));
+  expect(vi.mocked(agentRequest)).toHaveBeenCalledTimes(1);
 });

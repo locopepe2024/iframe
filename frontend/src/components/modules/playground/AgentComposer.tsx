@@ -41,7 +41,7 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; knowledgeSearch: boolean; setKnowledgeSearch: (value: boolean) => void; knowledgeQuery: string; setKnowledgeQuery: (value: string) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; knowledgeSearch: boolean; setKnowledgeSearch: (value: boolean) => void; knowledgeQuery: string; setKnowledgeQuery: (value: string) => void; liveResearch?: boolean; setLiveResearch?: (value: boolean) => void; liveResearchAvailable?: boolean; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -189,6 +189,11 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
                 {agent?.knowledgeSearch && <label className="block text-xs text-text-secondary">检索词
                   <input value={agent.knowledgeQuery ?? ''} onChange={event => agent.setKnowledgeQuery?.(event.target.value)} maxLength={200} placeholder="留空则使用当前提问" className="mt-2 w-full rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground outline-none focus:border-primary" />
                 </label>}
+                {agent?.knowledgeSearch && <label className="flex min-h-11 items-center gap-3 text-sm text-foreground">
+                  <input type="checkbox" checked={agent.liveResearch ?? false} disabled={!agent.liveResearchAvailable} onChange={event => agent.setLiveResearch?.(event.target.checked)} className="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50" />
+                  联网研究
+                </label>}
+                {agent?.knowledgeSearch && !agent.liveResearchAvailable && <p className="text-xs text-text-muted">联网来源尚未配置</p>}
               </div>
             )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (

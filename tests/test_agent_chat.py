@@ -212,6 +212,71 @@ def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, 
     assert agent.messages(h3_sid, setup)['messages'] == []
 
 
+def test_live_research_starts_durable_run_without_claiming_citations(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    from src.apps.knowledge import api
+    run_id = str(__import__('uuid').uuid4())
+    monkeypatch.setattr(agent, 'plan_research', lambda ctx, model, content, previous: agent.ResearchIntent(
+        search_query='NVIDIA', subject='NVIDIA', start_date='2026-03-01',
+        end_date='2026-03-31', dimensions=['financial results']))
+    monkeypatch.setattr(agent, 'search_knowledge', lambda owner, query: [])
+    monkeypatch.setattr(api, 'start_research', lambda owner, session, query, intent: {
+        'id': run_id, 'status': 'awaiting_selection', 'candidates': [
+            {'url': 'https://example.org/a', 'title': 'Lead', 'access_status': 'public'}],
+    })
+    completion = Mock(side_effect=AssertionError('A lead must not be used as evidence'))
+    monkeypatch.setattr(agent, 'complete', completion)
+    result = agent.send(sid, agent.MessageCreate(content='英伟达 2026 年 3 月近况',
+                                                 knowledge_search=True, live_research=True), setup)
+    assert result['assistant_message']['research_run_id'] == run_id
+    assert '候选来源' in result['assistant_message']['content']
+    assert 'knowledge_citations' not in result['assistant_message']
+    completion.assert_not_called()
+
+
+def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    from src.apps.knowledge import api
+    monkeypatch.setattr(api, 'start_research', Mock(side_effect=AssertionError('Must clarify first')))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"ABC","subject":"ABC","start_date":"2026-03-01","end_date":"2026-03-31","dimensions":[],"needs_clarification":true,"clarification":"请确认是哪一家 ABC 公司？"}'))
+    result = agent.send(sid, agent.MessageCreate(content='研究 ABC 公司 2026 年 3 月',
+                                                 knowledge_search=True, live_research=True), setup)
+    assert result['assistant_message']['content'] == '请确认是哪一家 ABC 公司？'
+    assert 'research_run_id' not in result['assistant_message']
+
+
+def test_research_plan_rejects_future_or_reversed_window(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"NVIDIA","subject":"NVIDIA","start_date":"2027-03-31","end_date":"2027-03-01","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    with pytest.raises(HTTPException, match='研究需求解析失败'):
+        agent.plan_research(setup, 'qwen', '英伟达未来', [])
+
+
+def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch):
+    from contextlib import contextmanager
+    from src.apps.knowledge import store
+    run_id = __import__('uuid').uuid4()
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    @contextmanager
+    def transaction():
+        yield object()
+    monkeypatch.setattr(store, 'transaction', transaction)
+    monkeypatch.setattr(store, 'research_evidence', lambda connection, owner, rid: (
+        {'session_id': sid, 'query': '英伟达 2026 年 3 月', 'intent': {}, 'collection_id': 'collection-a', 'jobs': []},
+        [{'unit_id': 'unit-a', 'revision_id': 'revision-a', 'source_id': 'source-a',
+          'kind': 'text', 'locator': 'block:1', 'excerpt': '原文',
+          'source_uri': 'https://example.org/a', 'title': 'Article', 'captured_at': '2026-03-03T00:00:00Z'}]))
+    completion = Mock(side_effect=['错误引用 [unit-b]', '资料摘要 [unit-a]'])
+    monkeypatch.setattr(agent, 'complete', completion)
+    with pytest.raises(HTTPException, match='未提供可核对的来源引用'):
+        agent.answer_research(sid, run_id, setup)
+    assert agent.messages(sid, setup)['messages'] == []
+    first = agent.answer_research(sid, run_id, setup)['assistant_message']
+    second = agent.answer_research(sid, run_id, setup)['assistant_message']
+    assert first == second
+    assert first['knowledge_citations'][0]['revision_id'] == 'revision-a'
+    assert completion.call_count == 2
+
+
 def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     complete = Mock(return_value='我听着呢。')

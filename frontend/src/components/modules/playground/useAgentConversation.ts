@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { agentRequest, type ChatMessage, type ChatModel, type ChatSession } from '@/lib/api';
+import { agentRequest, knowledgeRequest, type ChatMessage, type ChatModel, type ChatSession } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceName } from './referenceMedia';
 import { readCompanionSkills, COMPANION_SKILLS_STORAGE_KEY, type CompanionSkillId } from './companionSkills';
@@ -21,6 +21,8 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const [companionSkills, setCompanionSkills] = useState<CompanionSkillId[]>([]);
   const [knowledgeSearch, setKnowledgeSearch] = useState(false);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
+  const [liveResearch, setLiveResearch] = useState(false);
+  const [liveResearchAvailable, setLiveResearchAvailable] = useState(false);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
@@ -33,6 +35,14 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     setCompanionSkills(readCompanionSkills(window.localStorage));
     setSkillsLoaded(true);
   }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    knowledgeRequest<{ enabled: boolean }>('/research-capability')
+      .then(result => { if (!cancelled) setLiveResearchAvailable(result.enabled); })
+      .catch(() => { if (!cancelled) setLiveResearchAvailable(false); });
+    return () => { cancelled = true; };
+  }, [enabled]);
   useEffect(() => {
     if (!skillsLoaded) return;
     try { window.localStorage.setItem(COMPANION_SKILLS_STORAGE_KEY, JSON.stringify(companionSkills)); } catch { /* Preferences are optional. */ }
@@ -140,6 +150,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         content: snapshot.prompt, input_media: snapshot.inputMedia,
         companion_skills: companionSkills,
         knowledge_search: knowledgeSearch,
+        live_research: knowledgeSearch && liveResearch && liveResearchAvailable,
         knowledge_query: knowledgeSearch && knowledgeQuery.trim() ? knowledgeQuery.trim() : undefined,
         asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
         duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
@@ -164,5 +175,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery, memories, memoryCandidates, memoryError, refreshMemories, extractMemories, saveMemory, editMemory, deleteMemory };
+  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery, liveResearch, setLiveResearch, liveResearchAvailable, memories, memoryCandidates, memoryError, refreshMemories, extractMemories, saveMemory, editMemory, deleteMemory };
 }

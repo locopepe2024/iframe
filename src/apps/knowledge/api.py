@@ -3,6 +3,7 @@
 import base64
 import binascii
 import json
+import os
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -11,7 +12,7 @@ from pg8000.dbapi import Error as PostgresError
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..identity import UserContext, require_user_context
-from . import blob_store, store
+from . import blob_store, discovery, store
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -53,6 +54,20 @@ class SearchRequest(BaseModel):
     domain: str | None = Field(default=None, max_length=80)
     kind: str | None = Field(default=None, pattern="^(text|image|table|video_segment)$")
     collection_id: UUID | None = None
+
+
+class ResearchCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=2, max_length=200)
+    session_id: str = Field(min_length=1, max_length=200)
+    collection_id: UUID | None = None
+
+
+class ResearchSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    urls: list[str] = Field(min_length=1, max_length=5)
 
 
 def _decode_unit(unit: ContentUnitCreate) -> dict:
@@ -189,3 +204,72 @@ def search(body: SearchRequest, ctx: UserContext = Depends(require_user_context)
             return {"hits": hits}
     except (OSError, ValueError, PostgresError, RuntimeError) as exc:
         raise HTTPException(503, "Knowledge database unavailable") from exc
+
+
+def start_research(owner: str, session_id: str, query: str,
+                   collection_id: str | None = None, intent: dict | None = None):
+    if len(query.strip()) < 2:
+        raise HTTPException(422, "Research query is too short")
+    try:
+        with store.transaction() as connection:
+            target = collection_id or store.ensure_research_collection(connection, owner)
+            run_id = store.create_research_run(connection, owner, session_id, query.strip(), target, intent)
+            allowed = (store.reserve_discovery(connection, owner)
+                       if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "gdelt" else True)
+        if not allowed:
+            candidates = []
+            error_code = "rate_budget"
+        else:
+            try:
+                planned = intent or {}
+                candidates = discovery.discover(planned.get("search_query") or query.strip(),
+                                                planned.get("start_date"), planned.get("end_date"))
+                error_code = None if candidates else "no_results"
+            except discovery.DiscoveryUnavailable as exc:
+                candidates = []
+                error_code = str(exc)
+        with store.transaction() as connection:
+            store.finish_discovery(connection, owner, run_id, candidates, error_code)
+            return store.get_research_run(connection, owner, run_id)
+    except store.KnowledgeAccessDenied as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (OSError, ValueError, PostgresError, RuntimeError) as exc:
+        raise HTTPException(503, "Knowledge research storage unavailable") from exc
+
+
+@router.post("/research", status_code=201)
+def create_research(body: ResearchCreate, ctx: UserContext = Depends(require_user_context)):
+    return start_research(ctx.owner_profile_id, body.session_id, body.query,
+                          str(body.collection_id) if body.collection_id else None)
+
+
+@router.get("/research-capability")
+def research_capability(ctx: UserContext = Depends(require_user_context)):
+    return {"enabled": os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "gdelt"
+            and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip())}
+
+
+@router.get("/research/{run_id}")
+def read_research(run_id: UUID, ctx: UserContext = Depends(require_user_context)):
+    try:
+        with store.transaction() as connection:
+            return store.get_research_run(connection, ctx.owner_profile_id, str(run_id))
+    except store.KnowledgeAccessDenied as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (OSError, ValueError, PostgresError, RuntimeError) as exc:
+        raise HTTPException(503, "Knowledge research storage unavailable") from exc
+
+
+@router.post("/research/{run_id}/sources")
+def select_research(run_id: UUID, body: ResearchSelection,
+                    ctx: UserContext = Depends(require_user_context)):
+    try:
+        with store.transaction() as connection:
+            return store.select_research_sources(connection, ctx.owner_profile_id,
+                                                 str(run_id), body.urls)
+    except store.KnowledgeAccessDenied as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except (OSError, PostgresError, RuntimeError) as exc:
+        raise HTTPException(503, "Knowledge research storage unavailable") from exc
