@@ -2392,6 +2392,7 @@
     "textGenerationMode": "Text to image",
     "referenceGenerationMode": "Reference image",
     "referenceIndex": "Reference index",
+    "referenceSearchHint": "Type after @ to search; use arrows and Enter; * marks the active view",
     "noMatchingReference": "No matching reference",
     "noAvailableReference": "No available reference",
     "explicitReferenceCount": "{count} explicit reference{suffix} selected",

@@ -90,6 +90,10 @@ def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     )
     episode_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "Episode 分集导演理解" in episode_prompt
+    assert "剧情发生顺序和剧本呈现顺序" in episode_prompt
+    assert "相邻及非相邻场景的地点" in episode_prompt
+    assert "同名地点或同一时间词不足以证明" in episode_prompt
+    assert "state_out 与下一场相关的 state_in 应能对应" in episode_prompt
 
 
 def test_series_director_failure_retains_model_response_evidence():
@@ -251,6 +255,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "用户没有明确标注该结构时，不得自行套用" in prompt
     assert '<stage_preset name="director-interpretation">' in prompt
     assert '<stage_preset name="director-intent">' in prompt
+    assert "相邻及非相邻场景的地点" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 1800
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 1
     assert result["setting"]["geography"] == "中国大学校园与北京"

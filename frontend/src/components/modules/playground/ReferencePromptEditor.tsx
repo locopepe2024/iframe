@@ -17,6 +17,7 @@ export type ReferenceCandidate = {
   previewUrl?: string;
   sourceLabel?: string;
   variantLabel?: string;
+  isActive?: boolean;
 };
 
 export type ReferenceSuggestion = {
@@ -130,9 +131,10 @@ export function referenceSelectionsFromEditor(editor: Editor): AssetLibraryRefer
   return references;
 }
 
-export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false }: {
+export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false }: {
   value: string; labels?: string[]; candidates?: ReferenceCandidate[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
   onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
+  onMentionKeyDown?: (event: KeyboardEvent) => boolean;
   onReferencesChange?: (references: AssetLibraryReference[]) => void;
   allowImplicitMentions?: boolean;
   editable?: boolean;
@@ -141,8 +143,8 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   const lastLocalValue = useRef<string | null>(null);
   const currentCandidates = useRef<ReferenceCandidate[]>(candidates ?? labels.map((label) => ({ label })));
   currentCandidates.current = candidates ?? labels.map((label) => ({ label }));
-  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onReferencesChange });
-  callbacks.current = { onChange, onSubmit, onMentionChange, onReferencesChange };
+  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange });
+  callbacks.current = { onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange };
   const initialCandidates = candidates ?? labels.map((label) => ({ label }));
   const editor = useEditor({
     immediatelyRender: false,
@@ -153,6 +155,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: 'min-h-[100px] max-h-[160px] overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none' },
       handleKeyDown: (_view, event) => {
+        if (callbacks.current.onMentionKeyDown?.(event)) return true;
         if (event.key === 'Escape') callbacks.current.onMentionChange?.(null);
         if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           callbacks.current.onSubmit?.(); return true;

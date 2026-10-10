@@ -918,6 +918,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
         ),
     );
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const [mentionIndex, setMentionIndex] = useState(0);
 
     // Style Controls
     const [applyStyle, setApplyStyle] = useState(true);
@@ -959,6 +960,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
         return assetIndex.flatMap((entry) => (entry.variants || []).map((variant: any, index: number) => {
             if (!variant?.id) return null;
             const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const isActive = entry.selected_variant_id === variant.id;
             const baseLabel = entry.variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
             let label = baseLabel;
             let suffix = 2;
@@ -969,14 +971,32 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                 previewUrl: getAssetUrl(variant.url),
                 sourceLabel: entry.source_scope,
                 variantLabel,
+                isActive,
                 reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
             };
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
 
     const matchingReferenceCandidates = referenceCandidates.filter((candidate) =>
-        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
-    );
+        candidate.label.toLocaleLowerCase().includes(mention?.query.trim().toLocaleLowerCase() ?? ""),
+    ).sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
+
+    const handleMentionKeyDown = (event: KeyboardEvent) => {
+        if (!mention) return false;
+        if (event.key === "Escape") { setMention(null); return true; }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setMentionIndex(current => (current + (event.key === "ArrowDown" ? 1 : -1) + matchingReferenceCandidates.length) % Math.max(matchingReferenceCandidates.length, 1));
+            return true;
+        }
+        if (event.key === "Enter" && matchingReferenceCandidates.length) {
+            event.preventDefault();
+            mention.choose(matchingReferenceCandidates[Math.min(mentionIndex, matchingReferenceCandidates.length - 1)]);
+            setMention(null);
+            return true;
+        }
+        return false;
+    };
 
     // Sync negative prompt if style changes
     useEffect(() => {
@@ -1150,7 +1170,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                         candidates={referenceCandidates}
                                         onChange={setImagePrompt}
                                         onReferencesChange={setPromptReferences}
-                                        onMentionChange={setMention}
+                                        onMentionChange={(suggestion) => { setMention(suggestion); setMentionIndex(0); }}
+                                        onMentionKeyDown={handleMentionKeyDown}
                                         allowImplicitMentions={false}
                                         pruneUnlistedReferences
                                         editable={!isGenerating}
@@ -1158,20 +1179,21 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                     />
                                     {mention && (
                                         <div role="listbox" aria-label="Reference index" className="absolute bottom-full left-0 z-50 mb-2 max-h-56 w-[min(100%,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
-                                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">{tv("referenceIndex")}</div>
+                                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">{tv("referenceIndex")} · {tv("referenceSearchHint")}</div>
                                             {matchingReferenceCandidates.length === 0 ? (
                                                 <div className="px-2 py-2 text-xs text-text-muted">{referenceCandidates.length ? tv("noMatchingReference") : tv("noAvailableReference")}</div>
-                                            ) : matchingReferenceCandidates.map((candidate) => (
+                                            ) : matchingReferenceCandidates.map((candidate, index) => (
                                                 <button
                                                     key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
                                                     type="button"
                                                     role="option"
                                                     onMouseDown={(event) => event.preventDefault()}
                                                     onClick={() => { mention.choose(candidate); setMention(null); }}
-                                                    className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover-bg"
+                                                    aria-selected={index === mentionIndex}
+                                                    className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover-bg ${index === mentionIndex ? "bg-hover-bg" : ""}`}
                                                 >
                                                     {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={14} className="text-text-muted" />}
-                                                    <span className="truncate text-xs text-foreground">@{candidate.label}</span>
+                                                    <span className="truncate text-xs text-foreground">{candidate.isActive ? "* " : ""}@{candidate.label}</span>
                                                 </button>
                                             ))}
                                         </div>
