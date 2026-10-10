@@ -10,6 +10,7 @@ export const DEFAULT_CHARACTER_NEGATIVE_PROMPT =
     "低质量，解剖结构错误，手部错误，文字，瑕疵，缺失手指，多余手指，裁切，最差质量，JPEG压缩伪影，签名，水印，模糊";
 
 function cleanFragment(value: unknown): string {
+    if (value == null || typeof value === "boolean") return "";
     return String(value ?? "")
         .trim()
         .replace(/[。！？.!?]+$/, "");

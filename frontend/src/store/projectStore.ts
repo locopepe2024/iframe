@@ -218,6 +218,8 @@ export interface StyleConfig {
     positive_prompt: string;
     negative_prompt: string;
     thumbnail_url?: string;
+    tags?: string[];
+    sample_prompt?: string;
     is_custom: boolean;
     reason?: string; // For AI recommendations
 }
@@ -256,6 +258,18 @@ export interface DirectorProfile {
     revision: number;
     content_hash: string;
     confirmed_at: number;
+}
+
+export interface EpisodeUnderstandingHandoff {
+    status: "not_generated" | "draft" | "compatibility" | "confirmed" | "stale";
+    episode_summary?: string | null;
+    incoming_handoff?: Record<string, unknown>;
+    outgoing_handoff?: Record<string, unknown>;
+    source_refs?: string[];
+    source_revision?: number | null;
+    series_director_revision?: number | null;
+    episode_director_revision?: number | null;
+    generated_at?: number | null;
 }
 
 export type DirectorEvidenceStatus = "explicit" | "interpretation" | "uncertain" | "conflicted";
@@ -473,6 +487,8 @@ export interface Project {
     style_preset?: string;
     style_prompt?: string;
     art_direction?: ArtDirection;
+    director_style_review_required?: boolean;
+    series_director_review_required?: boolean;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
     workflow_mode?: "i2v_legacy" | "r2v";
@@ -486,6 +502,7 @@ export interface Project {
     assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
+    episode_understanding?: EpisodeUnderstandingHandoff | null;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
     starred?: boolean;
 }

@@ -18,6 +18,7 @@ from src.apps.comic_gen.models import (
     DirectorProfile,
     DirectorShootingPlan,
     DirectorStoryMap,
+    EpisodeAssetBinding,
     Prop,
     Script,
     StoryboardFrame,
@@ -345,9 +346,86 @@ def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     assert script.episode_visual_context is not None
 
 
+def test_unbound_plan_scene_id_does_not_resolve_as_scene_asset():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_id = "cinema"  # Collides with an existing Scene asset ID.
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    revision = script.director_shooting_plan_revisions[-1]
+    script.episode_asset_bindings = [EpisodeAssetBinding(
+        asset_type="scene", asset_id="cinema", scene_ids=["cinema"],
+        source_plan_revision=revision.revision, source_plan_hash=revision.content_hash,
+        status="accepted",
+    )]
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    assert not any(item["asset_type"] == "scene" and item["status"] != "stale"
+                   for item in result["bindings"])
+    assert [(item["asset_id"], item["status"]) for item in result["stale_bindings"]] == [
+        ("cinema", "stale")]
+    assert {item["scene_id"] for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"} == {"cinema"}
+    assert pipeline._episode_asset_context_prompt(script, "scene", "cinema") == ""
+
+
+def test_distinct_shot_scene_bindings_are_synced_and_visible_to_storyboard():
+    from src.apps.comic_gen.models import Scene
+
+    pipeline, script = make_pipeline()
+    room = Scene(id="room", name="室内", description="室内")
+    script.scenes.append(room)
+    pipeline.resolve_episode_assets.return_value["scenes"].append(room)
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.scene_binding = DirectorPlanSceneBinding(scene_asset_id="cinema")
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-room"
+    second.order = 1
+    second.scene_binding = DirectorPlanSceneBinding(scene_asset_id="room")
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    scenes = {item["asset_id"]: item for item in result["bindings"]
+              if item["asset_type"] == "scene" and item["status"] != "stale"}
+    assert {asset_id: item["shot_ids"] for asset_id, item in scenes.items()} == {
+        "cinema": ["shot-entry"], "room": ["shot-room"]}
+    assert [(item["shot_id"], item["scene_asset_id"])
+            for item in result["context"]["shots"]] == [
+                ("shot-entry", "cinema"), ("shot-room", "room")]
+    assert pipeline._episode_asset_context_prompt(script, "scene", "room")
+
+
+def test_unbound_shot_scene_remains_visible_beside_bound_shot():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.scene_binding = DirectorPlanSceneBinding(scene_asset_id="cinema")
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-unbound"
+    second.order = 1
+    second.scene_binding = None
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    assert [(item["asset_id"], item["shot_ids"]) for item in result["bindings"]
+            if item["asset_type"] == "scene"] == [("cinema", ["shot-entry"])]
+    assert [(item["scene_id"], item.get("shot_id")) for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"] == [
+                ("scene-cinema", "shot-unbound")]
+
+
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
     first = pipeline.sync_episode_assets_from_shooting_plan("film")
@@ -392,6 +470,20 @@ def test_asset_sync_maps_person_to_character_and_preserves_distinct_scene_looks(
     assert pipeline._episode_asset_context_prompt(script, "character", "shen-xia-young") == ""
 
 
+def test_shot_context_separates_person_ids_from_character_asset_ids():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    shot = plan.scenes[0].beats[0].shots[0]
+    shot.cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    context = pipeline.project_episode_visual_context("film")
+
+    assert context.shots[0].character_ids == ["shen-xia-young"]
+    assert context.shots[0].person_ids == ["shen-xia"]
+
+
 def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     pipeline, script = make_pipeline()
     career = Character(id="shen-xia-career", name="沈夏（职场）", description="职场时期", base_character_id="shen-xia")
@@ -407,13 +499,22 @@ def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert any(item.get("reason") == "era_variant_unresolved" for item in result["unresolved_bindings"])
     assert not any(item["asset_type"] == "character" for item in result["bindings"])
+    assert result["context"]["shots"][0]["character_ids"] == []
+    assert result["context"]["shots"][0]["person_ids"] == ["shen-xia"]
 
 
 def test_sync_only_marks_assets_affected_by_a_plan_change():
-    pipeline, _ = make_pipeline()
+    from src.apps.comic_gen.models import Scene
+
+    pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    restaurant = Scene(id="restaurant", name="餐馆", description="餐馆")
+    script.scenes.append(restaurant)
+    pipeline.resolve_episode_assets.return_value["scenes"].append(restaurant)
     second_scene = plan.scenes[0].model_copy(deep=True)
     second_scene.scene_id = "scene-restaurant"
+    second_scene.scene_asset_id = "restaurant"
     second_scene.order = 1
     second_scene.beats[0].beat_id = "beat-restaurant"
     second_scene.beats[0].shots[0].shot_id = "shot-restaurant"
@@ -426,8 +527,8 @@ def test_sync_only_marks_assets_affected_by_a_plan_change():
     pipeline.save_director_shooting_plan_draft("film", 1, 1, plan)
     pipeline.apply_director_shooting_plan("film", plan, 1, 2)
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert any(item["asset_id"] == "scene-cinema" for item in result["reusable_bindings"])
-    assert any(item["asset_id"] == "scene-restaurant" for item in result["changed_bindings"])
+    assert any(item["asset_id"] == "cinema" for item in result["reusable_bindings"])
+    assert any(item["asset_id"] == "restaurant" for item in result["changed_bindings"])
 
 def test_style_save_preserves_episode_assets_and_director_profile():
     pipeline, script = make_pipeline()
@@ -450,6 +551,28 @@ def test_style_save_preserves_episode_assets_and_director_profile():
         [item.id for item in updated.props],
     ) == asset_ids_before
     assert updated.art_direction.director_profile == profile_before
+
+
+def test_adopting_new_director_interpretation_creates_new_plan_revision():
+    pipeline, script = make_pipeline()
+    old_plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, old_plan)
+    pipeline.apply_director_shooting_plan("film", old_plan, 0, 1)
+
+    script.art_direction.director_profile.revision = 4
+    script.art_direction.director_profile.content_hash = "director-hash-v4"
+    lineage = pipeline.director_shooting_plan_lineage("film")
+    aligned_plan = old_plan.model_copy(update={
+        "director_profile_revision": lineage["director_profile_revision"],
+        "director_profile_hash": lineage["director_profile_hash"],
+        "effective_style_hash": lineage["effective_style_hash"],
+    })
+    pipeline.save_director_shooting_plan_draft("film", 1, 1, aligned_plan)
+    pipeline.apply_director_shooting_plan("film", aligned_plan, 1, 2)
+
+    assert [item.revision for item in script.director_shooting_plan_revisions] == [1, 2]
+    assert script.director_shooting_plan_revisions[0].plan.director_profile_revision == 3
+    assert script.director_shooting_plan_revisions[1].plan.director_profile_revision == 4
 
 
 def test_confirmation_allows_missing_performance_physics_or_lighting_for_later_editing():

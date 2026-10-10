@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference } from "@/lib/api";
-import { getAssetUrl } from "@/lib/utils";
+import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -22,8 +22,8 @@ import {
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { toast } from "@/store/toastStore";
-import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
-import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
+import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
+import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
@@ -115,6 +115,12 @@ export default function ConsistencyVault() {
         } catch (error) {
             console.error("Failed to update asset attributes:", error);
         }
+    };
+
+    const handleRenameAsset = async (assetId: string, type: string, name: string) => {
+        if (!currentProject) return;
+        const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, { name });
+        updateProject(currentProject.id, updatedProject);
     };
 
     const handleClearGenerationState = async (assetId: string, type: string) => {
@@ -237,7 +243,18 @@ export default function ConsistencyVault() {
         if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
 
         try {
-            if (type === "character") {
+            const asset = (type === "character" ? currentProject.characters :
+                type === "scene" ? currentProject.scenes : currentProject.props)
+                ?.find((item: any) => item.id === assetId);
+            if (asset?.source === "series" && currentProject.series_id) {
+                try {
+                    await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId);
+                } catch (error) {
+                    const detail = (error as any)?.response?.data?.detail;
+                    if (detail?.error !== "series_asset_in_use" || !confirm("该资产仍被分集引用。强制删除将解除当前分镜和资产绑定；已确认拍摄计划的历史 ID 会保留，需在新版本中重新关联。继续删除？")) throw error;
+                    await api.deleteSeriesAsset(currentProject.series_id, type as "character" | "scene" | "prop", assetId, true);
+                }
+            } else if (type === "character") {
                 await crudApi.deleteCharacter(currentProject.id, assetId);
             } else if (type === "scene") {
                 await crudApi.deleteScene(currentProject.id, assetId);
@@ -249,7 +266,10 @@ export default function ConsistencyVault() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete asset:", error);
-            alert("Failed to delete asset");
+            const detail = (error as any)?.response?.data?.detail;
+            alert(detail?.error === "series_asset_in_use"
+                ? "资产仍被分集引用，删除未完成。请刷新后重试或检查引用。"
+                : extractErrorDetail(error, "Failed to delete asset"));
         }
     };
 
@@ -401,6 +421,8 @@ export default function ConsistencyVault() {
             const diff = await api.syncEpisodeAssetsFromShootingPlan(currentProject.id);
             setEpisodeAssetSync(diff);
             setEpisodeAssetState({ context: diff.context, bindings: diff.bindings });
+            const updatedProject = await api.getProject(currentProject.id);
+            updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             alert(error?.response?.data?.detail || error?.message || "请先确认拍摄计划");
         } finally {
@@ -491,9 +513,11 @@ export default function ConsistencyVault() {
                 </div>
             )}
 
-            {(episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 && currentProject && (
+            {((episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 ||
+                getUnboundCharacterRequirements(episodeAssetState.context).length > 0) && currentProject && (
                 <ShootingPlanAssetRequirements
                     bindings={episodeAssetSync?.bindings || episodeAssetState.bindings}
+                    context={episodeAssetState.context}
                     project={currentProject}
                     onOpenAsset={(assetType, assetId) => {
                         setActiveTab(assetType);
@@ -577,6 +601,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
+                            onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
                             onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
@@ -643,13 +668,16 @@ export default function ConsistencyVault() {
 
 function ShootingPlanAssetRequirements({
     bindings,
+    context,
     project,
     onOpenAsset,
 }: {
     bindings: EpisodeVisualContextState["bindings"];
+    context: EpisodeVisualContext | null;
     project: any;
     onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
 }) {
+    const unboundCharacters = getUnboundCharacterRequirements(context);
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
         { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character") },
         { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
@@ -663,20 +691,20 @@ function ShootingPlanAssetRequirements({
 
     return (
         <section className="mx-6 mt-3 rounded-lg border border-glass-border bg-surface px-4 py-3" aria-label="拍摄计划资产需求">
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
                     <p className="mt-1 text-xs text-text-secondary">这里展示分镜前置需求。打开已有基础资产后再生成场景变体，系统不会自动生成图片。</p>
                 </div>
-                <span className="shrink-0 text-xs text-text-muted">{bindings.length} 条绑定</span>
+                <span className="text-xs text-text-muted">{bindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
                 {groups.map(group => (
                     <div key={group.type} className="min-w-0 rounded-md border border-glass-border bg-glass/40 p-3">
                         <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
-                            <span>{group.label}</span><span>{group.items.length}</span>
+                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? unboundCharacters.length : 0)}</span>
                         </div>
-                        {group.items.length === 0 ? (
+                        {group.items.length === 0 && (group.type !== "character" || unboundCharacters.length === 0) ? (
                             <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
                         ) : (
                             <div className="mt-2 max-h-32 space-y-2 overflow-y-auto">
@@ -692,6 +720,12 @@ function ShootingPlanAssetRequirements({
                                         </div>
                                     );
                                 })}
+                                {group.type === "character" && unboundCharacters.map((requirement, index) => (
+                                    <div key={`unbound:${requirement.personId}`} className="rounded border border-glass-border/70 px-2 py-1.5" title={requirement.personId}>
+                                        <p className="truncate text-xs text-foreground">人物 {index + 1} · {requirement.personId.slice(0, 8)}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · 待关联角色资产</p>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>

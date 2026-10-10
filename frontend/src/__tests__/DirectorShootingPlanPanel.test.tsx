@@ -3,14 +3,14 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, expect, it, vi } from "vitest";
-import messages from "../../../messages/en.json";
+import messages from "../../messages/en.json";
 import { api } from "@/lib/api";
 import type {
     DirectorShootingPlan,
     DirectorShootingPlanState,
 } from "@/lib/directorShootingPlan";
 import { useProjectStore } from "@/store/projectStore";
-import DirectorShootingPlanPanel from "./DirectorShootingPlanPanel";
+import DirectorShootingPlanPanel from "../components/modules/DirectorShootingPlanPanel";
 
 const plan: DirectorShootingPlan = {
     schema_version: 1,
@@ -195,19 +195,31 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     expect(screen.queryByRole("button", { name: /Create video task/ })).not.toBeInTheDocument();
 });
 
-it("lets the user choose editing or continue with a stale saved plan", async () => {
+it("distinguishes plan v2 from Director v2 and aligns the draft before confirmation", async () => {
+    const oldPlan = { ...plan, director_profile_revision: 1, director_profile_hash: "old-director-hash" };
     vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
-        ...state(plan, 1),
+        ...state(oldPlan, 2, 2),
         draft_stale: true,
+        current_stale: true,
+        current: {
+            revision: 2, content_hash: "old-plan-hash", confirmed_at: 20,
+            source_revision: 1, source_revision_id: "source-r1:script-hash",
+            director_profile_revision: 1, director_profile_hash: "old-director-hash",
+            effective_style_hash: "style-hash", scene_count: 1, beat_count: 1,
+            shot_count: 1, duration_seconds: 4,
+        },
     });
+    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, expectedRevision, draft) => ({
+        project_id: "film", draft_revision: expectedRevision + 1, draft_updated_at: 21, draft,
+    }));
     const confirm = vi.spyOn(api, "confirmDirectorShootingPlan").mockResolvedValue({
-        project_id: "film", current_revision: 1, current: {
-            revision: 1, content_hash: "hash", confirmed_at: 30,
+        project_id: "film", current_revision: 3, current: {
+            revision: 3, content_hash: "hash", confirmed_at: 30,
             source_revision: 1, source_revision_id: "source-r1:script-hash",
             director_profile_revision: 2, director_profile_hash: "director-hash",
             effective_style_hash: "style-hash", scene_count: 1, beat_count: 1,
             shot_count: 1, duration_seconds: 4,
-        }, draft_revision: 1,
+        }, draft_revision: 3,
     });
 
     render(
@@ -216,13 +228,20 @@ it("lets the user choose editing or continue with a stale saved plan", async () 
         </NextIntlClientProvider>,
     );
 
-    expect(await screen.findByText(/source script or Director interpretation changed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit this plan" })).toBeInTheDocument();
-    const continueButton = screen.getByRole("button", { name: "Continue with current plan" });
-    expect(continueButton).toBeEnabled();
-    fireEvent.click(continueButton);
+    expect(await screen.findByText(/Shooting-plan draft r2 still uses older upstream inputs/i)).toBeInTheDocument();
+    expect(screen.getByText("Director interpretation revision changed from 1 to 2.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit plan draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Link current Director interpretation and save draft" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(
+        "film", 1, 2, expect.objectContaining({ director_profile_revision: 2, director_profile_hash: "director-hash" }),
+    ));
+    expect(await screen.findByText(/Confirmed shooting plan v2 still uses older upstream inputs/i)).toBeInTheDocument();
+    const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
+    expect(confirmButton).toBeEnabled();
+    fireEvent.click(confirmButton);
     await waitFor(() => expect(confirm).toHaveBeenCalledWith(
-        "film", 0, 1, expect.objectContaining({ scenes: expect.any(Array) }), "", "", true,
+        "film", 2, 3, expect.objectContaining({ director_profile_revision: 2 }), "", "",
     ));
 });
 
@@ -244,6 +263,28 @@ it("does not stale a plan when only the visual style changes", async () => {
 
     expect(await screen.findByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
     expect(screen.queryByText(/visual style changed/i)).not.toBeInTheDocument();
+});
+
+it("does not relabel a draft from an older script source", async () => {
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
+        ...state(plan, 2),
+        current_lineage: {
+            ...state(plan, 2).current_lineage,
+            source_revision: 2,
+            source_revision_id: "source-r2:new-script-hash",
+        },
+        draft_stale: true,
+    });
+
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorShootingPlanPanel />
+        </NextIntlClientProvider>,
+    );
+
+    expect(await screen.findByText("Script revision changed from 1 to 2.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Link current Director interpretation and save draft" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
 });
 
 it("lets the user discard a generated but unsaved proposal", async () => {

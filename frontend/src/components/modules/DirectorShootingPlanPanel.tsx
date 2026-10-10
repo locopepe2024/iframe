@@ -95,6 +95,22 @@ function emptyPlan(lineage: Record<string, unknown>): DirectorShootingPlan {
     };
 }
 
+function stableLineageChanged(plan: DirectorShootingPlan | null, lineage: Record<string, unknown> | null | undefined): boolean {
+    return Boolean(plan && (!lineage || plan.source_revision !== lineage.source_revision
+        || plan.source_revision_id !== lineage.source_revision_id
+        || plan.director_profile_revision !== lineage.director_profile_revision
+        || plan.director_profile_hash !== lineage.director_profile_hash));
+}
+
+function alignPlanToDirector(plan: DirectorShootingPlan, lineage: Record<string, unknown>): DirectorShootingPlan {
+    return {
+        ...plan,
+        director_profile_revision: Number(lineage.director_profile_revision),
+        director_profile_hash: String(lineage.director_profile_hash),
+        effective_style_hash: String(lineage.effective_style_hash ?? plan.effective_style_hash),
+    };
+}
+
 function reindex<T extends { order: number }>(items: T[]): T[] {
     return items.map((item, order) => ({ ...item, order }));
 }
@@ -281,6 +297,14 @@ export default function DirectorShootingPlanPanel() {
     const [revisionSummary, setRevisionSummary] = useState("");
 
     const sourceRevision = currentProject?.source_revision ?? 1;
+    const currentLineage = serverState?.current_lineage;
+    const draftStale = Boolean(serverState?.draft_stale || stableLineageChanged(plan, currentLineage));
+    const currentStale = Boolean(serverState?.current_stale);
+    const canAlignPlan = Boolean(plan && currentLineage && !serverState?.readiness_error
+        && plan.source_revision === currentLineage.source_revision
+        && plan.source_revision_id === currentLineage.source_revision_id
+        && (plan.director_profile_revision !== currentLineage.director_profile_revision
+            || plan.director_profile_hash !== currentLineage.director_profile_hash));
     const dirty = useMemo(() => planFingerprint(plan) !== planFingerprint(savedPlan), [plan, savedPlan]);
     const scenes = plan?.scenes ?? [];
     const beats = scenes.flatMap(scene => scene.beats);
@@ -403,10 +427,11 @@ export default function DirectorShootingPlanPanel() {
         setAction("save");
         setError("");
         try {
-            const allowStaleLineage = stale || Boolean(serverState?.readiness_error);
+            const planToSave = canAlignPlan && currentLineage ? alignPlanToDirector(plan, currentLineage) : plan;
+            const allowStaleLineage = !canAlignPlan && (draftStale || Boolean(serverState?.readiness_error));
             const result = allowStaleLineage
-                ? await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan, true)
-                : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan);
+                ? await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave, true)
+                : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave);
             setPlan(result.draft);
             setSavedPlan(result.draft);
             setServerState(previous => previous ? {
@@ -414,7 +439,7 @@ export default function DirectorShootingPlanPanel() {
                 draft: result.draft,
                 draft_revision: result.draft_revision,
                 draft_updated_at: result.draft_updated_at,
-                draft_stale: false,
+                draft_stale: stableLineageChanged(result.draft, previous.current_lineage),
             } : previous);
             setNotice(t("draftSaved", { revision: result.draft_revision }));
         } catch (cause) {
@@ -425,14 +450,11 @@ export default function DirectorShootingPlanPanel() {
     };
 
     const confirmPlan = async () => {
-        if (!projectId || !plan) return;
+        if (!projectId || !plan || dirty || draftStale || serverState?.readiness_error) return;
         setAction("confirm");
         setError("");
         try {
-            const allowStaleLineage = stale || Boolean(serverState?.readiness_error);
-            const result = allowStaleLineage
-                ? await api.confirmDirectorShootingPlan(projectId, serverState?.current_revision ?? 0, serverState?.draft_revision ?? 0, plan, revisionTitle, revisionSummary, true)
-                : await api.confirmDirectorShootingPlan(projectId, serverState?.current_revision ?? 0, serverState?.draft_revision ?? 0, plan, revisionTitle, revisionSummary);
+            const result = await api.confirmDirectorShootingPlan(projectId, serverState?.current_revision ?? 0, serverState?.draft_revision ?? 0, plan, revisionTitle, revisionSummary);
             setNotice(t("confirmed", { revision: result.current_revision }));
             await load();
         } catch (cause) {
@@ -474,20 +496,9 @@ export default function DirectorShootingPlanPanel() {
     }
 
     const locked = action !== null;
-    const localPlanStale = Boolean(plan && (
-        plan.source_revision !== serverState?.current_lineage?.source_revision
-        || plan.source_revision_id !== serverState?.current_lineage?.source_revision_id
-        || plan.director_profile_revision !== serverState?.current_lineage?.director_profile_revision
-        || plan.director_profile_hash !== serverState?.current_lineage?.director_profile_hash
-    ));
-    const draftStale = Boolean(serverState?.draft_stale || localPlanStale);
-    const currentStale = Boolean(serverState?.current_stale);
-    const stale = draftStale || currentStale;
-    const planNeedsExplicitAccept = Boolean(plan && (stale || serverState?.readiness_error));
-    const staleReferences = [
-        plan,
-        currentStale ? serverState?.current : null,
-    ].filter((item): item is NonNullable<typeof plan> => Boolean(item));
+    const showLineageNotice = Boolean(plan && (draftStale || currentStale || serverState?.readiness_error));
+    const staleReferences = (draftStale ? [plan] : currentStale ? [serverState?.current] : [])
+        .filter((item): item is NonNullable<typeof plan> => Boolean(item));
     const staleChanges = Array.from(new Set(staleReferences.flatMap(reference => [
         serverState?.current_lineage?.source_revision !== undefined && reference.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: reference.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
         serverState?.current_lineage?.source_revision_id && reference.source_revision_id !== serverState.current_lineage.source_revision_id ? t("changedScriptContent") : null,
@@ -544,14 +555,16 @@ export default function DirectorShootingPlanPanel() {
                     <span>{t("notReady", { reason: serverState.readiness_error })}</span>
                 </div>
             )}
-            {planNeedsExplicitAccept && (
+            {showLineageNotice && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
                     <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                        <span>{t(draftStale ? "stale" : serverState?.readiness_error ? "staleWithReadinessError" : "confirmedStale")}</span>
+                        <span>{serverState?.readiness_error ? t("staleWithReadinessError") : draftStale
+                            ? t("draftStale", { draft: serverState?.draft_revision ?? 0 })
+                            : t("confirmedStale", { revision: serverState?.current_revision ?? 0 })}</span>
                         {plan && <>
                             <button type="button" onClick={openPlanEditor} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
-                            <span className="text-xs text-amber-100/80">{t("staleChoiceHint")}</span>
+                            {canAlignPlan && <button type="button" onClick={save} disabled={locked} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 disabled:opacity-50">{t("adoptCurrentDirector")}</button>}
                         </>}
                         {staleChanges.length > 0 && <ul className="basis-full list-disc pl-5 text-xs text-amber-100/90">{staleChanges.map(change => <li key={change}>{change}</li>)}</ul>}
                     </span>
@@ -907,8 +920,8 @@ export default function DirectorShootingPlanPanel() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
-                            <button type="button" onClick={save} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
-                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : planNeedsExplicitAccept ? t("continueWithPlan") : t("confirmPlan")}</button>
+                            <button type="button" onClick={save} disabled={locked || (!dirty && !canAlignPlan) || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : canAlignPlan ? t("saveAndAlign") : t("saveDraft")}</button>
+                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>
                 </>

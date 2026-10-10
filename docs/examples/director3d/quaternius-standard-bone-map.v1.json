@@ -1,0 +1,41 @@
+{
+  "schema": "director3d-bone-map.v1",
+  "revision": "quaternius-standard-to-white-model-candidate-2",
+  "sourceRig": "Quaternius Universal Animation Library Standard",
+  "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+  "sourceBufferSha256": "6e65377d81558333c4093dbb144a48fd19019343d82b1a3a7992a98ec0e0543c",
+  "targetRig": "white-model-neutral-female-v1.glb",
+  "targetSha256": "d31319921ff0cc8600ccc2aa822a17503483f192a32dda2fc2a5f5ce61f111cf",
+  "targetBlendSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "retargetStatus": "unmapped",
+  "pairs": [
+    { "source": "DEF-hips", "target": "pelvis" },
+    { "source": "DEF-spine.001", "target": "spine_lower" },
+    { "source": "DEF-spine.002", "target": "spine_mid" },
+    { "source": "DEF-spine.003", "target": "spine_chest" },
+    { "source": "DEF-neck", "target": "neck" },
+    { "source": "DEF-head", "target": "head" },
+    { "source": "DEF-shoulder.L", "target": "clavicle_l" },
+    { "source": "DEF-upper_arm.L", "target": "upper_arm_l" },
+    { "source": "DEF-forearm.L", "target": "lower_arm_l" },
+    { "source": "DEF-hand.L", "target": "hand_l" },
+    { "source": "DEF-shoulder.R", "target": "clavicle_r" },
+    { "source": "DEF-upper_arm.R", "target": "upper_arm_r" },
+    { "source": "DEF-forearm.R", "target": "lower_arm_r" },
+    { "source": "DEF-hand.R", "target": "hand_r" },
+    { "source": "DEF-thigh.L", "target": "upper_leg_l" },
+    { "source": "DEF-shin.L", "target": "lower_leg_l" },
+    { "source": "DEF-foot.L", "target": "foot_l" },
+    { "source": "DEF-toe.L", "target": "toe_l" },
+    { "source": "DEF-thigh.R", "target": "upper_leg_r" },
+    { "source": "DEF-shin.R", "target": "lower_leg_r" },
+    { "source": "DEF-foot.R", "target": "foot_r" },
+    { "source": "DEF-toe.R", "target": "toe_r" }
+  ],
+  "neutralTargetBones": ["wrist_l", "wrist_r", "ankle_l", "ankle_r", "DEF_foot_l", "DEF_foot_r"],
+  "warnings": [
+    "Source foot and target foot rest directions differ substantially; contact and IK are not admitted.",
+    "Target wrist and ankle helper chains remain neutral in this diagnostic.",
+    "Finger channels and root translation are not included."
+  ]
+}

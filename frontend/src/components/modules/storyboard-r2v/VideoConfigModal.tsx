@@ -23,6 +23,7 @@ export interface VideoConfig {
     r2vModel: string;
     duration: number;
     resolution: string;
+    ratio?: string;
     promptExtend: boolean;
     negativePrompt: string;
     audio?: boolean;
@@ -62,6 +63,7 @@ export const DEFAULT_VIDEO_CONFIG: VideoConfig = {
     r2vModel: DEFAULT_R2V_MODEL_ID,
     duration: 5,
     resolution: "720p",
+    ratio: "16:9",
     promptExtend: true,
     negativePrompt: "",
     mode: "std",

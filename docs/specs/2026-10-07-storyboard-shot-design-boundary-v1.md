@@ -2,6 +2,11 @@
 
 **Status:** Accepted product boundary
 
+The cross-stage identity and revision glossary is
+`2026-10-10-script-plan-asset-material-identity-v1.md`. First/last frames and
+Director snapshots are shot-scoped material by default; reuse as an asset
+requires an explicit promotion or variant-confirmation decision.
+
 ## Canonical workflow
 
 ```text

@@ -12,6 +12,72 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert 'replacement' in text
 
 
+def test_explicit_skill_selection_is_independent_from_target_model():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=['seedance-camera']
+    )
+    assert 'SELECTED OPTIMIZATION SKILLS' in text
+    assert 'seedance-camera' in text
+    assert 'MiniMax H3 分段导演' not in text
+
+
+def test_empty_explicit_skill_selection_disables_legacy_target_guidance():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=[]
+    )
+    assert 'SELECTED OPTIMIZATION SKILLS' not in text
+    assert 'MiniMax H3 分段导演' not in text
+
+
+def test_unknown_explicit_skill_is_rejected():
+    with pytest.raises(api.HTTPException) as exc_info:
+        api._storyboard_polish_contract(
+            'uniart/minimax-h3-vip', '', '', optimization_skills=['not-installed']
+        )
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.parametrize('provider,expected', [
+    ('gpt', 'minimax-h3-director'),
+    ('qwen', 'minimax-h3-director'),
+    ('deepseek', 'minimax-h3-director'),
+    ('glm', 'minimax-h3-director'),
+])
+def test_non_ir_optimizer_defaults_to_h3_director_skill(provider, expected):
+    request = api.PolishVideoPromptRequest(draft_prompt='动作', optimizer_provider=provider)
+    assert api._effective_optimization_skills(request) == [expected]
+
+
+def test_minimax_ir_does_not_force_local_director_skill():
+    request = api.PolishVideoPromptRequest(draft_prompt='动作', optimizer_provider='minimax_context_ir')
+    assert api._effective_optimization_skills(request) is None
+
+
+def test_named_optimizer_selects_its_model_and_director_skill(monkeypatch):
+    processor = Mock()
+    structured = 'integrated_multimodal_description: value\noverall_soundscape: N/A\nnon_diegetic_music: N/A'
+    processor.polish_video_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+    api.polish_video_prompt(api.PolishVideoPromptRequest(
+        draft_prompt='动作', target_video_model='uniart/minimax-h3-vip', optimizer_provider='qwen'
+    ))
+    assert processor.polish_video_prompt.call_args.kwargs['polish_model'] == 'qwen3.8-flash'
+    assert 'minimax-h3-director' in processor.polish_video_prompt.call_args.args[2]
+
+
+def test_h3_polish_contract_forbids_text_overlays():
+    text = api._storyboard_polish_contract('uniart/minimax-h3-vip', '', '')
+    assert 'HARD H3 TEXT-OVERLAY PROHIBITION' in text
+    assert 'subtitles' in text
+    assert 'Dialogue, if\nrequested, is audio only' in text
+    assert 'FINAL H3 ENFORCEMENT (highest priority)' in text
+    assert 'Do not return a standalone sentence' in text
+    assert 'subject_definitions:' in text
+    assert 'non_diegetic_music:' in text
+
+
 def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     processor = Mock()
     structured = '\n'.join([
@@ -74,6 +140,51 @@ def test_h3_polish_accepts_required_structure(monkeypatch, r2v, fields):
         result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
     else:
         result = api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+
+    assert result == {'prompt_cn': structured, 'prompt_en': structured}
+
+
+def test_h3_polish_accepts_markdown_field_headings(monkeypatch):
+    structured = '\n'.join([
+        '1. **subject_definitions:** value',
+        '2. **summary:** value',
+        '3. **retention_analysis:** value',
+        '4. **detailed_description:** value',
+        '5. **overall_soundscape:** N/A',
+        '6. **non_diegetic_music:** N/A',
+    ])
+    processor = Mock()
+    processor.polish_r2v_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(
+        draft_prompt='主播举起药盒',
+        slots=[],
+        target_video_model='uniart/minimax-h3-vip',
+    ))
+
+    assert result == {'prompt_cn': structured, 'prompt_en': structured}
+
+
+def test_r2v_polish_accepts_minimax_ir_base_h3_contract(monkeypatch):
+    structured = '\n'.join([
+        'integrated_multimodal_description: [Shot 1] Su Yan draws his sword.',
+        'overall_soundscape: Metal collision and wind.',
+        'non_diegetic_music: N/A',
+    ])
+    processor = Mock()
+    processor.polish_r2v_prompt.return_value = {'prompt_cn': structured, 'prompt_en': structured}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+
+    result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(
+        draft_prompt='苏砚拔剑横掠',
+        slots=[],
+        target_video_model='uniart/minimax-h3-vip',
+    ))
 
     assert result == {'prompt_cn': structured, 'prompt_en': structured}
 

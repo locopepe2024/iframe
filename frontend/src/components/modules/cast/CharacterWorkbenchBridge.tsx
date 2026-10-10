@@ -90,12 +90,19 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
         updateProject(project.id, updated);
     };
 
+    const onRename = async (name: string) => {
+        if (!project) return;
+        const updated = await api.updateAssetAttributes(project.id, entityId, "character", { name });
+        updateProject(project.id, updated);
+    };
+
     if (!project || !character) return null;
     return <CharacterWorkbench
         asset={character}
         onClose={onClose}
         onUpdateDescription={onUpdateDescription}
         onUpdateAttributes={onUpdateAttributes}
+        onRename={onRename}
         onGenerate={onGenerate}
         generatingTypes={[]}
         stylePrompt={stylePrompt}

@@ -72,6 +72,170 @@ def test_series_source_context_is_exposed_to_episode_analysis(pipeline):
     assert entities["series_context"]["synopsis"] == "全剧摘要"
 
 
+def test_director_analysis_excludes_unbound_shared_assets(pipeline):
+    series = pipeline.create_series("S")
+    series.characters.append(_make_character("Series extra"))
+    episode = _make_script(series_id=series.id, characters=[_make_character("Episode lead")])
+    pipeline.scripts[episode.id] = episode
+    pipeline.series_store[series.id] = series
+    pipeline.resolve_episode_assets = lambda _episode: {
+        "characters": [*episode.characters, *series.characters, _make_character("Global extra")],
+        "scenes": [], "props": [],
+    }
+
+    _, entities, _ = pipeline.director_analysis_context(episode.id)
+
+    assert [character["name"] for character in entities["characters"]] == ["Episode lead"]
+
+
+def test_series_director_analysis_excludes_shared_visual_assets(pipeline):
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.characters.append(_make_character("Shared reference"))
+    episode = _make_script(series_id=series.id, characters=[_make_character("Script lead")])
+    pipeline.scripts[episode.id] = episode
+    series.episode_ids = [episode.id]
+    pipeline.series_store[series.id] = series
+    pipeline.script_processor.analyze_director_profile_with_audit.return_value = {
+        "profile": profile_payload(),
+        "source_audit": {},
+    }
+
+    pipeline.preview_series_director_profile(series.id)
+
+    entities = pipeline.script_processor.analyze_director_profile_with_audit.call_args.args[1]
+    assert [character["name"] for character in entities["characters"]] == ["Script lead"]
+
+
+def test_updating_series_style_preserves_confirmed_director_profile(pipeline):
+    from src.apps.comic_gen.models import ArtDirection, DirectorProfile
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    profile = DirectorProfile(**profile_payload(), revision=1, content_hash="profile-1")
+    series.art_direction = ArtDirection(
+        selected_style_id="old", style_config={"name": "Old"}, director_profile=profile,
+    )
+
+    updated = pipeline.update_series(series.id, {
+        "art_direction": {"selected_style_id": "new", "style_config": {"name": "New"}},
+    })
+
+    assert updated.art_direction.style_config["name"] == "New"
+    assert updated.art_direction.director_profile == profile
+
+    cleared = pipeline.update_series(series.id, {"art_direction": None})
+    assert cleared.art_direction.style_config == {}
+    assert cleared.art_direction.director_profile == profile
+
+
+def test_episode_director_confirmation_keeps_series_style_live(pipeline):
+    from src.apps.comic_gen.models import ArtDirection
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.art_direction = ArtDirection(selected_style_id="old", style_config={"name": "Old"})
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    pipeline._save_data = MagicMock()
+
+    pipeline.apply_director_profile(episode.id, profile_payload())
+    assert episode.art_direction.director_profile is not None
+    assert episode.art_direction.style_config == {}
+    assert pipeline.effective_art_direction(episode).style_config["name"] == "Old"
+
+    series.art_direction.style_config = {"name": "New"}
+    assert pipeline.effective_art_direction(episode).style_config["name"] == "New"
+    assert pipeline.effective_director_profile(episode).revision == 1
+
+
+def test_reset_episode_style_retains_its_director_profile(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ArtDirection, DirectorProfile
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.art_direction = ArtDirection(selected_style_id="series", style_config={"name": "Series"})
+    profile = DirectorProfile(**profile_payload(), revision=2, content_hash="profile-2")
+    episode = _make_script(series_id=series.id, art_direction=ArtDirection(
+        selected_style_id="episode", style_config={"name": "Episode"}, director_profile=profile,
+    ))
+    pipeline.scripts[episode.id] = episode
+    pipeline._save_data = MagicMock()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    api.clear_project_art_direction(episode.id)
+
+    assert episode.art_direction.style_config == {}
+    assert episode.art_direction.director_profile == profile
+    assert pipeline.effective_art_direction(episode).style_config["name"] == "Series"
+
+
+def test_episode_director_draft_and_history_do_not_impersonate_series_profile(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ArtDirection, DirectorProfile
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.art_direction = ArtDirection(
+        selected_style_id="series", style_config={"name": "Series"},
+        director_profile=DirectorProfile(**profile_payload(), revision=3, content_hash="series-3"),
+    )
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    assert pipeline.effective_director_profile(episode).revision == 3
+    assert api.list_director_profile_revisions(episode.id) == []
+    assert api.get_director_profile_draft(episode.id)["draft"] is None
+
+
+def test_episode_director_review_status_tracks_series_style_and_director_revision(pipeline, monkeypatch):
+    import json
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ArtDirection, DirectorProfile
+    from src.apps.comic_gen.pipeline import _director_style_hash
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.art_direction = ArtDirection(selected_style_id="series", style_config={"name": "Old"})
+    series.director_profile_revisions = []
+    episode = _make_script(series_id=series.id, art_direction=ArtDirection(
+        selected_style_id="director-profile", style_config={},
+        director_profile=DirectorProfile(**profile_payload(), revision=1, content_hash="episode-1"),
+    ))
+    episode.director_style_hash = _director_style_hash({"name": "Old"})
+    episode.director_series_revision = 1
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    series.art_direction.style_config = {"name": "New"}
+    response = api.get_project(episode.id)
+    payload = json.loads(response.body)
+    assert payload["director_style_review_required"] is True
+    assert payload["series_director_review_required"] is True
+
+
+def test_series_director_review_status_tracks_style_baseline(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ArtDirection, DirectorProfile
+    from tests.test_director_profile import profile_payload
+
+    series = pipeline.create_series("S")
+    series.art_direction = ArtDirection(selected_style_id="old", style_config={"name": "Old"})
+    series.director_profile_draft = DirectorProfile(**profile_payload())
+    pipeline.confirm_series_director_profile(series.id)
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    assert api.get_series_director_profile(series.id)["style_review_required"] is False
+
+    pipeline.update_series(series.id, {
+        "art_direction": {"selected_style_id": "new", "style_config": {"name": "New"}},
+    })
+    assert api.get_series_director_profile(series.id)["style_review_required"] is True
+    assert len(series.director_profile_revisions) == 1
+
+
 def _make_prop(name="Sword", **kw) -> Prop:
     return Prop(id=kw.pop("id", str(uuid.uuid4())), name=name,
                 description=kw.pop("description", "A magic sword"), **kw)

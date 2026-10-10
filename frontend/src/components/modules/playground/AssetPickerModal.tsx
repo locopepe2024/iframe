@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, type RefObject } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Image, Film, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -33,6 +33,7 @@ interface AssetItem {
 
 type FilterTab = 'all' | 'image' | 'video';
 const PAGE_SIZE = 36;
+const ASSET_SOURCE_TIMEOUT_MS = 15000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,6 +76,8 @@ export default function AssetPickerModal({
   triggerRef,
 }: AssetPickerModalProps) {
   const t = useTranslations('playground');
+  const translate = useRef(t);
+  translate.current = t;
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,19 +88,26 @@ export default function AssetPickerModal({
   const [activeTab, setActiveTab] = useState<FilterTab>(
     accept === 'all' ? 'all' : accept
   );
+  const loadGeneration = useRef(0);
 
   // -------------------------------------------------------------------------
   // Merge owner-scoped workspace assets, Playground history, and current inputs.
   // -------------------------------------------------------------------------
 
   const fetchAssets = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
+    const withTimeout = <T,>(promise: Promise<T>) => new Promise<T>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('asset source timeout')), ASSET_SOURCE_TIMEOUT_MS);
+      promise.then(resolve, reject).finally(() => window.clearTimeout(timer));
+    });
     try {
       const [historyResult, libraryResult] = await Promise.allSettled([
-        playgroundApi.getHistory(100, 0),
-        api.getAssetLibraryIndex(),
+        withTimeout(playgroundApi.getHistory(100, 0)),
+        withTimeout(api.getAssetLibraryIndex()),
       ]);
+      if (generation !== loadGeneration.current) return;
       if (historyResult.status === 'rejected' && libraryResult.status === 'rejected') {
         throw historyResult.reason;
       }
@@ -169,11 +179,11 @@ export default function AssetPickerModal({
       setAssets(items);
     } catch (err) {
       console.error('[AssetPickerModal] fetch failed:', err);
-      setError(t('assetPicker.loadFailed'));
+      if (generation === loadGeneration.current) setError(translate.current('assetPicker.loadFailed'));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -181,6 +191,11 @@ export default function AssetPickerModal({
       setSearch('');
       setPage(0);
       fetchAssets();
+    } else {
+      // Invalidate an in-flight load so closing and reopening cannot let an
+      // older request overwrite the state of the new modal instance.
+      loadGeneration.current += 1;
+      setLoading(false);
     }
   }, [isOpen, fetchAssets]);
 

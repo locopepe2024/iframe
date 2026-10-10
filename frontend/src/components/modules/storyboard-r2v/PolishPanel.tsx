@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { debugLog } from "@/lib/debugLog";
 import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
+import OptimizerSelector, { type OptimizerProvider } from "./OptimizerSelector";
 
 interface PolishedPrompt {
     cn: string;
@@ -58,8 +59,10 @@ interface PolishPanelProps {
      *  (T2I or storyboard render); r2v: reference image URLs. Empty/omit =
      *  pure text-only polish (back-compat for shots with no frame). */
     imageUrls?: string[];
+    targetRatio?: string;
     onApply: (text: string) => void;
 }
+
 
 /** 把后端 reason 映射到 i18n key（错误码列表与 llm.py PolishError 对齐）。 */
 function reasonToI18nKey(reason: PolishErrorReason): string {
@@ -110,6 +113,7 @@ export default function PolishPanel({
     scriptId,
     slots = [],
     imageUrls = [],
+    targetRatio = "16:9",
     onApply,
 }: PolishPanelProps) {
     const t = useTranslations("storyboardR2V");
@@ -119,6 +123,14 @@ export default function PolishPanel({
     const [feedback, setFeedback] = useState("");
     /** 跟踪两栏的 "已复制" 闪烁状态。 */
     const [copiedCol, setCopiedCol] = useState<"cn" | "en" | "original" | null>(null);
+    const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
+    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
+
+    const toggleSkill = (skillId: string) => {
+        setOptimizationSkills((current) => current.includes(skillId)
+            ? current.filter((id) => id !== skillId)
+            : [...current, skillId]);
+    };
 
     const runPolish = useCallback(async (feedbackText: string = "") => {
         // 迭代时：draft=上一版 EN，prev_cn=上一版 CN，让后端双语锚点。
@@ -135,8 +147,8 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio);
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");
@@ -160,7 +172,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue]);
+    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);
@@ -195,9 +207,25 @@ export default function PolishPanel({
     // ────────────────────────────────────────────────────────────────────
     // Trigger 按钮 — 当没有结果、没有错误、不在 loading 时显示
     // ────────────────────────────────────────────────────────────────────
+    const optimizerControls = (
+        <div className="mb-2">
+            <OptimizerSelector
+                provider={optimizerProvider}
+                skills={optimizationSkills}
+                onProviderChange={(provider) => {
+                    setOptimizerProvider(provider);
+                    setOptimizationSkills(provider === "minimax_context_ir" ? [] : ["minimax-h3-director"]);
+                }}
+                onToggleSkill={toggleSkill}
+            />
+        </div>
+    );
+
     if (!polished && !error && !isPolishing) {
         return (
-            <div className="flex items-center justify-end">
+            <div>
+                {optimizerControls}
+                <div className="flex items-center justify-end">
                 <WorkflowActionButton
                     variant="secondary"
                     size="sm"
@@ -208,6 +236,7 @@ export default function PolishPanel({
                 >
                     {t("polish")}
                 </WorkflowActionButton>
+                </div>
             </div>
         );
     }
@@ -222,6 +251,7 @@ export default function PolishPanel({
     const useGlow = !isHardError && !isEchoWarning;
     const containerInner = (
         <>
+            {optimizerControls}
             {/* Header — label + close button */}
             <div className="flex items-center justify-between gap-2">
                 <span

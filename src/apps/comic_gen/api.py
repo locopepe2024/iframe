@@ -46,10 +46,12 @@ from .pipeline import (
     AssetGenerationInProgress,
     LibraryAssetInUseError,
     InvalidAssetReference,
+    InvalidAssetName,
     AssemblyPlanValidationError,
     AssemblyPlanConflictError,
     StaleStoryboardDraftError,
     DIRECTOR_PLAN_STABLE_LINEAGE_KEYS,
+    _director_style_hash,
 )
 from .structured_evidence import (
     query_asset_mentions,
@@ -81,7 +83,7 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, director_preset_identity
-from ...utils.oss_utils import OSSImageUploader, is_object_key, sign_oss_urls_in_data
+from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_key_from_url, sign_oss_urls_in_data
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -348,7 +350,7 @@ def signed_response(data):
 
 
 def _script_response_dump(script: Script) -> Dict[str, Any]:
-    return script.model_dump(exclude={
+    payload = script.model_dump(exclude={
         "source_revisions",
         "director_profile_revisions",
         "director_profile_draft",
@@ -366,6 +368,10 @@ def _script_response_dump(script: Script) -> Dict[str, Any]:
         "fact_ledger_draft_source_revision",
         "fact_ledger_draft_updated_at",
     })
+    for collection in ("characters", "scenes", "props"):
+        for asset in payload.get(collection, []):
+            asset.pop("asset_revisions", None)
+    return payload
 
 
 def private_no_store_signed_response(data):
@@ -1227,6 +1233,22 @@ def get_series_assets(series_id: str):
     })
 
 
+@app.delete("/series/{series_id}/assets/{asset_type}/{asset_id}")
+def delete_series_asset(series_id: str, asset_type: Literal["character", "scene", "prop"], asset_id: str,
+                        force: bool = False, user: UserContext = Depends(require_studio_user)):
+    try:
+        pipeline.delete_series_asset(series_id, asset_type, asset_id, user.owner_profile_id, force)
+        return {"status": "deleted", "asset_type": asset_type, "id": asset_id}
+    except LibraryAssetInUseError as exc:
+        raise HTTPException(status_code=409, detail={
+            "error": "series_asset_in_use",
+            "message": "Asset is referenced by an episode. Force deletion removes current frame and asset bindings; confirmed shooting plan history retains its original IDs.",
+            "references": exc.references,
+        }) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
@@ -1306,6 +1328,8 @@ def update_series_asset_attributes(series_id: str, request: UpdateAssetAttribute
             series_id, request.asset_id, request.asset_type, request.attributes
         )
         return signed_response(series)
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1529,11 +1553,9 @@ def upload_library_asset_image(
 ):
     """Upload an image to use as a global library asset's master image.
 
-    Saves the file under output/uploads/ (served via the /files static mount)
-    and returns {"image_url": <path-or-URL the frontend can load>}. When OSS
-    is configured the returned URL is the (signed) OSS URL; otherwise a local
-    relative path "uploads/<name>" resolvable through the frontend's
-    getAssetUrl helper. The caller then passes this image_url to
+    Saves the file under the owner's managed output tree. The returned
+    image_url is a durable local storage path even when an OSS mirror exists.
+    The caller then passes this image_url to
     POST /library/assets (image_url=...) or PATCH /library/assets/{type}/{id}
     to attach it to a library asset. Mirrors the generic /upload endpoint but
     returns the {image_url} contract the library UI expects.
@@ -1544,11 +1566,7 @@ def upload_library_asset_image(
         file_path, stored_path = _studio_upload_target(user, filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        # Prefer OSS when configured (signed), else fall back to local path.
-        oss_url = OSSImageUploader().upload_image(file_path)
-        if oss_url:
-            return signed_response({"image_url": oss_url})
-        return signed_response({"image_url": stored_path})
+        return {"image_url": stored_path}
     except Exception as e:
         logger.exception("upload_library_asset_image failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1561,6 +1579,8 @@ def update_library_asset(asset_type: str, asset_id: str, request: UpdateLibraryA
         patch = request.model_dump(exclude_unset=True)
         asset = pipeline.update_library_asset(asset_type, asset_id, patch)
         return signed_response(asset.model_dump())
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2035,6 +2055,19 @@ def get_project(script_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
 
     payload = _script_response_dump(script)
+    local_director = script.art_direction.director_profile if script.art_direction else None
+    effective_style = pipeline.effective_art_direction(script)
+    payload["director_style_review_required"] = bool(
+        local_director and script.director_style_hash
+        and script.director_style_hash != _director_style_hash(
+            effective_style.style_config if effective_style else {}
+        )
+    )
+    series_profile = pipeline.effective_series_director_profile(script.series_id) if script.series_id else None
+    payload["series_director_review_required"] = bool(
+        local_director and script.director_series_revision is not None
+        and script.director_series_revision != (series_profile.revision if series_profile else None)
+    )
 
     # Episode-local entries always carry source="episode".
     for asset_list in (payload.get("characters", []),
@@ -2060,17 +2093,17 @@ def get_project(script_id: str):
             ep_prop_ids = {p.id for p in script.props}
             for ch in series.characters:
                 if ch.id not in ep_char_ids:
-                    d = ch.model_dump()
+                    d = ch.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["characters"].append(d)
             for sc in series.scenes:
                 if sc.id not in ep_scene_ids:
-                    d = sc.model_dump()
+                    d = sc.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["scenes"].append(d)
             for pr in series.props:
                 if pr.id not in ep_prop_ids:
-                    d = pr.model_dump()
+                    d = pr.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["props"].append(d)
 
@@ -2124,14 +2157,19 @@ def get_asset_library_preview(
         raise HTTPException(status_code=404, detail="Asset variant not found")
 
     raw = image_variant_storage_key(variant)
+    if not raw:
+        raise HTTPException(status_code=404, detail="Asset image not found")
     uploader = OSSImageUploader()
     remote = False
     if is_object_key(raw):
         source = uploader.sign_url_for_api(raw)
         remote = True
     elif raw.startswith(("http://", "https://")):
-        # External URLs are not fetched through the authenticated preview endpoint.
-        raise HTTPException(status_code=422, detail="External image preview is unavailable")
+        managed_key = managed_object_key_from_url(raw, uploader)
+        if not managed_key:
+            raise HTTPException(status_code=422, detail="External image preview is unavailable")
+        source = uploader.sign_url_for_api(managed_key)
+        remote = True
     else:
         try:
             source = pipeline._resolve_stored_reference_value(raw, user.owner_profile_id)
@@ -3542,6 +3580,8 @@ def update_asset_attributes(script_id: str, request: UpdateAssetAttributesReques
             request.attributes
         )
         return signed_response(updated_script)
+    except InvalidAssetName as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -3582,6 +3622,57 @@ class SelectVariantRequest(BaseModel):
     asset_type: str
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
+
+
+class ConfirmAssetRevisionRequest(BaseModel):
+    expected_revision: int = Field(..., ge=1)
+    active_variant_ids: Optional[List[str]] = None
+    selected_variant_id: Optional[str] = None
+
+
+class RestoreAssetRevisionRequest(BaseModel):
+    expected_revision: int = Field(..., ge=1)
+
+
+@app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions")
+def get_asset_revisions(script_id: str, asset_type: str, asset_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(
+            pipeline.get_asset_revisions(script_id, asset_id, asset_type))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions/confirm")
+def confirm_asset_revision(script_id: str, asset_type: str, asset_id: str,
+                           request: ConfirmAssetRevisionRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.confirm_asset_revision(
+            script_id, asset_id, asset_type, request.expected_revision,
+            request.active_variant_ids, request.selected_variant_id))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions/{revision}/restore")
+def restore_asset_revision(script_id: str, asset_type: str, asset_id: str,
+                           revision: int, request: RestoreAssetRevisionRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.restore_asset_revision(
+            script_id, asset_id, asset_type, revision, request.expected_revision))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc))
 
 @app.post("/projects/{script_id}/assets/variant/select")
 def select_asset_variant(script_id: str, request: SelectVariantRequest):
@@ -4972,7 +5063,7 @@ def list_director_profile_revisions(
     # Legacy confirmed profiles were embedded in art_direction before the
     # revision archive was introduced. Expose that immutable profile as a
     # migration snapshot without rewriting project data on read.
-    legacy = pipeline.effective_director_profile(script)
+    legacy = script.art_direction.director_profile if script.art_direction else None
     if legacy is None:
         return []
     return [DirectorProfileRevision(
@@ -5000,7 +5091,7 @@ def get_director_profile_draft(
     if draft is None:
         # Keep the pre-revision Director profile editable after upgrading an
         # existing workspace. This is a read-only compatibility projection.
-        draft = pipeline.effective_director_profile(script)
+        draft = script.art_direction.director_profile if script.art_direction else None
         if draft is not None:
             # The confirmed profile revision is not the optimistic-concurrency
             # revision of the separate draft resource. A migrated profile is
@@ -5019,7 +5110,7 @@ def get_director_profile_draft(
         }))
         pipeline._bind_director_story_map(
             script,
-            pipeline.resolve_episode_assets(script),
+            pipeline.director_source_assets(script),
             projected,
         )
         draft_payload = projected
@@ -5050,6 +5141,12 @@ def get_series_director_profile(
         "series_id": series_id,
         "source_context": series.source_context,
         "profile": profile.model_dump() if profile else None,
+        "style_review_required": bool(
+            profile and series.director_style_hash
+            and series.director_style_hash != _director_style_hash(
+                series.art_direction.style_config if series.art_direction else {}
+            )
+        ),
         "confirmed_revisions": [item.model_dump() for item in series.director_profile_revisions],
         "draft": series.director_profile_draft.model_dump() if series.director_profile_draft else None,
         "draft_revision": series.director_profile_draft_revision,
@@ -5536,17 +5633,18 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
 
 @app.post("/projects/{script_id}/art_direction/clear")
 def clear_project_art_direction(script_id: str):
-    """R2V v2 Phase 2 — clear project-level art_direction so the
-    episode falls back to series baseline (inherit). Used by the
-    Style step '重置为系列' button."""
+    """Remove the episode style override while retaining its Director profile."""
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
-    script.art_direction = None
+    profile = script.art_direction.director_profile if script.art_direction else None
+    script.art_direction = ArtDirection(
+        selected_style_id="director-profile", style_config={}, director_profile=profile,
+    ) if profile else None
     script.updated_at = time.time()
     pipeline.scripts[script_id] = script
     pipeline._save_data()
-    return signed_response(script)
+    return get_project(script_id)
 
 
 @app.put("/projects/{script_id}/last_episode_summary")
@@ -5592,7 +5690,7 @@ def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
             request.custom_styles,
             request.ai_recommendations
         )
-        return signed_response(updated_script)
+        return get_project(updated_script.id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -5692,6 +5790,9 @@ class PolishVideoPromptRequest(BaseModel):
     # 显式覆盖 polish 用的 LLM 模型；空 = 用 project / series PromptConfig
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
+    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
+    target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -5713,7 +5814,7 @@ def _polish_error_response(err) -> Dict[str, Any]:
 
 
 def _target_model_guidance(model_id: str) -> str:
-    """Load the installed provider skill for storyboard prompt polishing."""
+    """Legacy model-to-skill mapping for callers before explicit skill selection."""
     value = (model_id or "").lower()
     from ..agent_skills import catalog
     label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
@@ -5724,8 +5825,29 @@ def _target_model_guidance(model_id: str) -> str:
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="") -> str:
-    guidance = _target_model_guidance(model_id)
+def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
+    """Compose explicitly selected catalog skills in request order.
+
+    This is intentionally independent of the target video model.  The catalog
+    remains the source of truth, so arbitrary prompt text cannot inject a new
+    instruction package or a missing skill id.
+    """
+    if skill_ids is None:
+        return ""
+    from ..agent_skills import catalog
+    packages = {package["id"]: package for package in catalog()}
+    unknown = [skill_id for skill_id in skill_ids if skill_id not in packages]
+    if unknown:
+        raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
+    selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
+    if not selected:
+        return ""
+    text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
+    return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None) -> str:
+    guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
     if not guidance:
         return custom or default
     constraints = ""
@@ -5738,6 +5860,14 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+    if "h3" in (model_id or "").lower():
+        constraints += """
+HARD H3 TEXT-OVERLAY PROHIBITION:
+Do not add subtitles, captions, karaoke text, dialogue text overlays, title cards,
+watermarks, labels, or any other burned-in/on-screen typography. Dialogue, if
+requested, is audio only and must not be rendered as text. Do not describe or
+request subtitle tracks in either prompt language.
+"""
     return guidance + "\n" + custom + constraints + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string contains
@@ -5756,6 +5886,21 @@ Do not invent dialogue text, music, extra shots or replacement identities unless
 requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
+
+FINAL H3 ENFORCEMENT (highest priority):
+Do not return a standalone sentence, summary, explanation, Markdown prose, or
+an unstructured action description. Return one JSON object with exactly these
+string keys: prompt_cn and prompt_en. Inside EACH string, emit the required
+field headings in this exact order and spelling, each followed by a colon:
+subject_definitions:
+summary:
+retention_analysis:
+detailed_description:
+overall_soundscape:
+non_diegetic_music:
+If the request is not reference mode, still use the same six headings and set
+subject_definitions/retention_analysis to N/A when no references exist. Never
+omit a heading. Never put subtitles or any other text overlay in the prompt.
 """
 
 
@@ -5763,18 +5908,34 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
     """Reject responses that ignore the selected provider's prompt contract."""
     if "h3" not in (model_id or "").lower():
         return
-    fields = (
-        ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
-        if reference_mode
-        else ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
-    )
+    reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
+    base_fields = ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
+    def has_field(text: Any, field: str) -> bool:
+        """Accept the model's harmless Markdown decoration around contract fields.
+
+        The prompt contract is still field based; models commonly render a
+        valid field as ``1. **subject_definitions:**`` or
+        ``subject_definitions:``.  Requiring the raw token at column zero
+        made those responses fail despite containing every required section.
+        """
+        if not isinstance(text, str):
+            return False
+        parts = [part for part in re.split(r"[\s_-]+", field.strip().lower()) if part]
+        field_pattern = r"[\s_-]*".join(re.escape(part) for part in parts)
+        pattern = re.compile(
+            rf"(?im)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:[\"'`]|\*\*)?"
+            rf"{field_pattern}(?:[\"'`]|\*\*)?\s*(?:[:：-]|$)"
+        )
+        return pattern.search(text) is not None
+
     invalid_languages = []
     for key in ("prompt_cn", "prompt_en"):
         text = result.get(key, "")
-        if not isinstance(text, str) or any(
-            re.search(rf"(?im)^\s*{re.escape(field)}\s*[:：]", text) is None
-            for field in fields
-        ):
+        # MiniMax IR may return the valid base H3/T2VA contract even when the
+        # caller entered through the R2V polish surface. Accept that explicit
+        # three-field form; do not accept an unstructured sentence.
+        accepted = (reference_fields, base_fields) if reference_mode else (base_fields,)
+        if not any(all(has_field(text, field) for field in fields) for fields in accepted):
             invalid_languages.append(key)
     if invalid_languages:
         from .llm import PolishError
@@ -5794,6 +5955,62 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             message_zh="润色结果遗漏或改写了镜头对白，请重试。本次结果未应用。",
             message_en="The polished prompt omitted or rewrote the shot dialogue. Retry; this result was not applied.",
         )
+
+
+def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
+    """Run the official MiniMax Context-IR optimizer for storyboard polish."""
+    from .llm import PolishError
+    if request.target_video_model and "h3" not in request.target_video_model.lower():
+        raise HTTPException(status_code=422, detail={
+            "reason": "optimizer_target_mismatch",
+            "message": "MiniMax Context-IR is only available for MiniMax H3 optimization.",
+        })
+    user = current_studio_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="MiniMax Context-IR requires a Studio user context")
+    from ..models.uniart import complete_context_ir, _image_reference_url
+    from ..studio_access import runtime_uniart_for_owner
+    config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
+    instruction = custom_prompt.strip()
+    instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
+    if request.optimization_skills:
+        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
+    if getattr(request, "feedback", "").strip():
+        text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
+    content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
+    for index, value in enumerate(request.image_urls or []):
+        content.append({"type": "text", "text": f"Reference image {index + 1}"})
+        content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
+    try:
+        prompt = complete_context_ir(
+            config,
+            content,
+            duration=max(1, int(round(request.target_duration or 5))),
+            ratio=request.target_ratio or "16:9",
+            idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}",
+        )
+    except Exception as exc:
+        logger.exception("MiniMax Context-IR storyboard polish failed")
+        raise PolishError(reason="api_error", message_zh=f"MiniMax IR 调用失败：{exc}", message_en=f"MiniMax Context-IR failed: {exc}") from exc
+    return {"prompt_cn": prompt, "prompt_en": prompt}
+
+
+_OPTIMIZER_MODEL_IDS = {
+    "gpt": "gpt-5.6-sol",
+    "qwen": "qwen3.8-flash",
+    "deepseek": "deepseek-v4.1-flash",
+    "glm": "glm-5.3",
+}
+
+
+def _effective_optimization_skills(request) -> Optional[List[str]]:
+    """Non-IR optimizer models use the H3 Director skill by default."""
+    if request.optimization_skills is not None:
+        return request.optimization_skills
+    if request.optimizer_provider in _OPTIMIZER_MODEL_IDS:
+        return ["minimax-h3-director"]
+    return None
 
 
 @app.post("/video/polish_prompt")
@@ -5821,9 +6038,15 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         director = _get_director_prompt_context(request.script_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
+        selected_skills = _effective_optimization_skills(request)
+        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
+        if request.optimizer_provider == "minimax_context_ir":
+            result = _complete_minimax_ir_polish(request, custom_prompt)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            return result
         # Polish model: request override → project/series PromptConfig → ""
-        polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
+        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         result = processor.polish_video_prompt(
             request.draft_prompt,
@@ -5862,6 +6085,9 @@ class PolishR2VPromptRequest(BaseModel):
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
     polish_model: str = ""
+    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
+    target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -5879,8 +6105,14 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         director = _get_director_prompt_context(request.script_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line)
-        polish_model = request.polish_model or _get_polish_model_for_project(request.script_id)
+        selected_skills = _effective_optimization_skills(request)
+        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
+        if request.optimizer_provider == "minimax_context_ir":
+            result = _complete_minimax_ir_polish(request, custom_prompt)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            return result
+        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
         result = processor.polish_r2v_prompt(

@@ -7,6 +7,28 @@ export interface AssetPlanEntry {
     prompt: string;
 }
 
+export interface UnboundCharacterRequirement {
+    personId: string;
+    sceneIds: string[];
+    shotIds: string[];
+    lookCount: number;
+}
+
+export function getUnboundCharacterRequirements(context: EpisodeVisualContext | null): UnboundCharacterRequirement[] {
+    const people = new Map<string, UnboundCharacterRequirement>();
+    for (const character of context?.characters ?? []) {
+        if (character.character_asset_ids.length) continue;
+        const item = people.get(character.person_id) ?? {
+            personId: character.person_id, sceneIds: [], shotIds: [], lookCount: 0,
+        };
+        item.sceneIds = Array.from(new Set([...item.sceneIds, ...character.scene_ids]));
+        item.shotIds = Array.from(new Set([...item.shotIds, ...character.shot_ids]));
+        item.lookCount += 1;
+        people.set(character.person_id, item);
+    }
+    return Array.from(people.values());
+}
+
 function isReadableLabel(value: string): boolean {
     return !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value);
 }
@@ -23,7 +45,9 @@ export function getAssetPlanEntries(
             ? context.characters.filter(item => item.character_asset_ids.includes(assetId) && item.scene_ids.includes(scene.scene_id))
             : assetType === "prop"
                 ? context.props.filter(item => item.prop_id === assetId && item.scene_ids.includes(scene.scene_id))
-                : scene.scene_asset_id === assetId || scene.scene_id === assetId ? [scene] : [];
+                : scene.scene_asset_id === assetId || context.shots.some(
+                    shot => shot.scene_id === scene.scene_id && shot.scene_asset_id === assetId
+                ) ? [scene] : [];
         matches.forEach((match, index) => {
             const details = [
                 scene.location,

@@ -58,6 +58,7 @@ function projectSerializableState(state: WorkbenchState): Partial<WorkbenchState
       panoramaCalibrations: [],
       activePanoramaCalibrationId: null,
     },
+    panoramaScenePackage: null,
   };
 }
 
@@ -104,6 +105,7 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
       dialogueReferenceInputs: [],
       objectAssetCatalog: { status: "unavailable", message: "浏览器核心仅开放内置对象。", assets: [] },
       environmentInputCatalog: { status: "ready", message: "环境素材将在 iFrame Core 资产契约接入后开放。", entries: [] },
+      panoramaScenePackage: null,
       panoramaDiagnosticPreviewInputId: null,
       unsavedChanges: false,
     });

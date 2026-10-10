@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
 import {
@@ -10,6 +10,9 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    agentRequest: vi.fn((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
 }));
 
 const projectStoreMocks = vi.hoisted(() => ({
@@ -34,7 +37,7 @@ vi.mock("../common/VariantSelector", () => ({
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
-vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
@@ -83,7 +86,7 @@ it("keeps shooting-plan constraints collapsed in the workbench header", () => {
     expect(screen.queryByText("2018年秋天 · 室外")).not.toBeInTheDocument();
 });
 
-it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+it("shows one task at a time and unlocks derived prompts when the reference sheet is available", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const { container } = render(
         <CharacterWorkbench
@@ -103,10 +106,12 @@ it("unlocks derived asset prompts when the canonical reference sheet is availabl
         />,
     );
 
-    const promptFields = Array.from(container.querySelectorAll("[contenteditable]"));
-    expect(promptFields).toHaveLength(3);
-    expect(promptFields[1]).toHaveAttribute("contenteditable", "true");
-    expect(promptFields[2]).toHaveAttribute("contenteditable", "true");
+    expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
+    expect(container.querySelector("[contenteditable]")).toHaveAttribute("contenteditable", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    expect(container.querySelector("[contenteditable]")).toHaveAttribute("contenteditable", "true");
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
@@ -116,6 +121,36 @@ it("does not offer direct image upload from the character panel", () => {
     expect(screen.queryByLabelText("uploadRef: Full body")).not.toBeInTheDocument();
     expect(screen.queryByTitle("uploadRef")).not.toBeInTheDocument();
     expect(screen.getByText("Full body · 图片变体")).toBeInTheDocument();
+});
+
+it("offers inline asset rename in the character workbench", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onRename={onRename} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "renameAsset" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "assetName" }), { target: { value: "雪痕客" } });
+    fireEvent.click(screen.getByRole("button", { name: "saveName" }));
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("雪痕客"));
+});
+
+it("preserves each task prompt while switching views", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const fullBody = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { fullBody.editor.commands.setContent("<p>full body detail</p>"); });
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    const threeView = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { threeView.editor.commands.setContent("<p>three view detail</p>"); });
+    fireEvent.click(screen.getByRole("tab", { name: "masterAsset" }));
+    expect((document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("full body detail");
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect((document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("three view detail");
+});
+
+it("keeps image references separate from generated variants", () => {
+    render(<WorkbenchPanel {...baseProps} />);
+    expect(screen.queryByLabelText("uploadRef: Full body")).not.toBeInTheDocument();
 });
 
 it("shows indexed clips when typing @ and emits the stable selected reference", () => {
@@ -145,8 +180,8 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
     expect(editor.editor.getText()).toBe("@wat");
 
     expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
-    fireEvent.mouseDown(screen.getByRole("option"));
-    fireEvent.click(screen.getByRole("option"));
+    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
 
     expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
     expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
@@ -202,11 +237,13 @@ it("loads the project reference index for the character workbench", async () => 
     );
 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
-    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor: import("@tiptap/core").Editor }>;
-    act(() => { editors[0].editor.commands.setContent("<p>@wat</p>"); });
+    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
+    const promptEditor = editors.find((editor) => editor.editor);
+    expect(promptEditor?.editor).toBeDefined();
+    act(() => { promptEditor!.editor!.commands.setContent("<p>@wat</p>"); });
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
-    fireEvent.mouseDown(screen.getByRole("option"));
-    fireEvent.click(screen.getByRole("option"));
+    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
@@ -220,7 +257,7 @@ it("loads the project reference index for the character workbench", async () => 
     ));
 });
 
-it("persists accepted identity facets separately from the provider prompt", async () => {
+it("does not expose generic facet suggestions as character design values", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn();
     render(
@@ -234,21 +271,48 @@ it("persists accepted identity facets separately from the provider prompt", asyn
         />,
     );
 
-    const facet = screen.getByRole("button", { name: /眼神/ });
-    fireEvent.click(facet);
-    expect(facet).toHaveAttribute("aria-pressed", "true");
-    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
-        digital_avatar: expect.objectContaining({
-            schema_version: "digital-avatar-character.v1",
-            identity_facet_ids: ["eyes-gaze"],
-        }),
-    }));
+    fireEvent.click(screen.getByText("advancedSettings"));
+    expect(screen.queryByRole("button", { name: /眼神/ })).not.toBeInTheDocument();
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+});
 
-    fireEvent.click(facet);
-    expect(facet).toHaveAttribute("aria-pressed", "false");
-    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
-        digital_avatar: expect.objectContaining({ identity_facet_ids: [] }),
-    }));
+it("keeps an AI design as an editable draft until the user confirms it", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={onGenerate} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    expect(editor.editor.getText()).not.toContain("深棕眼");
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("深棕眼"));
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    expect(editor.editor.getText()).not.toContain("深棕眼");
+
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        confirmed: true,
+        skill_revision: "skill-hash",
+        field_status: expect.objectContaining({ visual_notes: "creative-choice" }),
+    }) }));
+    await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
+    expect(editor.editor.getText()).toContain("深棕眼");
+    expect(editor.editor.getText()).toContain("黑色劲装");
+});
+
+it("uses the latest confirmed design instead of an older saved image prompt", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{
+        id: "character-1", name: "Hero", description: "Old personality text", full_body_prompt: "Old image prompt",
+        character_design: { design_revisions: [{ revision: 2, design: { identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" } } }] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    expect(editor.editor.getText()).toContain("深棕眼");
+    expect(editor.editor.getText()).toContain("黑色劲装");
+    expect(editor.editor.getText()).not.toContain("Old image prompt");
 });
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
@@ -296,9 +360,10 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     rerender(workbench(vi.fn()));
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
 
-    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
-    act(() => { editor.editor.commands.setContent("<p>@Hero</p>"); });
-    fireEvent.click(screen.getByRole("option"));
+    const editor = (screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>).find((item) => item.editor);
+    expect(editor?.editor).toBeDefined();
+    act(() => { editor!.editor!.commands.setContent("<p>@Hero</p>"); });
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
 
@@ -335,9 +400,9 @@ it("does not refetch references for an equivalent project snapshot or discard th
     projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1", updated_at: 2 }] };
     rerender(view());
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
-    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     act(() => { editor.editor.commands.setContent("<p>@</p>"); });
-    expect(screen.getByRole("option")).toHaveTextContent("Hero");
+    expect(screen.getByRole("option", { name: /Hero/ })).toHaveTextContent("Hero");
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {
@@ -348,6 +413,7 @@ it("builds Chinese character defaults without duplicate punctuation", () => {
     );
 
     expect(prompt).toContain("全身角色设计：周涵（大学时期）");
+    expect(prompt).not.toMatch(/^false。/);
     expect(prompt).not.toMatch(/Full body|concept art|Standing pose|Clean white background/);
     expect(prompt).not.toMatch(/。\./);
 });
