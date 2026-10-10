@@ -3212,6 +3212,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             replacements = (script.episode_scene_asset_replacements if asset_type == "scene"
                             else script.episode_prop_asset_replacements)
             source_ids.extend(source_id for source_id, current_id in replacements.items() if current_id == asset_id)
+            if replacements.get(asset_id) and replacements[asset_id] != asset_id:
+                source_ids.remove(asset_id)
             for source_id in source_ids:
                 replacements.pop(source_id, None)
         for source_id in source_ids:
@@ -8676,6 +8678,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if asset_type == "character" and asset_id in episode.episode_person_asset_bindings.values():
                     references.append({"owner_kind": "project", "owner_id": episode.id,
                                        "owner_title": episode.title, "person_asset_id": asset_id})
+                if asset_type in ("scene", "prop"):
+                    replacements = (episode.episode_scene_asset_replacements if asset_type == "scene"
+                                    else episode.episode_prop_asset_replacements)
+                    for source_id, current_id in replacements.items():
+                        if current_id == asset_id:
+                            references.append({"owner_kind": "project", "owner_id": episode.id,
+                                               "owner_title": episode.title, "plan_asset_id": source_id})
                 for frame in episode.frames:
                     used = (frame.scene_id == asset_id if asset_type == "scene" else
                             asset_id in (frame.character_ids if asset_type == "character" else frame.prop_ids))

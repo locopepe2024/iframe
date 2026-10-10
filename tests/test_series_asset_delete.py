@@ -120,6 +120,65 @@ def test_confirmed_shooting_plan_references_require_force_and_survive_deletion()
     assert pipeline._save_series_data_unlocked.call_count == 3
 
 
+@pytest.mark.parametrize("asset_type,collection,replacements", [
+    ("scene", "scenes", "episode_scene_asset_replacements"),
+    ("prop", "props", "episode_prop_asset_replacements"),
+])
+def test_deleting_rebound_plan_source_keeps_current_asset_mapping(asset_type, collection, replacements):
+    pipeline, series, episode = make_pipeline()
+    pipeline._save_data = Mock()
+    model = Scene if asset_type == "scene" else Prop
+    getattr(series, collection).extend([
+        model(id="old", name="Old", description=""),
+        model(id="current", name="Current", description=""),
+    ])
+    getattr(episode, replacements)["old"] = "current"
+    plan_scene = {"scene_id": "plan-scene", "order": 0,
+                  "beats": [{"beat_id": "beat", "order": 0, "shots": []}]}
+    if asset_type == "scene":
+        plan_scene["scene_asset_id"] = "old"
+    else:
+        plan_scene["prop_ids"] = ["old"]
+    plan = DirectorShootingPlan.model_validate({
+        "source_revision": 1, "director_profile_revision": 1,
+        "director_profile_hash": "profile", "effective_style_hash": "style",
+        "scenes": [plan_scene],
+    })
+    episode.director_shooting_plan_revisions = [
+        DirectorShootingPlanRevision(revision=1, content_hash="plan", plan=plan, confirmed_at=1)]
+
+    pipeline.delete_series_asset(series.id, asset_type, "old", force=True)
+
+    assert getattr(episode, replacements) == {"old": "current"}
+    assert "old" not in episode.retired_plan_asset_ids.get(asset_type, [])
+    assert [item.id for item in getattr(series, collection)] == ["current"]
+    pipeline._library_list_for_type = Mock(return_value=[])
+    synced = pipeline.sync_episode_assets_from_shooting_plan(episode.id)
+    assert getattr(episode, replacements) == {"old": "current"}
+    assert any(binding["asset_type"] == asset_type and binding["asset_id"] == "current"
+               for binding in synced["bindings"])
+
+
+@pytest.mark.parametrize("asset_type,collection,replacements", [
+    ("scene", "scenes", "episode_scene_asset_replacements"),
+    ("prop", "props", "episode_prop_asset_replacements"),
+])
+def test_deleting_rebound_target_retires_plan_source(asset_type, collection, replacements):
+    pipeline, series, episode = make_pipeline()
+    pipeline._save_data = Mock()
+    model = Scene if asset_type == "scene" else Prop
+    getattr(series, collection).append(model(id="current", name="Current", description=""))
+    getattr(episode, replacements)["old"] = "current"
+
+    with pytest.raises(LibraryAssetInUseError) as error:
+        pipeline.delete_series_asset(series.id, asset_type, "current")
+    assert any(ref.get("plan_asset_id") == "old" for ref in error.value.references)
+    pipeline.delete_series_asset(series.id, asset_type, "current", force=True)
+
+    assert getattr(episode, replacements) == {}
+    assert episode.retired_plan_asset_ids[asset_type] == ["current", "old"]
+
+
 def test_cast_person_id_collision_does_not_reference_unrelated_character_asset():
     pipeline, series, episode = make_pipeline()
     series.characters.append(Character(id="visual", name="Visual", description="Visual"))

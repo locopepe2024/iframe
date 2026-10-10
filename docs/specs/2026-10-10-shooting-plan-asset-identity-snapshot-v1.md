@@ -16,6 +16,9 @@ created empty episode assets, losing the original names and descriptions.
   snapshot. Explicit deletion records the retired plan source ID on each
   affected episode. Later sync must not recreate an asset for a retired ID.
   The snapshot is historical evidence only; it cannot authorize restoration.
+- If a plan source has already been explicitly rebound to a surviving current
+  Scene or Prop, deleting the old source asset preserves that binding. Deleting
+  the current target retires the affected source IDs and clears the binding.
 - A new confirmed plan must omit retired references, or a user must explicitly
   bind a current asset. A page refresh does not create a new plan revision.
 - Unregistered asset IDs have no identity snapshot. Existing legacy plans
@@ -28,4 +31,5 @@ created empty episode assets, losing the original names and descriptions.
 
 Confirm a plan, explicitly delete its source assets, sync, and verify no
 replacement assets appear while historical identities remain readable. Verify
-repeat sync is idempotent and legacy revisions load.
+repeat sync is idempotent and legacy revisions load. Rebind a Scene or Prop,
+delete its old source, and verify the current target survives the next sync.
