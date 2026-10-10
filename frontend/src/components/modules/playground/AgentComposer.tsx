@@ -41,7 +41,7 @@ interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; knowledgeSearch?: boolean; setKnowledgeSearch?: (value: boolean) => void; knowledgeQuery?: string; setKnowledgeQuery?: (value: string) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; knowledgeSearch: boolean; setKnowledgeSearch: (value: boolean) => void; knowledgeQuery: string; setKnowledgeQuery: (value: string) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -210,6 +210,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={outputLabel}
             onClick={() => togglePanel('output')}
           />
+          {agent?.active && <ToolButton active={activePanel === 'knowledge'} icon={BookOpen} label={agent.knowledgeSearch ? '知识库已开启' : '知识库'} onClick={() => togglePanel('knowledge')} />}
           <ToolButton
             shorten
             active={activePanel === 'model'}
@@ -223,7 +224,6 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={`陪护技能${agent.companionSkills?.length ? ` ${agent.companionSkills.length}` : ''}`}
             onClick={() => togglePanel('companion')}
           />}
-          {agent?.active && <ToolButton active={activePanel === 'knowledge'} icon={BookOpen} label={agent.knowledgeSearch ? '知识库已开启' : '知识库'} onClick={() => togglePanel('knowledge')} />}
           {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           {!agent?.active && <>
           <ToolButton

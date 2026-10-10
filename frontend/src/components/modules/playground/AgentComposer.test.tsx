@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import AgentComposer from './AgentComposer';
 import { usePlaygroundStore } from './usePlaygroundStore';
@@ -45,7 +46,7 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     const change = vi.fn();
     const send = vi.fn();
     render(<AgentComposer canGenerate batchSize={4} onGenerate={send} onAgentChange={change}
-        agent={{ active: true, model: 'chat-real', models: [{ api_model_id: 'chat-real', display_name: 'GPT 6' }], setModel: vi.fn() }} />);
+        agent={{ active: true, model: 'chat-real', models: [{ api_model_id: 'chat-real', display_name: 'GPT 6' }], setModel: vi.fn(), knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn() }} />);
     expect(screen.getByRole('button', { name: '开始语音输入' }).parentElement).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
     const dialog = screen.getByRole('dialog');
@@ -63,7 +64,7 @@ it('uses the existing type popup and composer for Agent while keeping shared act
 it('shows four independently configurable companion skills only in Agent mode', () => {
     const toggle = vi.fn();
     render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()}
-        agent={{ active: true, model: 'chat', models: [], setModel: vi.fn(), companionSkills: ['listening'], toggleCompanionSkill: toggle }} />);
+        agent={{ active: true, model: 'chat', models: [], setModel: vi.fn(), companionSkills: ['listening'], toggleCompanionSkill: toggle, knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn() }} />);
     fireEvent.click(screen.getByRole('button', { name: '陪护技能 1' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getAllByRole('checkbox')).toHaveLength(4);
@@ -85,9 +86,32 @@ it('switches video resolution to image tiers without submitting stale video para
     expect(screen.queryByRole('button', { name: '720p' })).not.toBeInTheDocument();
 });
 
+it('opens the knowledge panel and changes the search setting', () => {
+    function KnowledgeComposer() {
+        const [knowledgeSearch, setKnowledgeSearch] = useState(false);
+        const [knowledgeQuery, setKnowledgeQuery] = useState('');
+        return <AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} agent={{
+            active: true, model: 'chat', models: [], setModel: vi.fn(),
+            knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery,
+        }} />;
+    }
+    render(<KnowledgeComposer />);
+    const tools = screen.getByRole('button', { name: 'Agent' }).parentElement;
+    expect(tools?.children[1]).toHaveTextContent('知识库');
+    fireEvent.click(screen.getByRole('button', { name: '知识库' }));
+    const dialog = screen.getByRole('dialog');
+    const checkbox = within(dialog).getByRole('checkbox', { name: '检索公共库和个人库' });
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    expect(screen.getByRole('button', { name: '知识库已开启' })).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByPlaceholderText('留空则使用当前提问'), { target: { value: '印刷政策' } });
+    expect(within(dialog).getByDisplayValue('印刷政策')).toBeInTheDocument();
+});
+
 it('preserves long drafts across modes and submits Chat beyond sixteen thousand characters', () => {
     const send = vi.fn();
-    const agent = { active: true, model: 'chat', models: [], setModel: vi.fn() };
+    const agent = { active: true, model: 'chat', models: [], setModel: vi.fn(), knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn() };
     const text = '长提示词'.repeat(700);
     usePlaygroundStore.setState({ prompt: text });
     const view = render(<AgentComposer canGenerate batchSize={1} onGenerate={send} agent={agent} />);
