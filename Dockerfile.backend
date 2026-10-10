@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 # Install FFmpeg and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
+    ffmpeg openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

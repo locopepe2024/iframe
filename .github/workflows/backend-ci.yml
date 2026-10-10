@@ -80,6 +80,13 @@ jobs:
         run: |
           "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py tests/test_reference_files.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
 
+      - name: Verify Blender depth on media
+        env:
+          IFRAME_TEST_BLENDER_BIN: /opt/blender/blender
+        run: |
+          /opt/blender/blender --background --factory-startup --threads 1 --python-exit-code 1 --python scripts/director3d/check_depth_reference.py
+          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_director_depth.py
+
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
