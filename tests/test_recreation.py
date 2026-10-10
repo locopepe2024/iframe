@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import subprocess
 import os
-import shutil
 import time
 from unittest.mock import Mock
 
@@ -24,8 +23,6 @@ def service(tmp_path, monkeypatch):
 
 @pytest.fixture
 def video(tmp_path):
-    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-        pytest.skip("Recreation video integration tests require ffmpeg and ffprobe")
     path = tmp_path / "input.mp4"
     subprocess.run([
         "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=red:s=96x64:r=24:d=1",
@@ -930,8 +927,6 @@ def test_assembly_rejects_short_generated_clip_without_stretching(service, video
 
 @pytest.fixture
 def video_with_audio(tmp_path):
-    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-        pytest.skip("Recreation video integration tests require ffmpeg and ffprobe")
     path = tmp_path / "input-audio.mp4"
     subprocess.run([
         "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=96x64:r=24:d=2",

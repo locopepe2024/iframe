@@ -1,5 +1,4 @@
 import base64
-import shutil
 import subprocess
 
 import pytest
@@ -8,8 +7,6 @@ from src.apps import agent_api as agent
 from src.utils.reference_files import chat_audio
 
 
-@pytest.mark.skipif(not shutil.which('ffmpeg') or not shutil.which('ffprobe'),
-                    reason='Audio conversion integration test requires ffmpeg and ffprobe')
 def test_m4a_reference_is_converted_and_sent_as_valid_mp3(tmp_path, monkeypatch):
     original = tmp_path / 'voice.m4a'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
@@ -27,7 +24,6 @@ def test_m4a_reference_is_converted_and_sent_as_valid_mp3(tmp_path, monkeypatch)
     assert original.read_bytes() == before
 
 
-@pytest.mark.skipif(not shutil.which('ffmpeg'), reason='Audio decoding integration test requires ffmpeg')
 def test_invalid_audio_reports_decode_failure_without_raw_ffmpeg_output(tmp_path):
     bad = tmp_path / 'private-name.m4a'
     bad.write_bytes(b'invalid-container')
