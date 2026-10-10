@@ -27,6 +27,7 @@ import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEnt
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
+import AssetNameEditor from "../common/AssetNameEditor";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -701,6 +702,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
+                            onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
                             onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
@@ -890,7 +892,7 @@ function ShootingPlanAssetRequirements({
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRename, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -1082,7 +1084,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                 <div className="w-1/2 flex flex-col">
                     {/* Header */}
                     <div className="p-6 border-b border-glass-border flex justify-between items-center bg-surface">
-                        <h2 className="text-2xl font-bold text-foreground">{asset.name}</h2>
+                        <AssetNameEditor name={asset.name} onRename={onRename} className="text-2xl font-bold" />
                         <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground">
                             <X size={24} />
                         </button>
