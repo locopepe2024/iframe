@@ -2392,6 +2392,7 @@
     "textGenerationMode": "文生图",
     "referenceGenerationMode": "参考图生成",
     "referenceIndex": "参考索引",
+    "referenceSearchHint": "在 @ 后输入搜索；方向键选择，回车确认；* 为当前使用",
     "noMatchingReference": "没有匹配的参考图",
     "noAvailableReference": "暂无可用参考图",
     "explicitReferenceCount": "已显式选择 {count} 张参考图",

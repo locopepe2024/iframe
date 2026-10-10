@@ -155,6 +155,32 @@ to disambiguate before migration.
    choice or creation. It must not produce an `EpisodeAssetBinding.asset_id`.
    An accidental string match between plan and asset IDs is never a binding.
 
+### Place and time continuity
+
+Current runtime has no `place_continuity_id` or `time_continuity_id`.
+`scene_asset_id` identifies reusable visual material; plan `scene_id`
+identifies one planned scene. Neither establishes that different views show
+the same physical street or occur during the same continuous dusk. Current
+`location`, `time_anchor`, `time_of_day`, and shot `lighting` fields are text
+descriptions and do not provide a reliable cross-scene join.
+
+The target plan contract assigns a stable `place_continuity_id` to the
+physical place shared by its views, and a `time_continuity_id` to one
+continuous story interval. “青溪镇青石板长街” and “青溪镇粮铺门前” can have
+different scene asset IDs and the same place ID. If their shots occur in one
+黄昏 interval, they share a time ID. Neither ID creates or merges an asset.
+
+The reviewed time interval records its story time, daylight phase, and
+weather. Each reviewed place/time pair owns a lighting baseline: key light
+source and world direction, color tone, and shadow direction. Shots with the
+same pair inherit that baseline. A deliberate lighting difference records an
+explicit override and reason. A confirmed plan revision pins both IDs and
+the baseline revision used for generation; changing one requires review of
+affected shots. Before render, validation must flag contradictory shot
+lighting. Matching names or a shared word such as “黄昏” cannot by itself
+establish continuity; the user confirms the join when the script does not
+provide an unambiguous place or continuous interval.
+
 ## Revision Dependencies
 
 ```text
