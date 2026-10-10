@@ -741,6 +741,8 @@ function ShootingPlanAssetRequirements({
     onBindPlanAsset: (assetType: "scene" | "prop", planAssetIds: string[], assetId: string) => Promise<void>;
     onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
 }) {
+    const scopeLabel = (source?: "episode" | "series" | "global") =>
+        source === "series" ? "系列共享" : source === "global" ? "个人资产" : "本集资产";
     const unboundCharacters = getUnboundCharacterRequirements(context);
     const people = new Map<string, { label: string; assetIds: string[]; sceneIds: string[]; shotIds: string[]; lookCount: number }>();
     for (const character of context?.characters ?? []) {
@@ -760,8 +762,9 @@ function ShootingPlanAssetRequirements({
     ];
     const assetsForType = (type: "character" | "scene" | "prop") => {
         const key = type === "character" ? "characters" : type === "scene" ? "scenes" : "props";
-        const local: Array<{ id: string; name: string }> = project[key] ?? [];
-        return [...local, ...seriesAssets[key].filter(asset => !local.some(item => item.id === asset.id))];
+        const local: Array<{ id: string; name: string; source?: "episode" | "series" | "global" }> = project[key] ?? [];
+        return [...local, ...seriesAssets[key].filter(asset => !local.some(item => item.id === asset.id))
+            .map(asset => ({ ...asset, source: "series" as const }))];
     };
     const getAsset = (type: "character" | "scene" | "prop", id: string) =>
         assetsForType(type).find(asset => asset.id === id);
@@ -815,7 +818,7 @@ function ShootingPlanAssetRequirements({
                                         <div key={`${group.type}:${binding.asset_id}`} className="rounded border border-glass-border/70 px-2 py-1.5">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-xs text-foreground">{asset?.name || "计划需求（待关联资产）"}</p>
+                                                    <p className="truncate text-xs text-foreground">{asset ? `${asset.name} · ${scopeLabel(asset.source)}` : "计划需求（待关联资产）"}</p>
                                                     <p className="text-[0.6875rem] text-text-muted">{binding.scene_ids.length} 个场景 · {binding.shot_ids.length} 个镜头 · {asset ? statusLabel(binding.status) : "待关联资产"}</p>
                                                 </div>
                                                 {asset && project[group.type === "scene" ? "scenes" : group.type === "prop" ? "props" : "characters"]?.some((item: { id: string }) => item.id === asset.id) &&
@@ -826,7 +829,7 @@ function ShootingPlanAssetRequirements({
                                                 onChange={event => void onBindPlanAsset(group.type as "scene" | "prop", sourceIds, event.target.value)}
                                                 className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                                                 {!asset && <option value="">选择{group.label}资产</option>}
-                                                {assetsForType(group.type).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                                {assetsForType(group.type).map(item => <option key={item.id} value={item.id}>{item.name} · {scopeLabel(item.source)}</option>)}
                                             </select>}
                                         </div>
                                     );
@@ -846,8 +849,8 @@ function ShootingPlanAssetRequirements({
                                             onChange={(event) => void onBindPersonAsset(personId, event.target.value || null)}
                                             className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                                             <option value="" disabled={Boolean(project.episode_person_asset_bindings?.[personId])}>{requirement.assetIds.length ? "使用导演映射" : "选择角色资产"}</option>
-                                            {assetsForType("character").map((asset: { id: string; name: string }) => (
-                                                <option key={asset.id} value={asset.id}>{asset.name}</option>
+                                            {assetsForType("character").map((asset) => (
+                                                <option key={asset.id} value={asset.id}>{asset.name} · {scopeLabel(asset.source)}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -1386,7 +1389,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                 </div>
             )}
 
-            <AssetCoverBadges planCount={planCount} failed={asset.status === "failed" && !isGenerating} error={asset.generation_error} />
+            <AssetCoverBadges planCount={planCount} failed={asset.status === "failed" && !isGenerating} error={asset.generation_error} source={asset.source} />
 
             {/* Top Actions Overlay */}
             <div className="absolute top-2 right-2 z-30 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
