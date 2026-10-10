@@ -1,10 +1,22 @@
 # Asset, Revision, Variant, and Material Confirmation V1
 
-Status: product contract for review; no runtime migration in this document.
+Status: product contract with partial runtime implementation (2026-10-10).
 Date: 2026-10-06
 
 Cross-stage ID and revision definitions, including plan and shot keyframe
 boundaries: `2026-10-10-script-plan-asset-material-identity-v1.md`.
+
+Implementation status (2026-10-10): project, series, and personal-library
+assets persist monotonic semantic snapshots. Existing attachments start as
+`legacy_attached`; explicit confirmation records `user_confirmed`. Project
+asset details support variant membership confirmation and revision restore.
+Confirmed storyboard reference packages and video tasks persist asset revision,
+variant, and available media/storage identities. Restore appends a new revision.
+Generation still attaches variants immediately, so the separate candidate
+material area and acceptance boundary below remain target behavior. Legacy
+variants without `media_id` can pin a storage key, but lack a complete media
+registry identity. Series and personal-library assets can be resolved through
+an episode project; their direct library views have no confirmation action yet.
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Script, Plan, Asset, and Material Identity v1
 
-Status: proposed cross-stage contract; no runtime migration in this document.
+Status: cross-stage contract with partial runtime implementation.
 Date: 2026-10-10
 
 Implementation note (2026-10-10): shooting-plan asset sync now keeps an
@@ -8,7 +8,17 @@ unbound plan scene in `unresolved_bindings` with reason `scene_asset_unbound`
 instead of substituting `scene_id` for `asset_id`. Scene asset-context lookup
 matches only `scene_asset_id`. Previously persisted mistaken bindings become
 stale on the next sync; historical plan snapshots are not rewritten. The
-remaining identity and revision rules below are still target contracts.
+remaining identity rules below include target contracts.
+
+Implementation note (2026-10-10, asset revisions): project, series, and
+personal-library assets now persist semantic revision snapshots with explicit
+`legacy_attached` versus `user_confirmed` status. Confirmation and restore
+preserve the asset ID; restore creates a new current revision. Confirmed
+storyboard reference packages and video tasks record asset revision, variant,
+and available media/storage IDs. Old packages without pins remain legacy
+records; legacy variants without `media_id` cannot claim complete material
+identity. Generation still attaches variants before review, and project asset
+details are the only direct confirmation UI.
 
 The episode Assets prompt projection in the frontend also matches Scene assets
 only by `scene_asset_id`; a coincidentally equal plan `scene_id` is not a match.
@@ -59,8 +69,8 @@ an explicit migration is implemented.
   is a compatibility resolution rule, not proof of one authoritative owner.
 - An image `ImageVariant` has `id`, material locator/storage key, and optional
   owner-scoped `media_id`. The media registry exists, but legacy variants may
-  lack `media_id`; a delivery URL is not an identity. A monotonic, confirmed
-  asset revision is still a target contract, not a current model field.
+  lack `media_id`; a delivery URL is not an identity. Assets now store monotonic
+  revisions, with explicit confirmation status for each snapshot.
 - `StoryboardFrame.scene_id` currently means a Scene **asset** ID, while a
   shooting-plan scene's `scene_id` means a **plan node** ID. `shot_id` on a
   frame may point back to a confirmed plan shot. A frame also has its own
@@ -211,9 +221,10 @@ asset variant/selection change.
 - Plan node stability across revisions is a target rule. The validator proves
   uniqueness within a plan only; a restore/regeneration may need reviewed
   old-to-new node mapping before references can follow it.
-- Asset revisions, placement IDs, confirmed variant membership, and exact
-  asset-revision pins remain target contracts. Existing `media_id` coverage is
-  partial for legacy data. Do not label a legacy selected variant "confirmed".
+- Asset revisions, confirmed variant membership, and new shot/task pins are
+  implemented. Explicit placement IDs, a separate candidate material flow,
+  and complete `media_id` coverage remain target contracts. Do not label a
+  legacy selected variant or an old unpinned package "confirmed".
 - Force deletion must remain possible, but the impact preview should list
   plan revisions, current bindings, and shot references. Bulk replacement
   must require an explicit old-to-new typed ID mapping and create a new plan
