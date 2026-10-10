@@ -420,14 +420,14 @@ class RecreationService:
 
     def _image(self, db, media_id):
         item = self._media(db, media_id)
-        if item["kind"] not in ("sample_frame", "evidence_frame", "contact_sheet", "reference_image", "replacement_image"):
+        if item["kind"] not in ("sample_frame", "evidence_frame", "contact_sheet", "reference_image", "replacement_image", "edit_mask"):
             raise HTTPException(422, "An image media record is required")
         if fingerprint(self._path(item["storage_path"])) != item["sha256"]:
             raise HTTPException(409, "Media fingerprint changed")
         return item
 
     def upload_image(self, project_id, stream, filename, kind, parent_media_id=None):
-        if kind not in ("reference_image", "replacement_image"):
+        if kind not in ("reference_image", "replacement_image", "edit_mask"):
             raise HTTPException(422, "Invalid image role")
         with self.db() as db:
             self._get(db, project_id)
@@ -452,10 +452,14 @@ class RecreationService:
                         fmt, width, height = image.format, image.width, image.height
                         if fmt not in ("PNG", "JPEG", "WEBP") or width * height > 25000000 or getattr(image, "n_frames", 1) != 1:
                             raise ValueError("Expected a still PNG, JPEG or WebP up to 25 megapixels")
+                        if kind == "edit_mask" and fmt != "PNG":
+                            raise ValueError("Edit mask must be PNG")
                         image.verify()
                     with Image.open(temporary) as image:
                         image.load()
             except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
+                if kind == "edit_mask":
+                    raise HTTPException(422, "Invalid edit mask: use a still PNG up to 25 megapixels") from exc
                 raise HTTPException(422, "Invalid image: use a still PNG, JPEG or WebP up to 25 megapixels") from exc
             path = temporary.with_name("image." + {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[fmt])
             temporary.rename(path)
@@ -477,7 +481,17 @@ class RecreationService:
             raise
 
     @staticmethod
-    def _keyframe_prompt(instruction):
+    def _keyframe_prompt(instruction, masked=False):
+        if masked:
+            return (
+                "Image 1 is the source video frame and its pose, timing, camera and scene are authoritative. "
+                "Image 2 is the replacement subject's appearance reference. Edit only the subject inside "
+                "the supplied mask. Transfer the replacement appearance while preserving the source "
+                "subject's silhouette, pose, limb positions, hand grip, sword position, foot placement, "
+                "occlusions, camera, lighting and background. Do not invent a new action or widen the sword. "
+                "Keep all content outside the mask unchanged. Produce one corrected video keyframe. "
+                f"Additional constraint: {instruction.strip()}"
+            )
         return (
             "Use case: precise-object-edit. Image 1 is the edit target from the source video. "
             "Image 2 is the replacement product identity reference. The additional constraint below "
@@ -507,7 +521,7 @@ class RecreationService:
 
     def create_keyframe_task(self, project_id, shot_id, revision, analysis_id, reference_media_id,
                              replacement_media_id, instruction, accept_cost,
-                             model=DEFAULT_KEYFRAME_IMAGE_MODEL):
+                             model=DEFAULT_KEYFRAME_IMAGE_MODEL, mask_media_id=None):
         if not accept_cost:
             raise HTTPException(422, "Paid image generation requires explicit cost acceptance")
         if len(instruction) > 2000:
@@ -529,6 +543,15 @@ class RecreationService:
                 raise HTTPException(422, "Source frame belongs to another recreation project")
             if replacement["kind"] != "replacement_image":
                 raise HTTPException(422, "Replacement product must use the replacement image role")
+            mask = None
+            if mask_media_id:
+                mask = self._image(db, mask_media_id)
+                if mask["kind"] != "edit_mask" or mask["project_id"] != project_id or mask["metadata"].get("mime") != "image/png":
+                    raise HTTPException(422, "Keyframe mask must be a PNG uploaded to this project")
+                with Image.open(self._path(reference["storage_path"])) as source_image:
+                    source_size = source_image.size
+                if (mask["metadata"].get("width"), mask["metadata"].get("height")) != source_size:
+                    raise HTTPException(422, "Keyframe mask dimensions must match the source frame")
             compiled_instruction, bad_instruction = compile_mentions(instruction, [
                 {"media_id": reference_media_id, "label": "Image 1"},
                 {"media_id": replacement_media_id, "label": "Image 2"},
@@ -544,7 +567,7 @@ class RecreationService:
             active = bool(active_rows)
             if active:
                 raise HTTPException(409, "A corrected keyframe task is already active for this shot")
-            prompt = self._keyframe_prompt(compiled_instruction)
+            prompt = self._keyframe_prompt(compiled_instruction, masked=bool(mask))
             now = time.time()
             task = {
                 "task_id": uuid4().hex, "project_id": project_id, "shot_id": shot_id,
@@ -552,6 +575,7 @@ class RecreationService:
                 "model": selected_model, "reference_media_id": reference_media_id,
                 "replacement_media_id": replacement_media_id, "reference_sha256": reference["sha256"],
                 "replacement_sha256": replacement["sha256"], "prompt": prompt,
+                "mask_media_id": mask_media_id, "mask_sha256": mask["sha256"] if mask else None,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                 "output_media_id": None, "error": None, "created_at": now, "updated_at": now,
             }
@@ -605,8 +629,18 @@ class RecreationService:
                     raise ValueError("Keyframe input fingerprint changed")
                 reference_path = self._path(reference["storage_path"])
                 replacement_path = self._path(replacement["storage_path"])
-                width = int(reference["metadata"].get("width") or 16)
-                height = int(reference["metadata"].get("height") or 9)
+                mask_path = None
+                if task.get("mask_media_id"):
+                    mask = self._image(db, task["mask_media_id"])
+                    if mask["sha256"] != task["mask_sha256"] or mask["kind"] != "edit_mask" or mask["project_id"] != task["project_id"]:
+                        raise ValueError("Keyframe mask fingerprint changed")
+                    mask_path = self._path(mask["storage_path"])
+                if mask_path:
+                    with Image.open(reference_path) as source_image:
+                        width, height = source_image.size
+                else:
+                    width = int(reference["metadata"].get("width") or 16)
+                    height = int(reference["metadata"].get("height") or 9)
             from ...models.uniart import UniArtImageModel
             from ..studio_access import runtime_uniart_for_owner
             config = provider_config if provider_config is not None else runtime_uniart_for_owner(
@@ -617,10 +651,11 @@ class RecreationService:
             output = folder / "image.png"
             ratios = ((1, 1, "1:1"), (4, 3, "4:3"), (3, 4, "3:4"), (16, 9, "16:9"), (9, 16, "9:16"))
             ratio = min(ratios, key=lambda item: abs(width / height - item[0] / item[1]))[2]
-            UniArtImageModel(config).generate(
-                task["prompt"], str(output), model_name=task["model"], size="2k", quality="high",
-                aspect_ratio=ratio, ref_image_paths=[str(reference_path), str(replacement_path)],
-            )
+            image_kwargs = {"model_name": task["model"], "size": "2k", "quality": "high",
+                            "aspect_ratio": ratio, "ref_image_paths": [str(reference_path), str(replacement_path)]}
+            if mask_path:
+                image_kwargs["mask"] = str(mask_path)
+            UniArtImageModel(config).generate(task["prompt"], str(output), **image_kwargs)
             with Image.open(output) as image:
                 output_format = image.format
                 image.verify()
@@ -641,7 +676,7 @@ class RecreationService:
                 "sha256": fingerprint(output),
                 "metadata": {"width": out_width, "height": out_height, "bytes": output.stat().st_size,
                              "mime": Image.MIME[output_format], "parent_media_id": task["reference_media_id"],
-                             "replacement_media_id": task["replacement_media_id"], "keyframe_task_id": task_id,
+                             "replacement_media_id": task["replacement_media_id"], "mask_media_id": task.get("mask_media_id"), "keyframe_task_id": task_id,
                              "model": task["model"], "prompt_sha256": task["prompt_sha256"]},
                 "created_at": time.time(),
             }

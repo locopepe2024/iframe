@@ -603,6 +603,80 @@ def test_keyframe_task_generates_indexed_reference_without_binding(service, vide
     assert service.get(p['id'])['timeline']['shots'][0].get('reference_media_id') is None
 
 
+def test_keyframe_task_passes_same_size_png_mask_to_uniart(service, video, monkeypatch):
+    from PIL import Image
+
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    with Image.open(Path('output') / source['storage_path']) as source_image:
+        width, height = source_image.size
+    mask_bytes = BytesIO()
+    Image.new('RGBA', (width, height), (255, 255, 255, 0)).save(mask_bytes, format='PNG')
+    mask_bytes.seek(0)
+    mask = service.upload_image(p['id'], mask_bytes, 'mask.png', 'edit_mask')
+    shot = p['timeline']['shots'][0]
+    task = service.create_keyframe_task(
+        p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+        'Replace the red box', True, mask_media_id=mask['media_id'],
+    )
+    assert task['mask_media_id'] == mask['media_id']
+
+    def generate(_self, prompt, output_path, **kwargs):
+        assert 'Edit only the subject inside the supplied mask' in prompt
+        assert 'preserving the source subject' in prompt
+        assert kwargs['mask'] == str((Path('output') / mask['storage_path']).resolve())
+        Image.new('RGB', (width, height), 'green').save(output_path, 'PNG')
+        return output_path, 0.1
+
+    monkeypatch.setattr('src.models.uniart.UniArtImageModel.generate', generate)
+    service.process_keyframe_task(task['task_id'], {'api_key': 'unused'})
+    done = service.keyframe_task(task['task_id'])
+    assert done['status'] == 'completed', done
+    assert done['output_media']['metadata']['mask_media_id'] == mask['media_id']
+
+
+def test_keyframe_task_rejects_mask_with_wrong_dimensions(service, video):
+    p = completed(service, video)
+    p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])
+    source = service.search_media(project_id=p['id'], kind='sample_frame')['items'][0]
+    product = service.upload_image(p['id'], image_stream(), 'product.png', 'replacement_image')
+    mask = service.upload_image(p['id'], image_stream(), 'small.png', 'edit_mask')
+    shot = p['timeline']['shots'][0]
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(
+            p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+            'Replace the red box', True, mask_media_id=mask['media_id'],
+        )
+    assert exc.value.status_code == 422
+    assert service.keyframe_tasks(p['id'], shot['id']) == []
+
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(
+            p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+            'Replace the red box', True, mask_media_id=product['media_id'],
+        )
+    assert exc.value.status_code == 422
+
+    from PIL import Image
+    jpeg_bytes = BytesIO()
+    Image.new('RGB', (20, 20), 'white').save(jpeg_bytes, format='JPEG')
+    jpeg_bytes.seek(0)
+    with pytest.raises(HTTPException) as exc:
+        service.upload_image(p['id'], jpeg_bytes, 'mask.jpg', 'edit_mask')
+    assert exc.value.status_code == 422
+
+    other = register(service, video)
+    foreign_mask = service.upload_image(other['id'], image_stream(), 'other.png', 'edit_mask')
+    with pytest.raises(HTTPException) as exc:
+        service.create_keyframe_task(
+            p['id'], shot['id'], p['revision'], p['analysis_id'], source['media_id'], product['media_id'],
+            'Replace the red box', True, mask_media_id=foreign_mask['media_id'],
+        )
+    assert exc.value.status_code == 422
+
+
 def test_keyframe_task_rejects_non_editing_model_before_persisting(service, video):
     p = completed(service, video)
     p = service.confirm(p['id'], p['revision'], p['analysis_id'], [])

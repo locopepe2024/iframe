@@ -28,6 +28,8 @@
     "replacement_image": "Replacement image",
     "description": "Shot description: composition, action and camera motion",
     "keyframeImageModel": "Keyframe image model",
+    "editMask": "Edit mask",
+    "maskPngOnly": "Use a PNG mask",
     "videoModel": "Recreation video model",
     "modelCatalogFallback": "Live model catalog unavailable; showing verified local defaults.",
     "generateCorrected": "Generate corrected keyframe (paid)",

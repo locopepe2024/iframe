@@ -44,7 +44,7 @@ export function importCuts(text: string, analysis: SourceAnalysis): number[] {
   return cuts;
 }
 
-export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image" | "generated_video" | "final_video";
+export type RecreationMediaKind = "source_video" | "contact_sheet" | "sample_frame" | "evidence_frame" | "reference_image" | "replacement_image" | "edit_mask" | "generated_video" | "final_video";
 export interface RecreationMedia {
   media_id: string; project_id: string; kind: RecreationMediaKind; display_name: string;
   storage_path: string; preview_url?: string; sha256: string; created_at: number;
@@ -243,6 +243,7 @@ export interface RecreationKeyframeTask {
   task_id: string; project_id?: string; shot_id?: string; revision?: number; analysis_id?: string;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   model?: string;
+  mask_media_id?: string | null;
   created_at?: number; updated_at?: number;
   output_media: RecreationMedia | null; error: string | null;
 }
@@ -295,15 +296,15 @@ export const recreationApi = {
   models: (): Promise<RecreationModelOptions> => axios.get(`${API_URL}/recreation/models`).then(r => r.data),
   generationPlan: (project: RecreationProject, model = "uniart/minimax-h3-vip", options: { audio_policy: string; soundscape: string; generation_durations: Record<string, number> } = { audio_policy: "silent", soundscape: "", generation_durations: {} }): Promise<RecreationPlan> => axios.post(`${API_URL}/recreation/projects/${project.id}/generation-plan`, { revision: project.revision, model, ...options }).then(r => r.data),
   media: (id: string): Promise<RecreationMedia> => axios.get(`${API_URL}/recreation/media/${id}`).then(r => r.data),
-  uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image", parentId?: string): Promise<RecreationMedia> => {
+  uploadImage: (projectId: string, file: File, kind: "reference_image" | "replacement_image" | "edit_mask", parentId?: string): Promise<RecreationMedia> => {
     const data = new FormData(); data.append("file", file); data.append("kind", kind);
     if (parentId) data.append("parent_media_id", parentId);
     return axios.post(`${API_URL}/recreation/projects/${projectId}/images`, data).then(r => r.data);
   },
-  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string, acceptCost: boolean, model = "uniart/gpt-image-2"): Promise<RecreationKeyframeTask> =>
+  createKeyframeTask: (project: RecreationProject, shotId: string, referenceMediaId: string, replacementMediaId: string, instruction: string, acceptCost: boolean, model = "uniart/gpt-image-2", maskMediaId?: string): Promise<RecreationKeyframeTask> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/shots/${shotId}/keyframe-tasks`, {
       revision: project.revision, analysis_id: project.analysis_id, reference_media_id: referenceMediaId,
-      replacement_media_id: replacementMediaId, instruction, model, accept_cost: acceptCost,
+      replacement_media_id: replacementMediaId, mask_media_id: maskMediaId || null, instruction, model, accept_cost: acceptCost,
     }).then(r => r.data),
   keyframeTask: (taskId: string): Promise<RecreationKeyframeTask> =>
     axios.get(`${API_URL}/recreation/keyframe-tasks/${taskId}`).then(r => r.data),

@@ -85,8 +85,34 @@ it('runs a paid keyframe task and selects its output without binding it', async 
   fireEvent.click(screen.getByRole('checkbox', { name: 'keyframeAcceptCost' }));
   fireEvent.click(screen.getByRole('button', { name: 'generateCorrected' }));
   expect(await screen.findByText('Corrected')).toBeInTheDocument();
-  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion', true, 'uniart/gpt-image-2');
+  expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(project, 'shot', 'image', 'product', 'Keep hand occlusion', true, 'uniart/gpt-image-2', undefined);
   expect(recreationApi.bindShot).not.toHaveBeenCalled();
+});
+
+it('uploads a PNG mask and includes it in the paid keyframe task', async () => {
+  const replacement = { ...image, media_id: 'product', kind: 'replacement_image' as const, display_name: 'Product' };
+  const mask = { ...image, media_id: 'mask', kind: 'edit_mask' as const, display_name: 'mask.png' };
+  vi.mocked(recreationApi.uploadImage).mockResolvedValue(mask);
+  vi.mocked(recreationApi.createKeyframeTask).mockResolvedValue({ task_id: 'task', status: 'pending', output_media: null, error: null });
+  vi.mocked(recreationApi.keyframeTask).mockResolvedValue({ task_id: 'task', status: 'completed', output_media: null, error: null });
+  render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'save' })).toBeEnabled());
+  fireEvent.click(screen.getAllByRole('button', { name: 'choose' })[0]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Evidence' }));
+  vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [replacement], next_cursor: null });
+  fireEvent.click(screen.getAllByRole('button', { name: 'choose' })[1]);
+  fireEvent.change(screen.getByRole('combobox', { name: 'kind' }), { target: { value: 'replacement_image' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Product' }));
+  const file = new File(['mask'], 'mask.png', { type: 'image/png' });
+  fireEvent.change(screen.getByLabelText('editMask upload'), { target: { files: [file] } });
+  await screen.findByText('mask.png');
+  expect(recreationApi.uploadImage).toHaveBeenCalledWith('p', file, 'edit_mask', 'image');
+  fireEvent.change(screen.getByRole('textbox', { name: 'instruction' }), { target: { value: 'Replace the figure' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'keyframeAcceptCost' }));
+  fireEvent.click(screen.getByRole('button', { name: 'generateCorrected' }));
+  await waitFor(() => expect(recreationApi.createKeyframeTask).toHaveBeenCalledWith(
+    project, 'shot', 'image', 'product', 'Replace the figure', true, 'uniart/gpt-image-2', 'mask',
+  ));
 });
 
 it('restores the latest completed keyframe output after a reload', async () => {

@@ -281,6 +281,7 @@ function ReferenceForm({ project, shot, disabled, imageModel, imageModels, onIma
   const [keyframeBusy, setKeyframeBusy] = useState(false);
   const [keyframeTaskId, setKeyframeTaskId] = useState<string | null>(null);
   const [keyframeTask, setKeyframeTask] = useState<RecreationKeyframeTask | null>(null);
+  const [mask, setMask] = useState<RecreationMedia | null>(null);
   const [keyframeCostAccepted, setKeyframeCostAccepted] = useState(false);
   const [keyframeError, setKeyframeError] = useState("");
   const alive = useRef(true);
@@ -335,7 +336,7 @@ function ReferenceForm({ project, shot, disabled, imageModel, imageModels, onIma
     const timer = window.setInterval(poll, 2000);
     return () => { active = false; window.clearInterval(timer); };
   }, [activeKeyframeTaskId, activeKeyframeTaskStatus, t]);
-  const choose = (role: Role, item?: RecreationMedia) => { setSelected(all => ({ ...all, [role]: item })); setSaved(false); setKeyframeCostAccepted(false); setKeyframeError(""); };
+  const choose = (role: Role, item?: RecreationMedia) => { setSelected(all => ({ ...all, [role]: item })); if (role === "reference") setMask(null); setSaved(false); setKeyframeCostAccepted(false); setKeyframeError(""); };
   async function upload(file: File, role: Role, parentId?: string) {
     if (file.size > 25 * 1024 * 1024) throw new Error("Image exceeds 25 MiB");
     const item = await recreationApi.uploadImage(project.id, file, role === "reference" ? "reference_image" : "replacement_image", parentId);
@@ -346,7 +347,7 @@ function ReferenceForm({ project, shot, disabled, imageModel, imageModels, onIma
     setKeyframeBusy(true); setKeyframeError(""); setSaved(false);
     try {
       const task = await recreationApi.createKeyframeTask(
-        project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction, keyframeCostAccepted, imageModel,
+        project, shot.id, selected.reference.media_id, selected.replacement.media_id, instruction, keyframeCostAccepted, imageModel, mask?.media_id,
       );
       if (alive.current) {
         setKeyframeTask(task); setKeyframeTaskId(task.task_id);
@@ -393,6 +394,22 @@ function ReferenceForm({ project, shot, disabled, imageModel, imageModels, onIma
         </div>
       </div>)}</div>
       {selected.reference && selected.replacement && <>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>{t("editMask")}</span>
+          <label className="glass-button flex items-center gap-2 cursor-pointer"><Upload size={16} />{t("upload")}
+            <input type="file" aria-label={t("editMask") + " " + t("upload")} accept="image/png" className="sr-only" onChange={async e => {
+              const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+              if (file.type !== "image/png") { setKeyframeError(t("maskPngOnly")); return; }
+              setBusy(true); setKeyframeError("");
+              try {
+                const uploaded = await recreationApi.uploadImage(project.id, file, "edit_mask", selected.reference?.media_id);
+                if (alive.current) { setMask(uploaded); setKeyframeCostAccepted(false); }
+              } catch (error) {
+                if (alive.current) setKeyframeError(error instanceof Error ? error.message : t("keyframeFailed"));
+              } finally { if (alive.current) setBusy(false); }
+            }} /></label>
+          {mask && <><span className="break-all">{mask.display_name}</span><button type="button" className="glass-button" title={t("detach")} aria-label={t("detach") + " " + t("editMask")} onClick={() => { setMask(null); setKeyframeCostAccepted(false); }}><X size={16} /></button></>}
+        </div>
         <label className="block text-sm">{t("keyframeImageModel")}<select aria-label={t("keyframeImageModel")} className="glass-input block" value={imageModel} disabled={keyframeBusy || !imageModels.length} onChange={e => onImageModelChange(e.target.value)}>
           {imageModels.map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.id}</option>)}
         </select></label>

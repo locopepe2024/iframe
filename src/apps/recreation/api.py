@@ -12,7 +12,7 @@ from .service import (
 
 router = APIRouter(prefix="/recreation", tags=["recreation"])
 
-_IMAGE_MEDIA_KINDS = frozenset({"contact_sheet", "sample_frame", "evidence_frame", "reference_image", "replacement_image"})
+_IMAGE_MEDIA_KINDS = frozenset({"contact_sheet", "sample_frame", "evidence_frame", "reference_image", "replacement_image", "edit_mask"})
 
 
 def _with_preview_urls(value, owner_profile_id):
@@ -163,6 +163,7 @@ class KeyframeTaskRequest(AnalyzeRequest):
     analysis_id: str
     reference_media_id: str = Field(min_length=1, max_length=64)
     replacement_media_id: str = Field(min_length=1, max_length=64)
+    mask_media_id: str | None = Field(default=None, min_length=1, max_length=64)
     instruction: str = Field(default="", max_length=2000)
     model: str = Field(default=DEFAULT_KEYFRAME_IMAGE_MODEL, min_length=1, max_length=120)
     accept_cost: bool = False
@@ -200,7 +201,7 @@ def create_keyframe_task(project_id: str, shot_id: str, request: KeyframeTaskReq
         task = service.create_keyframe_task(
             project_id, shot_id, request.revision, request.analysis_id,
             request.reference_media_id, request.replacement_media_id,
-            request.instruction, request.accept_cost, request.model,
+            request.instruction, request.accept_cost, request.model, request.mask_media_id,
         )
         background.add_task(service.process_keyframe_task, task["task_id"])
         return public(task, user)

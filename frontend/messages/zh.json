@@ -28,6 +28,8 @@
     "replacement_image": "替换图",
     "description": "镜头描述：构图、主体动作与运镜",
     "keyframeImageModel": "关键帧图片模型",
+    "editMask": "编辑遮罩",
+    "maskPngOnly": "请使用 PNG 遮罩",
     "videoModel": "复刻视频模型",
     "modelCatalogFallback": "实时模型目录暂不可用，当前显示已验证的本地默认值。",
     "generateCorrected": "AI 生成修正关键帧（付费）",
