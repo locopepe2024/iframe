@@ -47,3 +47,26 @@ unchanged. Invalid distance ranges and missing named cameras were rejected.
 Blender 4.x compatibility code exists but has not been executed in this slice.
 The new 5.2 file-output API appends the socket name to filenames; consumers must
 use the manifest's actual filenames rather than construct a filename pattern.
+
+## Browser submission slice
+
+Submit one evaluated frame from the live Three stage: baked world-space mesh
+vertices/triangles and active viewport camera matrix/projection, meter units.
+Only explicitly marked scene geometry participates. Helpers and backgrounds
+are excluded. This is a static-frame job, not an animation export.
+
+Core owns `/director3d/depth-tasks` with existing identity dependency. Immutable
+snapshots and task outputs persist under owner-hashed `output/users/*/director3d`.
+No client-provided filesystem paths or scripts. A configured local
+`DIRECTOR_DEPTH_BLENDER_BIN` (or `blender` on PATH) executes a project script with
+a 120-second timeout, CPU rendering, serialized jobs and bounded geometry and
+resolution. Missing runtime fails explicitly. Interrupted persisted tasks become
+failed when read after restart. Downloads require the same owner.
+
+UI provides near/far meters, submit, running/failure state, recovered recent jobs,
+PNG preview and EXR/manifest download. The submitted camera/frame label stays
+attached to each result. Polling stops on terminal state and unmount.
+
+Success checks: owner isolation, request bounds, timeout/failure persistence,
+real snapshot-to-Blender metric output, frontend submission/polling/failure,
+typecheck/build and desktop/mobile visual checks when authorized.
