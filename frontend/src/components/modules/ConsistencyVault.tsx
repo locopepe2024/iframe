@@ -793,7 +793,7 @@ function ShootingPlanAssetRequirements({
             <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
-                    <p className="mt-1 text-xs text-text-secondary">同步会为失效的角色、场景和道具引用创建空资产，不会自动生成图片。</p>
+                    <p className="mt-1 text-xs text-text-secondary">已删除的资产不会由同步恢复。仍引用旧资产的计划需重新确认或关联当前资产。</p>
                 </div>
                 <span className="text-xs text-text-muted">{currentBindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>

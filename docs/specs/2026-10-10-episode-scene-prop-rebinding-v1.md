@@ -18,10 +18,9 @@ although there is no asset on which generation can run.
   IDs to current asset IDs. Projection uses the current ID for asset-facing
   context and shot references. It never changes historical plan snapshots or
   existing storyboard revision pins.
-- Sync creates one empty episode-local Scene or Prop with a new ID for each
-  distinct missing source asset ID, then saves the replacement. It does not
-  generate media. Repeated sync reuses a valid replacement; if deleted, the
-  next sync creates another ID.
+- Sync reuses an existing asset or explicit replacement. A missing source ID
+  does not authorize creating an asset. Explicit deletion retires its plan
+  source IDs; repeated sync does not recreate deleted assets.
 - A user may replace the mapping with an available episode or series asset.
   No name matching establishes identity automatically.
 - The Assets UI groups requirements by the one current effective asset ID.

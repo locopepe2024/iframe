@@ -2744,6 +2744,9 @@ class Script(BaseModel):
     episode_prop_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"
     )
+    retired_plan_asset_ids: Dict[str, List[str]] = Field(
+        default_factory=dict, description="Plan source IDs explicitly retired by asset deletion"
+    )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
     # Model Settings for each generation stage

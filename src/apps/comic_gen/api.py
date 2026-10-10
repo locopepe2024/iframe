@@ -6355,6 +6355,7 @@ def delete_prop(script_id: str, prop_id: str):
     if len(script.props) == original_count:
         raise HTTPException(status_code=404, detail="Prop not found")
 
+    pipeline.retire_episode_plan_asset(script, "prop", prop_id)
     # Remove prop references from frames
     for frame in script.frames:
         if prop_id in frame.prop_ids:

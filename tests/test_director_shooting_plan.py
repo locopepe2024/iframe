@@ -526,16 +526,12 @@ def test_explicit_binding_resolves_legacy_plan_person_after_asset_id_changes():
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
 
     before = pipeline.sync_episode_assets_from_shooting_plan("film")
-    generated_id = script.episode_person_asset_bindings["person-old"]
-    assert generated_id != "replacement-asset"
-    assert before["context"]["characters"][0]["character_asset_ids"] == [generated_id]
+    assert "person-old" not in script.episode_person_asset_bindings
+    assert before["context"]["characters"][0]["character_asset_ids"] == []
     assert before["context"]["characters"][0]["person_label"] == "沈夏"
-    assert script.characters[-1].name == "沈夏"
-    assert script.characters[-1].description == ""
     repeated = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert repeated["context"]["shots"] == before["context"]["shots"]
-    assert script.episode_person_asset_bindings["person-old"] == generated_id
-    assert len(script.characters) == 2
+    assert len(script.characters) == 1
     confirmed_plan = script.director_shooting_plan_revisions[-1].model_dump()
     with pytest.raises(ValueError, match="revision changed"):
         pipeline.bind_episode_person_asset("film", "person-old", "replacement-asset", 0)
@@ -553,16 +549,9 @@ def test_explicit_binding_resolves_legacy_plan_person_after_asset_id_changes():
 
     script.characters = [item for item in script.characters if item.id != "replacement-asset"]
     missing = pipeline.sync_episode_assets_from_shooting_plan("film")
-    second_id = script.episode_person_asset_bindings["person-old"]
-    assert second_id not in {generated_id, "replacement-asset"}
-    assert missing["context"]["characters"][0]["character_asset_ids"] == [second_id]
-    assert missing["context"]["shots"][0]["character_ids"] == [second_id]
-    script.characters = []
-    recreated = pipeline.sync_episode_assets_from_shooting_plan("film")
-    next_id = script.episode_person_asset_bindings["person-old"]
-    assert next_id not in {generated_id, second_id, "replacement-asset"}
-    assert recreated["context"]["shots"][0]["character_ids"] == [next_id]
-    assert len(script.characters) == 1
+    assert "person-old" not in script.episode_person_asset_bindings
+    assert missing["context"]["characters"][0]["character_asset_ids"] == []
+    assert script.characters == []
     assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed_plan
 
 
@@ -584,7 +573,7 @@ def test_sync_reuses_existing_candidate_after_explicit_asset_is_deleted():
     assert result["context"]["characters"][0]["character_asset_ids"] == ["shen-xia-young"]
 
 
-def test_sync_rebinds_missing_scene_and_prop_ids_without_editing_plan():
+def test_sync_does_not_recreate_missing_scene_and_prop_ids():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
     scene = plan.scenes[0]
@@ -601,31 +590,18 @@ def test_sync_rebinds_missing_scene_and_prop_ids_without_editing_plan():
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
 
     first = pipeline.sync_episode_assets_from_shooting_plan("film")
-    scene_id = script.episode_scene_asset_replacements["old-scene"]
-    shot_scene_id = script.episode_scene_asset_replacements["old-shot-scene"]
-    prop_id = script.episode_prop_asset_replacements["old-prop"]
-    assert len({scene_id, shot_scene_id}) == 2
-    assert {item.id for item in script.scenes} == {"cinema", scene_id, shot_scene_id}
-    assert {item.id for item in script.props} == {"ticket", prop_id}
-    assert script.props[-1].name == "道具 1"
-    assert all("old-" not in item.name for item in script.scenes + script.props)
-    assert first["context"]["scenes"][0]["scene_asset_id"] == scene_id
-    assert first["context"]["shots"][0]["scene_asset_id"] == shot_scene_id
-    assert first["context"]["shots"][0]["prop_ids"] == [prop_id]
-    assert first["context"]["props"][0]["prop_id"] == prop_id
-    assert not any(item.get("reason") == "scene_asset_unbound" for item in first["unresolved_bindings"])
-    assert Script.model_validate(script.model_dump()).episode_prop_asset_replacements == {"old-prop": prop_id}
+    assert script.episode_scene_asset_replacements == {}
+    assert script.episode_prop_asset_replacements == {}
+    assert {item.id for item in script.scenes} == {"cinema"}
+    assert {item.id for item in script.props} == {"ticket"}
+    assert first["context"]["scenes"][0]["scene_asset_id"] == "old-scene"
+    assert first["context"]["shots"][0]["scene_asset_id"] == "old-shot-scene"
+    assert first["context"]["shots"][0]["prop_ids"] == ["old-prop"]
     assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
 
     pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert len(script.scenes) == 3
-    assert len(script.props) == 2
-    script.scenes = [item for item in script.scenes if item.id != shot_scene_id]
-    script.props = [item for item in script.props if item.id != prop_id]
-    recreated = pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert script.episode_scene_asset_replacements["old-shot-scene"] != shot_scene_id
-    assert script.episode_prop_asset_replacements["old-prop"] != prop_id
-    assert recreated["context"]["shots"][0]["scene_asset_id"] != shot_scene_id
+    assert len(script.scenes) == 1
+    assert len(script.props) == 1
 
     bound_scene = pipeline.bind_episode_plan_asset("film", "scene", "old-scene", "cinema", 1)
     bound_prop = pipeline.bind_episode_plan_asset("film", "prop", "old-prop", "ticket", 1)
@@ -636,7 +612,7 @@ def test_sync_rebinds_missing_scene_and_prop_ids_without_editing_plan():
     assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
 
 
-def test_confirmed_plan_preserves_asset_identity_when_sources_are_deleted():
+def test_confirmed_plan_preserves_identity_but_explicit_deletion_does_not_restore_assets():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
     plan.scenes[0].scene_asset_id = "cinema"
@@ -651,19 +627,21 @@ def test_confirmed_plan_preserves_asset_identity_when_sources_are_deleted():
     restored_revision = Script.model_validate(script.model_dump()).director_shooting_plan_revisions[-1]
     assert restored_revision.asset_identities == revision.asset_identities
 
-    script.characters = []
-    script.scenes = []
+    pipeline.delete_character("film", "shen-xia-young")
+    pipeline.delete_scene("film", "cinema")
+    pipeline.retire_episode_plan_asset(script, "prop", "ticket")
     script.props = []
     pipeline.resolve_episode_assets.side_effect = lambda episode: {
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props,
     }
     pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert [(item.name, item.description) for item in script.characters] == [("沈夏（大学）", "温婉的大学生")]
-    assert [(item.name, item.description) for item in script.scenes] == [("电影院入口", "电影院入口")]
-    assert [(item.name, item.description) for item in script.props] == [("电影票", "一张电影票")]
+    assert (script.characters, script.scenes, script.props) == ([], [], [])
+    assert script.retired_plan_asset_ids == {
+        "character": ["shen-xia-young"], "scene": ["cinema"], "prop": ["ticket"],
+    }
     assert revision.model_dump() == confirmed
     pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert (len(script.characters), len(script.scenes), len(script.props)) == (1, 1, 1)
+    assert (script.characters, script.scenes, script.props) == ([], [], [])
 
 
 def test_plan_asset_group_rebinding_changes_all_sources_atomically():
@@ -681,7 +659,7 @@ def test_plan_asset_group_rebinding_changes_all_sources_atomically():
 
     with pytest.raises(ValueError, match="not in the confirmed shooting plan"):
         pipeline.bind_episode_plan_asset("film", "scene", source_ids + ["unknown"], "cinema", 1)
-    assert script.episode_scene_asset_replacements[source_ids[0]] != "cinema"
+    assert source_ids[0] not in script.episode_scene_asset_replacements
 
     grouped = pipeline.bind_episode_plan_asset("film", "scene", source_ids, "cinema", 1)
     assert {script.episode_scene_asset_replacements[item] for item in source_ids} == {"cinema"}

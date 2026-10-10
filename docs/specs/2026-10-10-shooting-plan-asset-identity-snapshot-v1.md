@@ -13,9 +13,11 @@ created empty episode assets, losing the original names and descriptions.
   of each available asset it references at confirmation time. This is an
   immutable description snapshot, not a second asset or an image revision.
 - Deleting or replacing an asset does not alter a confirmed plan or its
-  snapshot. A later sync that must create a new asset from a missing reference
-  uses the snapshot's name and description. It does not restore images or
-  silently equate a different current ID with the old ID.
+  snapshot. Explicit deletion records the retired plan source ID on each
+  affected episode. Later sync must not recreate an asset for a retired ID.
+  The snapshot is historical evidence only; it cannot authorize restoration.
+- A new confirmed plan must omit retired references, or a user must explicitly
+  bind a current asset. A page refresh does not create a new plan revision.
 - Unregistered asset IDs have no identity snapshot. Existing legacy plans
   without snapshots remain readable; their missing identity requires
   historical evidence rather than guessed names.
@@ -24,6 +26,6 @@ created empty episode assets, losing the original names and descriptions.
 
 ## Verification
 
-Confirm a plan, remove its source assets, sync, and verify replacement assets
-retain names and descriptions while historical plan and storyboard references
-stay unchanged. Verify repeat sync is idempotent and legacy revisions load.
+Confirm a plan, explicitly delete its source assets, sync, and verify no
+replacement assets appear while historical identities remain readable. Verify
+repeat sync is idempotent and legacy revisions load.
