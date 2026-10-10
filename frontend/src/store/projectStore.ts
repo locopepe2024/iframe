@@ -504,6 +504,8 @@ export interface Project {
     episode_number?: number;
     episode_understanding?: EpisodeUnderstandingHandoff | null;
     episode_person_asset_bindings?: Record<string, string>;
+    episode_scene_asset_replacements?: Record<string, string>;
+    episode_prop_asset_replacements?: Record<string, string>;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
     starred?: boolean;
 }
