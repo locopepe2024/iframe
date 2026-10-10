@@ -16,6 +16,13 @@ Implementation note (2026-10-10, shot context): projected
 not become a Character asset reference. Legacy `DirectorPlanShot.character_ids`
 still names Character assets and is not renamed in stored plans.
 
+Implementation note (2026-10-10, series deletion): confirmed-plan reference
+scanning now resolves cast `person_id` through the matching Director profile's
+character variant mapping and explicit era choice, or the character's declared
+base identity when that mapping is absent. A same-string `person_id` cannot
+override a reviewed mapping to a different asset. Force deletion remains
+available and retains plan history.
+
 This is the common identity glossary for Script, Director shooting plan, Assets,
 Storyboard, and Shot Design. It refines the asset revision and scope contracts
 from 2026-10-06 and the shooting-plan and storyboard boundary contracts. When

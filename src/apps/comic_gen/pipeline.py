@@ -8156,6 +8156,30 @@ class ComicGenPipeline(StudioOwnerMixin):
             collection = getattr(series, collections[asset_type])
             if not any(item.id == asset_id for item in collection):
                 raise ValueError("Series asset not found")
+
+            def cast_asset_ids(episode: Script, plan: DirectorShootingPlan,
+                               cast: DirectorPlanCastBinding) -> List[str]:
+                profiles = [item.profile for item in episode.director_profile_revisions]
+                profiles.extend(item.profile for item in series.director_profile_revisions)
+                if episode.art_direction and episode.art_direction.director_profile:
+                    profiles.append(episode.art_direction.director_profile)
+                if series.art_direction and series.art_direction.director_profile:
+                    profiles.append(series.art_direction.director_profile)
+                profile = next((item for item in profiles
+                                if item.revision == plan.director_profile_revision
+                                and item.content_hash == plan.director_profile_hash), None)
+                person = next((item for item in profile.story_map.people
+                               if item.person_id == cast.person_id), None) if profile and profile.story_map else None
+                available = {item.id: item for item in episode.characters + series.characters}
+                if person:
+                    candidates = [item for item in person.variant_character_ids if item in available]
+                else:
+                    candidates = [item.id for item in available.values()
+                                  if (item.base_character_id or item.id) == cast.person_id]
+                if cast.era_variant_id in candidates:
+                    return [cast.era_variant_id]
+                return candidates if len(candidates) == 1 else []
+
             references = []
             plan_references = []
             for episode in self.get_series_episodes(series_id):
@@ -8183,7 +8207,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         for beat in scene.beats:
                             for shot in beat.shots:
                                 if asset_type == "character":
-                                    cast_ids = [binding.person_id for binding in shot.cast_bindings]
+                                    cast_ids = [character_id for binding in shot.cast_bindings
+                                                for character_id in cast_asset_ids(episode, plan, binding)]
                                     if asset_id in shot.character_ids or asset_id in cast_ids:
                                         plan_references.append({"owner_kind": "project", "owner_id": episode.id,
                                                                 "owner_title": episode.title, "revision": revision.revision,

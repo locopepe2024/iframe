@@ -4,7 +4,9 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.comic_gen.models import (
-    Character, DirectorShootingPlan, DirectorShootingPlanRevision, Prop, Scene, Script, Series, StoryboardFrame,
+    ArtDirection, Character, DirectorProfile, DirectorProfileRevision,
+    DirectorShootingPlan, DirectorShootingPlanRevision,
+    DirectorStoryMap, Prop, Scene, Script, Series, StoryboardFrame,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline, LibraryAssetInUseError
 
@@ -88,3 +90,46 @@ def test_confirmed_shooting_plan_references_require_force_and_survive_deletion()
     assert series.props == []
     assert episode.director_shooting_plan_revisions[0].plan == original_plan
     assert pipeline._save_series_data_unlocked.call_count == 3
+
+
+def test_cast_person_id_collision_does_not_reference_unrelated_character_asset():
+    pipeline, series, episode = make_pipeline()
+    series.characters.append(Character(id="visual", name="Visual", description="Visual"))
+    episode.art_direction = ArtDirection(
+        selected_style_id="test", style_config={},
+        director_profile=DirectorProfile(
+            revision=1, content_hash="profile",
+            story_map=DirectorStoryMap(
+                source_revision=1, source_revision_id="source-r1:test",
+                people=[{"person_id": "shared", "display_name": "Lead",
+                         "variant_character_ids": ["visual"]}],
+            ),
+        ),
+    )
+    plan = DirectorShootingPlan.model_validate({
+        "source_revision": 1, "director_profile_revision": 1,
+        "director_profile_hash": "profile", "effective_style_hash": "style",
+        "scenes": [{"scene_id": "plan-scene", "order": 0,
+                    "beats": [{"beat_id": "beat", "order": 0,
+                               "shots": [{"shot_id": "shot", "order": 0,
+                                          "cast_bindings": [{"person_id": "shared"}]}]}]}],
+    })
+    episode.director_shooting_plan_revisions = [
+        DirectorShootingPlanRevision(revision=1, content_hash="plan", plan=plan, confirmed_at=1)]
+    historical_profile = episode.art_direction.director_profile
+    episode.director_profile_revisions = [DirectorProfileRevision(
+        revision=1, content_hash="profile", profile=historical_profile.model_copy(deep=True),
+        confirmed_at=1)]
+    episode.art_direction.director_profile = DirectorProfile(
+        revision=2, content_hash="current",
+        story_map=DirectorStoryMap(
+            source_revision=1, source_revision_id="source-r1:test",
+            people=[{"person_id": "shared", "display_name": "Lead",
+                     "variant_character_ids": ["shared"]}],
+        ),
+    )
+
+    with pytest.raises(LibraryAssetInUseError):
+        pipeline.delete_series_asset(series.id, "character", "visual")
+    pipeline.delete_series_asset(series.id, "character", "shared")
+    assert [character.id for character in series.characters] == ["visual"]
