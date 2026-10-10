@@ -3,6 +3,9 @@
 Status: product contract for review; no runtime migration in this document.
 Date: 2026-10-06
 
+Cross-stage ID and revision definitions, including plan and shot keyframe
+boundaries: `2026-10-10-script-plan-asset-material-identity-v1.md`.
+
 ## Goal
 
 Define what it means to save a generated image, confirm it as an asset variant,

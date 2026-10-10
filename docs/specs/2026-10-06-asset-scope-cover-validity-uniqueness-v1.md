@@ -3,6 +3,13 @@
 Status: proposed product and identity contract; no runtime cutover.
 Date: 2026-10-06
 
+Implementation note (2026-10-10): `ImageVariant.media_id` is now optional in
+the model, and the owner-scoped media registry registers some variant and shot
+materials. The earlier observation below describes the 2026-10-06 state, not
+the present schema. Legacy coverage and complete asset-revision pinning remain
+unverified. See `2026-10-10-script-plan-asset-material-identity-v1.md` for the
+cross-stage identity contract.
+
 This document refines `2026-10-06-asset-revision-material-confirmation-v1.md`
 and `2026-09-24-asset-material-workspace-index-v1.md`. Where the September
 cover-selection implementation differs, the migration rules below apply.
