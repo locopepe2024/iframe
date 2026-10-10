@@ -6,10 +6,16 @@ import { ScanFace, Plus, Sparkles, Save, Check, History } from "lucide-react";
 
 import { agentRequest, api, type ChatModel } from "@/lib/api";
 import type { CharacterDesign, DigitalAvatarCharacter, IdentityDesign } from "@/lib/avatarCharacterAsset";
+import { AVATAR_FEATURE_LIBRARY } from "@/lib/avatarFeatureLibrary";
 
 const fields: { key: keyof Omit<IdentityDesign, "identity_anchors" | "visual_notes">; zh: string; en: string }[] = [
   { key: "face", zh: "脸部结构", en: "Face structure" },
   { key: "facial_features", zh: "五官特征", en: "Facial features" },
+  { key: "eye_shape", zh: "眼型", en: "Eye shape" },
+  { key: "brow_shape", zh: "眉形", en: "Brow shape" },
+  { key: "nose_shape", zh: "鼻型", en: "Nose shape" },
+  { key: "lip_shape", zh: "唇形", en: "Lip shape" },
+  { key: "facial_mark", zh: "面部识别特征", en: "Facial identifier" },
   { key: "skin", zh: "肤色与皮肤", en: "Skin" },
   { key: "body", zh: "身材与体态", en: "Body and posture" },
   { key: "age_appearance", zh: "年龄外观", en: "Age appearance" },
@@ -178,7 +184,13 @@ export default function AvatarWorkbench() {
         </div>
         <div className="mt-4"><button type="button" className="glass-button inline-flex min-h-10 items-center gap-2 px-3 text-sm disabled:opacity-50" disabled={!model || !profile.trim() || busy} onClick={() => void generateDraft()}><Sparkles size={16} />{zh ? "生成设计草稿" : "Generate design draft"}</button></div>
         <h2 className="mb-4 mt-8 border-b border-glass-border pb-3 text-sm font-semibold">{zh ? "稳定身份特征" : "Stable identity features"}</h2>
-        <div className="grid gap-4 sm:grid-cols-2">{fields.map(({ key, zh: zhLabel, en }) => <label key={key} className="grid gap-1 text-sm"><span>{zh ? zhLabel : en}</span><input className={inputClass} value={design.identity[key] || ""} onChange={(event) => setDesign((current) => ({ ...current, identity: { ...current.identity, [key]: event.target.value }, basis: { ...current.basis, [key]: "user_specified" } }))} /></label>)}</div>
+        <div className="grid gap-4 sm:grid-cols-2">{fields.map(({ key, zh: zhLabel, en }) => <div key={key} className="grid content-start gap-1 text-sm"><label htmlFor={`avatar-${key}`}>{zh ? zhLabel : en}</label><input id={`avatar-${key}`} className={inputClass} value={design.identity[key] || ""} onChange={(event) => setDesign((current) => ({ ...current, identity: { ...current.identity, [key]: event.target.value }, basis: { ...current.basis, [key]: "user_specified" } }))} />
+          {!!AVATAR_FEATURE_LIBRARY[key] && <div className="flex flex-wrap gap-1 pt-1" aria-label={zh ? `${zhLabel}特征建议` : `${en} feature suggestions`}>
+            {AVATAR_FEATURE_LIBRARY[key].map((option) => <button type="button" key={option.id} aria-pressed={design.identity[key] === option.zh || design.identity[key] === option.en} title={zh ? option.zh : option.en}
+              className="border border-glass-border px-2 py-1 text-left text-xs text-text-secondary hover:border-primary hover:text-foreground aria-pressed:border-primary aria-pressed:text-primary"
+              onClick={() => setDesign((current) => ({ ...current, identity: { ...current.identity, [key]: zh ? option.zh : option.en }, basis: { ...current.basis, [key]: "user_specified" } }))}>{zh ? option.zh : option.en}</button>)}
+          </div>}
+        </div>)}</div>
         <div className="mt-4 grid gap-4">
           <label className="grid gap-1 text-sm"><span>{zh ? "身份识别锚点（每行一个）" : "Identity anchors (one per line)"}</span><textarea className={inputClass} rows={2} value={(design.identity.identity_anchors || []).join("\n")} onChange={(event) => setDesign((current) => ({ ...current, identity: { ...current.identity, identity_anchors: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) } }))} /></label>
           <label className="grid gap-1 text-sm"><span>{zh ? "身份视觉说明" : "Identity visual notes"}</span><textarea className={inputClass} rows={4} value={design.identity.visual_notes || ""} onChange={(event) => setDesign((current) => ({ ...current, identity: { ...current.identity, visual_notes: event.target.value }, basis: { ...current.basis, visual_notes: "user_specified" } }))} /></label>

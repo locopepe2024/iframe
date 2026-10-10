@@ -17,6 +17,11 @@ from ..studio_access import require_studio_user, studio_owner_dir
 class IdentityDesign(BaseModel):
     face: str | None = None
     facial_features: str | None = None
+    eye_shape: str | None = None
+    brow_shape: str | None = None
+    nose_shape: str | None = None
+    lip_shape: str | None = None
+    facial_mark: str | None = None
     skin: str | None = None
     body: str | None = None
     age_appearance: str | None = None

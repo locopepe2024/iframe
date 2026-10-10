@@ -2,6 +2,11 @@
 export interface IdentityDesign {
   face?: string;
   facial_features?: string;
+  eye_shape?: string;
+  brow_shape?: string;
+  nose_shape?: string;
+  lip_shape?: string;
+  facial_mark?: string;
   skin?: string;
   body?: string;
   age_appearance?: string;

@@ -38,6 +38,22 @@ it("creates an Avatar identity independently while reading library references", 
   expect(listLibraryAssets).toHaveBeenCalled();
 });
 
+it("applies a concrete feature suggestion to the editable draft only", async () => {
+  createAvatarCharacter.mockClear();
+  listAvatarCharacters.mockResolvedValue({ characters: [] });
+  listLibraryAssets.mockResolvedValue({ characters: [] });
+  agentRequest.mockResolvedValue({ models: [] });
+  render(<AvatarWorkbench />);
+
+  expect(screen.getByRole("button", { name: "Oval face" })).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Oval face" }));
+  expect(screen.getByRole("textbox", { name: "Face structure" })).toHaveValue("Oval face");
+  expect(screen.getByRole("button", { name: "Oval face" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Almond-shaped eyes" }));
+  expect(screen.getByRole("textbox", { name: "Eye shape" })).toHaveValue("Almond-shaped eyes");
+  expect(createAvatarCharacter).not.toHaveBeenCalled();
+});
+
 it("saves a design draft and confirms it without using the media library", async () => {
   const base = { character_id: "avatar_1", name: "Mira", profile: "Original profile", design_revision: 1,
     character_design: { design_draft: { route: "realistic-modern", identity: { face: "oval" } }, design_revisions: [] }, review_status: "draft" };
