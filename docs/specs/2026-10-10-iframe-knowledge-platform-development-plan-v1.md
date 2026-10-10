@@ -29,6 +29,8 @@ The deployed owner API passes a bounded online smoke test. This does not establi
 
 ## Gates and slices
 
+The current Agent library-search path does not perform live news discovery. Before slice 2 is enabled for a recent-company briefing, apply the [live research discovery gate](2026-10-10-iframe-live-research-discovery-gate-v1.md): validate a provider, capture selected source originals and media, then require source revisions and locators for factual claims. An anonymous GDELT probe returned 429 and a Google News RSS probe timed out on 2026-10-10; neither is an approved shared-deployment provider on that evidence.
+
 | Slice | Work and affected paths | Acceptance and verification |
 |---|---|---|
 | 0. Fixture and contract | Freeze public/owner/project authorization, source/claim/retrieval and publication schemas in `src/apps/knowledge/models.py`; create legal local fixtures: illustrated HTML, paper PDF with figure/table, changed revision, conflicting excerpt, private/redirect URL cases. Add evaluation questions for screenwriting and director/art. | Contract examples parse; each expected citation locator is manually recorded. The two-owner public-plus-private matrix is explicit. No live source or model call is required in unit tests. |
