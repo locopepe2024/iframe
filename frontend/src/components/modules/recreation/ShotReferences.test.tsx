@@ -3,9 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import ShotReferences from './ShotReferences';
 import { recreationApi, RecreationProject, RecreationMedia } from '@/lib/recreation';
 
-vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { models: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() } }));
+vi.mock('@/lib/recreation', async original => ({ ...await original<typeof import('@/lib/recreation')>(), recreationApi: { models: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), generationPlan: vi.fn(), createKeyframeTask: vi.fn(), keyframeTask: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), retryGenerationTask: vi.fn(), assemblyTasks: vi.fn() } }));
 vi.mock('next/dynamic', () => ({ default: () => ({ onSave }: { onSave: (file: File) => Promise<void> }) => <button onClick={() => void onSave(new File(['edited'], 'edited.png', { type: 'image/png' }))}>export edit</button> }));
-vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
+vi.mock('next-intl', () => { const translate = (key: string) => key; return { useTranslations: () => translate }; });
 const image: RecreationMedia = { media_id: 'image', project_id: 'p', kind: 'evidence_frame', display_name: 'Evidence', storage_path: '/image.png', sha256: 'hash', created_at: 1, metadata: {} };
 const project = { id: 'p', revision: 4, analysis_id: 'a', status: 'confirmed', analysis: { start_pts: 0, time_base: '1/24' }, timeline: { cuts: [], shots: [{ id: 'shot', start_pts: 0, end_pts: 24 }] } } as unknown as RecreationProject;
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(recreationApi.models).mockResolvedValue({ provider: 'uniart', source: 'static', defaults: { image_model: 'uniart/gpt-image-2', video_model: 'uniart/minimax-h3-vip' }, image_models: [{ id: 'uniart/gpt-image-2', display_name: 'GPT Image 2', capabilities: ['i2i'] }], video_models: [{ id: 'uniart/minimax-h3-vip', display_name: 'MiniMax H3', capabilities: ['r2v'] }] }); vi.mocked(recreationApi.media).mockResolvedValue(image); vi.mocked(recreationApi.searchMedia).mockResolvedValue({ items: [image], next_cursor: null }); vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]); vi.mocked(recreationApi.generationTasks).mockResolvedValue([]); vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]); });
@@ -116,6 +116,24 @@ it('restores the latest generation task group after a reload', async () => {
   render(<ShotReferences project={project} disabled={false} onSaved={vi.fn()} />);
   expect(await screen.findByText(/generationStatus\.completed/)).toBeInTheDocument();
   expect(recreationApi.generationTasks).toHaveBeenCalledWith('p');
+});
+
+it('resumes generation polling after retrying a terminal task', async () => {
+  const failed = { task_id: 'generation-task', generation_id: 'generation', project_id: 'p', shot_id: 'shot', shot_number: 1, revision: 4, analysis_id: 'a', status: 'failed' as const, model: 'uniart/minimax-h3-vip', duration: 5, generate_audio: false, output_media: null, error: 'provider failed', created_at: 10 };
+  const pending = { ...failed, status: 'pending' as const, error: null };
+  const completed = { ...failed, status: 'completed' as const, error: null };
+  vi.mocked(recreationApi.generationTasks).mockResolvedValueOnce([failed]).mockResolvedValueOnce([failed]).mockResolvedValue([completed]);
+  vi.mocked(recreationApi.generationPlan).mockResolvedValue({ revision: 4, ready: true, blockers: [], shots: [] });
+  vi.mocked(recreationApi.retryGenerationTask).mockResolvedValue(pending);
+  render(<ShotReferences project={project} disabled={false} stage="submit" onSaved={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'checkPlan' }));
+  await screen.findByText('planReady');
+  await waitFor(() => expect(recreationApi.generationTasks).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'acceptCost' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'retryGeneration' }));
+  await waitFor(() => expect(recreationApi.retryGenerationTask).toHaveBeenCalledWith('generation-task', true));
+  await waitFor(() => expect(recreationApi.generationTasks).toHaveBeenCalledTimes(3), { timeout: 3500 });
+  expect(await screen.findByText('generationStatus.completed')).toBeInTheDocument();
 });
 
 it('shows saved-plan blockers and clears the preview when revision changes', async () => {
