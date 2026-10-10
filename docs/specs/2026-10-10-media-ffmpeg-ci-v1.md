@@ -13,7 +13,7 @@ non-media test still fails the `backend-tests` PR check.
 ## Runner Boundary
 
 Register a repository-scoped GitHub Actions runner on the media host with the
-custom label `iframe-media`. Run it as a dedicated, unprivileged system user
+custom label `iframe-media-ffmpeg`. Run it as a dedicated, unprivileged system user
 with a private home and workspace. Do not grant the runner sudo, production
 environment files, SSH keys, or access to application output directories.
 Never let pull-request events run code on this host. Keep the workflow job's

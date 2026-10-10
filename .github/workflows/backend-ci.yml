@@ -48,7 +48,7 @@ jobs:
 
   media-ffmpeg-tests:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, iframe-media]
+    runs-on: [self-hosted, linux, x64, iframe-media-ffmpeg]
     timeout-minutes: 20
     steps:
       - name: Checkout trusted main revision
