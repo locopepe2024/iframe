@@ -280,15 +280,41 @@ export default function ConsistencyVault() {
             } else if (type === "prop") {
                 await crudApi.deleteProp(currentProject.id, assetId);
             }
-            // Refresh project data
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete asset:", error);
             const detail = (error as any)?.response?.data?.detail;
             alert(detail?.error === "series_asset_in_use"
                 ? "资产仍被分集引用，删除未完成。请刷新后重试或检查引用。"
                 : extractErrorDetail(error, "Failed to delete asset"));
+            return;
+        }
+
+        // Deletion retires mappings; the persisted context needs a fresh projection.
+        const isCurrentProject = () => useProjectStore.getState().currentProject?.id === currentProject.id;
+        if (isCurrentProject()) {
+            setEpisodeAssetSync(null);
+            setEpisodeAssetState({ context: null, bindings: [] });
+            setSeriesAssets({ characters: [], scenes: [], props: [] });
+        }
+        const [projectResult, contextResult, seriesResult] = await Promise.allSettled([
+            api.getProject(currentProject.id),
+            episodeAssetState.context
+                ? api.syncEpisodeAssetsFromShootingPlan(currentProject.id)
+                : api.getEpisodeVisualContext(currentProject.id),
+            currentProject.series_id ? api.getSeries(currentProject.series_id) : Promise.resolve(null),
+        ]);
+        if (!isCurrentProject()) return;
+        if (projectResult.status === "fulfilled") updateProject(currentProject.id, projectResult.value);
+        if (contextResult.status === "fulfilled") {
+            setEpisodeAssetState({ context: contextResult.value.context, bindings: contextResult.value.bindings });
+        }
+        if (seriesResult.status === "fulfilled" && seriesResult.value) {
+            setSeriesAssets({ characters: seriesResult.value.characters ?? [],
+                scenes: seriesResult.value.scenes ?? [], props: seriesResult.value.props ?? [] });
+        }
+        const failedRefresh = [projectResult, contextResult, seriesResult].find(result => result.status === "rejected");
+        if (failedRefresh?.status === "rejected") {
+            toast.error("资产已删除，部分数据刷新失败", { body: extractErrorDetail(failedRefresh.reason, "请刷新页面后重试同步") });
         }
     };
 
