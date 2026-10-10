@@ -50,6 +50,15 @@ an older document uses `scene_id` or "revision" without a namespace, use the
 definitions below. Existing JSON field names remain compatibility names until
 an explicit migration is implemented.
 
+Implementation note (2026-10-11, Assets deletion refresh): after a successful
+deletion, the Assets view invalidates its prior sync diff, context, bindings,
+and series picker cache. An episode with a previously synced context reruns
+the non-creating asset sync to project the retired mappings; an unsynced
+episode only reads context. Project assets and series options are refreshed
+independently. A failed refresh reports that deletion already succeeded and
+does not restore stale plan state. Responses for an episode the user has left
+are discarded. Confirmed plan snapshots and asset revision history are unchanged.
+
 ## Observed Code Facts
 
 - A `Script` is the persisted episode/project record. Its source text has a
