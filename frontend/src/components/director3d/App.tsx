@@ -192,7 +192,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
       </main>
 
       <footer className="command-bar">
-        <div><p className="kicker">Browser core</p><strong>当前仅保存本地草稿，不调用 UniArt 或独立导演台 API</strong></div>
+        <div><p className="kicker">Browser core</p><strong>场景保存在本机；深度任务由 iFrame 后端执行</strong></div>
         <label><span className="sr-only">导演指令</span><input disabled placeholder="例如：角色 A 举起右手，镜头改为近景并前推" /></label>
         <button type="button" disabled>预览计划</button>
       </footer>
