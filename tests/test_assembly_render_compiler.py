@@ -319,6 +319,7 @@ def test_explicit_render_endpoints_are_registered():
     assert ("/series/{series_id}/assembly-plan/render", "POST") in routes
 
 
+@pytest.mark.media_ffmpeg
 def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")

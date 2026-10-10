@@ -10,6 +10,8 @@ from unittest.mock import Mock
 from fastapi import HTTPException
 import pytest
 
+pytestmark = pytest.mark.media_ffmpeg
+
 from src.apps.identity import UserContext
 from src.apps.recreation import analysis
 from src.apps.recreation.service import RecreationService

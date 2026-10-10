@@ -130,6 +130,7 @@ class TestExtractLastFramePathContainment:
         get_ffmpeg_path() is None and shutil.which("ffmpeg") is None,
         reason="ffmpeg not available",
     )
+    @pytest.mark.media_ffmpeg
     def test_legit_relative_video_extracts_frame(self, pipeline, monkeypatch, tmp_path):
         """Happy path: a managed output/video file passes the guard and the
         real ffmpeg invocation still works end-to-end after the fix."""

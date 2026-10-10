@@ -3,7 +3,10 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.media_ffmpeg
+
 from src.apps import agent_api as agent
+from src.apps.identity import UserContext
 from src.utils.reference_files import chat_audio
 
 
@@ -13,7 +16,8 @@ def test_m4a_reference_is_converted_and_sent_as_valid_mp3(tmp_path, monkeypatch)
                     '-c:a', 'aac', str(original)], check=True)
     before = original.read_bytes()
     monkeypatch.setattr(agent, 'reference_path', lambda *args: str(original))
-    content = agent.reference_content(None, 'owned-reference')
+    monkeypatch.setattr(agent, 'owned_library_image_key', lambda *args: None)
+    content = agent.reference_content(UserContext('owner', 'profile', 'Owner', ''), 'owned-reference')
     assert content['type'] == 'input_audio'
     assert content['input_audio']['format'] == 'mp3'
     result = tmp_path / 'result.mp3'

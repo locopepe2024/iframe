@@ -1,9 +1,7 @@
 # Minimal mechanical validation gate for merging into main.
 #
-# Runs the Python test suite and the model catalog validation script on
-# every pull request targeting main (and on pushes to main as a post-merge
-# safety net). Local development flow is unchanged — this only enforces
-# the checks that CLAUDE.md already declares.
+# Python tests that need real ffmpeg run on the isolated media runner after
+# trusted main pushes. All other tests remain a pull-request gate.
 #
 # To make this a hard gate, enable branch protection on main with
 # "backend-tests" as a required status check.
@@ -18,6 +16,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   backend-tests:
@@ -42,10 +41,35 @@ jobs:
           pip install -r requirements-docker.txt pytest
 
       - name: Run Python test suite
-        run: python -m pytest
+        run: python -m pytest -m "not media_ffmpeg"
 
       - name: Validate model catalog
         run: python scripts/validate_model_catalog.py
+
+  media-ffmpeg-tests:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, iframe-media]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main revision
+        uses: actions/checkout@v4
+
+      - name: Verify media host tools
+        run: |
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version | head -n 1
+          python3 --version
+
+      - name: Install isolated test dependencies
+        run: |
+          python3 -m venv .venv-ci
+          .venv-ci/bin/python -m pip install -r requirements-docker.txt pytest
+
+      - name: Run real media tests
+        env:
+          LUMENX_RECREATION_SAMPLE: ""
+        run: .venv-ci/bin/python -m pytest -m media_ffmpeg
 
   frontend-playground-tests:
     runs-on: ubuntu-latest
