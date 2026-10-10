@@ -1,6 +1,6 @@
 # iFrame Knowledge: Agent Search Slice v1
 
-Status: implemented in source; production release pending. Date: 2026-10-10.
+Status: deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`. Date: 2026-10-10.
 
 ## Observed
 
@@ -27,3 +27,9 @@ Status: implemented in source; production release pending. Date: 2026-10-10.
 
 - Keyword retrieval recall, source truth, attribution accuracy in generated prose, or usefulness for finance and creative disciplines. Those need evaluated fixtures and human review.
 - Automatic web collection, public curation, refresh jobs and model-proposed multi-step tool calls remain later slices.
+
+## Deployment Evidence
+
+- PR #69 passed backend, media and frontend CI and was merged. Release `9ac09355d18289b75f9b231faf0fcec9a5ec6508` passed isolated candidate preparation and was deployed with matching backend/static revisions.
+- In the new production container, a direct read-only call to `agent_tools.search_knowledge` connected to TencentDB and returned an empty list for a fresh test identity. This verifies the runtime search path and owner argument, not a complete user conversation or answer attribution.
+- Local targeted checks: 40 backend tests, 9 Playground conversation tests and frontend typecheck/build passed. A real model-backed conversation with a configured user and a curated public source remains an acceptance item.

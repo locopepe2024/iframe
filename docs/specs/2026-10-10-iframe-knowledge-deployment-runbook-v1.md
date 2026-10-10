@@ -1,6 +1,6 @@
 # iFrame Knowledge Runtime Deployment Runbook v1
 
-Status: deployed at `621246da0309b3bfd96e718bd43a4d43509d8e81`; later `main` CI fixes are not on the host. Date: 2026-10-10.
+Status: latest deployment `9ac09355d18289b75f9b231faf0fcec9a5ec6508`; previous knowledge API release `621246da0309b3bfd96e718bd43a4d43509d8e81`. Date: 2026-10-10.
 
 ## Required state
 
@@ -29,7 +29,8 @@ Status: deployed at `621246da0309b3bfd96e718bd43a4d43509d8e81`; later `main` CI 
 - `prepare` verified isolated candidate health, knowledge routes, TLS database access and unchanged project/series identities. The production revision was still `e01224463a82b4aa8db0c2dd984198c3b6e668fa`.
 - A separate isolated HTTP candidate and the live API each passed two-browser-identity import, idempotency, text/image/video retrieval and private-isolation checks using disposable fixtures. This does not validate real third-party identity login or public publication.
 - `deploy` completed. `inspect` reported matching backend and static revision `621246da0309b3bfd96e718bd43a4d43509d8e81`; localhost static `build-manifest.json` reported the same revision. Previous containers and static content remain as rollback targets.
-- GitHub `main` later advanced to PR #67 and Backend CI run `38043886431` passed. The host remains pinned to the reviewed knowledge release. Its earlier CI failure included missing FFmpeg and other baseline assertions; PR #67 addressed those in a later revision.
+- GitHub `main` later advanced to PR #67 and Backend CI run `38043886431` passed. At that point the host was pinned to `621246da`. Its earlier CI failure included missing FFmpeg and other baseline assertions; PR #67 addressed those in a later revision.
+- PR #69 then added explicit owner-scoped Agent search. Its candidate passed preparation and was deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`; backend/static match. A read-only search helper call inside the live container reached TencentDB for a fresh test owner and returned no hits. Model-backed answer attribution remains unverified.
 
 ## Outstanding gates
 
