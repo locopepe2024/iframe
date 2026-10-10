@@ -182,9 +182,10 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             {activePanel === 'knowledge' && (
               <div className="space-y-3">
                 <label className="flex min-h-11 items-center gap-3 text-sm text-foreground">
-                  <input type="checkbox" checked={agent?.knowledgeSearch ?? false} onChange={event => agent?.setKnowledgeSearch?.(event.target.checked)} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" checked={agent?.knowledgeSearch ?? false} disabled={agent?.model === 'minimax-h3-ir'} onChange={event => agent?.setKnowledgeSearch?.(event.target.checked)} className="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50" />
                   检索公共库和个人库
                 </label>
+                {agent?.model === 'minimax-h3-ir' && <p className="text-xs text-text-muted">H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型。</p>}
                 {agent?.knowledgeSearch && <label className="block text-xs text-text-secondary">检索词
                   <input value={agent.knowledgeQuery ?? ''} onChange={event => agent.setKnowledgeQuery?.(event.target.value)} maxLength={200} placeholder="留空则使用当前提问" className="mt-2 w-full rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground outline-none focus:border-primary" />
                 </label>}

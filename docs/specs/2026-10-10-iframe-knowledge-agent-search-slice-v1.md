@@ -1,6 +1,6 @@
 # iFrame Knowledge: Agent Search Slice v1
 
-Status: deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`. Date: 2026-10-10.
+Status: base slice deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`; companion compatibility amendment pending release. Date: 2026-10-10.
 
 ## Observed
 
@@ -10,7 +10,7 @@ Status: deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`. Date: 2026-10-10
 ## Contract
 
 - A chat request may set `knowledge_search=true` and an optional `knowledge_query`. The server searches with the current authenticated `owner_profile_id`, the explicit query or the first 200 characters of the current user message, and a maximum of five hits. It never accepts a caller-supplied owner ID. The Playground exposes a query override for precise keyword lookup.
-- Only normal Chat models without companion skills use this slice. H3 Context-IR and companion mode reject `knowledge_search=true` explicitly.
+- Normal Chat models may combine knowledge search with companion skills; the same owner-scoped search and untrusted-source rules apply. H3 Context-IR rejects `knowledge_search=true` explicitly. The Playground disables the search control for H3 and clears it when switching to H3.
 - Search failures leave the turn unsaved and return a service error. Empty results remain explicit; the model must not imply it found a source.
 - Hits are bounded before inclusion in the model request. Search output is untrusted source data, not system instructions. The Agent must distinguish source claims from verified facts and may cite only returned IDs.
 - The assistant message persists structured citations for the exact hit IDs and revisions used in that turn. The UI displays those citations with title, locator, collection scope, source URI and rights state. The citation list documents retrieved material, not proof that each source supports every generated claim.
@@ -20,7 +20,7 @@ Status: deployed at `9ac09355d18289b75f9b231faf0fcec9a5ec6508`. Date: 2026-10-10
 
 1. A normal chat turn with search enabled invokes `knowledge.store.search` once using its authenticated owner and at most five hits. A/B identities receive only their authorized results.
 2. The model sees bounded excerpts and immutable citation IDs, and the saved assistant message exposes the same structured citations after reload.
-3. A disabled turn performs no knowledge access. H3/companion use is rejected, and database failure does not save a partial turn.
+3. A disabled turn performs no knowledge access. Companion skills and search work in one normal Chat turn. H3 rejects search, and database failure does not save a partial turn.
 4. Playground offers a binary search control and renders persisted citations without treating a source URL as a fetch command.
 
 ## Not Yet Proven
