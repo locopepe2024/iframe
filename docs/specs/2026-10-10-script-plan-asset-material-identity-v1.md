@@ -3,6 +3,13 @@
 Status: proposed cross-stage contract; no runtime migration in this document.
 Date: 2026-10-10
 
+Implementation note (2026-10-10): shooting-plan asset sync now keeps an
+unbound plan scene in `unresolved_bindings` with reason `scene_asset_unbound`
+instead of substituting `scene_id` for `asset_id`. Scene asset-context lookup
+matches only `scene_asset_id`. Previously persisted mistaken bindings become
+stale on the next sync; historical plan snapshots are not rewritten. The
+remaining identity and revision rules below are still target contracts.
+
 This is the common identity glossary for Script, Director shooting plan, Assets,
 Storyboard, and Shot Design. It refines the asset revision and scope contracts
 from 2026-10-06 and the shooting-plan and storyboard boundary contracts. When
@@ -37,11 +44,9 @@ an explicit migration is implemented.
 - Asset sync projects the latest confirmed plan into episode context and
   bindings. Each `EpisodeAssetBinding` stores asset type/ID, source plan
   revision/hash, optional selected variant ID, and status. It does not contain
-  an asset revision. Sync does not create or overwrite assets. When a scene has
-  no `scene_asset_id`, current sync writes its plan `scene_id` into a Scene
-  `asset_id` binding and reports it unresolved unless an asset happens to have
-  that ID. The asset-context prompt also matches either ID; both paths mix
-  plan and asset namespaces.
+  an asset revision. Sync does not create or overwrite assets. The earlier
+  implementation wrote plan `scene_id` into a Scene `asset_id` binding when no
+  `scene_asset_id` existed, and asset-context lookup accepted either ID.
 
 ## Object and Identity Registry
 
@@ -176,10 +181,9 @@ asset variant/selection change.
   values in one map, but there is no verified series-wide person registry or
   enforced cross-episode continuity. Name matching must not manufacture identity.
 - Plan `scene_id` and frame `scene_id` share a name despite different domains.
-  Current sync substitutes plan `scene_id` for a missing Scene asset ID, and
-  asset-context lookup accepts both. Fix those boundaries before interpreting
-  existing unresolved Scene bindings as real asset references; add typed
-  names at API/view boundaries before any persistent migration.
+  The former sync substitution and dual-ID lookup are fixed, but previously
+  persisted mistaken bindings need review after sync. Add typed names at
+  API/view boundaries before any persistent migration.
 - Plan node stability across revisions is a target rule. The validator proves
   uniqueness within a plan only; a restore/regeneration may need reviewed
   old-to-new node mapping before references can follow it.

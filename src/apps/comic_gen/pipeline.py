@@ -3737,8 +3737,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             context = self.project_episode_visual_context(script_id)
             previous = {(b.asset_type, b.asset_id): b for b in script.episode_asset_bindings}
             desired: List[EpisodeAssetBinding] = []
+            unbound_scenes = []
             for scene in context.scenes:
-                asset_id = scene.scene_asset_id or scene.scene_id
+                asset_id = scene.scene_asset_id
+                if not asset_id:
+                    unbound_scenes.append({"asset_type": "scene", "scene_id": scene.scene_id,
+                                           "reason": "scene_asset_unbound"})
+                    continue
                 existing_scene = next((item for item in desired if item.asset_type == "scene" and item.asset_id == asset_id), None)
                 if existing_scene:
                     existing_scene.scene_ids.append(scene.scene_id)
@@ -3783,6 +3788,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "prop": {item.id for item in resolved["props"]},
             }
             unresolved = [item.model_dump() for item in desired if item.asset_id not in available[item.asset_type]]
+            unresolved.extend(unbound_scenes)
             unresolved.extend({"asset_type": "character", "person_id": item.person_id,
                                "scene_ids": item.scene_ids, "reason": "era_variant_unresolved"}
                               for item in context.characters if not item.character_asset_ids)
@@ -3870,7 +3876,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         elif asset_type == "prop":
             matches = [item.model_dump(exclude_none=True) for item in context.props if item.prop_id == asset_id]
         else:
-            matches = [item.model_dump(exclude_none=True) for item in context.scenes if item.scene_id == asset_id or item.scene_asset_id == asset_id]
+            matches = [item.model_dump(exclude_none=True) for item in context.scenes if item.scene_asset_id == asset_id]
         if not matches:
             return ""
         # A generic asset generation has no scene selection. Mixing distinct looks

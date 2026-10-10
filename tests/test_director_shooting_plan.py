@@ -18,6 +18,7 @@ from src.apps.comic_gen.models import (
     DirectorProfile,
     DirectorShootingPlan,
     DirectorStoryMap,
+    EpisodeAssetBinding,
     Prop,
     Script,
     StoryboardFrame,
@@ -345,9 +346,34 @@ def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     assert script.episode_visual_context is not None
 
 
+def test_unbound_plan_scene_id_does_not_resolve_as_scene_asset():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_id = "cinema"  # Collides with an existing Scene asset ID.
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    revision = script.director_shooting_plan_revisions[-1]
+    script.episode_asset_bindings = [EpisodeAssetBinding(
+        asset_type="scene", asset_id="cinema", scene_ids=["cinema"],
+        source_plan_revision=revision.revision, source_plan_hash=revision.content_hash,
+        status="accepted",
+    )]
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    assert not any(item["asset_type"] == "scene" and item["status"] != "stale"
+                   for item in result["bindings"])
+    assert [(item["asset_id"], item["status"]) for item in result["stale_bindings"]] == [
+        ("cinema", "stale")]
+    assert {item["scene_id"] for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"} == {"cinema"}
+    assert pipeline._episode_asset_context_prompt(script, "scene", "cinema") == ""
+
+
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
     first = pipeline.sync_episode_assets_from_shooting_plan("film")
@@ -410,10 +436,17 @@ def test_multi_era_person_requires_explicit_variant_before_asset_binding():
 
 
 def test_sync_only_marks_assets_affected_by_a_plan_change():
-    pipeline, _ = make_pipeline()
+    from src.apps.comic_gen.models import Scene
+
+    pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    restaurant = Scene(id="restaurant", name="餐馆", description="餐馆")
+    script.scenes.append(restaurant)
+    pipeline.resolve_episode_assets.return_value["scenes"].append(restaurant)
     second_scene = plan.scenes[0].model_copy(deep=True)
     second_scene.scene_id = "scene-restaurant"
+    second_scene.scene_asset_id = "restaurant"
     second_scene.order = 1
     second_scene.beats[0].beat_id = "beat-restaurant"
     second_scene.beats[0].shots[0].shot_id = "shot-restaurant"
@@ -426,8 +459,8 @@ def test_sync_only_marks_assets_affected_by_a_plan_change():
     pipeline.save_director_shooting_plan_draft("film", 1, 1, plan)
     pipeline.apply_director_shooting_plan("film", plan, 1, 2)
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
-    assert any(item["asset_id"] == "scene-cinema" for item in result["reusable_bindings"])
-    assert any(item["asset_id"] == "scene-restaurant" for item in result["changed_bindings"])
+    assert any(item["asset_id"] == "cinema" for item in result["reusable_bindings"])
+    assert any(item["asset_id"] == "restaurant" for item in result["changed_bindings"])
 
 def test_style_save_preserves_episode_assets_and_director_profile():
     pipeline, script = make_pipeline()
