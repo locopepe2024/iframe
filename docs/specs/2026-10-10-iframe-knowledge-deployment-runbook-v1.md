@@ -1,6 +1,6 @@
 # iFrame Knowledge Runtime Deployment Runbook v1
 
-Status: prepared, not deployed. Date: 2026-10-10.
+Status: deployed at `621246da0309b3bfd96e718bd43a4d43509d8e81`; later `main` CI fixes are not on the host. Date: 2026-10-10.
 
 ## Required state
 
@@ -21,8 +21,15 @@ Status: prepared, not deployed. Date: 2026-10-10.
 1. On the host, fetch and check out the reviewed feature branch; confirm the working tree is clean and its full revision matches GitHub.
 2. Run `python3 scripts/iframe_release.py inspect` and record backend/static revision.
 3. Run `sudo python3 scripts/iframe_release.py prepare --revision <full-sha>`. Candidate startup must pass state-identity, route and knowledge database checks. The production backend stays untouched during prepare.
-4. Complete the two-owner acceptance against the candidate's localhost port 17178 before switching. Use disposable collections and source fixtures. Confirm text/image/video import, exact revision and locator IDs, owner A/B isolation, public publication visibility, and COS media read. Remove disposable data under the retention procedure.
+4. `prepare` removes its candidate on success. For deeper HTTP acceptance, start a separate container from the prepared image on localhost port 17178 with an isolated copy of durable output state, the same managed environment and read-only secret mount. Use disposable collections and source fixtures. Confirm text/image/video import, exact revision and locator IDs, owner A/B isolation and COS media read. Public publication visibility requires a separate curator fixture and remains unverified. Remove disposable data under the retention procedure.
 5. Run `sudo python3 scripts/iframe_release.py deploy --revision <full-sha>` only after the candidate checks pass. Confirm the live backend/static revision and repeat the owner A/B HTTP smoke test.
+
+## Deployment evidence (2026-10-10)
+
+- `prepare` verified isolated candidate health, knowledge routes, TLS database access and unchanged project/series identities. The production revision was still `e01224463a82b4aa8db0c2dd984198c3b6e668fa`.
+- A separate isolated HTTP candidate and the live API each passed two-browser-identity import, idempotency, text/image/video retrieval and private-isolation checks using disposable fixtures. This does not validate real third-party identity login or public publication.
+- `deploy` completed. `inspect` reported matching backend and static revision `621246da0309b3bfd96e718bd43a4d43509d8e81`; localhost static `build-manifest.json` reported the same revision. Previous containers and static content remain as rollback targets.
+- GitHub `main` later advanced to PR #67 and Backend CI run `38043886431` passed. The host remains pinned to the reviewed knowledge release. Its earlier CI failure included missing FFmpeg and other baseline assertions; PR #67 addressed those in a later revision.
 
 ## Outstanding gates
 

@@ -1,12 +1,12 @@
 # iFrame Knowledge: Agent Handoff and Acceptance v1
 
-Date: 2026-10-10. Status: implementation in progress. This is the short handoff for agents building collection, indexing, and domain workflows. The product rules remain in `2026-10-10-iframe-knowledge-platform-spec-v1.md`.
+Date: 2026-10-10. Status: owner import/search API deployed; collector and Agent tool loop pending. This is the short handoff for agents building collection, indexing, and domain workflows. The product rules remain in `2026-10-10-iframe-knowledge-platform-spec-v1.md`.
 
 ## Observed
 
-- TencentDB PostgreSQL 16 is provisioned privately in Tokyo, and migration v1 has been applied. The app is not yet deployed with knowledge database credentials.
-- The repository has authenticated owner collection creation/listing, a TLS database connection, and a live rollback-only A/B visibility verification script.
-- There is no web crawler, COS knowledge bucket, media ingestion, full-text query, Agent tool loop, or public curator API yet. Existing Agent skills are prompt instructions, not executable retrieval tools.
+- TencentDB PostgreSQL 16 is provisioned privately in Tokyo with migrations v1/v2; the deployed API connects through TLS. Private COS storage is configured with scoped credentials.
+- The deployed API accepts owner collections and text/image/short-video source units, annotations and searches. An isolated candidate and the live localhost API passed two-identity HTTP tests of import, idempotency, media retrieval, type-filtered search and private isolation.
+- There is no web crawler, Agent tool loop or public curator API yet. Existing Agent skills are prompt instructions, not executable retrieval tools. The HTTP smoke did not test public publication.
 
 ## Direct implication
 
@@ -38,7 +38,7 @@ All endpoints use the existing iFrame authentication context. The import request
 
 Response IDs are `source_id`, `revision_id`, and each unit's `id/kind/locator`; `created=false` means the exact submitted revision already exists. Query with `POST /knowledge/search` body `{"query":"printing","limit":10,"kind":"image"}`. An `upload:<id>` URI may identify user-provided material. Supported media types are PNG/JPEG/WebP and MP4/WebM. Each media unit is limited to 16 MiB, and all media in one source request to 32 MiB; the first slice accepts at most 100 units. `source_uri` records provenance and never causes a server-side fetch.
 
-Private bytes use SHA-256 paths and never have a public file mount. The default single-host development backend requires `IFRAME_KNOWLEDGE_BLOB_ROOT`. Set `IFRAME_KNOWLEDGE_BLOB_BACKEND=cos` for shared storage with `IFRAME_KNOWLEDGE_COS_REGION`, `IFRAME_KNOWLEDGE_COS_BUCKET`, `IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE`, and `IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE`; the COS adapter writes private objects under `knowledge/`. COS provision, IAM scope and metadata/media restore are still deployment gates. Do not run shared production ingestion in local mode.
+Private bytes use SHA-256 paths and never have a public file mount. The default single-host development backend requires `IFRAME_KNOWLEDGE_BLOB_ROOT`. Shared deployment uses `IFRAME_KNOWLEDGE_BLOB_BACKEND=cos` with `IFRAME_KNOWLEDGE_COS_REGION`, `IFRAME_KNOWLEDGE_COS_BUCKET`, `IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE`, and `IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE`; the COS adapter writes private objects under `knowledge/`. COS provision and IAM scope passed; joint metadata/media backup and restore remain open. Do not run shared production ingestion in local mode.
 
 An Agent can submit its own collected material through this contract, but the server does not fetch arbitrary URLs in this slice. `source_uri` is provenance, not a fetch command. For a web article, the collecting Agent must submit the actual text and media it has permission to store. Short video segments are supported within the upload limit; complete large videos need chunked object storage in a later slice.
 
