@@ -88,11 +88,21 @@ def bind_h3_canonical_prompt(
     kind_for_ref = {ref: media_kind(ref) for ref in ordered_media}
     counts = {"image": 0, "video": 0, "audio": 0}
     canonical_for_ref: dict[str, str] = {}
+    documents = []
     for ref in ordered_media:
         kind = kind_for_ref[ref]
         counts[kind] += 1
         label = {"image": "Picture", "video": "Video", "audio": "Audio"}[kind]
         canonical_for_ref[ref] = f"<{label} {counts[kind]}>"
+
+    for ref in originals:
+        if media_kind(ref) != "text":
+            continue
+        if urlsplit(ref).scheme:
+            raise ValueError("请上传文本文件，不支持远程文本地址")
+        label = f"[Text {len(documents) + 1}]"
+        canonical_for_ref[ref] = label
+        documents.append(f"{label} {names.get(ref) or Path(ref).name}\n{read_reference_text(ref)}")
 
     if has_legacy:
         labels = [names.get(ref, "") for ref in originals]
@@ -115,4 +125,4 @@ def bind_h3_canonical_prompt(
         kind = {"Picture": "image", "Video": "video", "Audio": "audio"}[label]
         if int(number) < 1 or int(number) > counts[kind]:
             raise ValueError(f"H3 {label} reference is outside the submitted {kind} media slots")
-    return bound
+    return bound + ("\n\n参考文本材料（按用户要求使用）：\n" + "\n\n".join(documents) if documents else "")

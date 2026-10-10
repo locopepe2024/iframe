@@ -414,11 +414,11 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     agent.send(sid, agent.MessageCreate(content='Use @face.png with @walk.mp4', input_media=files,
         asset_names=['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt']), setup)
     parts = call.call_args.args[2][-1]['content']
-    assert parts[0]['text'].startswith('Use @face.png with @walk.mp4')
+    assert parts[0]['text'].startswith('Use @1 with @3')
     assert [parts[i]['type'] for i in [2, 4, 6, 8, 10]] == ['image_url', 'image_url', 'video_url', 'input_audio', 'text']
     assert parts[2]['image_url']['url'] == 'https://cdn.example/face.png'
     assert parts[6]['video_url'] == 'https://cdn.example/walk.mp4'
-    assert '参考素材 @sound.wav' in parts[7]['text']
+    assert '参考素材 @4：sound.wav' in parts[7]['text']
     agent.send(sid, agent.MessageCreate(content='Continue'), setup)
     assert call.call_args.args[2][1]['content'] == parts
 
@@ -496,7 +496,7 @@ def test_seedance_agent_keeps_filenames_in_model_context_and_answer(setup, monke
         input_media=['/tmp/singer.jpg', '/tmp/lake.png'],
         asset_names=['singer.jpg', 'lake.png'],
     ), setup)
-    assert '@singer.jpg 与 @lake.png' in call.call_args.args[2][-1]['content'][0]['text']
+    assert '@1 与 @2' in call.call_args.args[2][-1]['content'][0]['text']
     assert agent.messages(sid, setup)['messages'][-1]['content'] == 'Seedance 提示词：让 `@singer.jpg` 与 @lake.png 在湖边唱歌'
 
 
