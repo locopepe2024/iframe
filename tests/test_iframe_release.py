@@ -42,6 +42,54 @@ def test_release_accepts_only_current_service_topology():
         release.verify_topology(backend, frontend)
 
 
+def test_release_accepts_only_read_only_knowledge_secret_mount():
+    backend, frontend = topology()
+    mount = {"Destination": release.KNOWLEDGE_MOUNT, "Source": str(release.KNOWLEDGE_SECRETS),
+             "Type": "bind", "RW": False}
+    backend["Mounts"].append(mount)
+    release.verify_topology(backend, frontend)
+    mount["RW"] = True
+    with pytest.raises(RuntimeError, match="Unexpected backend mounts"):
+        release.verify_topology(backend, frontend)
+
+
+def test_release_requires_complete_private_knowledge_runtime(monkeypatch, tmp_path):
+    env_file = tmp_path / "backend.env"
+    secrets = tmp_path / "knowledge-secrets"
+    secrets.mkdir()
+    secrets.chmod(0o700)
+    monkeypatch.setattr(release, "KNOWLEDGE_SECRETS", secrets)
+    env_file.write_text("APP_ENV=production\n")
+    assert not release.knowledge_runtime(env_file)
+    env_file.write_text("IFRAME_KNOWLEDGE_PG_HOST=10.0.0.1\n")
+    with pytest.raises(RuntimeError, match="Incomplete knowledge"):
+        release.knowledge_runtime(env_file)
+    names = (
+        "IFRAME_KNOWLEDGE_PG_HOST", "IFRAME_KNOWLEDGE_PG_USER",
+        "IFRAME_KNOWLEDGE_PG_PASSWORD_FILE", "IFRAME_KNOWLEDGE_PG_CA_FILE",
+        "IFRAME_KNOWLEDGE_BLOB_BACKEND", "IFRAME_KNOWLEDGE_COS_REGION",
+        "IFRAME_KNOWLEDGE_COS_BUCKET", "IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE",
+        "IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE",
+    )
+    overrides = {
+        "IFRAME_KNOWLEDGE_PG_PASSWORD_FILE": f"{release.KNOWLEDGE_MOUNT}/knowledge-pg-app-password",
+        "IFRAME_KNOWLEDGE_PG_CA_FILE": f"{release.KNOWLEDGE_MOUNT}/knowledge-pg-ca.pem",
+        "IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE": f"{release.KNOWLEDGE_MOUNT}/knowledge-cos-secret-id",
+        "IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE": f"{release.KNOWLEDGE_MOUNT}/knowledge-cos-secret-key",
+        "IFRAME_KNOWLEDGE_BLOB_BACKEND": "cos",
+    }
+    env_file.write_text("".join(f"{name}={overrides.get(name, 'configured')}\n" for name in names))
+    for name in ("knowledge-pg-app-password", "knowledge-pg-ca.pem",
+                 "knowledge-cos-secret-id", "knowledge-cos-secret-key"):
+        path = secrets / name
+        path.write_text("configured")
+        path.chmod(0o600)
+    assert release.knowledge_runtime(env_file)
+    (secrets / "knowledge-cos-secret-key").chmod(0o644)
+    with pytest.raises(RuntimeError, match="unsafe knowledge secret"):
+        release.knowledge_runtime(env_file)
+
+
 def test_release_requires_explicit_matching_remote_revision(monkeypatch, tmp_path):
     sha = "a" * 40
     monkeypatch.setattr(release.os, "geteuid", lambda: 0)
