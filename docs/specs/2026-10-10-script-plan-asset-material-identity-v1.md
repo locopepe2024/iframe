@@ -245,6 +245,19 @@ asset. First/last-frame confirmation advances the shot reference-package
 revision; an asset revision advances only if a user separately confirms an
 asset variant/selection change.
 
+### Entity extraction alias boundary
+
+Entity extraction is allowed to create episode semantic asset records, but it
+must not create a new record for a scene-local alias of an existing role. A
+stable person, group role, or reusable role class keeps one canonical name and
+one asset ID across scenes. Location, quantity, staging, or action modifiers
+such as “街头”“一群”“多人结伙” belong in the description or shot context,
+not in the asset name. A new asset is justified only when the source explicitly
+distinguishes identity, group membership, or a stable visual state. This rule
+prevents near-duplicate extraction such as “江湖打手” and “街头江湖打手” from
+becoming two assets; it does not authorize fuzzy runtime merging of existing
+IDs.
+
 ## Current Gaps and Verification
 
 - The `person_id` to Character-asset mapping may be absent; current sync can

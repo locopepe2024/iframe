@@ -29,3 +29,9 @@ def test_temporal_character_variants_share_persona_with_full_width_parentheses()
 def test_entity_prompt_requires_separate_visual_variants_for_temporal_states():
     assert "周涵（大学时期）" in DEFAULT_ENTITY_EXTRACTION_PROMPT
     assert "分别生成和绑定不同的角色设计" in DEFAULT_ENTITY_EXTRACTION_PROMPT
+
+
+def test_entity_prompt_merges_group_role_aliases_instead_of_creating_assets():
+    assert "江湖打手" in DEFAULT_ENTITY_EXTRACTION_PROMPT
+    assert "街头江湖打手" in DEFAULT_ENTITY_EXTRACTION_PROMPT
+    assert "只保留“江湖打手”一个实体" in DEFAULT_ENTITY_EXTRACTION_PROMPT
