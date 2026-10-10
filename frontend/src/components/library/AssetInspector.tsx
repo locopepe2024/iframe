@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { X, Star, Download, Sparkles, Loader2, Globe } from "lucide-react";
+import { X, Star, Download, Sparkles, Loader2, Globe, History, RotateCcw, Check } from "lucide-react";
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
-import { api, type AssetCoverSelectionResult } from "@/lib/api";
+import { api, type AssetCoverSelectionResult, type AssetRevisionHistory } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -40,6 +40,7 @@ interface AssetInspectorProps {
   onCoverUpdated?: (result: AssetCoverSelectionResult) => void;
   /** 提升到全局成功后回调（父层刷新库以显示新入池资产）。可选。 */
   onPromoted?: () => void;
+  onRevisionUpdated?: () => void;
   onRename?: (name: string) => Promise<void>;
 }
 
@@ -47,6 +48,18 @@ interface AssetInspectorProps {
 function primaryImageAsset(asset: Character | Scene | Prop, type: AssetTab): ImageAsset | undefined {
   if (type === "characters") return characterImageAsset(asset as Character);
   return (asset as Scene | Prop).image_asset;
+}
+
+function assetVariants(asset: Character | Scene | Prop, type: AssetTab): ImageVariant[] {
+  if (type !== "characters") return (asset as Scene | Prop).image_asset?.variants ?? [];
+  const character = asset as Character;
+  const all = [
+    character.reference_sheet?.image_variants,
+    character.full_body_asset?.variants,
+    character.three_view_asset?.variants,
+    character.headshot_asset?.variants,
+  ].flatMap((items) => items ?? []);
+  return Array.from(new Map(all.map((variant) => [variant.id, variant])).values());
 }
 
 function fallbackUrl(asset: Character | Scene | Prop, type: AssetTab): string | undefined {
@@ -98,6 +111,7 @@ export default function AssetInspector({
   onToggleStar,
   onCoverUpdated,
   onPromoted,
+  onRevisionUpdated,
   onRename,
 }: AssetInspectorProps) {
   const t = useTranslations("library");
@@ -118,7 +132,7 @@ export default function AssetInspector({
     return t("timeMonthsAgo", { months: Math.floor(days / 30) });
   };
   const imageAsset = primaryImageAsset(asset, type);
-  const baseVariants = imageAsset?.variants ?? [];
+  const baseVariants = assetVariants(asset, type);
   // 本地新生成的变体（来自「生成更多变体」）。父层 library 自己持有 `sources` 且只在整页
   // reload 时刷新，所以新变体在此并入以即时反馈；按 id 与 prop 集去重，父层后续 reload
   // （届时新变体会随 `baseVariants` 带回）也不会重复。
@@ -133,6 +147,25 @@ export default function AssetInspector({
   const [generating, setGenerating] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [settingCover, setSettingCover] = useState(false);
+  const [revisionHistory, setRevisionHistory] = useState<AssetRevisionHistory | null>(null);
+  const [checkedVariantIds, setCheckedVariantIds] = useState<string[]>([]);
+  const [savingRevision, setSavingRevision] = useState(false);
+
+  const variantIds = variants.map((item) => item.id).join("|");
+  useEffect(() => {
+    setCheckedVariantIds(variantIds ? variantIds.split("|") : []);
+  }, [asset.id, variantIds]);
+
+  useEffect(() => {
+    setRevisionHistory(null);
+    if (sourceKind !== "project") return;
+    let cancelled = false;
+    const projectId = sourceId.replace(/^project-/, "");
+    void api.getAssetRevisions(projectId, SINGULAR_TYPE[type], asset.id)
+      .then((history) => { if (!cancelled) setRevisionHistory(history); })
+      .catch(() => { if (!cancelled) setRevisionHistory(null); });
+    return () => { cancelled = true; };
+  }, [asset.id, sourceId, sourceKind, type]);
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
   useEffect(() => {
@@ -236,6 +269,51 @@ export default function AssetInspector({
       });
     } finally {
       setSettingCover(false);
+    }
+  };
+
+  const refreshRevision = async (projectId: string) => {
+    const [history, project] = await Promise.all([
+      api.getAssetRevisions(projectId, SINGULAR_TYPE[type], asset.id),
+      api.getProject(projectId),
+    ]);
+    setRevisionHistory(history);
+    useProjectStore.getState().updateProject(projectId, project);
+    onRevisionUpdated?.();
+  };
+
+  const handleConfirmRevision = async () => {
+    if (!revisionHistory || savingRevision || sourceKind !== "project") return;
+    const projectId = sourceId.replace(/^project-/, "");
+    setSavingRevision(true);
+    try {
+      await api.confirmAssetRevision(
+        projectId, SINGULAR_TYPE[type], asset.id, revisionHistory.current_revision,
+        checkedVariantIds, activeVariantId && checkedVariantIds.includes(activeVariantId) ? activeVariantId : undefined,
+      );
+      await refreshRevision(projectId);
+      toast.success(t("revisionConfirmed"));
+    } catch (error) {
+      toast.error(t("revisionFailed"), { body: (error as any)?.response?.data?.detail || (error as Error)?.message });
+    } finally {
+      setSavingRevision(false);
+    }
+  };
+
+  const handleRestoreRevision = async (revision: number) => {
+    if (!revisionHistory || savingRevision || sourceKind !== "project") return;
+    if (!window.confirm(t("restoreRevisionConfirm", { revision }))) return;
+    const projectId = sourceId.replace(/^project-/, "");
+    setSavingRevision(true);
+    try {
+      await api.restoreAssetRevision(projectId, SINGULAR_TYPE[type], asset.id,
+        revision, revisionHistory.current_revision);
+      await refreshRevision(projectId);
+      toast.success(t("revisionRestored"));
+    } catch (error) {
+      toast.error(t("revisionFailed"), { body: (error as any)?.response?.data?.detail || (error as Error)?.message });
+    } finally {
+      setSavingRevision(false);
     }
   };
 
@@ -408,7 +486,7 @@ export default function AssetInspector({
         </div>
 
         {/* Variant strip */}
-        {variants.length > 1 && (
+        {variants.length > 0 && (
           <div>
             <div className="font-mono text-[0.5625rem] font-semibold uppercase tracking-[0.16em] text-text-secondary mb-2.5">
               {t("variantsSection")}
@@ -417,21 +495,63 @@ export default function AssetInspector({
               {variants.map((v) => {
                 const on = v.id === activeVariant?.id;
                 return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setActiveVariantId(v.id)}
-                    aria-current={on ? "true" : undefined}
-                    className={`relative aspect-square rounded-md overflow-hidden transition-transform hover:-translate-y-0.5 ${
-                      on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
-                    }`}
-                  >
-                    <img src={getAssetUrl(v.url)} alt={t("variantAlt")} className="w-full h-full object-cover" />
-                  </button>
+                  <div key={v.id} className="relative aspect-square">
+                    <button
+                      type="button"
+                      onClick={() => setActiveVariantId(v.id)}
+                      aria-current={on ? "true" : undefined}
+                      className={`w-full h-full rounded-md overflow-hidden transition-transform hover:-translate-y-0.5 ${
+                        on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
+                      }`}
+                    >
+                      <img src={getAssetUrl(v.url)} alt={t("variantAlt")} className="w-full h-full object-cover" />
+                    </button>
+                    {sourceKind === "project" && (
+                      <label className="absolute bottom-1 right-1 grid place-items-center size-6 rounded bg-black/75 text-white cursor-pointer"
+                        title={t("includeVariant")}>
+                        <input type="checkbox" className="sr-only" checked={checkedVariantIds.includes(v.id)}
+                          aria-label={t("includeVariant")}
+                          onChange={(event) => setCheckedVariantIds((current) => event.target.checked
+                            ? [...current, v.id] : current.filter((id) => id !== v.id))} />
+                        {checkedVariantIds.includes(v.id) && <Check size={15} />}
+                      </label>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
+        )}
+
+        {sourceKind === "project" && revisionHistory && (
+          <section className="border-t border-glass-border pt-4">
+            <div className="flex items-center justify-between text-xs text-text-secondary">
+              <span>{t("assetRevision", { revision: revisionHistory.current_revision })}</span>
+              <span>{revisionHistory.revisions.at(-1)?.confirmation_status === "user_confirmed"
+                ? t("revisionConfirmedState") : t("revisionPendingState")}</span>
+            </div>
+            <button type="button" onClick={() => void handleConfirmRevision()} disabled={savingRevision}
+              className="mt-3 w-full flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
+              {savingRevision ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              {t("confirmAssetRevision")}
+            </button>
+            <details className="mt-3 text-xs text-text-secondary">
+              <summary className="flex cursor-pointer items-center gap-2"><History size={14} />{t("revisionHistory")}</summary>
+              <div className="mt-2 divide-y divide-glass-border">
+                {[...revisionHistory.revisions].reverse().map((item) => (
+                  <div key={item.revision} className="flex items-center justify-between py-2">
+                    <span>{t("assetRevision", { revision: item.revision })} · {item.confirmation_status === "user_confirmed"
+                      ? t("revisionConfirmedState") : t("revisionPendingState")}</span>
+                    {item.revision !== revisionHistory.current_revision && (
+                      <button type="button" onClick={() => void handleRestoreRevision(item.revision)}
+                        disabled={savingRevision} title={t("restoreRevision")} aria-label={t("restoreRevision")}
+                        className="rounded p-1 hover:bg-hover-bg disabled:opacity-50"><RotateCcw size={14} /></button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          </section>
         )}
 
         {sourceKind === "project" && activeVariant && !activeVariantIsCover && (

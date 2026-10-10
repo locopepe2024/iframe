@@ -787,6 +787,7 @@ function SemanticAssetLibrary() {
             onToggleStar={() => toggleStar(selected.sourceId, selected.assetId, selected.type)}
             onCoverUpdated={(result) => updateCoverSelection(selected.sourceId, selected.type, result)}
             onPromoted={loadAssets}
+            onRevisionUpdated={loadAssets}
             onRename={(name) => renameAsset(selectedSource, selected.type, selected.assetId, name)}
           />
         )}

@@ -267,6 +267,22 @@ export interface AssetCoverSelectionResult {
     };
 }
 
+export interface AssetRevisionRecord {
+    revision: number;
+    content_hash: string;
+    confirmation_status: "legacy_attached" | "user_confirmed";
+    created_at: number;
+    snapshot: Record<string, unknown>;
+}
+
+export interface AssetRevisionHistory {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    source: "script" | "series" | "global";
+    current_revision: number;
+    revisions: AssetRevisionRecord[];
+}
+
 export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
@@ -984,6 +1000,36 @@ export const api = {
         return res.data;
     },
 
+    getAssetRevisions: async (scriptId: string, assetType: string, assetId: string): Promise<AssetRevisionHistory> => {
+        const res = await axios.get<AssetRevisionHistory>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions`,
+        );
+        return res.data;
+    },
+
+    confirmAssetRevision: async (
+        scriptId: string, assetType: string, assetId: string,
+        expectedRevision: number, activeVariantIds: string[], selectedVariantId?: string,
+    ): Promise<{ revision: AssetRevisionRecord }> => {
+        const res = await axios.post<{ revision: AssetRevisionRecord }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions/confirm`,
+            { expected_revision: expectedRevision, active_variant_ids: activeVariantIds,
+                selected_variant_id: selectedVariantId },
+        );
+        return res.data;
+    },
+
+    restoreAssetRevision: async (
+        scriptId: string, assetType: string, assetId: string,
+        revision: number, expectedRevision: number,
+    ): Promise<{ revision: AssetRevisionRecord }> => {
+        const res = await axios.post<{ revision: AssetRevisionRecord }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions/${revision}/restore`,
+            { expected_revision: expectedRevision },
+        );
+        return res.data;
+    },
+
     selectAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, generationType?: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/select`, {
             asset_id: assetId,
@@ -1432,6 +1478,7 @@ export const api = {
                 media_id?: string | null;
                 label?: string | null;
                 source_asset_id?: string | null;
+                source_variant_id?: string | null;
             }>;
             confirmed?: boolean;
         };
