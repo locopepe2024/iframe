@@ -72,6 +72,7 @@ def test_force_delete_clears_explicit_person_binding_without_changing_plan_histo
     pipeline.delete_series_asset(series.id, "character", "shared", force=True)
 
     assert episode.episode_person_asset_bindings == {}
+    assert episode.retired_plan_asset_ids["character"] == ["shared", "person"]
     assert episode.director_shooting_plan_revisions[0].plan == plan
     assert series.characters == []
     pipeline._save_data.assert_called_once()
@@ -114,6 +115,8 @@ def test_confirmed_shooting_plan_references_require_force_and_survive_deletion()
     assert series.scenes == []
     assert series.props == []
     assert episode.director_shooting_plan_revisions[0].plan == original_plan
+    assert episode.retired_plan_asset_ids["scene"] == ["scene-shared"]
+    assert episode.retired_plan_asset_ids["prop"] == ["prop-shared"]
     assert pipeline._save_series_data_unlocked.call_count == 3
 
 

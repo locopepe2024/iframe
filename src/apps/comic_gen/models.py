@@ -1291,10 +1291,18 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
         return self
 
 
+class DirectorPlanAssetIdentity(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    name: str
+    description: str = ""
+
+
 class DirectorShootingPlanRevision(BaseModel):
     revision: int = Field(..., ge=1)
     content_hash: str = Field(..., min_length=1)
     plan: DirectorShootingPlan
+    asset_identities: List[DirectorPlanAssetIdentity] = Field(default_factory=list)
     user_title: str = Field("", max_length=160)
     summary: str = Field("", max_length=1000)
     confirmed_at: float = Field(..., ge=0)
@@ -2735,6 +2743,9 @@ class Script(BaseModel):
     )
     episode_prop_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"
+    )
+    retired_plan_asset_ids: Dict[str, List[str]] = Field(
+        default_factory=dict, description="Plan source IDs explicitly retired by asset deletion"
     )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     

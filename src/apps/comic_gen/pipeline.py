@@ -27,6 +27,7 @@ from .models import (
     EpisodeUnderstandingHandoff,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
+    DirectorPlanAssetIdentity,
     DirectorPlanSceneBinding,
     DirectorPlanCastBinding,
     DirectorPlanPropBinding,
@@ -1634,6 +1635,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
+        self.retire_episode_plan_asset(script, "character", char_id)
         script.characters = [c for c in script.characters if c.id != char_id]
         self._save_data()
         return script
@@ -1657,6 +1659,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         
+        self.retire_episode_plan_asset(script, "scene", scene_id)
         script.scenes = [s for s in script.scenes if s.id != scene_id]
         self._save_data()
         return script
@@ -3172,6 +3175,49 @@ class ComicGenPipeline(StudioOwnerMixin):
             key: value for key, value in plan.items() if key != "generated_at"
         }
 
+    def _shooting_plan_asset_identities(self, script: Script, plan: DirectorShootingPlan) -> List[DirectorPlanAssetIdentity]:
+        referenced = {"character": set(), "scene": set(), "prop": set()}
+        for scene in plan.scenes:
+            if scene.scene_asset_id:
+                referenced["scene"].add(scene.scene_asset_id)
+            referenced["prop"].update(scene.prop_ids)
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    referenced["character"].update(shot.character_ids)
+                    referenced["prop"].update(shot.prop_ids)
+                    referenced["prop"].update(item.prop_id for item in shot.prop_bindings)
+                    if shot.scene_binding and shot.scene_binding.scene_asset_id:
+                        referenced["scene"].add(shot.scene_binding.scene_asset_id)
+                    referenced["character"].update(item.person_id for item in shot.cast_bindings)
+                    referenced["character"].update(item.era_variant_id for item in shot.cast_bindings if item.era_variant_id)
+        resolved = self.resolve_episode_assets(script)
+        return [DirectorPlanAssetIdentity(
+            asset_type=asset_type, asset_id=asset.id,
+            name=asset.name, description=asset.description,
+        ) for asset_type, collection in (("character", "characters"), ("scene", "scenes"), ("prop", "props"))
+            for asset in resolved[collection] if asset.id in referenced[asset_type]]
+
+    @staticmethod
+    def retire_episode_plan_asset(script: Script, asset_type: str, asset_id: str) -> None:
+        retired = script.retired_plan_asset_ids.setdefault(asset_type, [])
+        source_ids = [asset_id]
+        if asset_type == "character":
+            source_ids.extend(person_id for person_id, current_id in script.episode_person_asset_bindings.items()
+                              if current_id == asset_id)
+            script.episode_person_asset_bindings = {
+                person_id: current_id for person_id, current_id in script.episode_person_asset_bindings.items()
+                if current_id != asset_id
+            }
+        elif asset_type in ("scene", "prop"):
+            replacements = (script.episode_scene_asset_replacements if asset_type == "scene"
+                            else script.episode_prop_asset_replacements)
+            source_ids.extend(source_id for source_id, current_id in replacements.items() if current_id == asset_id)
+            for source_id in source_ids:
+                replacements.pop(source_id, None)
+        for source_id in source_ids:
+            if source_id not in retired:
+                retired.append(source_id)
+
     def director_shooting_plan_lineage(self, script_id: str) -> Dict[str, Any]:
         script = self.scripts.get(script_id)
         if not script:
@@ -3618,6 +3664,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 revision=revision,
                 content_hash=content_hash,
                 plan=validated.model_copy(deep=True),
+                asset_identities=self._shooting_plan_asset_identities(script, validated),
                 user_title=user_title.strip()[:160],
                 summary=summary.strip()[:1000],
                 confirmed_at=time.time(),
@@ -3826,6 +3873,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Character asset is not available in this episode")
             if asset_id:
                 script.episode_person_asset_bindings[person_id] = asset_id
+                script.retired_plan_asset_ids["character"] = [item for item in
+                    script.retired_plan_asset_ids.get("character", []) if item != person_id]
             else:
                 script.episode_person_asset_bindings.pop(person_id, None)
             return self.sync_episode_assets_from_shooting_plan(script_id)
@@ -3863,6 +3912,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                             else script.episode_prop_asset_replacements)
             for plan_asset_id in requested_ids:
                 replacements[plan_asset_id] = asset_id
+            script.retired_plan_asset_ids[asset_type] = [item for item in
+                script.retired_plan_asset_ids.get(asset_type, []) if item not in requested_ids]
             return self.sync_episode_assets_from_shooting_plan(script_id)
 
     def sync_episode_assets_from_shooting_plan(self, script_id: str) -> Dict[str, Any]:
@@ -3875,40 +3926,37 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not script.director_shooting_plan_revisions:
                 raise ValueError("Confirm the shooting plan before syncing episode assets")
             plan = script.director_shooting_plan_revisions[-1].plan
-            scene_sources: Dict[str, str] = {}
-            prop_sources: Dict[str, str] = {}
+            scene_sources: set[str] = set()
+            prop_sources: set[str] = set()
             for scene in plan.scenes:
                 if scene.scene_asset_id:
-                    scene_sources.setdefault(scene.scene_asset_id, scene.location or scene.scene_ref)
+                    scene_sources.add(scene.scene_asset_id)
                 for prop_id in scene.prop_ids:
-                    prop_sources.setdefault(prop_id, f"道具 {len(prop_sources) + 1}")
+                    prop_sources.add(prop_id)
                 for beat in scene.beats:
                     for shot in beat.shots:
                         if shot.scene_binding and shot.scene_binding.scene_asset_id:
-                            scene_sources.setdefault(shot.scene_binding.scene_asset_id,
-                                                     scene.location or scene.scene_ref)
+                            scene_sources.add(shot.scene_binding.scene_asset_id)
                         for prop_id in shot.prop_ids:
-                            prop_sources.setdefault(prop_id, f"道具 {len(prop_sources) + 1}")
+                            prop_sources.add(prop_id)
                         for binding in shot.prop_bindings:
-                            prop_sources.setdefault(binding.prop_id, f"道具 {len(prop_sources) + 1}")
+                            prop_sources.add(binding.prop_id)
             resolved = self.resolve_episode_assets(script)
-            for asset_type, sources, replacements, collection, model in (
-                ("scene", scene_sources, script.episode_scene_asset_replacements, "scenes", Scene),
-                ("prop", prop_sources, script.episode_prop_asset_replacements, "props", Prop),
+            for asset_type, sources, replacements, collection in (
+                ("scene", scene_sources, script.episode_scene_asset_replacements, "scenes"),
+                ("prop", prop_sources, script.episode_prop_asset_replacements, "props"),
             ):
                 available_ids = {item.id for item in resolved[collection]}
-                for source_id, label in sources.items():
+                for source_id in sources:
+                    if source_id in script.retired_plan_asset_ids.get(asset_type, []):
+                        replacements.pop(source_id, None)
+                        continue
                     if replacements.get(source_id) in available_ids:
                         continue
                     if source_id in available_ids:
                         replacements.pop(source_id, None)
                         continue
-                    fallback = f"场景 {len(script.scenes) + 1}" if asset_type == "scene" else f"道具 {len(script.props) + 1}"
-                    new_asset = model(id=str(uuid.uuid4()), name=label or fallback,
-                                      description="")
-                    getattr(script, collection).append(new_asset)
-                    replacements[source_id] = new_asset.id
-                    available_ids.add(new_asset.id)
+                    replacements.pop(source_id, None)
             context = self.project_episode_visual_context(script_id)
             unresolved_people = {item.person_id: item for item in context.characters
                                  if not item.character_asset_ids}
@@ -3918,7 +3966,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 profile = self.effective_director_profile(script)
                 profile_people = {item.person_id: item for item in profile.story_map.people} \
                     if profile and profile.story_map else {}
-                for person_index, (person_id, requirement) in enumerate(unresolved_people.items(), start=1):
+                for person_id in unresolved_people:
+                    if person_id in script.retired_plan_asset_ids.get("character", []):
+                        continue
                     candidates = {item.id for item in resolved_characters
                                   if item.id == person_id or item.base_character_id == person_id}
                     profile_person = profile_people.get(person_id)
@@ -3928,13 +3978,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         if script.episode_person_asset_bindings.get(person_id) not in available_ids:
                             script.episode_person_asset_bindings.pop(person_id, None)
                         continue
-                    asset_id = str(uuid.uuid4())
-                    script.characters.append(Character(
-                        id=asset_id,
-                        name=requirement.person_label or f"人物 {person_index}",
-                        description="",
-                    ))
-                    script.episode_person_asset_bindings[person_id] = asset_id
+                    script.episode_person_asset_bindings.pop(person_id, None)
                 context = self.project_episode_visual_context(script_id)
             previous = {(b.asset_type, b.asset_id): b for b in script.episode_asset_bindings}
             desired: List[EpisodeAssetBinding] = []
@@ -8402,6 +8446,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 refs = self._scan_library_asset_references(asset_type, asset_id)
                 if refs:
                     raise LibraryAssetInUseError(asset_type, asset_id, refs)
+            for episode in self.scripts.values():
+                if asset_id in {item.id for item in self.resolve_episode_assets(episode)[
+                    {"character": "characters", "scene": "scenes", "prop": "props"}[asset_type]]}:
+                    self.retire_episode_plan_asset(episode, asset_type, asset_id)
             target_list = self._library_raw_list_for_type(asset_type)
             kept = [a for a in target_list if a is not target_asset]
             if asset_type == "character":
@@ -8411,6 +8459,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             else:  # prop
                 self.library_store.props = kept
             self._save_library_data_unlocked()
+            self._save_data()
 
     def promote_asset_to_library(self, source_kind: str, source_id: str, asset_type: str, asset_id: str):
         """Deep-copy an asset from a Project (episode) or Series into the
@@ -8674,6 +8723,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise LibraryAssetInUseError(asset_type, asset_id, references)
             if references:
                 for episode in self.get_series_episodes(series_id):
+                    self.retire_episode_plan_asset(episode, asset_type, asset_id)
                     for frame in episode.frames:
                         if asset_type == "character":
                             frame.character_ids = [item for item in frame.character_ids if item != asset_id]
