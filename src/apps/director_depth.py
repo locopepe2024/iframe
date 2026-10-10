@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from .identity import UserContext, require_user_context
+from .director_depth_media import remote_settings, render_remote, probe_remote
 
 router = APIRouter(prefix="/director3d", tags=["director3d"])
 _lock = threading.Lock()
@@ -87,6 +88,12 @@ class Snapshot(BaseModel):
 
 
 def runtime():
+    try:
+        remote = remote_settings()
+    except ValueError as exc:
+        raise HTTPException(503, "Media depth configuration invalid") from exc
+    if remote:
+        return remote
     binary = os.getenv("DIRECTOR_DEPTH_BLENDER_BIN") or shutil.which("blender")
     if not binary or not Path(binary).is_file():
         raise HTTPException(503, "深度渲染运行时未配置。请配置 DIRECTOR_DEPTH_BLENDER_BIN。")
@@ -126,12 +133,15 @@ def run_task(path, binary):
                 record = json.loads(record_path.read_text())
                 record["status"] = "running"
                 write_record(record_path, record)
-            script = ROOT / "scripts" / "director3d" / "render_scene_depth.py"
-            with (path / "render.log").open("w") as log:
-                subprocess.run([binary, "--background", "--factory-startup", "--threads", "1", "--python-exit-code", "1",
-                    "--python", str(script), "--", "--snapshot", str((path / "snapshot.json").resolve()),
-                    "--output", str((path / "result").resolve())], check=True, timeout=120,
-                    stdout=log, stderr=subprocess.STDOUT)
+            if isinstance(binary, tuple):
+                render_remote(path, binary)
+            else:
+                script = ROOT / "scripts" / "director3d" / "render_scene_depth.py"
+                with (path / "render.log").open("w") as log:
+                    subprocess.run([binary, "--background", "--factory-startup", "--threads", "1", "--python-exit-code", "1",
+                        "--python", str(script), "--", "--snapshot", str((path / "snapshot.json").resolve()),
+                        "--output", str((path / "result").resolve())], check=True, timeout=120,
+                        stdout=log, stderr=subprocess.STDOUT)
             manifest = json.loads((path / "result" / "depth-reference.v1.json").read_text())
             if manifest.get("status") != "completed" or any(len(manifest["outputs"][kind]) != 1 for kind in ("meters", "preview")):
                 raise ValueError("invalid depth result")
@@ -139,7 +149,7 @@ def run_task(path, binary):
                        "meters": manifest["outputs"]["meters"][0], "manifest": "depth-reference.v1.json"}
             if any(Path(name).name != name or not (path / "result" / name).is_file() for name in outputs.values()):
                 raise ValueError("missing depth result files")
-            record.update(status="completed", outputs=outputs)
+            record.update(status="completed", outputs=outputs, executionHost="media" if isinstance(binary, tuple) else "local", blenderVersion=manifest.get("blenderVersion"))
     except Exception as exc:
         record = json.loads(record_path.read_text())
         error = "深度渲染超时，请减少场景复杂度。" if isinstance(exc, subprocess.TimeoutExpired) else "深度渲染失败，请检查服务端 Blender 日志后重试。"
@@ -153,10 +163,14 @@ def run_task(path, binary):
 @router.get("/depth-capability")
 def capability(user: UserContext = Depends(require_user_context)):
     try:
-        runtime()
+        configured = runtime()
+        if isinstance(configured, tuple):
+            probe_remote(configured)
         return {"available": True, "message": ""}
     except HTTPException as exc:
         return {"available": False, "message": exc.detail}
+    except (OSError, subprocess.SubprocessError):
+        return {"available": False, "message": "Media Blender unavailable"}
 
 
 @router.post("/depth-tasks", status_code=202)
