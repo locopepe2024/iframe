@@ -2507,7 +2507,8 @@ export const playgroundApi = {
 };
 
 export interface ChatSession { id: string; title: string; model: string; updated_at: number }
-export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; created_at?: number; model?: string }
+export interface KnowledgeCitation { unit_id: string; revision_id: string; source_id: string; collection_id: string; scope: string; kind: string; locator: string; title: string; source_uri: string; rights_status: string; has_media: boolean; excerpt: string; annotation: string }
+export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; knowledge_citations?: KnowledgeCitation[]; created_at?: number; model?: string }
 export interface ChatModel { id: string; api_model_id: string; display_name: string; agent_capability?: string }
 export async function agentTranscribe(file: File): Promise<{ text: string; model: string }> {
   const form = new FormData();

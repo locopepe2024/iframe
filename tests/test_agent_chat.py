@@ -146,6 +146,52 @@ def test_multiturn_owner_and_model(setup, monkeypatch):
     assert agent.sessions(ctx)['sessions'] == []
 
 
+def test_knowledge_search_uses_authenticated_owner_and_persists_citations(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    calls = []
+    citation = {
+        'unit_id': 'unit-a', 'revision_id': 'revision-a', 'source_id': 'source-a',
+        'collection_id': 'collection-a', 'scope': 'owner', 'kind': 'text',
+        'locator': 'section:policy', 'title': 'Printing report',
+        'source_uri': 'upload:report', 'rights_status': 'owned',
+        'has_media': False, 'excerpt': 'Printing policy', 'annotation': '',
+    }
+    monkeypatch.setattr(agent, 'search_knowledge', lambda owner, query: calls.append((owner, query)) or [citation])
+    completion = Mock(return_value='政策摘要 [unit-a]')
+    monkeypatch.setattr(agent, 'complete', completion)
+
+    agent.send(sid, agent.MessageCreate(content='分析印刷行业政策', knowledge_search=True,
+                                       knowledge_query='印刷政策'), setup)
+    assert calls == [(setup.owner_profile_id, '印刷政策')]
+    history = completion.call_args.args[2]
+    assert '未经核实' in history[0]['content']
+    assert 'unit-a' in history[1]['content']
+    assert agent.messages(sid, setup)['messages'][-1]['knowledge_citations'] == [citation]
+
+    agent.send(sid, agent.MessageCreate(content='继续'), setup)
+    assert len(calls) == 1
+    assert '知识库检索结果' not in completion.call_args.args[2][0]['content']
+
+
+def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    monkeypatch.setattr(agent, 'search_knowledge', Mock(side_effect=HTTPException(503, '知识库检索暂不可用')))
+    with pytest.raises(HTTPException) as error:
+        agent.send(sid, agent.MessageCreate(content='查询政策', knowledge_search=True), setup)
+    assert error.value.status_code == 503
+    assert agent.messages(sid, setup)['messages'] == []
+    with agent.database() as db:
+        row, _ = agent.read_session(db, setup.owner_profile_id, sid)
+        assert row['busy'] == 0
+    with pytest.raises(HTTPException) as error:
+        agent.send(sid, agent.MessageCreate(content='查询政策', knowledge_search=True,
+                                            companion_skills=['memory']), setup)
+    assert error.value.status_code == 422
+    with pytest.raises(HTTPException) as error:
+        agent.send(sid, agent.MessageCreate(content='查询政策', knowledge_query='政策'), setup)
+    assert error.value.status_code == 422
+
+
 def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     complete = Mock(return_value='我听着呢。')

@@ -157,6 +157,14 @@ function ChatCard({ message, onDelete }: { message: ChatMessage; onDelete: (id: 
     <section className="rounded-[18px] border border-glass-border bg-glass px-4 py-3">
       <div className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] text-text-muted"><span>{message.role === 'user' ? '你 · Agent' : 'Agent'}</span><span title={message.model}>{message.model && (message.model.length > 10 ? message.model.slice(0, 10) + '...' : message.model)}</span></div>
       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"><PromptWithReferences prompt={message.content} mediaNames={message.asset_names || []} mediaPaths={message.input_media || []} mediaMap={Object.fromEntries((message.input_media || []).map((path, i) => [path, message.asset_names?.[i] || path]))} /></p>
+      {!!message.knowledge_citations?.length && <div className="mt-3 border-t border-border-subtle pt-3 text-xs text-text-secondary">
+        <div className="mb-2 font-medium text-foreground">检索来源</div>
+        <ul className="space-y-2">{message.knowledge_citations.map(citation => <li key={citation.unit_id} className="break-all">
+          <span className="font-medium text-foreground">{citation.title}</span> · {citation.locator} · {citation.scope === 'owner' ? '个人库' : '公共库'} · {citation.rights_status}
+          <div className="font-mono text-[10px] text-text-muted">{citation.unit_id} · {citation.revision_id}</div>
+          <span className="text-text-muted">{citation.source_uri}</span>
+        </li>)}</ul>
+      </div>}
       {!!message.asset_names?.length && <div className="mt-3 flex flex-wrap gap-2">{message.asset_names.map((name, i) => <span key={i} title={name} className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">@{shortReferenceLabel(name)}</span>)}</div>}
       <button type="button" onClick={restore} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-glass-border px-3 text-xs text-text-secondary hover:text-primary"><ArrowUpLeft size={14} />{message.role === 'assistant' ? '填入输入框' : '编辑继续'}</button>
       <div className="mt-2 flex items-center text-xs text-text-muted"><time>{message.created_at ? new Date(message.created_at * 1000).toLocaleString() : '历史消息'}</time><OverflowActions label="消息操作" actions={[
