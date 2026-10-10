@@ -10,6 +10,12 @@ matches only `scene_asset_id`. Previously persisted mistaken bindings become
 stale on the next sync; historical plan snapshots are not rewritten. The
 remaining identity and revision rules below are still target contracts.
 
+Implementation note (2026-10-10, shot context): projected
+`EpisodeVisualShotContext.character_ids` now contains only Character asset IDs;
+`person_ids` carries narrative cast identities. An unresolved cast person does
+not become a Character asset reference. Legacy `DirectorPlanShot.character_ids`
+still names Character assets and is not renamed in stored plans.
+
 This is the common identity glossary for Script, Director shooting plan, Assets,
 Storyboard, and Shot Design. It refines the asset revision and scope contracts
 from 2026-10-06 and the shooting-plan and storyboard boundary contracts. When
@@ -25,9 +31,10 @@ an explicit migration is implemented.
 - `DirectorShootingPlanRevision` stores a confirmed plan snapshot, revision,
   hash, and confirmation time. Its scene, beat, and shot IDs identify plan
   nodes. Plan `scene_asset_id` and `prop_ids` can refer to semantic assets. A
-  cast binding carries `person_id` and optional era/look IDs. The legacy shot
-  `character_ids` field is not typed by its schema; projection combines it
-  with cast `person_id` values before attempting asset resolution.
+  cast binding carries `person_id` and optional era/look IDs. The plan shot's
+  `character_ids` field is not typed by its schema, but the editor and plan
+  validation treat its values as Character asset IDs. Earlier projection
+  mixed those values with cast `person_id` values in one list.
 - An effective episode asset view merges episode-local, series, and (in some
   resolver paths) personal/global assets by `asset.id`. The project response
   exposes local and series assets with a `source` label. The project Assets
@@ -87,9 +94,9 @@ to disambiguate before migration.
    variant IDs; that is a migration gap, not the target identity rule.
 5. **Plan references:** a plan scene's `scene_id` identifies the planned scene.
    Its `scene_asset_id`, or a shot's `scene_binding.scene_asset_id`, identifies
-   a reusable Scene asset. Legacy `shot.character_ids` needs a typed migration:
-   current projection may treat its values as narrative people, while other
-   frame paths use Character asset IDs. `scene/shot.prop_ids` and
+   a reusable Scene asset. `shot.character_ids` and projected shot
+   `character_ids` identify Character assets; projected shot `person_ids` and
+   `cast_bindings.person_id` identify narrative people. `scene/shot.prop_ids` and
    `prop_bindings.prop_id` identify Prop assets.
    `cast_bindings.person_id` identifies a narrative person and resolves through
    a reviewed person-to-character-asset mapping. It must not be silently
@@ -208,5 +215,5 @@ its exact material when an asset's default changes.
   asset has the same string ID.
 - Compare confirmed profile and plan revisions across edits, restores, and
   episodes to establish which person and plan-node IDs actually persist.
-- Audit legacy `shot.character_ids`, variant `media_id` coverage, and accepted
+- Audit legacy plan `shot.character_ids` values, variant `media_id` coverage, and accepted
   shot/task lineage before migrating fields or promising exact revision pins.

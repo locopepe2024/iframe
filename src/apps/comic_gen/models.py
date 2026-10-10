@@ -1307,6 +1307,7 @@ class EpisodeVisualShotContext(BaseModel):
     beat_id: str
     shot_id: str
     character_ids: List[str] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
     visual_intent: str = ""
     performance_action: str = ""

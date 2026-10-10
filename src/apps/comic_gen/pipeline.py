@@ -3674,11 +3674,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 for shot in beat.shots:
                     cast_items = [DirectorPlanCastBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.cast_bindings]
                     prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
-                    shot_char_ids = list(dict.fromkeys(shot.character_ids + [b.person_id for b in cast_items]))
+                    shot_char_ids = list(dict.fromkeys(
+                        shot.character_ids + [asset_id for cast in cast_items
+                                              for asset_id in matching_character_assets(
+                                                  cast.person_id, cast.era_variant_id)]))
                     shot_prop_ids = list(dict.fromkeys(shot.prop_ids + [b.prop_id for b in prop_items]))
                     shots.append(EpisodeVisualShotContext(
                         scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
-                        character_ids=shot_char_ids, prop_ids=shot_prop_ids,
+                        character_ids=shot_char_ids,
+                        person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
+                        prop_ids=shot_prop_ids,
                         visual_intent=shot.visual_intent, performance_action=shot.performance_action,
                         composition=shot.composition, camera_movement=shot.camera_movement,
                         lighting=shot.lighting.model_dump(),

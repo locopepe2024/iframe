@@ -418,6 +418,20 @@ def test_asset_sync_maps_person_to_character_and_preserves_distinct_scene_looks(
     assert pipeline._episode_asset_context_prompt(script, "character", "shen-xia-young") == ""
 
 
+def test_shot_context_separates_person_ids_from_character_asset_ids():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    shot = plan.scenes[0].beats[0].shots[0]
+    shot.cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    context = pipeline.project_episode_visual_context("film")
+
+    assert context.shots[0].character_ids == ["shen-xia-young"]
+    assert context.shots[0].person_ids == ["shen-xia"]
+
+
 def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     pipeline, script = make_pipeline()
     career = Character(id="shen-xia-career", name="沈夏（职场）", description="职场时期", base_character_id="shen-xia")
@@ -433,6 +447,8 @@ def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert any(item.get("reason") == "era_variant_unresolved" for item in result["unresolved_bindings"])
     assert not any(item["asset_type"] == "character" for item in result["bindings"])
+    assert result["context"]["shots"][0]["character_ids"] == []
+    assert result["context"]["shots"][0]["person_ids"] == ["shen-xia"]
 
 
 def test_sync_only_marks_assets_affected_by_a_plan_change():
