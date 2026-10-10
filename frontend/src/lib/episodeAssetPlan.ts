@@ -45,7 +45,7 @@ export function getAssetPlanEntries(
             ? context.characters.filter(item => item.character_asset_ids.includes(assetId) && item.scene_ids.includes(scene.scene_id))
             : assetType === "prop"
                 ? context.props.filter(item => item.prop_id === assetId && item.scene_ids.includes(scene.scene_id))
-                : scene.scene_asset_id === assetId || scene.scene_id === assetId ? [scene] : [];
+                : scene.scene_asset_id === assetId ? [scene] : [];
         matches.forEach((match, index) => {
             const details = [
                 scene.location,

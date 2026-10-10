@@ -10,6 +10,9 @@ matches only `scene_asset_id`. Previously persisted mistaken bindings become
 stale on the next sync; historical plan snapshots are not rewritten. The
 remaining identity and revision rules below are still target contracts.
 
+The episode Assets prompt projection in the frontend also matches Scene assets
+only by `scene_asset_id`; a coincidentally equal plan `scene_id` is not a match.
+
 Implementation note (2026-10-10, shot context): projected
 `EpisodeVisualShotContext.character_ids` now contains only Character asset IDs;
 `person_ids` carries narrative cast identities. An unresolved cast person does

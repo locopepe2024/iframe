@@ -3,6 +3,15 @@ import { getAssetPlanEntries, getUnboundCharacterRequirements } from "../lib/epi
 import type { EpisodeVisualContext } from "../lib/directorShootingPlan";
 
 describe("episode asset plan context", () => {
+    it("does not match a plan scene ID as a Scene asset ID", () => {
+        const context = {
+            scenes: [{ scene_id: "cinema", scene_asset_id: null, scene_ref: "电影院",
+                location: "西安", time_anchor: "白天", atmosphere: "", prop_ids: [] }],
+            characters: [], props: [], shots: [],
+        } as unknown as EpisodeVisualContext;
+        expect(getAssetPlanEntries(context, "scene", "cinema")).toEqual([]);
+    });
+
     it("keeps indoor and outdoor looks separate for the same character asset", () => {
         const context = {
             scenes: [
