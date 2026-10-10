@@ -648,6 +648,8 @@ def test_confirmed_plan_preserves_asset_identity_when_sources_are_deleted():
     assert identities[("scene", "cinema")].name == "电影院入口"
     assert identities[("prop", "ticket")].description == "一张电影票"
     confirmed = revision.model_dump()
+    restored_revision = Script.model_validate(script.model_dump()).director_shooting_plan_revisions[-1]
+    assert restored_revision.asset_identities == revision.asset_identities
 
     script.characters = []
     script.scenes = []
