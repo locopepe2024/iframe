@@ -62,6 +62,20 @@ export default function ConsistencyVault() {
     const [episodeAssetState, setEpisodeAssetState] = useState<EpisodeVisualContextState>({ context: null, bindings: [] });
     const [episodeAssetSync, setEpisodeAssetSync] = useState<EpisodeAssetSyncDiff | null>(null);
     const [syncingPlan, setSyncingPlan] = useState(false);
+    const [bindingPersonId, setBindingPersonId] = useState<string | null>(null);
+    const [seriesCharacters, setSeriesCharacters] = useState<Array<{ id: string; name: string }>>([]);
+
+    useEffect(() => {
+        if (!currentProject?.series_id) {
+            setSeriesCharacters([]);
+            return;
+        }
+        let active = true;
+        void api.getSeries(currentProject.series_id).then(series => {
+            if (active) setSeriesCharacters(series.characters ?? []);
+        }).catch(() => { if (active) setSeriesCharacters([]); });
+        return () => { active = false; };
+    }, [currentProject?.series_id]);
 
     useEffect(() => {
         if (!currentProject?.id) {
@@ -430,6 +444,22 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleBindPersonAsset = async (personId: string, assetId: string | null) => {
+        if (!currentProject || !episodeAssetState.context) return;
+        setBindingPersonId(personId);
+        try {
+            const diff = await api.bindEpisodePersonAsset(
+                currentProject.id, personId, assetId, episodeAssetState.context.shooting_plan_revision);
+            setEpisodeAssetSync(diff);
+            setEpisodeAssetState({ context: diff.context, bindings: diff.bindings });
+            updateProject(currentProject.id, await api.getProject(currentProject.id));
+        } catch (error) {
+            toast.error("角色资产关联失败", { body: extractErrorDetail(error) });
+        } finally {
+            setBindingPersonId(null);
+        }
+    };
+
     // Upload handlers
     const handleOpenUploadModal = (asset: any, type: string) => {
         setUploadTarget({
@@ -519,6 +549,9 @@ export default function ConsistencyVault() {
                     bindings={episodeAssetSync?.bindings || episodeAssetState.bindings}
                     context={episodeAssetState.context}
                     project={currentProject}
+                    seriesCharacters={seriesCharacters}
+                    bindingPersonId={bindingPersonId}
+                    onBindPersonAsset={handleBindPersonAsset}
                     onOpenAsset={(assetType, assetId) => {
                         setActiveTab(assetType);
                         setSelectedAssetType(assetType);
@@ -670,14 +703,29 @@ function ShootingPlanAssetRequirements({
     bindings,
     context,
     project,
+    seriesCharacters,
+    bindingPersonId,
+    onBindPersonAsset,
     onOpenAsset,
 }: {
     bindings: EpisodeVisualContextState["bindings"];
     context: EpisodeVisualContext | null;
     project: any;
+    seriesCharacters: Array<{ id: string; name: string }>;
+    bindingPersonId: string | null;
+    onBindPersonAsset: (personId: string, assetId: string | null) => Promise<void>;
     onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
 }) {
     const unboundCharacters = getUnboundCharacterRequirements(context);
+    const people = new Map<string, { label: string; assetIds: string[]; sceneIds: string[]; shotIds: string[]; lookCount: number }>();
+    for (const character of context?.characters ?? []) {
+        const item = people.get(character.person_id) ?? { label: character.person_label || character.person_id.slice(0, 8), assetIds: [], sceneIds: [], shotIds: [], lookCount: 0 };
+        item.assetIds = Array.from(new Set([...item.assetIds, ...character.character_asset_ids]));
+        item.sceneIds = Array.from(new Set([...item.sceneIds, ...character.scene_ids]));
+        item.shotIds = Array.from(new Set([...item.shotIds, ...character.shot_ids]));
+        item.lookCount += 1;
+        people.set(character.person_id, item);
+    }
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
         { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character") },
         { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
@@ -694,7 +742,7 @@ function ShootingPlanAssetRequirements({
             <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
-                    <p className="mt-1 text-xs text-text-secondary">这里展示分镜前置需求。打开已有基础资产后再生成场景变体，系统不会自动生成图片。</p>
+                    <p className="mt-1 text-xs text-text-secondary">同步时会为缺失的人物创建空角色资产，不会自动生成图片。</p>
                 </div>
                 <span className="text-xs text-text-muted">{bindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>
@@ -707,7 +755,7 @@ function ShootingPlanAssetRequirements({
                         {group.items.length === 0 && (group.type !== "character" || unboundCharacters.length === 0) ? (
                             <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
                         ) : (
-                            <div className="mt-2 max-h-32 space-y-2 overflow-y-auto">
+                            <div className={`mt-2 space-y-2 overflow-y-auto ${group.type === "character" ? "max-h-80" : "max-h-32"}`}>
                                 {group.items.map(binding => {
                                     const asset = getAsset(group.type, binding.asset_id);
                                     return (
@@ -720,10 +768,21 @@ function ShootingPlanAssetRequirements({
                                         </div>
                                     );
                                 })}
-                                {group.type === "character" && unboundCharacters.map((requirement, index) => (
-                                    <div key={`unbound:${requirement.personId}`} className="rounded border border-glass-border/70 px-2 py-1.5" title={requirement.personId}>
-                                        <p className="truncate text-xs text-foreground">人物 {index + 1} · {requirement.personId.slice(0, 8)}</p>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · 待关联角色资产</p>
+                                {group.type === "character" && Array.from(people.entries()).map(([personId, requirement], index) => (
+                                    <div key={`person:${personId}`} className="rounded border border-glass-border/70 px-2 py-1.5" title={personId}>
+                                        <p className="truncate text-xs text-foreground">{requirement.label} · {personId.slice(0, 8)}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? "已关联" : "待关联角色资产"}</p>
+                                        <select aria-label={`关联人物 ${personId} 的角色资产`}
+                                            value={project.episode_person_asset_bindings?.[personId] ?? ""}
+                                            disabled={bindingPersonId !== null}
+                                            onChange={(event) => void onBindPersonAsset(personId, event.target.value || null)}
+                                            className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
+                                            <option value="" disabled={Boolean(project.episode_person_asset_bindings?.[personId])}>{requirement.assetIds.length ? "使用导演映射" : "选择角色资产"}</option>
+                                            {[...project.characters, ...seriesCharacters.filter(asset =>
+                                                !project.characters.some((local: { id: string }) => local.id === asset.id))].map((asset: { id: string; name: string }) => (
+                                                <option key={asset.id} value={asset.id}>{asset.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 ))}
                             </div>

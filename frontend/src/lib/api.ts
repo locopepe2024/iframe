@@ -23,6 +23,7 @@ import {
     getDirectorShootingPlan,
     getEpisodeVisualContext,
     syncEpisodeAssetsFromShootingPlan,
+    bindEpisodePersonAsset,
     getStoryboardAssetContext,
     getDirectorShootingPlanRevision,
     listDirectorShootingPlanRevisions,
@@ -1239,6 +1240,9 @@ export const api = {
 
     syncEpisodeAssetsFromShootingPlan: (scriptId: string) =>
         syncEpisodeAssetsFromShootingPlan(API_URL, scriptId),
+
+    bindEpisodePersonAsset: (scriptId: string, personId: string, assetId: string | null, expectedPlanRevision: number) =>
+        bindEpisodePersonAsset(API_URL, scriptId, personId, assetId, expectedPlanRevision),
 
     getStoryboardAssetContext: (scriptId: string, frameId: string) =>
         getStoryboardAssetContext(API_URL, scriptId, frameId),
