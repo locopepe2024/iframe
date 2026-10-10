@@ -67,6 +67,17 @@ placeholder names such as `道具 1` remain explicit user-editable names until
 the user supplies a semantic name; the system does not infer one from a plan
 ID or a similar asset name.
 
+Normative decision (2026-10-11, series reference boundary): a Series shared
+asset is reference material for episode asset design, not an episode asset
+candidate. A shooting plan must keep the episode entity asset ID in
+`prop_ids`, `scene_asset_id`, and character asset fields. A series asset may
+provide reference media, variants, descriptions, or visual guidance while a
+new episode asset is designed, but it must not be directly imported, copied,
+or written into an episode plan binding. Any generated episode asset receives
+a new ID and records its reference lineage; the shared asset and any existing
+episode asset remain unchanged. User selection of a shared reference is not a
+semantic asset replacement.
+
 ## Observed Code Facts
 
 - A `Script` is the persisted episode/project record. Its source text has a
@@ -132,16 +143,25 @@ to disambiguate before migration.
    is not placement in a project. Current resolver and project-response paths
    differ on whether it appears without import; the target contract requires
    explicit use/binding or placement, with the source identity retained.
-4. **Move/share versus fork:** moving placement or inheriting a series asset
-   keeps the asset ID. A fork or deep-copy import makes a **new semantic
-   asset ID** and records source lineage. Current copy paths may copy child
-   variant IDs; that is a migration gap, not the target identity rule.
+4. **Reference versus episode design:** a series or personal asset may be
+   attached as reference material while designing an episode asset. This does
+   not place the source asset in the episode and does not authorize plan
+   binding to its ID. The designed episode asset receives a **new semantic
+   asset ID** and records source lineage; the reference asset and any existing
+   episode asset remain unchanged. A direct "import as episode asset" operation
+   is outside the target contract and must not be used by Assets or shooting
+   plan synchronization.
 5. **Plan references:** a plan scene's `scene_id` identifies the planned scene.
    Its `scene_asset_id`, or a shot's `scene_binding.scene_asset_id`, identifies
    a reusable Scene asset. `shot.character_ids` and projected shot
    `character_ids` identify Character assets; projected shot `person_ids` and
    `cast_bindings.person_id` identify narrative people. `scene/shot.prop_ids` and
    `prop_bindings.prop_id` identify Prop assets.
+   These plan asset fields are restricted to the episode entity asset IDs
+   established by extraction or explicit episode design. A `source=series`
+   record may appear in a reference package or picker context, but its ID is
+   invalid in these plan fields unless a separate, explicit future contract
+   changes the asset ownership model.
    `cast_bindings.person_id` identifies a narrative person and resolves through
    a reviewed person-to-character-asset mapping. It must not be silently
    equated to `asset_id` even when legacy values happen to match.
