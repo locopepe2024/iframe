@@ -24,6 +24,21 @@ describe("episode asset plan context", () => {
         expect(getAssetPlanEntries(context, "scene", "plan-scene")).toEqual([]);
     });
 
+    it("keeps internal plan IDs out of asset detail text", () => {
+        const context = {
+            scenes: [{ scene_id: "old-scene-id", scene_asset_id: "current-scene",
+                scene_ref: "", location: "", time_anchor: "", atmosphere: "", prop_ids: [] }],
+            characters: [{ person_id: "old-person-id", character_asset_ids: ["current-character"],
+                era_variant_id: "old-era-id", scene_look_id: "old-look-id",
+                continuity_state: {}, scene_ids: ["old-scene-id"], shot_ids: [] }],
+            props: [], shots: [],
+        } as unknown as EpisodeVisualContext;
+        const scene = getAssetPlanEntries(context, "scene", "current-scene")[0];
+        const character = getAssetPlanEntries(context, "character", "current-character")[0];
+        expect(scene.sceneLabel).toBe("场景 1");
+        expect(character.prompt).not.toContain("old-");
+    });
+
     it("keeps indoor and outdoor looks separate for the same character asset", () => {
         const context = {
             scenes: [

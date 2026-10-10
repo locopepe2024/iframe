@@ -16,6 +16,7 @@ from src.apps.comic_gen.models import (
     DirectorPlanSceneBinding,
     DirectorPlanShot,
     DirectorProfile,
+    DirectorProfileRevision,
     DirectorShootingPlan,
     DirectorStoryMap,
     EpisodeAssetBinding,
@@ -501,6 +502,163 @@ def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     assert not any(item["asset_type"] == "character" for item in result["bindings"])
     assert result["context"]["shots"][0]["character_ids"] == []
     assert result["context"]["shots"][0]["person_ids"] == ["shen-xia"]
+
+
+def test_explicit_binding_resolves_legacy_plan_person_after_asset_id_changes():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    shot = plan.scenes[0].beats[0].shots[0]
+    shot.character_ids = ["person-old"]
+    shot.cast_bindings = []
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    archived_profile = script.art_direction.director_profile.model_copy(deep=True)
+    archived_profile.story_map = DirectorStoryMap.model_validate({
+        **archived_profile.story_map.model_dump(),
+        "people": [{"person_id": "person-old", "display_name": "沈夏",
+                    "variant_character_ids": ["person-old"]}],
+    })
+    script.director_profile_revisions.append(DirectorProfileRevision(
+        revision=1, content_hash="historical", profile=archived_profile, confirmed_at=1))
+    script.art_direction.director_profile.story_map = None
+    script.characters[0].id = "replacement-asset"
+    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+        "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
+
+    before = pipeline.sync_episode_assets_from_shooting_plan("film")
+    generated_id = script.episode_person_asset_bindings["person-old"]
+    assert generated_id != "replacement-asset"
+    assert before["context"]["characters"][0]["character_asset_ids"] == [generated_id]
+    assert before["context"]["characters"][0]["person_label"] == "沈夏"
+    assert script.characters[-1].name == "沈夏"
+    assert script.characters[-1].description == ""
+    repeated = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert repeated["context"]["shots"] == before["context"]["shots"]
+    assert script.episode_person_asset_bindings["person-old"] == generated_id
+    assert len(script.characters) == 2
+    confirmed_plan = script.director_shooting_plan_revisions[-1].model_dump()
+    with pytest.raises(ValueError, match="revision changed"):
+        pipeline.bind_episode_person_asset("film", "person-old", "replacement-asset", 0)
+    with pytest.raises(ValueError, match="not available"):
+        pipeline.bind_episode_person_asset("film", "person-old", "missing", 1)
+
+    bound = pipeline.bind_episode_person_asset("film", "person-old", "replacement-asset", 1)
+    assert bound["context"]["shots"][0]["character_ids"] == ["replacement-asset"]
+    assert bound["context"]["characters"][0]["character_asset_ids"] == ["replacement-asset"]
+    assert any(item["asset_type"] == "character" and item["asset_id"] == "replacement-asset"
+               for item in bound["bindings"])
+    assert Script.model_validate(script.model_dump()).episode_person_asset_bindings == {
+        "person-old": "replacement-asset"}
+    assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed_plan
+
+    script.characters = [item for item in script.characters if item.id != "replacement-asset"]
+    missing = pipeline.sync_episode_assets_from_shooting_plan("film")
+    second_id = script.episode_person_asset_bindings["person-old"]
+    assert second_id not in {generated_id, "replacement-asset"}
+    assert missing["context"]["characters"][0]["character_asset_ids"] == [second_id]
+    assert missing["context"]["shots"][0]["character_ids"] == [second_id]
+    script.characters = []
+    recreated = pipeline.sync_episode_assets_from_shooting_plan("film")
+    next_id = script.episode_person_asset_bindings["person-old"]
+    assert next_id not in {generated_id, second_id, "replacement-asset"}
+    assert recreated["context"]["shots"][0]["character_ids"] == [next_id]
+    assert len(script.characters) == 1
+    assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed_plan
+
+
+def test_sync_reuses_existing_candidate_after_explicit_asset_is_deleted():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    shot = plan.scenes[0].beats[0].shots[0]
+    shot.character_ids = ["shen-xia"]
+    shot.cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    script.episode_person_asset_bindings["shen-xia"] = "deleted-asset"
+
+    result = pipeline.sync_episode_assets_from_shooting_plan("film")
+
+    assert script.episode_person_asset_bindings.get("shen-xia") is None
+    assert len(script.characters) == 1
+    assert result["context"]["shots"][0]["character_ids"] == ["shen-xia-young"]
+    assert result["context"]["characters"][0]["character_asset_ids"] == ["shen-xia-young"]
+
+
+def test_sync_rebinds_missing_scene_and_prop_ids_without_editing_plan():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    scene = plan.scenes[0]
+    scene.scene_asset_id = "old-scene"
+    scene.prop_ids = ["old-prop"]
+    shot = scene.beats[0].shots[0]
+    shot.scene_binding = DirectorPlanSceneBinding(scene_asset_id="old-shot-scene")
+    shot.prop_ids = ["old-prop"]
+    shot.prop_bindings = [DirectorPlanPropBinding(prop_id="old-prop")]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    confirmed = script.director_shooting_plan_revisions[-1].model_dump()
+    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+        "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
+
+    first = pipeline.sync_episode_assets_from_shooting_plan("film")
+    scene_id = script.episode_scene_asset_replacements["old-scene"]
+    shot_scene_id = script.episode_scene_asset_replacements["old-shot-scene"]
+    prop_id = script.episode_prop_asset_replacements["old-prop"]
+    assert len({scene_id, shot_scene_id}) == 2
+    assert {item.id for item in script.scenes} == {"cinema", scene_id, shot_scene_id}
+    assert {item.id for item in script.props} == {"ticket", prop_id}
+    assert script.props[-1].name == "道具 1"
+    assert all("old-" not in item.name for item in script.scenes + script.props)
+    assert first["context"]["scenes"][0]["scene_asset_id"] == scene_id
+    assert first["context"]["shots"][0]["scene_asset_id"] == shot_scene_id
+    assert first["context"]["shots"][0]["prop_ids"] == [prop_id]
+    assert first["context"]["props"][0]["prop_id"] == prop_id
+    assert not any(item.get("reason") == "scene_asset_unbound" for item in first["unresolved_bindings"])
+    assert Script.model_validate(script.model_dump()).episode_prop_asset_replacements == {"old-prop": prop_id}
+    assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
+
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert len(script.scenes) == 3
+    assert len(script.props) == 2
+    script.scenes = [item for item in script.scenes if item.id != shot_scene_id]
+    script.props = [item for item in script.props if item.id != prop_id]
+    recreated = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert script.episode_scene_asset_replacements["old-shot-scene"] != shot_scene_id
+    assert script.episode_prop_asset_replacements["old-prop"] != prop_id
+    assert recreated["context"]["shots"][0]["scene_asset_id"] != shot_scene_id
+
+    bound_scene = pipeline.bind_episode_plan_asset("film", "scene", "old-scene", "cinema", 1)
+    bound_prop = pipeline.bind_episode_plan_asset("film", "prop", "old-prop", "ticket", 1)
+    assert bound_scene["context"]["scenes"][0]["scene_asset_id"] == "cinema"
+    assert bound_prop["context"]["shots"][0]["prop_ids"] == ["ticket"]
+    with pytest.raises(ValueError, match="revision changed"):
+        pipeline.bind_episode_plan_asset("film", "prop", "old-prop", "ticket", 0)
+    assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
+
+
+def test_plan_asset_group_rebinding_changes_all_sources_atomically():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "old-scene-a"
+    plan.scenes[0].beats[0].shots[0].scene_binding = DirectorPlanSceneBinding(
+        scene_asset_id="old-scene-b")
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+        "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+    source_ids = ["old-scene-a", "old-scene-b"]
+
+    with pytest.raises(ValueError, match="not in the confirmed shooting plan"):
+        pipeline.bind_episode_plan_asset("film", "scene", source_ids + ["unknown"], "cinema", 1)
+    assert script.episode_scene_asset_replacements[source_ids[0]] != "cinema"
+
+    grouped = pipeline.bind_episode_plan_asset("film", "scene", source_ids, "cinema", 1)
+    assert {script.episode_scene_asset_replacements[item] for item in source_ids} == {"cinema"}
+    assert grouped["context"]["scenes"][0]["scene_asset_id"] == "cinema"
+    assert grouped["context"]["shots"][0]["scene_asset_id"] == "cinema"
+    assert len([item for item in grouped["bindings"] if item["asset_type"] == "scene"
+                and item["status"] != "stale"]) == 1
 
 
 def test_sync_only_marks_assets_affected_by_a_plan_change():

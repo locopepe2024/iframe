@@ -162,10 +162,10 @@ export interface EpisodeVisualContext {
     shooting_plan_revision: number;
     shooting_plan_hash: string;
     context_status: "complete" | "partial";
-    scenes: Array<{ scene_id: string; scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; prop_ids: string[] }>;
-    characters: Array<{ person_id: string; character_asset_ids: string[]; era_variant_id?: string | null; scene_look_id?: string | null; continuity_state: Record<string, unknown>; scene_ids: string[]; shot_ids: string[] }>;
-    props: Array<{ prop_id: string; state: string; scene_ids: string[]; shot_ids: string[] }>;
-    shots: Array<{ scene_id: string; beat_id: string; shot_id: string; scene_asset_id?: string | null; character_ids: string[]; person_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;
+    scenes: Array<{ scene_id: string; scene_asset_id?: string | null; plan_scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; prop_ids: string[] }>;
+    characters: Array<{ person_id: string; person_label?: string | null; character_asset_ids: string[]; era_variant_id?: string | null; scene_look_id?: string | null; continuity_state: Record<string, unknown>; scene_ids: string[]; shot_ids: string[] }>;
+    props: Array<{ prop_id: string; plan_prop_id?: string | null; state: string; scene_ids: string[]; shot_ids: string[] }>;
+    shots: Array<{ scene_id: string; beat_id: string; shot_id: string; scene_asset_id?: string | null; plan_scene_asset_id?: string | null; character_ids: string[]; person_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;
 }
 
 export interface EpisodeVisualContextState {
@@ -269,6 +269,25 @@ export async function getEpisodeVisualContext(baseUrl: string, projectId: string
 export async function syncEpisodeAssetsFromShootingPlan(baseUrl: string, projectId: string) {
     const response = await axios.post<EpisodeAssetSyncDiff>(
         `${baseUrl}/projects/${projectId}/episode-visual-context/sync`,
+    );
+    return response.data;
+}
+
+export async function bindEpisodePersonAsset(baseUrl: string, projectId: string,
+    personId: string, assetId: string | null, expectedPlanRevision: number) {
+    const response = await axios.put<EpisodeAssetSyncDiff>(
+        `${baseUrl}/projects/${encodeURIComponent(projectId)}/episode-visual-context/person-asset`,
+        { person_id: personId, asset_id: assetId, expected_plan_revision: expectedPlanRevision },
+    );
+    return response.data;
+}
+
+export async function bindEpisodePlanAsset(baseUrl: string, projectId: string,
+    assetType: "scene" | "prop", planAssetIds: string[], assetId: string, expectedPlanRevision: number) {
+    const response = await axios.put<EpisodeAssetSyncDiff>(
+        `${baseUrl}/projects/${encodeURIComponent(projectId)}/episode-visual-context/plan-asset`,
+        { asset_type: assetType, plan_asset_ids: planAssetIds, asset_id: assetId,
+          expected_plan_revision: expectedPlanRevision },
     );
     return response.data;
 }

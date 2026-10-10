@@ -1303,6 +1303,7 @@ class DirectorShootingPlanRevision(BaseModel):
 class EpisodeVisualSceneContext(BaseModel):
     scene_id: str
     scene_asset_id: Optional[str] = None
+    plan_scene_asset_id: Optional[str] = None
     scene_ref: str = ""
     location: str = ""
     time_anchor: str = ""
@@ -1316,6 +1317,7 @@ class EpisodeVisualSceneContext(BaseModel):
 
 class EpisodeVisualCharacterContext(BaseModel):
     person_id: str
+    person_label: Optional[str] = None
     character_asset_ids: List[str] = Field(default_factory=list)
     era_variant_id: Optional[str] = None
     scene_look_id: Optional[str] = None
@@ -1326,6 +1328,7 @@ class EpisodeVisualCharacterContext(BaseModel):
 
 class EpisodeVisualPropContext(BaseModel):
     prop_id: str
+    plan_prop_id: Optional[str] = None
     state: str = "present"
     scene_ids: List[str] = Field(default_factory=list)
     shot_ids: List[str] = Field(default_factory=list)
@@ -1336,6 +1339,7 @@ class EpisodeVisualShotContext(BaseModel):
     beat_id: str
     shot_id: str
     scene_asset_id: Optional[str] = None
+    plan_scene_asset_id: Optional[str] = None
     character_ids: List[str] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
@@ -2722,6 +2726,15 @@ class Script(BaseModel):
     )
     episode_asset_bindings: List[EpisodeAssetBinding] = Field(
         default_factory=list, description="Reviewable scene/shot asset handoff bindings"
+    )
+    episode_person_asset_bindings: Dict[str, str] = Field(
+        default_factory=dict, description="Explicit episode person-to-Character asset choices"
+    )
+    episode_scene_asset_replacements: Dict[str, str] = Field(
+        default_factory=dict, description="Confirmed-plan Scene asset ID to current episode-visible asset ID"
+    )
+    episode_prop_asset_replacements: Dict[str, str] = Field(
+        default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"
     )
     director_review_required: bool = Field(False, description="Existing assets or frames should be reviewed after director profile changes")
     
