@@ -42,7 +42,7 @@ def test_cos_blob_store_uses_private_content_addressed_key(monkeypatch):
     assert blob_store.get(key) == content
     assert calls[0] == {
         "Bucket": "private-knowledge-bucket", "Key": f"knowledge/{key}",
-        "Body": content, "ContentType": "application/octet-stream", "ACL": "private",
+        "Body": content, "ContentType": "application/octet-stream",
     }
     assert calls[1] == {"Bucket": "private-knowledge-bucket", "Key": f"knowledge/{key}"}
 
