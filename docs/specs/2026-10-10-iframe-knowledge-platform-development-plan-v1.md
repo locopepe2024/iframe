@@ -20,7 +20,7 @@ First demo on a shared deployment: a curator publishes an authorized illustrated
 |---|---|---|
 | Source/API contract | Implemented in source | Another Agent submits text, image and video bytes with locator/labels/annotation, reads the source, then searches and retrieves authorized media through OpenAPI. |
 | Database behavior | Verified on TencentDB with rollback fixtures | Repeat after each migration: published public plus own private hits, no foreign private hit/media, idempotent and changed revisions, no test rows left behind. |
-| Shared media durability | Open | Private COS bucket and scoped credentials; API and independent worker both access the same bytes; metadata and COS backup/restore tested together. |
+| Shared media durability | Adapter coded; deployment open | Private COS bucket and scoped credentials; API and independent worker both access the same bytes; metadata and COS backup/restore tested together. |
 | Online Agent use | Open | Deploy API through the normal release flow; two real identities complete the contract via HTTP, then register bounded Playground tools with real source citations. |
 
 The first two gates do not constitute online acceptance. Local private blob storage is a single-host development bridge and must be replaced before shared production ingestion.
