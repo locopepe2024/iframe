@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import shutil
@@ -63,7 +62,7 @@ class Camera(BaseModel):
 
 class Snapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    schema_version: str = Field(default="director-scene-depth-snapshot.v1", pattern="^director-scene-depth-snapshot\\.v1$")
+    schema_version: str = Field(default="director-scene-depth-snapshot.v1", pattern=r"^director-scene-depth-snapshot\.v1$")
     frame: StrictInt = Field(ge=1, le=100000)
     fps: StrictInt = Field(ge=1, le=120)
     cameraLabel: str = Field(min_length=1, max_length=120)
@@ -127,9 +126,9 @@ def run_task(path, binary):
                 record = json.loads(record_path.read_text())
                 record["status"] = "running"
                 write_record(record_path, record)
-            script = ROOT.parent / "scripts" / "director3d" / "render_scene_depth.py"
+            script = ROOT / "scripts" / "director3d" / "render_scene_depth.py"
             with (path / "render.log").open("w") as log:
-                subprocess.run([binary, "--background", "--factory-startup", "--python-exit-code", "1",
+                subprocess.run([binary, "--background", "--factory-startup", "--threads", "1", "--python-exit-code", "1",
                     "--python", str(script), "--", "--snapshot", str((path / "snapshot.json").resolve()),
                     "--output", str((path / "result").resolve())], check=True, timeout=120,
                     stdout=log, stderr=subprocess.STDOUT)
@@ -165,6 +164,8 @@ def submit(snapshot: Snapshot, background: BackgroundTasks, user: UserContext = 
     binary = runtime()
     root = owner_dir(user)
     with _lock:
+        if len(_active) >= 4:
+            raise HTTPException(429, "深度服务繁忙，请稍后重试。")
         if any(str(p) in _active for p in root.glob("*/task.json")):
             raise HTTPException(409, "已有深度任务正在执行。")
         task_id = uuid.uuid4().hex

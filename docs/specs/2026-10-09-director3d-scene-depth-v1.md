@@ -70,3 +70,25 @@ attached to each result. Polling stops on terminal state and unmount.
 Success checks: owner isolation, request bounds, timeout/failure persistence,
 real snapshot-to-Blender metric output, frontend submission/polling/failure,
 typecheck/build and desktop/mobile visual checks when authorized.
+
+### Runtime deployment
+
+The task runner currently targets the repository's single-process Uvicorn
+runtime. Do not run this in-process job registry with multiple API workers.
+The default Docker image has no Blender executable. Provide an installed Blender
+binary and configure `DIRECTOR_DEPTH_BLENDER_BIN`; Linux needs Blender's runtime
+libraries. All scripts are already copied by `Dockerfile.backend`. This change
+does not install Blender or change the deployed backend automatically.
+
+### Browser slice verification (2026-10-10)
+
+- Typecheck and production build passed.
+- Director UI: 25 existing tests and 4 depth panel tests passed.
+- Scene snapshot: 2 tests passed, including actual skin deformation baking.
+- Panorama scene package: 8 tests passed; image editor: 9 passed.
+- API: 4 tests passed including real Blender snapshot rendering and owner isolation.
+- Full backend comparison against main `d28b45c6`: identical 86 failed test IDs;
+  main 864 passed, candidate 868 passed. New Blender test required execution
+  outside the macOS sandbox because Metal startup crashed inside the sandbox.
+- Browser visual automation was not authorized and was not run. Production
+  runtime availability and browser appearance remain deployment acceptance items.

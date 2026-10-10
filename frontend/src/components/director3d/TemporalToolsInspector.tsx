@@ -1,3 +1,4 @@
+import { DepthPanel } from "./depth/DepthPanel";
 import { useState } from "react";
 
 import { DialogueTimelinePanel } from "./dialogue/DialogueTimelinePanel";
@@ -11,9 +12,10 @@ import { ActionProposalPanel } from "./action/ActionProposalPanel";
 import { MotionTrackImporter } from "./reference/MotionTrackImporter";
 import { MotionTrackReviewPanel } from "./reference/MotionTrackReviewPanel";
 
-type TemporalTool = "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "motion-review" | "action";
+type TemporalTool = "depth" | "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "motion-review" | "action";
 
 const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
+  { id: "depth", label: "深度" },
   { id: "dialogue", label: "对白" },
   { id: "focus", label: "焦点" },
   { id: "interaction", label: "接触" },
@@ -26,6 +28,7 @@ const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
 ];
 
 function renderTemporalTool(tool: TemporalTool) {
+  if (tool === "depth") return <DepthPanel />;
   if (tool === "dialogue") return <DialogueTimelinePanel />;
   if (tool === "focus") return <FocusTimelinePanel />;
   if (tool === "interaction") return <InteractionAnchorPanel />;
@@ -97,7 +100,7 @@ export function TemporalToolsInspector() {
               aria-labelledby={activeTool === tool.id ? `temporal-tool-tab-${tool.id}` : undefined}
               hidden={activeTool !== tool.id}
             >
-              {renderTemporalTool(tool.id)}
+              {tool.id !== "depth" || activeTool === "depth" ? renderTemporalTool(tool.id) : null}
             </div>
           ))}
         </div>
