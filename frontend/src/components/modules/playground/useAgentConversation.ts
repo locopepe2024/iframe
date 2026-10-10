@@ -19,6 +19,8 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [companionSkills, setCompanionSkills] = useState<CompanionSkillId[]>([]);
+  const [knowledgeSearch, setKnowledgeSearch] = useState(false);
+  const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
@@ -130,6 +132,8 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       const result = await agentRequest<{ user_message: ChatMessage; assistant_message: ChatMessage }>(`/sessions/${session.id}/messages`, 'POST', {
         content: snapshot.prompt, input_media: snapshot.inputMedia,
         companion_skills: companionSkills,
+        knowledge_search: knowledgeSearch,
+        knowledge_query: knowledgeSearch && knowledgeQuery.trim() ? knowledgeQuery.trim() : undefined,
         asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
         duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
         ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
@@ -153,5 +157,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, memories, memoryCandidates, memoryError, refreshMemories, extractMemories, saveMemory, editMemory, deleteMemory };
+  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery, memories, memoryCandidates, memoryError, refreshMemories, extractMemories, saveMemory, editMemory, deleteMemory };
 }

@@ -18,6 +18,7 @@ import {
   Workflow,
   SlidersHorizontal,
   HeartHandshake,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -34,13 +35,13 @@ import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
 import type { AgentMemory, MemoryCandidate } from './useAgentConversation';
 import VoiceTranscriptionButton from './VoiceTranscriptionButton';
 
-type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
+type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | 'knowledge' | ComposerControl | null;
 
 interface AgentComposerProps {
   canGenerate: boolean;
   batchSize: number;
   onGenerate: () => void;
-  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
+  agent?: { active: boolean; model: string; models: { api_model_id: string; display_name: string }[]; setModel: (value: string) => void; modelsLoading?: boolean; modelsError?: string; reloadModels?: () => void; companionSkills?: CompanionSkillId[]; toggleCompanionSkill?: (id: CompanionSkillId) => void; knowledgeSearch?: boolean; setKnowledgeSearch?: (value: boolean) => void; knowledgeQuery?: string; setKnowledgeQuery?: (value: string) => void; memories?: AgentMemory[]; memoryCandidates?: MemoryCandidate[]; memoryError?: string; extractMemories?: () => void; saveMemory?: (candidate: MemoryCandidate) => void; editMemory?: (id: string, content: string) => void; deleteMemory?: (id: string) => void };
   onAgentChange?: (active: boolean) => void;
 }
 
@@ -102,7 +103,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   useEffect(() => { setActivePanel(null); }, [agent?.active]);
 
   const panelTitle = activePanel
-    ? activePanel === 'companion' ? '陪护技能' : activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
+    ? activePanel === 'companion' ? '陪护技能' : activePanel === 'knowledge' ? '知识库' : activePanel === 'quality' ? t('parameters.quality') : activePanel === 'method' ? referenceLabel : t(`agent.${activePanel === 'output' ? 'typePanel' : activePanel === 'model' ? 'skuPanel' : activePanel === 'reference' ? 'referencePanel' : `${activePanel}Panel`}`)
     : '';
 
   const togglePanel = (panel: Exclude<ComposerPanel, null>) => {
@@ -148,6 +149,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
               activePanel === 'reference' && 'max-w-[620px]',
               activePanel === 'resolution' && 'max-w-[520px]',
               activePanel === 'companion' && 'max-w-[420px]',
+              activePanel === 'knowledge' && 'max-w-[420px]',
               ['ratio', 'quality', 'method', 'seed', 'audio', 'batch'].includes(activePanel) && 'max-w-[360px]',
             )}
           >
@@ -175,6 +177,17 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
                   {agent.memoryError && <p role="alert" className="text-xs text-status-failed-fg">{agent.memoryError}</p>}
                 </div>}
                 <p className="border-t border-border-subtle pt-3 text-xs leading-5 text-text-muted">只有确认保存的记忆会跨会话使用；真实闹钟提醒和媒体播放尚未接入。</p>
+              </div>
+            )}
+            {activePanel === 'knowledge' && (
+              <div className="space-y-3">
+                <label className="flex min-h-11 items-center gap-3 text-sm text-foreground">
+                  <input type="checkbox" checked={agent?.knowledgeSearch ?? false} onChange={event => agent?.setKnowledgeSearch?.(event.target.checked)} className="h-4 w-4 accent-primary" />
+                  检索公共库和个人库
+                </label>
+                {agent?.knowledgeSearch && <label className="block text-xs text-text-secondary">检索词
+                  <input value={agent.knowledgeQuery ?? ''} onChange={event => agent.setKnowledgeQuery?.(event.target.value)} maxLength={200} placeholder="留空则使用当前提问" className="mt-2 w-full rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                </label>}
               </div>
             )}
             {['resolution', 'ratio', 'quality', 'seed', 'audio', 'batch'].includes(activePanel) && (
@@ -210,6 +223,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={`陪护技能${agent.companionSkills?.length ? ` ${agent.companionSkills.length}` : ''}`}
             onClick={() => togglePanel('companion')}
           />}
+          {agent?.active && <ToolButton active={activePanel === 'knowledge'} icon={BookOpen} label={agent.knowledgeSearch ? '知识库已开启' : '知识库'} onClick={() => togglePanel('knowledge')} />}
           {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           {!agent?.active && <>
           <ToolButton

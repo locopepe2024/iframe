@@ -27,6 +27,23 @@ it('sends only enabled companion skill IDs with a chat request', async () => {
     hook.unmount();
 });
 
+it('sends an explicit owner-scoped knowledge search request', async () => {
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({ prompt: '分析印刷行业' });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    act(() => { hook.result.current.setKnowledgeSearch(true); hook.result.current.setKnowledgeQuery('印刷政策'); });
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        knowledge_search: true,
+        knowledge_query: '印刷政策',
+    })));
+    await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
+});
+
 const models = [{ id: 'sol', api_model_id: 'gpt-5.6-sol', display_name: 'GPT 5.6 Sol' }];
 
 function deferred<T>() {
