@@ -59,6 +59,14 @@ independently. A failed refresh reports that deletion already succeeded and
 does not restore stale plan state. Responses for an episode the user has left
 are discarded. Confirmed plan snapshots and asset revision history are unchanged.
 
+Implementation note (2026-10-11, asset naming): Scene and Prop detail views
+expose the same rename control already used by Character assets. Renaming
+updates the asset display name through the existing attribute endpoint; it does
+not create an asset, change its ID, or alter shooting-plan bindings. Generated
+placeholder names such as `道具 1` remain explicit user-editable names until
+the user supplies a semantic name; the system does not infer one from a plan
+ID or a similar asset name.
+
 ## Observed Code Facts
 
 - A `Script` is the persisted episode/project record. Its source text has a
