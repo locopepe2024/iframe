@@ -53,6 +53,7 @@ def test_pipeline_forwards_scene_prompt_to_generator():
     from src.apps.comic_gen.models import Script
 
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = RLock()
     scene = Scene(id="scene-1", name="中式茶室", description="实木茶桌")
     now = time.time()
     script = Script(

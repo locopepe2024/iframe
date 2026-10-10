@@ -306,7 +306,7 @@ def test_shared_reference_upload_and_selection_save_source(source, kind):
     assert entity.image_url == 'first.png'
 
 
-def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_path, monkeypatch):
+def test_shared_upload_keeps_global_asset_out_of_episode_response(tmp_path, monkeypatch):
     from io import BytesIO
     from fastapi import UploadFile
     from src.apps.comic_gen.models import GlobalAssetLibrary
@@ -327,18 +327,16 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
     token=set_studio_user(user)
     try:
         result=api.upload_asset('project','character','asset','reference_sheet',None,UploadFile(filename='ref.png',file=BytesIO(b'image')),user)
-        assert [c['id'] for c in result['characters']] == ['asset']
-        char=result['characters'][0]
-        assert char['source']=='global'
-        assert char['status']=='completed'
-        variant=char['reference_sheet']['image_variants'][0]
-        result=api.select_asset_variant('project',api.SelectVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id'],generation_type='reference_sheet'))
-        assert result['characters'][0]['reference_sheet']['selected_image_id']==variant['id']
-        result=api.delete_asset_variant('project',api.DeleteVariantRequest(asset_id='asset',asset_type='character',variant_id=variant['id']))
-        assert [c['id'] for c in result['characters']] == ['asset']
-        assert result['characters'][0]['source'] == 'global'
-        assert result['characters'][0]['reference_sheet']['image_variants'] == []
-        assert result['characters'][0]['reference_sheet']['selected_image_id'] is None
+        assert result['characters'] == []
+        assert entity.status.value == 'completed'
+        variant=entity.reference_sheet.image_variants[0]
+        result=api.select_asset_variant('project',api.SelectVariantRequest(asset_id='asset',asset_type='character',variant_id=variant.id,generation_type='reference_sheet'))
+        assert result['characters'] == []
+        assert entity.reference_sheet.selected_image_id == variant.id
+        result=api.delete_asset_variant('project',api.DeleteVariantRequest(asset_id='asset',asset_type='character',variant_id=variant.id))
+        assert result['characters'] == []
+        assert entity.reference_sheet.image_variants == []
+        assert entity.reference_sheet.selected_image_id is None
         assert not p.scripts['project'].characters
     finally:
         reset_studio_user(token)
@@ -348,7 +346,7 @@ def test_shared_upload_response_retains_gallery_and_filters_other_owners(tmp_pat
 @pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
 @pytest.mark.parametrize('fail', [False, True])
 def test_shared_generation_task_resolves_saves_and_preserves_candidates(source, kind, fail, monkeypatch):
-    from src.apps.comic_gen.models import Series, GlobalAssetLibrary, GenerationStatus
+    from src.apps.comic_gen.models import Series, GlobalAssetLibrary, GenerationStatus, ModelSettings
     from src.apps.comic_gen import pipeline as module
     p, entity = pipeline(kind)
     collection = {'character':'characters','scene':'scenes','prop':'props'}[kind]
@@ -360,7 +358,7 @@ def test_shared_generation_task_resolves_saves_and_preserves_candidates(source, 
         setattr(p.scripts['project'],collection,[])
     if source == 'series':
         p.scripts['project'].series_id='series'
-        p.series_store={'series':Series(id='series',title='Series',created_at=1,updated_at=1,owner_user_id='owner',owner_profile_id='owner',**{collection:[entity]})}
+        p.series_store={'series':Series(id='series',title='Series',created_at=1,updated_at=1,owner_user_id='owner',owner_profile_id='owner',model_settings=ModelSettings(t2i_model='test-image-model'),**{collection:[entity]})}
     elif source == 'global':
         setattr(p.library_store,collection,[entity])
     upload_type='reference_sheet' if kind=='character' else 'image'

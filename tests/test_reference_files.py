@@ -12,6 +12,7 @@ def test_m4a_reference_is_converted_and_sent_as_valid_mp3(tmp_path, monkeypatch)
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
                     '-c:a', 'aac', str(original)], check=True)
     before = original.read_bytes()
+    monkeypatch.setattr(agent, 'owned_library_image_key', lambda *args: None)
     monkeypatch.setattr(agent, 'reference_path', lambda *args: str(original))
     content = agent.reference_content(None, 'owned-reference')
     assert content['type'] == 'input_audio'

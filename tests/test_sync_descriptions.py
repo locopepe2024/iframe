@@ -30,6 +30,8 @@ def test_sync_descriptions_returns_the_merged_project_asset_view(monkeypatch):
         get_script=lambda project_id: script if project_id == "episode" else None,
         sync_descriptions_from_script_entities=lambda project_id: script,
         get_series=lambda series_id: series if series_id == "series" else None,
+        effective_art_direction=lambda script: script.art_direction,
+        effective_series_director_profile=lambda series_id: None,
         library_store=SimpleNamespace(characters=[], scenes=[], props=[]),
         _library_list_for_type=lambda *args: [],
     )

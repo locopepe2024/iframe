@@ -1074,6 +1074,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 subject_ids=[asset_id],
                 director_profile=director_profile,
             )
+            director_context = self.director_prompt_context(
+                script, subject_ids=[asset_id], director_profile=director_profile,
+                execution_context=director_execution,
+            )
+            if director_context:
+                effective_positive_prompt = ". ".join(filter(None, [effective_positive_prompt, director_context]))
         episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
         if episode_context_prompt:
             effective_positive_prompt = ". ".join(filter(None, [

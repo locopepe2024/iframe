@@ -30,5 +30,5 @@ def test_names_round_trip_without_resolving_media_by_name():
     generation = PlaygroundService(storage).create_generation(request)
     assert generation.input_media == ['owned.png']
     assert generation.media_names == {'owned.png': 'Same name'}
-    assert captured['draft'].input_media == [reference]
-    assert captured['draft'].media_names == {reference: 'Same name'}
+    assert captured['draft'].input_media == ['owned.png']
+    assert captured['draft'].media_names == {'owned.png': 'Same name'}

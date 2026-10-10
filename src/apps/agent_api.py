@@ -712,6 +712,18 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             )
         else:
             answer = complete(ctx, session["model"], history)
+            named_turn = next((message for message in reversed(session["messages"] + [user])
+                               if message.get("asset_names")), None)
+            if named_turn:
+                names = named_turn["asset_names"]
+                answer = re.sub(r"@(\d+)[、，](\d+)", r"@\1、@\2", answer)
+                answer = re.sub(
+                    r"@(\d+)(?![0-9A-Za-z_.])",
+                    lambda match: f"@{names[int(match[1]) - 1]}"
+                    if 0 < int(match[1]) <= len(names) and names[int(match[1]) - 1]
+                    else match[0],
+                    answer,
+                )
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
         session["messages"].extend([user, assistant])
         session["updated_at"] = time.time()

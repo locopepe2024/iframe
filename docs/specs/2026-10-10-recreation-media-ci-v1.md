@@ -11,7 +11,9 @@ The media host provides both tools; GitHub-hosted CI does not share its filesyst
 
 Run the entire recreation test module on an isolated `iframe-ci` user on media,
 using a repository-specific self-hosted runner label `iframe-media-ffmpeg`.
-The standard backend job excludes this module; it is not silently skipped by
+Run `tests/test_reference_files.py` there as well: its audio fixtures and
+conversion path both invoke local FFmpeg or FFprobe.
+The standard backend job excludes both modules; neither is silently skipped by
 binary detection. A separate job requires actual media binaries and runs all
 recreation tests, including the existing timeout/mock tests.
 
