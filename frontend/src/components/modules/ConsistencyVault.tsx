@@ -794,6 +794,10 @@ function ShootingPlanAssetRequirements({
         return [...local, ...seriesAssets[key].filter(asset => !local.some(item => item.id === asset.id))
             .map(asset => ({ ...asset, source: "series" as const }))];
     };
+    const episodeAssetsForType = (type: "character" | "scene" | "prop") => {
+        const key = type === "character" ? "characters" : type === "scene" ? "scenes" : "props";
+        return (project[key] ?? []) as Array<{ id: string; name: string; source?: "episode" | "series" | "global" }>;
+    };
     const getAsset = (type: "character" | "scene" | "prop", id: string) =>
         assetsForType(type).find(asset => asset.id === id);
     const planSourcesByAsset = (type: "scene" | "prop") => {
@@ -857,7 +861,7 @@ function ShootingPlanAssetRequirements({
                                                 onChange={event => void onBindPlanAsset(group.type as "scene" | "prop", sourceIds, event.target.value)}
                                                 className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                                                 {!asset && <option value="">选择{group.label}资产</option>}
-                                                {assetsForType(group.type).map(item => <option key={item.id} value={item.id}>{item.name} · {scopeLabel(item.source)}</option>)}
+                                                {episodeAssetsForType(group.type).map(item => <option key={item.id} value={item.id}>{item.name} · {scopeLabel(item.source)}</option>)}
                                             </select>}
                                         </div>
                                     );
@@ -877,7 +881,7 @@ function ShootingPlanAssetRequirements({
                                             onChange={(event) => void onBindPersonAsset(personId, event.target.value || null)}
                                             className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                                             <option value="" disabled={Boolean(project.episode_person_asset_bindings?.[personId])}>{requirement.assetIds.length ? "使用导演映射" : "选择角色资产"}</option>
-                                            {assetsForType("character").map((asset) => (
+                                            {episodeAssetsForType("character").map((asset) => (
                                                 <option key={asset.id} value={asset.id}>{asset.name} · {scopeLabel(asset.source)}</option>
                                             ))}
                                         </select>

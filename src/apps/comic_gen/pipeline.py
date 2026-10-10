@@ -3190,7 +3190,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                         referenced["scene"].add(shot.scene_binding.scene_asset_id)
                     referenced["character"].update(item.person_id for item in shot.cast_bindings)
                     referenced["character"].update(item.era_variant_id for item in shot.cast_bindings if item.era_variant_id)
-        resolved = self.resolve_episode_assets(script)
+        # Plan lineage records only episode semantic assets. Shared/global
+        # assets are reference material and must never appear as plan IDs.
+        resolved = {
+            "characters": script.characters,
+            "scenes": script.scenes,
+            "props": script.props,
+        }
         return [DirectorPlanAssetIdentity(
             asset_type=asset_type, asset_id=asset.id,
             name=asset.name, description=asset.description,
@@ -3274,8 +3280,24 @@ class ComicGenPipeline(StudioOwnerMixin):
         if missing_events:
             raise ValueError("Shooting plan references unknown Director story events: " + ", ".join(sorted(missing_events)))
 
-        available_entities = self.resolve_episode_assets(script)
+        # Shooting-plan IDs are episode semantic identities. Series/global
+        # assets may be shown as references elsewhere, but cannot become plan
+        # references merely because the resolver exposes them in the picker.
+        available_entities = {
+            "characters": script.characters,
+            "scenes": script.scenes,
+            "props": script.props,
+        }
+        resolved_entities = self.resolve_episode_assets(script)
+        series_asset_ids = {
+            asset_type: {
+                item.id for item in resolved_entities[collection]
+                if item.id not in {local.id for local in available_entities[collection]}
+            }
+            for asset_type, collection in (("character", "characters"), ("scene", "scenes"), ("prop", "props"))
+        }
         available_characters = {character.id for character in available_entities["characters"]}
+        available_scenes = {scene.id for scene in available_entities["scenes"]}
         available_props = {prop.id for prop in available_entities["props"]}
         requested_characters = {
             character_id
@@ -3295,12 +3317,35 @@ class ComicGenPipeline(StudioOwnerMixin):
             for shot in beat.shots
             for prop_id in shot.prop_ids
         }
+        requested_scenes = {
+            scene.scene_asset_id for scene in plan.scenes if scene.scene_asset_id
+        } | {
+            shot.scene_binding.scene_asset_id
+            for scene in plan.scenes
+            for beat in scene.beats
+            for shot in beat.shots
+            if shot.scene_binding and shot.scene_binding.scene_asset_id
+        }
         unresolved_characters = sorted(requested_characters - available_characters)
+        unresolved_scenes = sorted(requested_scenes - available_scenes)
         unresolved_props = sorted(requested_props - available_props)
-        if unresolved_characters or unresolved_props:
+        shared_plan_ids = {
+            "character": requested_characters & series_asset_ids["character"],
+            "scene": requested_scenes & series_asset_ids["scene"],
+            "prop": requested_props & series_asset_ids["prop"],
+        }
+        if any(shared_plan_ids.values()):
+            details = ", ".join(
+                f"{asset_type}={sorted(ids)}"
+                for asset_type, ids in shared_plan_ids.items() if ids
+            )
+            raise ValueError(
+                "Shooting plan cannot reference series assets directly; use episode assets as plan IDs (" + details + ")"
+            )
+        if unresolved_characters or unresolved_scenes or unresolved_props:
             logger.warning(
-                "Shooting plan contains unbound entity references: characters=%s props=%s",
-                unresolved_characters,
+                "Shooting plan contains unbound entity references: characters=%s scenes=%s props=%s",
+                unresolved_characters, unresolved_scenes,
                 unresolved_props,
             )
         from .llm import split_director_source
@@ -3347,10 +3392,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         assert profile is not None
         story_map = self._effective_shooting_story_map(script, profile)
         assert story_map is not None
-        resolved = self.resolve_episode_assets(script)
-        available_character_ids = {item.id for item in resolved["characters"]}
-        available_scene_ids = {item.id for item in resolved["scenes"]}
-        available_prop_ids = {item.id for item in resolved["props"]}
+        episode_entities = {
+            "characters": script.characters,
+            "scenes": script.scenes,
+            "props": script.props,
+        }
+        available_character_ids = {item.id for item in episode_entities["characters"]}
+        available_scene_ids = {item.id for item in episode_entities["scenes"]}
+        available_prop_ids = {item.id for item in episode_entities["props"]}
         unbound_entity_refs: set[str] = set()
         entities = {
             "characters": [{
@@ -3359,9 +3408,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "persona": item.persona,
                 "base_character_id": item.base_character_id,
                 "description": item.description,
-            } for item in resolved["characters"]],
-            "scenes": [{"id": item.id, "name": item.name, "description": item.description} for item in resolved["scenes"]],
-            "props": [{"id": item.id, "name": item.name, "description": item.description} for item in resolved["props"]],
+            } for item in episode_entities["characters"]],
+            "scenes": [{"id": item.id, "name": item.name, "description": item.description} for item in episode_entities["scenes"]],
+            "props": [{"id": item.id, "name": item.name, "description": item.description} for item in episode_entities["props"]],
         }
         from .llm import split_director_source
         chunks = split_director_source(
@@ -3713,13 +3762,21 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Confirm the shooting plan before syncing episode assets")
         revision = script.director_shooting_plan_revisions[-1]
         plan = revision.plan
-        resolved_assets = self.resolve_episode_assets(script)
+        # A confirmed plan is projected against episode-local assets only.
+        # This keeps historical references to shared IDs visible as unresolved
+        # instead of silently treating a shared asset as the episode asset.
+        resolved_assets = {
+            "characters": script.characters,
+            "scenes": script.scenes,
+            "props": script.props,
+        }
         def current_asset_id(asset_type: str, plan_asset_id: Optional[str]) -> Optional[str]:
             if not plan_asset_id:
                 return None
             replacements = (script.episode_scene_asset_replacements if asset_type == "scene"
                             else script.episode_prop_asset_replacements)
-            return replacements.get(plan_asset_id, plan_asset_id)
+            current_id = replacements.get(plan_asset_id, plan_asset_id)
+            return current_id
         character_ids_by_person: Dict[str, List[str]] = {}
         for character in resolved_assets["characters"]:
             character_ids_by_person.setdefault(character.base_character_id or character.id, []).append(character.id)
@@ -3771,7 +3828,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 season=binding.season if binding else None,
                 weather=binding.weather if binding else None,
                 atmosphere=scene.environment_atmosphere,
-                prop_ids=[current_asset_id("prop", item) for item in scene.prop_ids],
+                prop_ids=[current_id for item in scene.prop_ids
+                          if (current_id := current_asset_id("prop", item))],
             ))
             for beat in scene.beats:
                 for shot in beat.shots:
@@ -3787,8 +3845,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                               for asset_id in matching_character_assets(
                                                   cast.person_id, cast.era_variant_id)]))
                     shot_prop_ids = list(dict.fromkeys(
-                        current_asset_id("prop", item) for item in
-                        shot.prop_ids + [b.prop_id for b in prop_items]))
+                        current_id for item in shot.prop_ids + [b.prop_id for b in prop_items]
+                        if (current_id := current_asset_id("prop", item))))
                     shot_scene_binding = shot.scene_binding
                     if isinstance(shot_scene_binding, dict):
                         shot_scene_binding = DirectorPlanSceneBinding.model_validate(shot_scene_binding)
@@ -3830,19 +3888,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                         item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
                     for prop in prop_items:
                         item = props.setdefault((prop.prop_id, scene.scene_id, prop.state),
-                            EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop.prop_id),
+                            EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop.prop_id) or prop.prop_id,
                                 plan_prop_id=prop.prop_id, state=prop.state, scene_ids=[scene.scene_id]))
                         item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
                     for prop_id in shot.prop_ids:
                         if any(prop.prop_id == prop_id for prop in prop_items):
                             continue
                         item = props.setdefault((prop_id, scene.scene_id, "present"),
-                            EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop_id),
+                            EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop_id) or prop_id,
                                 plan_prop_id=prop_id, scene_ids=[scene.scene_id]))
                         item.shot_ids = list(dict.fromkeys(item.shot_ids + [shot.shot_id]))
             for prop_id in scene.prop_ids:
                 props.setdefault((prop_id, scene.scene_id, "present"),
-                    EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop_id),
+                    EpisodeVisualPropContext(prop_id=current_asset_id("prop", prop_id) or prop_id,
                         plan_prop_id=prop_id, scene_ids=[scene.scene_id]))
         return EpisodeVisualContext(
             source_revision=plan.source_revision,
@@ -3871,8 +3929,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                for item in shot.character_ids)
             if person_id not in plan_people:
                 raise ValueError("Person is not in the confirmed shooting plan")
-            if asset_id and asset_id not in {item.id for item in self.resolve_episode_assets(script)["characters"]}:
-                raise ValueError("Character asset is not available in this episode")
+            if asset_id and asset_id not in {item.id for item in script.characters}:
+                raise ValueError("Character asset is not available in episode; shared assets are reference-only")
             if asset_id:
                 script.episode_person_asset_bindings[person_id] = asset_id
                 script.retired_plan_asset_ids["character"] = [item for item in
@@ -3908,8 +3966,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not requested_ids or any(not item or item not in source_ids for item in requested_ids):
                 raise ValueError("Asset ID is not in the confirmed shooting plan")
             collection = "scenes" if asset_type == "scene" else "props"
-            if asset_id not in {item.id for item in self.resolve_episode_assets(script)[collection]}:
-                raise ValueError("Asset is not available in this episode")
+            if asset_id not in {item.id for item in getattr(script, collection)}:
+                raise ValueError("Asset is not available in episode; shared assets are reference-only")
             replacements = (script.episode_scene_asset_replacements if asset_type == "scene"
                             else script.episode_prop_asset_replacements)
             for plan_asset_id in requested_ids:
@@ -3943,12 +4001,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                             prop_sources.add(prop_id)
                         for binding in shot.prop_bindings:
                             prop_sources.add(binding.prop_id)
-            resolved = self.resolve_episode_assets(script)
+            resolved = {
+                "characters": script.characters,
+                "scenes": script.scenes,
+                "props": script.props,
+            }
+            resolved_all = self.resolve_episode_assets(script)
             for asset_type, sources, replacements, collection in (
                 ("scene", scene_sources, script.episode_scene_asset_replacements, "scenes"),
                 ("prop", prop_sources, script.episode_prop_asset_replacements, "props"),
             ):
-                available_ids = {item.id for item in resolved[collection]}
+                available_ids = ({item.id for item in resolved[collection]} |
+                                 {item.id for item in resolved_all[collection]})
                 for source_id in sources:
                     if source_id in script.retired_plan_asset_ids.get(asset_type, []):
                         replacements.pop(source_id, None)
@@ -3963,7 +4027,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             unresolved_people = {item.person_id: item for item in context.characters
                                  if not item.character_asset_ids}
             if unresolved_people:
-                resolved_characters = self.resolve_episode_assets(script)["characters"]
+                resolved_characters = script.characters
                 available_ids = {item.id for item in resolved_characters}
                 profile = self.effective_director_profile(script)
                 profile_people = {item.person_id: item for item in profile.story_map.people} \
@@ -3984,10 +4048,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                 context = self.project_episode_visual_context(script_id)
             previous = {(b.asset_type, b.asset_id): b for b in script.episode_asset_bindings}
             desired: List[EpisodeAssetBinding] = []
+            unresolved: List[Dict[str, Any]] = []
             unbound_scenes = []
             scene_bindings: Dict[str, EpisodeAssetBinding] = {}
             def add_scene_binding(asset_id: str, scene_id: str,
                                   shot_id: Optional[str] = None) -> None:
+                mapped_scene_ids = set(script.episode_scene_asset_replacements.values())
+                if asset_id not in {item.id for item in script.scenes} and asset_id not in mapped_scene_ids:
+                    unresolved.append({
+                        "asset_type": "scene", "asset_id": asset_id,
+                        "scene_id": scene_id, "shot_id": shot_id,
+                        "reason": "episode_asset_unbound",
+                    })
+                    return
                 item = scene_bindings.get(asset_id)
                 if item is None:
                     item = EpisodeAssetBinding(
@@ -4022,6 +4095,20 @@ class ComicGenPipeline(StudioOwnerMixin):
                 for entry in items:
                     asset_ids = entry.character_asset_ids if asset_type == "character" else [getattr(entry, id_field)]
                     for asset_id in asset_ids:
+                        mapped_prop_ids = set(script.episode_prop_asset_replacements.values())
+                        if not asset_id or (asset_type == "prop" and asset_id not in {item.id for item in script.props}
+                                             and asset_id not in mapped_prop_ids):
+                            # Keep the original plan ID in context, but do not
+                            # create a binding for a missing/shared asset.
+                            unresolved.append({
+                                "asset_type": asset_type,
+                                "person_id" if asset_type == "character" else "plan_prop_id":
+                                    entry.person_id if asset_type == "character" else entry.plan_prop_id,
+                                "scene_ids": entry.scene_ids,
+                                "shot_ids": entry.shot_ids,
+                                "reason": "episode_asset_unbound",
+                            })
+                            continue
                         binding = grouped.setdefault(asset_id, EpisodeAssetBinding(
                             asset_type=asset_type, asset_id=asset_id,
                             source_plan_revision=context.shooting_plan_revision,
@@ -4052,7 +4139,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "scene": {item.id for item in resolved["scenes"]},
                 "prop": {item.id for item in resolved["props"]},
             }
-            unresolved = [item.model_dump() for item in desired if item.asset_id not in available[item.asset_type]]
+            unresolved.extend(item.model_dump() for item in desired if item.asset_id not in available[item.asset_type])
             unresolved.extend(unbound_scenes)
             unresolved.extend({"asset_type": "character", "person_id": item.person_id,
                                "scene_ids": item.scene_ids, "reason": "era_variant_unresolved"}

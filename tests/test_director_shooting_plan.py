@@ -612,6 +612,42 @@ def test_sync_does_not_recreate_missing_scene_and_prop_ids():
     assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
 
 
+def test_plan_generation_excludes_series_assets_from_entity_candidates():
+    pipeline, script = make_pipeline()
+    series_prop = Prop(id="series-sword", name="长剑", description="系列共享参考")
+    pipeline.resolve_episode_assets.return_value["props"].append(series_prop)
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = valid_chunk()
+
+    pipeline.preview_director_shooting_plan("film")
+
+    entities = pipeline.script_processor.plan_director_shooting_chunk.call_args.args[1]
+    assert [item["id"] for item in entities["props"]] == ["ticket"]
+
+
+def test_plan_rebinding_rejects_series_asset_id():
+    pipeline, script = make_pipeline()
+    series_prop = Prop(id="series-sword", name="长剑", description="系列共享参考")
+    pipeline.resolve_episode_assets.return_value["props"].append(series_prop)
+    plan = make_plan(pipeline)
+    plan.scenes[0].prop_ids = ["old-prop"]
+    plan.scenes[0].beats[0].shots[0].prop_ids = ["old-prop"]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    with pytest.raises(ValueError, match="shared assets are reference-only"):
+        pipeline.bind_episode_plan_asset("film", "prop", "old-prop", "series-sword", 1)
+
+
+def test_plan_confirmation_rejects_series_asset_id():
+    pipeline, script = make_pipeline()
+    series_prop = Prop(id="series-sword", name="长剑", description="系列共享参考")
+    pipeline.resolve_episode_assets.return_value["props"].append(series_prop)
+    plan = make_plan(pipeline)
+    plan.scenes[0].prop_ids = ["series-sword"]
+    plan.scenes[0].beats[0].shots[0].prop_ids = ["series-sword"]
+    with pytest.raises(ValueError, match="cannot reference series assets directly"):
+        pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+
 def test_confirmed_plan_preserves_identity_but_explicit_deletion_does_not_restore_assets():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
