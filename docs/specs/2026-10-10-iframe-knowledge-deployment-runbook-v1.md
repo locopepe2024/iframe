@@ -6,7 +6,7 @@ Status: prepared, not deployed. Date: 2026-10-10.
 
 - Release source is a clean, GitHub-pushed `feature/` or `fix/` branch containing the current production changes and merged knowledge API. The host release script rejects `main` and unpushed revisions.
 - TencentDB `iframe_knowledge` has migrations v1/v2; the iFrame host can reach its private endpoint with CA-verified TLS.
-- COS bucket `iframe-knowledge-1451819552` is private. Use a dedicated CAM identity limited to the bucket's `knowledge/` prefix; do not reuse a general provider key for the knowledge runtime.
+- COS bucket `iframe-knowledge-1451819552` is private. The dedicated `iframe-knowledge-cos-app` CAM identity is limited to the bucket's `knowledge/` prefix; scoped write/read passed and a write outside the prefix was denied. The application relies on the bucket's private default ACL and does not request object ACL changes.
 - Host `/srv/lumenx/runtime/knowledge-pg-provision/` is mode `0700`. The four files `knowledge-pg-app-password`, `knowledge-pg-ca.pem`, `knowledge-cos-secret-id`, `knowledge-cos-secret-key` are regular files, not symlinks, with mode `0600`. Never print their contents.
 - Managed `/srv/lumenx/repo/.env` is mode `0600` and defines `IFRAME_KNOWLEDGE_PG_HOST`, `IFRAME_KNOWLEDGE_PG_USER`, `IFRAME_KNOWLEDGE_BLOB_BACKEND=cos`, `IFRAME_KNOWLEDGE_COS_REGION`, `IFRAME_KNOWLEDGE_COS_BUCKET`, and these exact container paths:
   - `IFRAME_KNOWLEDGE_PG_PASSWORD_FILE=/run/iframe-knowledge/knowledge-pg-app-password`
@@ -26,6 +26,6 @@ Status: prepared, not deployed. Date: 2026-10-10.
 
 ## Outstanding gates
 
-- The current COS bucket was checked with an administrative credential; dedicated CAM identity and scoped policy remain to be configured and verified.
+- The scoped COS identity exists; verify its key rotation and revoke any stale key before production ingestion.
 - Database and COS backup/restore must be exercised together before production ingestion. The existing release snapshot covers Studio files, not PostgreSQL/COS.
 - Web collection workers, Playground Agent tool calls, and public curator APIs are separate later slices. This release does not claim those capabilities.
