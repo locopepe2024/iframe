@@ -42,10 +42,51 @@ jobs:
           pip install -r requirements-docker.txt pytest
 
       - name: Run Python test suite
-        run: python -m pytest
+        run: python -m pytest --ignore=tests/test_recreation.py
 
       - name: Validate model catalog
         run: python scripts/validate_model_catalog.py
+
+  recreation-media-tests:
+    # The full module must run where BOTH fixture and application FFmpeg calls
+    # execute. Never run fork PR code on the media host.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, iframe-media-ffmpeg]
+    timeout-minutes: 20
+    concurrency:
+      group: iframe-recreation-media
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify media FFmpeg runtime
+        run: |
+          test "$(id -un)" = iframe-ci
+          test "$(command -v ffmpeg)" = /usr/bin/ffmpeg
+          test "$(command -v ffprobe)" = /usr/bin/ffprobe
+          hostname
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Create isolated Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/recreation-venv"
+          "$RUNNER_TEMP/recreation-venv/bin/python" -m pip install -r requirements-docker.txt pytest
+
+      - name: Run recreation tests on media
+        run: |
+          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recreation-media-results
+          path: ${{ runner.temp }}/recreation-results.xml
+          if-no-files-found: ignore
 
   frontend-playground-tests:
     runs-on: ubuntu-latest
