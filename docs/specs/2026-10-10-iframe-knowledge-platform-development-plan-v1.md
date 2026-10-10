@@ -4,7 +4,9 @@ Status: implementation started; slices 0 and 1 are partial. Date: 2026-10-10. Re
 
 ## Shared database provisioning (2026-10-10)
 
-The database infrastructure for slice 1 is provisioned; the initial knowledge schema and owner collection API are implemented, while COS storage, worker and Agent integration are not. TencentDB for PostgreSQL instance `postgres-eshztgx9` (`iframe-knowledge-pg`) runs PostgreSQL 16.15 in `ap-tokyo-2`, VPC `vpc-ecewv8hk`, subnet `subnet-roqyqahz`, at private address `10.203.0.4:5432`. It uses pay-as-you-go `pg.it.small2` (1 vCPU, 2 GiB RAM) with 10 GiB storage. The price inquiry returned `76 CNY` as a raw API value; its billing unit was not established by that response, so no monthly estimate is asserted here.
+The database infrastructure for slice 1 is provisioned; the initial knowledge schema, owner collection/API, and COS storage adapter are implemented, while the worker and Agent integration are not. TencentDB for PostgreSQL instance `postgres-eshztgx9` (`iframe-knowledge-pg`) runs PostgreSQL 16.15 in `ap-tokyo-2`, VPC `vpc-ecewv8hk`, subnet `subnet-roqyqahz`, at private address `10.203.0.4:5432`. It uses pay-as-you-go `pg.it.small2` (1 vCPU, 2 GiB RAM) with 10 GiB storage. The price inquiry returned `76 CNY` as a raw API value; its billing unit was not established by that response, so no monthly estimate is asserted here.
+
+On 2026-10-10, a dedicated private COS bucket `iframe-knowledge-1451819552` was created in `ap-tokyo`. Its ACL had no public grant, and a temporary private object passed write/read/delete verification. The COS adapter is implemented in source, but scoped runtime credentials are not yet configured and the online API still runs an older image. No user knowledge media has been imported into the bucket.
 
 Dedicated security group `sg-cykc6y1s` has one inbound rule: TCP 5432 from the iFrame host `10.203.0.10/32`. The instance has no assigned public endpoint. Instance SSL is enabled; an authenticated connection from the iFrame host verified the TencentDB CA and reported `pg_stat_ssl.ssl = true`. Database `iframe_knowledge` and login `iframe_knowledge_app` were created, and a TLS login to that database passed. Migration v1 created the initial knowledge tables. The application has not been deployed or configured to use the database.
 
@@ -20,7 +22,7 @@ First demo on a shared deployment: a curator publishes an authorized illustrated
 |---|---|---|
 | Source/API contract | Implemented in source | Another Agent submits text, image and video bytes with locator/labels/annotation, reads the source, then searches and retrieves authorized media through OpenAPI. |
 | Database behavior | Verified on TencentDB with rollback fixtures | Repeat after each migration: published public plus own private hits, no foreign private hit/media, idempotent and changed revisions, no test rows left behind. |
-| Shared media durability | Adapter coded; deployment open | Private COS bucket and scoped credentials; API and independent worker both access the same bytes; metadata and COS backup/restore tested together. |
+| Shared media durability | Private bucket and adapter verified; runtime open | Scoped credentials; API and independent worker both access the same bytes; metadata and COS backup/restore tested together. |
 | Online Agent use | Open | Deploy API through the normal release flow; two real identities complete the contract via HTTP, then register bounded Playground tools with real source citations. |
 
 The first two gates do not constitute online acceptance. Local private blob storage is a single-host development bridge and must be replaced before shared production ingestion.
@@ -66,7 +68,7 @@ For the first demo, choose one source URL that permits capture and one legally u
 
 ## Open decisions before implementation
 
-- Shared target is fixed: TencentDB for PostgreSQL, private Tencent Cloud COS, iFrame API and an independent worker. PostgreSQL is provisioned in Tokyo; COS, worker, deployment credentials and a verified restore procedure remain open. Cost ceiling and retention must be reviewed before ingesting production data.
+- Shared target is fixed: TencentDB for PostgreSQL, private Tencent Cloud COS, iFrame API and an independent worker. PostgreSQL and a private COS bucket are provisioned in Tokyo; the worker, scoped deployment credentials and a verified restore procedure remain open. Cost ceiling and retention must be reviewed before ingesting production data.
 - Which sources may be captured in the demo, what rights allow storage/quoting/visual generation, and whether any require authenticated access.
 - Which public-search provider and source allowlist can support the discovery demo, including its terms, cost and candidate metadata limits; explicit URL import remains available if discovery is unavailable.
 - Which creative action first consumes accepted knowledge: script check, confirmed Director draft, or art asset draft. The design supports all, but one should be selected for the first vertical slice.
