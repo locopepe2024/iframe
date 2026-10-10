@@ -658,8 +658,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         row, session = read_session(db, owner, sid)
         if body.companion_skills and session["model"] == "minimax-h3-ir":
             raise HTTPException(422, "H3 提示词优化模型不支持陪护技能，请切换普通 Chat 模型")
-        if body.knowledge_search and (body.companion_skills or session["model"] == "minimax-h3-ir"):
-            raise HTTPException(422, "当前对话模式不支持知识库检索")
+        if body.knowledge_search and session["model"] == "minimax-h3-ir":
+            raise HTTPException(422, "H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型")
         if row["busy"] > time.time():
             raise HTTPException(409, "当前会话正在回复")
         request_timeout = h3_ir_timeout_seconds() if session["model"] == "minimax-h3-ir" else chat_timeout_seconds()

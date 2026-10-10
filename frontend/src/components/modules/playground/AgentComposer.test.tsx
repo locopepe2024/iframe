@@ -109,6 +109,17 @@ it('opens the knowledge panel and changes the search setting', () => {
     expect(within(dialog).getByDisplayValue('印刷政策')).toBeInTheDocument();
 });
 
+it('explains that H3 prompt optimization cannot search the knowledge base', () => {
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} agent={{
+        active: true, model: 'minimax-h3-ir', models: [], setModel: vi.fn(),
+        knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn(),
+    }} />);
+    fireEvent.click(screen.getByRole('button', { name: '知识库' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('checkbox', { name: '检索公共库和个人库' })).toBeDisabled();
+    expect(within(dialog).getByText(/H3 提示词优化模型不支持知识库检索/)).toBeInTheDocument();
+});
+
 it('preserves long drafts across modes and submits Chat beyond sixteen thousand characters', () => {
     const send = vi.fn();
     const agent = { active: true, model: 'chat', models: [], setModel: vi.fn(), knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn() };

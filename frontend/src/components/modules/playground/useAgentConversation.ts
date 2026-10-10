@@ -112,6 +112,9 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   useEffect(() => {
     if (models.length && !models.some(m => m.api_model_id === model)) setModel(models[0].api_model_id);
   }, [models, model]);
+  useEffect(() => {
+    if (model === 'minimax-h3-ir') setKnowledgeSearch(false);
+  }, [model]);
   async function removeMessage(id: string) {
     if (!sessionId) return;
     try {
@@ -123,6 +126,10 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     if (!sessionId || sending.current || remoteBusy || loading || modelsLoading || modelsError || !models.some(m => m.api_model_id === model)) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
+    if (knowledgeSearch && model === 'minimax-h3-ir') {
+      setError('H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型');
+      return;
+    }
     sending.current = true; setBusy(true); setError('');
     usePlaygroundStore.getState().setPrompt('');
     try {

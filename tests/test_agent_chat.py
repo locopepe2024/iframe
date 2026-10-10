@@ -173,6 +173,23 @@ def test_knowledge_search_uses_authenticated_owner_and_persists_citations(setup,
     assert '知识库检索结果' not in completion.call_args.args[2][0]['content']
 
 
+def test_knowledge_search_works_with_companion_skills_on_normal_chat(setup, monkeypatch):
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    search = Mock(return_value=[{'unit_id': 'unit-a', 'revision_id': 'revision-a'}])
+    completion = Mock(return_value='英伟达资料 [unit-a]')
+    monkeypatch.setattr(agent, 'search_knowledge', search)
+    monkeypatch.setattr(agent, 'complete', completion)
+
+    agent.send(sid, agent.MessageCreate(content='介绍英伟达', companion_skills=['listening'],
+                                       knowledge_search=True, knowledge_query='英伟达'), setup)
+
+    search.assert_called_once_with(setup.owner_profile_id, '英伟达')
+    history = completion.call_args.args[2]
+    assert agent.COMPANION_SKILL_INSTRUCTIONS['listening'] in history[0]['content']
+    assert 'unit-a' in history[1]['content']
+    assert agent.messages(sid, setup)['messages'][-1]['knowledge_citations'] == search.return_value
+
+
 def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, monkeypatch):
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     monkeypatch.setattr(agent, 'search_knowledge', Mock(side_effect=HTTPException(503, '知识库检索暂不可用')))
@@ -184,12 +201,15 @@ def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, 
         row, _ = agent.read_session(db, setup.owner_profile_id, sid)
         assert row['busy'] == 0
     with pytest.raises(HTTPException) as error:
-        agent.send(sid, agent.MessageCreate(content='查询政策', knowledge_search=True,
-                                            companion_skills=['memory']), setup)
-    assert error.value.status_code == 422
-    with pytest.raises(HTTPException) as error:
         agent.send(sid, agent.MessageCreate(content='查询政策', knowledge_query='政策'), setup)
     assert error.value.status_code == 422
+
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'minimax-h3-ir', 'capabilities': ['chat']}])
+    h3_sid = agent.create(agent.SessionCreate(model='minimax-h3-ir'), setup)['session']['id']
+    with pytest.raises(HTTPException, match='H3 提示词优化模型不支持知识库检索') as error:
+        agent.send(h3_sid, agent.MessageCreate(content='查询政策', knowledge_search=True), setup)
+    assert error.value.status_code == 422
+    assert agent.messages(h3_sid, setup)['messages'] == []
 
 
 def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):

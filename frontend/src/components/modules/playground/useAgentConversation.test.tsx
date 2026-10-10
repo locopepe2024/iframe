@@ -44,6 +44,19 @@ it('sends an explicit owner-scoped knowledge search request', async () => {
     hook.unmount();
 });
 
+it('clears knowledge search when switching to H3 prompt optimization', async () => {
+    mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }), [
+        ...models, { id: 'h3', api_model_id: 'minimax-h3-ir', display_name: 'MiniMax H3 IR' },
+    ]);
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    act(() => hook.result.current.setKnowledgeSearch(true));
+    expect(hook.result.current.knowledgeSearch).toBe(true);
+    act(() => hook.result.current.setModel('minimax-h3-ir'));
+    await waitFor(() => expect(hook.result.current.knowledgeSearch).toBe(false));
+    hook.unmount();
+});
+
 const models = [{ id: 'sol', api_model_id: 'gpt-5.6-sol', display_name: 'GPT 5.6 Sol' }];
 
 function deferred<T>() {
@@ -53,9 +66,9 @@ function deferred<T>() {
     return { promise, resolve, reject };
 }
 
-function mockConversation(messageRequest: Promise<unknown>) {
+function mockConversation(messageRequest: Promise<unknown>, availableModels = models) {
     vi.mocked(agentRequest).mockImplementation((path, method) => {
-        if (path === '/models') return Promise.resolve({ models });
+        if (path === '/models') return Promise.resolve({ models: availableModels });
         if (path.startsWith('/playground/')) return Promise.resolve({ session: { model: 'gpt-5.6-sol' }, messages: [], busy_until: 0 });
         if (path === '/sessions' && method === 'POST') return Promise.resolve({ session: { id: 'chat-session' } });
         if (path === '/sessions/chat-session/messages' && method === 'POST') return messageRequest as Promise<never>;
