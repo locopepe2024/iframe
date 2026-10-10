@@ -27,6 +27,9 @@ by name, so it creates an episode-local empty Character for that person.
   sync leaves the person unresolved for explicit selection instead of creating
   a third asset. Repeated sync reuses a valid binding. Deleting its asset makes
   the next sync create a new ID; old plan revisions and storyboard pins remain.
+- Force-deleting a series Character clears episode person bindings to its ID.
+  The current asset requirements view omits stale historical handoff bindings;
+  confirmed plan snapshots remain available for audit.
 - Users can replace or clear a choice. Sync groups the resulting shot and scene
   requirements under the selected asset ID.
 - Explicit choices take precedence over Director story-map and base-ID

@@ -727,10 +727,11 @@ function ShootingPlanAssetRequirements({
         people.set(character.person_id, item);
     }
     const representedCharacterIds = new Set(Array.from(people.values()).flatMap(item => item.assetIds));
+    const currentBindings = bindings.filter(item => item.status !== "stale");
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
-        { type: "character", label: "角色", items: bindings.filter(item => item.asset_type === "character" && !representedCharacterIds.has(item.asset_id)) },
-        { type: "scene", label: "场景", items: bindings.filter(item => item.asset_type === "scene") },
-        { type: "prop", label: "道具", items: bindings.filter(item => item.asset_type === "prop") },
+        { type: "character", label: "角色", items: currentBindings.filter(item => item.asset_type === "character" && !representedCharacterIds.has(item.asset_id)) },
+        { type: "scene", label: "场景", items: currentBindings.filter(item => item.asset_type === "scene") },
+        { type: "prop", label: "道具", items: currentBindings.filter(item => item.asset_type === "prop") },
     ];
     const getAsset = (type: "character" | "scene" | "prop", id: string) => {
         const list = type === "character" ? project.characters : type === "scene" ? project.scenes : project.props;
@@ -745,7 +746,7 @@ function ShootingPlanAssetRequirements({
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
                     <p className="mt-1 text-xs text-text-secondary">同步时会为缺失的人物创建空角色资产，不会自动生成图片。</p>
                 </div>
-                <span className="text-xs text-text-muted">{bindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
+                <span className="text-xs text-text-muted">{currentBindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
                 {groups.map(group => (
@@ -777,7 +778,7 @@ function ShootingPlanAssetRequirements({
                                                 <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", requirement.assetIds[0])}>打开资产</button>
                                             )}
                                         </div>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (bindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "待生成") : "待关联角色资产"}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "待生成") : "待关联角色资产"}</p>
                                         <select aria-label={`关联人物 ${personId} 的角色资产`}
                                             value={project.episode_person_asset_bindings?.[personId] ?? ""}
                                             disabled={bindingPersonId !== null}

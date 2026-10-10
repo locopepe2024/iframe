@@ -52,6 +52,31 @@ def test_force_delete_removes_episode_references():
     pipeline._save_data.assert_called_once()
 
 
+def test_force_delete_clears_explicit_person_binding_without_changing_plan_history():
+    pipeline, series, episode = make_pipeline()
+    pipeline._save_data = Mock()
+    episode.episode_person_asset_bindings = {"person": "shared"}
+    plan = DirectorShootingPlan.model_validate({
+        "source_revision": 1, "director_profile_revision": 1,
+        "director_profile_hash": "profile", "effective_style_hash": "style",
+        "scenes": [{"scene_id": "scene", "order": 0,
+                    "beats": [{"beat_id": "beat", "order": 0,
+                               "shots": [{"shot_id": "shot", "order": 0,
+                                          "cast_bindings": [{"person_id": "person"}]}]}]}],
+    })
+    episode.director_shooting_plan_revisions = [
+        DirectorShootingPlanRevision(revision=1, content_hash="plan", plan=plan, confirmed_at=1)]
+
+    with pytest.raises(LibraryAssetInUseError):
+        pipeline.delete_series_asset(series.id, "character", "shared")
+    pipeline.delete_series_asset(series.id, "character", "shared", force=True)
+
+    assert episode.episode_person_asset_bindings == {}
+    assert episode.director_shooting_plan_revisions[0].plan == plan
+    assert series.characters == []
+    pipeline._save_data.assert_called_once()
+
+
 def test_confirmed_shooting_plan_references_require_force_and_survive_deletion():
     pipeline, series, episode = make_pipeline()
     series.scenes.append(Scene(id="scene-shared", name="Room", description="Room"))

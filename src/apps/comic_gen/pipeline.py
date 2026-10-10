@@ -8531,6 +8531,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             references = []
             plan_references = []
             for episode in self.get_series_episodes(series_id):
+                if asset_type == "character" and asset_id in episode.episode_person_asset_bindings.values():
+                    references.append({"owner_kind": "project", "owner_id": episode.id,
+                                       "owner_title": episode.title, "person_asset_id": asset_id})
                 for frame in episode.frames:
                     used = (frame.scene_id == asset_id if asset_type == "scene" else
                             asset_id in (frame.character_ids if asset_type == "character" else frame.prop_ids))
@@ -8587,6 +8590,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                             frame.prop_ids = [item for item in frame.prop_ids if item != asset_id]
                     episode.episode_asset_bindings = [binding for binding in episode.episode_asset_bindings
                                                       if not (binding.asset_type == asset_type and binding.asset_id == asset_id)]
+                    if asset_type == "character":
+                        episode.episode_person_asset_bindings = {
+                            person_id: bound_id for person_id, bound_id in episode.episode_person_asset_bindings.items()
+                            if bound_id != asset_id
+                        }
                 self._save_data()
             setattr(series, collections[asset_type], [item for item in collection if item.id != asset_id])
             series.updated_at = time.time()
