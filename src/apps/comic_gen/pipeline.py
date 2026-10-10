@@ -35,6 +35,7 @@ from .models import (
     EpisodeVisualPropContext,
     EpisodeVisualShotContext,
     EpisodeAssetBinding,
+    AssetRevisionPin,
     ArtifactLineage,
     SourceRange,
     ScriptSourceRevision,
@@ -51,6 +52,7 @@ from .models import (
     merge_director_profile_patch,
     normalize_director_profile_draft,
 )
+from .asset_revisions import commit_asset_revision
 from .llm import ScriptProcessor
 from .structured_evidence import source_version
 from .assets import AssetGenerator
@@ -118,6 +120,22 @@ def _director_style_hash(style: Dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(
         style, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode()).hexdigest()
+
+
+def _atomic_json_write(path: str, payload: Any) -> None:
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=directory, prefix='.assets-', delete=False) as f:
+            temp_path = f.name
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
@@ -202,6 +220,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self.series_store: Dict[str, Series] = self._load_series_data()
         # Project-independent global asset library (lowest resolver layer).
         self.library_store: GlobalAssetLibrary = self._load_library_data()
+        self._initialize_asset_revisions()
         self._migrate_legacy_studio_owners()
         self._repair_series_bindings()
         self._migrate_uploaded_asset_statuses()
@@ -617,6 +636,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._unloaded_scripts[script_id] = payload
         return scripts
 
+    def _initialize_asset_revisions(self) -> None:
+        for owner in (*self.scripts.values(), *self.series_store.values(), self.library_store):
+            for asset in owner.characters + owner.scenes + owner.props:
+                if not asset.asset_revisions:
+                    commit_asset_revision(asset)
+
     def _save_data(self):
         """Save data with thread lock to prevent concurrent write issues."""
         with self._save_lock:
@@ -624,6 +649,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             try:
                 if getattr(self, "_project_load_error", False):
                     raise RuntimeError("Project store failed to load; refusing to overwrite it")
+                for script in self.scripts.values():
+                    for asset in script.characters + script.scenes + script.props:
+                        commit_asset_revision(asset)
                 os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
                 payload = {**getattr(self, "_unloaded_scripts", {}),
                            **{k: v.dict() for k, v in self.scripts.items()}}
@@ -636,6 +664,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 os.replace(temp_path, self.data_file)
             except Exception as e:
                 logger.error(f"Failed to save data: {e}")
+                raise
             finally:
                 if temp_path and os.path.exists(temp_path):
                     os.unlink(temp_path)
@@ -3875,7 +3904,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         }
         result = []
         ids = [("scene", frame.scene_id)] + [("character", item) for item in frame.character_ids] + [("prop", item) for item in frame.prop_ids]
+        if frame.reference_package.confirmed:
+            ids.extend((item.asset_type, item.asset_id)
+                       for item in frame.reference_package.asset_revision_pins)
+        ids = list(dict.fromkeys((asset_type, asset_id) for asset_type, asset_id in ids if asset_id))
         for asset_type, asset_id in ids:
+            pinned = [item for item in frame.reference_package.asset_revision_pins
+                      if item.asset_type == asset_type and item.asset_id == asset_id]
+            if frame.reference_package.confirmed and pinned:
+                result.extend({
+                    "asset_type": asset_type, "asset_id": asset_id,
+                    "revision": item.revision, "variant_id": item.variant_id,
+                    "media_id": item.media_id, "storage_key": item.storage_key,
+                    "source_scope": item.source_scope,
+                    "source": "pinned_asset_revision",
+                    "confirmation_status": item.confirmation_status,
+                } for item in pinned)
+                continue
             binding = bindings.get((asset_type, asset_id))
             asset = by_type[asset_type].get(asset_id)
             if binding and binding.selected_variant_id:
@@ -3892,6 +3937,76 @@ class ComicGenPipeline(StudioOwnerMixin):
         return {"frame_id": frame_id, "scene_id": frame.scene_id, "shot_id": frame.shot_id,
                 "context_status": script.episode_visual_context.context_status if script.episode_visual_context else "missing",
                 "assets": result}
+
+    def _pin_frame_assets(self, script: Script, frame: StoryboardFrame,
+                          package: Optional[Any] = None) -> List[AssetRevisionPin]:
+        package = package or frame.reference_package
+        pins: List[AssetRevisionPin] = []
+        refs = [("scene", frame.scene_id)]
+        refs.extend(("character", item) for item in frame.character_ids)
+        refs.extend(("prop", item) for item in frame.prop_ids)
+        refs.extend(("scene", item.source_asset_id) for item in package.references
+                    if item.kind == "scene" and item.source_asset_id)
+        for asset_type, asset_id in dict.fromkeys(refs):
+            if not asset_id:
+                continue
+            asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if asset is None:
+                raise ValueError(f"Cannot pin missing {asset_type} asset {asset_id}")
+            revision = commit_asset_revision(asset)
+            if source == "script":
+                container_id = script.id
+                scope = "project"
+            elif source == "series":
+                container_id = script.series_id
+                scope = "series"
+            else:
+                container_id = script.owner_profile_id
+                scope = "global"
+            variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+            selected_ids = frame.workbench_reference_variant_ids.get(asset_id, [])
+            package_refs = [item for item in package.references
+                            if asset_type == "scene" and item.kind == "scene"
+                            and item.source_asset_id == asset_id]
+            if package_refs:
+                selected_ids = []
+                for ref in package_refs:
+                    variant_id = ref.source_variant_id
+                    if not variant_id:
+                        matches = [item.id for item in variants.values()
+                                   if (ref.media_id and item.media_id == ref.media_id)
+                                   or ref.url in (item.url, image_variant_storage_key(item))]
+                        if len(matches) != 1:
+                            raise ValueError(f"Cannot resolve referenced variant on scene {asset_id}")
+                        variant_id = matches[0]
+                    if (ref.media_id and variant_id in variants
+                            and variants[variant_id].media_id != ref.media_id):
+                        raise ValueError(f"Referenced media does not match variant {variant_id}")
+                    variant = variants.get(variant_id)
+                    if (variant and not ref.media_id and ref.url not in
+                            (variant.url, image_variant_storage_key(variant))):
+                        raise ValueError(f"Referenced URL does not match variant {variant_id}")
+                    selected_ids.append(variant_id)
+                selected_ids = list(dict.fromkeys(selected_ids))
+            if not selected_ids:
+                binding = next((item for item in script.episode_asset_bindings
+                                if item.asset_type == asset_type and item.asset_id == asset_id
+                                and item.status == "accepted"), None)
+                selected_id = (binding.selected_variant_id if binding and binding.selected_variant_id
+                               else self._selected_asset_variant_id(asset, asset_type))
+                selected_ids = [selected_id] if selected_id else []
+            for variant_id in selected_ids or [None]:
+                variant = variants.get(variant_id) if variant_id else None
+                if variant_id and variant is None:
+                    raise ValueError(f"Cannot pin missing variant {variant_id} on {asset_type} {asset_id}")
+                pins.append(AssetRevisionPin(
+                    asset_type=asset_type, asset_id=asset_id, source_scope=scope,
+                    source_container_id=container_id, revision=revision.revision,
+                    variant_id=variant_id, media_id=variant.media_id if variant else None,
+                    storage_key=image_variant_storage_key(variant),
+                    confirmation_status=revision.confirmation_status,
+                ))
+        return pins
 
     @staticmethod
     def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
@@ -4760,6 +4875,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+
+        asset_refs_changed = (
+            (kwargs.get("scene_id") is not None and kwargs["scene_id"] != frame.scene_id)
+            or (kwargs.get("character_ids") is not None
+                and kwargs["character_ids"] != frame.character_ids)
+        )
         
         # Update only provided fields
         if kwargs.get('image_prompt') is not None:
@@ -4799,9 +4920,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.negative_prompt_override = kwargs['negative_prompt_override']
         if kwargs.get('reference_package') is not None:
             package = kwargs['reference_package']
+            if package.confirmed:
+                package.asset_revision_pins = self._pin_frame_assets(script, frame, package)
             package.revision = max(frame.reference_package.revision + 1, package.revision)
             package.updated_at = time.time()
             frame.reference_package = package
+        elif asset_refs_changed and frame.reference_package.confirmed:
+            frame.reference_package.confirmed = False
+            frame.reference_package.asset_revision_pins = []
+            frame.reference_package.revision += 1
+            frame.reference_package.updated_at = time.time()
         
         self._save_data()
         return script
@@ -5339,6 +5467,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         if source_frame:
             package = source_frame.reference_package
             storyboard_reference_revision = package.revision
+            asset_revision_pins = (package.asset_revision_pins if package.confirmed
+                                   else self._pin_frame_assets(script, source_frame))
             reference_media_ids.extend(item for item in (
                 package.first_frame_media_id,
                 package.last_frame_media_id,
@@ -5348,6 +5478,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             selected_id = rendered.selected_id if rendered else None
             selected = next((item for item in (rendered.variants if rendered else []) if item.id == selected_id), None)
             input_media_id = selected.media_id if selected else None
+        else:
+            asset_revision_pins = []
 
         task = VideoTask(
             id=task_id,
@@ -5381,6 +5513,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
             reference_media_ids=list(dict.fromkeys(reference_media_ids)),
+            asset_revision_pins=[item.model_copy(deep=True) for item in asset_revision_pins],
             storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],
             ratio=ratio,
@@ -6888,6 +7021,107 @@ class ComicGenPipeline(StudioOwnerMixin):
             ]
         return [getattr(target_asset, "image_asset", None)]
 
+    def get_asset_revisions(self, script_id: str, asset_id: str, asset_type: str) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+        if asset is None:
+            raise ValueError("Asset not found")
+        commit_asset_revision(asset)
+        return {"asset_type": asset_type, "asset_id": asset_id, "source": source,
+                "current_revision": asset.asset_revision,
+                "revisions": [item.model_dump() for item in asset.asset_revisions]}
+
+    def confirm_asset_revision(
+        self, script_id: str, asset_id: str, asset_type: str,
+        expected_revision: int, active_variant_ids: Optional[List[str]] = None,
+        selected_variant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        with self._save_lock:
+            asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if asset is None:
+                raise ValueError("Asset not found")
+            commit_asset_revision(asset)
+            if asset.asset_revision != expected_revision:
+                raise ValueError("Asset revision changed; reload before confirming")
+            containers = [item for item in self._asset_image_containers(asset, asset_type) if item]
+            available = {item.id for item in self._asset_image_variants(asset, asset_type)}
+            active = set(active_variant_ids) if active_variant_ids is not None else available
+            if ((active_variant_ids is not None and len(active_variant_ids) != len(active))
+                    or not active.issubset(available)):
+                raise ValueError("Active variants must be unique members of this asset")
+            if selected_variant_id and selected_variant_id not in active:
+                raise ValueError("Selected variant must remain active on this asset")
+            from .models import AssetUnit
+            for container in containers:
+                variant_field = "image_variants" if isinstance(container, AssetUnit) else "variants"
+                selected_field = "selected_image_id" if isinstance(container, AssetUnit) else "selected_id"
+                kept = [item for item in getattr(container, variant_field) if item.id in active]
+                setattr(container, variant_field, kept)
+                if getattr(container, selected_field) not in {item.id for item in kept}:
+                    setattr(container, selected_field, None)
+                if selected_variant_id in {item.id for item in kept}:
+                    setattr(container, selected_field, selected_variant_id)
+            if asset.cover_variant_id not in active:
+                asset.cover_variant_id = None
+            if asset_type in ("scene", "prop"):
+                selected = self._selected_image_variant(asset.image_asset)
+                asset.image_url = selected.url if selected else None
+            elif asset_type == "character":
+                selected = (self._selected_image_variant(asset.reference_sheet)
+                            or self._selected_image_variant(asset.full_body_asset))
+                asset.image_url = selected.url if selected else None
+                for container_name, url_field in (
+                    ("full_body_asset", "full_body_image_url"),
+                    ("three_view_asset", "three_view_image_url"),
+                    ("headshot_asset", "headshot_image_url"),
+                ):
+                    selected = self._selected_image_variant(getattr(asset, container_name))
+                    setattr(asset, url_field, selected.url if selected else None)
+                asset.avatar_url = asset.headshot_image_url
+            revision = commit_asset_revision(asset, "user_confirmed")
+            self._save_after_asset_mutation(source)
+            return {"asset_type": asset_type, "asset_id": asset_id,
+                    "revision": revision.model_dump()}
+
+    def restore_asset_revision(
+        self, script_id: str, asset_id: str, asset_type: str,
+        revision: int, expected_revision: int,
+    ) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        with self._save_lock:
+            asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if asset is None:
+                raise ValueError("Asset not found")
+            commit_asset_revision(asset)
+            if asset.asset_revision != expected_revision:
+                raise ValueError("Asset revision changed; reload before restoring")
+            old = next((item for item in asset.asset_revisions if item.revision == revision), None)
+            if old is None:
+                raise ValueError("Asset revision not found")
+            if old.snapshot.get("id") != asset.id:
+                raise ValueError("Asset revision identity mismatch")
+            candidate = type(asset).model_validate({
+                **old.snapshot,
+                "owner_user_id": asset.owner_user_id,
+                "owner_profile_id": asset.owner_profile_id,
+                "asset_revision": asset.asset_revision,
+                "asset_revisions": asset.asset_revisions,
+            })
+            for field in old.snapshot:
+                if field != "id":
+                    setattr(asset, field, getattr(candidate, field))
+            restored = commit_asset_revision(asset, "user_confirmed", force_new=True)
+            self._save_after_asset_mutation(source)
+            return {"asset_type": asset_type, "asset_id": asset_id,
+                    "restored_from_revision": revision, "revision": restored.model_dump()}
+
     def update_asset_variant_metadata(
         self,
         script_id: str,
@@ -6937,6 +7171,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Variant {variant_id} does not belong to asset {asset_id}")
 
         target_asset.cover_variant_id = variant_id
+        commit_asset_revision(target_asset, "user_confirmed")
         self._save_after_asset_mutation(source)
         return {
             "asset_type": asset_type,
@@ -7033,6 +7268,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     # If sketch, maybe don't update main image_url if rendered exists?
                     # For now, let's assume we only select rendered variants for frames usually.
 
+        if asset_type in ("character", "scene", "prop"):
+            if variant is None:
+                raise ValueError(f"Variant {variant_id} does not belong to asset {asset_id}")
+            commit_asset_revision(target_asset, "user_confirmed")
         self._save_after_asset_mutation(source)
         return script
 
@@ -7095,6 +7334,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             and getattr(target_asset, "cover_variant_id", None) == variant_id
         ):
             target_asset.cover_variant_id = None
+
+        if asset_type in ("character", "scene", "prop"):
+            commit_asset_revision(target_asset, "user_confirmed")
 
         cleaned_frame_selection = False
         for frame in script.frames:
@@ -7725,11 +7967,16 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _save_series_data_unlocked(self):
         """Save series data without acquiring the lock (caller must hold self._save_lock)."""
         try:
-            os.makedirs(os.path.dirname(self.series_data_file) or ".", exist_ok=True)
-            with open(self.series_data_file, 'w') as f:
-                json.dump({k: v.model_dump() for k, v in self.series_store.items()}, f, indent=2)
+            for series in self.series_store.values():
+                for asset in series.characters + series.scenes + series.props:
+                    commit_asset_revision(asset)
+            _atomic_json_write(
+                self.series_data_file,
+                {k: v.model_dump() for k, v in self.series_store.items()},
+            )
         except Exception as e:
             logger.error(f"Failed to save series data: {e}")
+            raise
 
     def _save_series_data(self):
         """Save series data with thread lock."""
@@ -7754,11 +8001,13 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _save_library_data_unlocked(self):
         """Save global library data without acquiring the lock (caller must hold self._save_lock)."""
         try:
-            os.makedirs(os.path.dirname(self.library_data_file) or ".", exist_ok=True)
-            with open(self.library_data_file, 'w') as f:
-                json.dump(self.library_store.model_dump(), f, indent=2)
+            for asset in (self.library_store.characters + self.library_store.scenes
+                          + self.library_store.props):
+                commit_asset_revision(asset)
+            _atomic_json_write(self.library_data_file, self.library_store.model_dump())
         except Exception as e:
             logger.error(f"Failed to save library data: {e}")
+            raise
 
     def _save_library_data(self):
         """Save global library data with thread lock."""

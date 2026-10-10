@@ -350,7 +350,7 @@ def signed_response(data):
 
 
 def _script_response_dump(script: Script) -> Dict[str, Any]:
-    return script.model_dump(exclude={
+    payload = script.model_dump(exclude={
         "source_revisions",
         "director_profile_revisions",
         "director_profile_draft",
@@ -368,6 +368,10 @@ def _script_response_dump(script: Script) -> Dict[str, Any]:
         "fact_ledger_draft_source_revision",
         "fact_ledger_draft_updated_at",
     })
+    for collection in ("characters", "scenes", "props"):
+        for asset in payload.get(collection, []):
+            asset.pop("asset_revisions", None)
+    return payload
 
 
 def private_no_store_signed_response(data):
@@ -2089,17 +2093,17 @@ def get_project(script_id: str):
             ep_prop_ids = {p.id for p in script.props}
             for ch in series.characters:
                 if ch.id not in ep_char_ids:
-                    d = ch.model_dump()
+                    d = ch.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["characters"].append(d)
             for sc in series.scenes:
                 if sc.id not in ep_scene_ids:
-                    d = sc.model_dump()
+                    d = sc.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["scenes"].append(d)
             for pr in series.props:
                 if pr.id not in ep_prop_ids:
-                    d = pr.model_dump()
+                    d = pr.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["props"].append(d)
 
@@ -3618,6 +3622,57 @@ class SelectVariantRequest(BaseModel):
     asset_type: str
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
+
+
+class ConfirmAssetRevisionRequest(BaseModel):
+    expected_revision: int = Field(..., ge=1)
+    active_variant_ids: Optional[List[str]] = None
+    selected_variant_id: Optional[str] = None
+
+
+class RestoreAssetRevisionRequest(BaseModel):
+    expected_revision: int = Field(..., ge=1)
+
+
+@app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions")
+def get_asset_revisions(script_id: str, asset_type: str, asset_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(
+            pipeline.get_asset_revisions(script_id, asset_id, asset_type))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions/confirm")
+def confirm_asset_revision(script_id: str, asset_type: str, asset_id: str,
+                           request: ConfirmAssetRevisionRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.confirm_asset_revision(
+            script_id, asset_id, asset_type, request.expected_revision,
+            request.active_variant_ids, request.selected_variant_id))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
+@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions/{revision}/restore")
+def restore_asset_revision(script_id: str, asset_type: str, asset_id: str,
+                           revision: int, request: RestoreAssetRevisionRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return private_no_store_signed_response(pipeline.restore_asset_revision(
+            script_id, asset_id, asset_type, revision, request.expected_revision))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc))
 
 @app.post("/projects/{script_id}/assets/variant/select")
 def select_asset_variant(script_id: str, request: SelectVariantRequest):
