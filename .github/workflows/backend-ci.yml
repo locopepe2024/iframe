@@ -42,7 +42,7 @@ jobs:
           pip install -r requirements-docker.txt pytest
 
       - name: Run Python test suite
-        run: python -m pytest --ignore=tests/test_recreation.py
+        run: python -m pytest --ignore=tests/test_recreation.py --ignore=tests/test_reference_files.py
 
       - name: Validate model catalog
         run: python scripts/validate_model_catalog.py
@@ -76,9 +76,9 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/recreation-venv"
           "$RUNNER_TEMP/recreation-venv/bin/python" -m pip install -r requirements-docker.txt pytest
 
-      - name: Run recreation tests on media
+      - name: Run FFmpeg tests on media
         run: |
-          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
+          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py tests/test_reference_files.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
 
       - name: Upload test report
         if: always()

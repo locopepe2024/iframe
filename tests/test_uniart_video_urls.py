@@ -103,7 +103,7 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
         refs.append('https://storage.example/b.mp4' if mode == 'v2v' else 'https://storage.example/b.png')
     if mode == 'v2v':
         refs.insert(0, 'https://storage.example/a.png')
-    gen = PlaygroundGeneration(id='test', model_id='uniart/' + model, mode=mode, prompt='walk', input_media=refs, created_at='2026-09-16', parameters={'resolution': resolution})
+    gen = PlaygroundGeneration(id='test', model_id='uniart/' + model, mode=mode, prompt='walk', input_media=refs, created_at='2026-09-16', parameters={'resolution': resolution, 'duration': 5})
     storage = Mock(output_dir=str(tmp_path))
     service = PlaygroundService(storage, provider_config_loader=lambda: {})
     monkeypatch.delenv('UNIART_BASE_URL', raising=False)
@@ -152,7 +152,7 @@ def test_video_restart_resumes_saved_task_without_resubmission(monkeypatch, tmp_
     storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
     gen = PlaygroundGeneration(id='restart', model_id='uniart/minimax-h3-vip', mode='r2v',
         prompt='walk', input_media=['missing-original.png'], created_at='2026-09-16',
-        owner_user_id='user', owner_profile_id='profile', status='processing', parameters={'resolution': '720p'})
+        owner_user_id='user', owner_profile_id='profile', status='processing', parameters={'resolution': '720p', 'duration': 5})
     storage.add_generation(gen)
     monkeypatch.setattr(uniart, '_media', lambda value: 'https://storage.example/ref.png' if value else None)
     monkeypatch.setattr(uniart, '_post', lambda *a: {'task_id': 'accepted-before-restart'})
