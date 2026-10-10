@@ -1291,10 +1291,18 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
         return self
 
 
+class DirectorPlanAssetIdentity(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    name: str
+    description: str = ""
+
+
 class DirectorShootingPlanRevision(BaseModel):
     revision: int = Field(..., ge=1)
     content_hash: str = Field(..., min_length=1)
     plan: DirectorShootingPlan
+    asset_identities: List[DirectorPlanAssetIdentity] = Field(default_factory=list)
     user_title: str = Field("", max_length=160)
     summary: str = Field("", max_length=1000)
     confirmed_at: float = Field(..., ge=0)

@@ -636,6 +636,34 @@ def test_sync_rebinds_missing_scene_and_prop_ids_without_editing_plan():
     assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
 
 
+def test_confirmed_plan_preserves_asset_identity_when_sources_are_deleted():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    revision = script.director_shooting_plan_revisions[-1]
+    identities = {(item.asset_type, item.asset_id): item for item in revision.asset_identities}
+    assert identities[("character", "shen-xia-young")].description == "温婉的大学生"
+    assert identities[("scene", "cinema")].name == "电影院入口"
+    assert identities[("prop", "ticket")].description == "一张电影票"
+    confirmed = revision.model_dump()
+
+    script.characters = []
+    script.scenes = []
+    script.props = []
+    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+        "characters": episode.characters, "scenes": episode.scenes, "props": episode.props,
+    }
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert [(item.name, item.description) for item in script.characters] == [("沈夏（大学）", "温婉的大学生")]
+    assert [(item.name, item.description) for item in script.scenes] == [("电影院入口", "电影院入口")]
+    assert [(item.name, item.description) for item in script.props] == [("电影票", "一张电影票")]
+    assert revision.model_dump() == confirmed
+    pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert (len(script.characters), len(script.scenes), len(script.props)) == (1, 1, 1)
+
+
 def test_plan_asset_group_rebinding_changes_all_sources_atomically():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
