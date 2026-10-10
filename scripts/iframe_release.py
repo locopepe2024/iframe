@@ -27,6 +27,9 @@ NETWORK = "lumenx-net"
 BACKEND_PORT = 17177
 CANDIDATE_PORT = 17178
 REQUIRED_PATHS = {"/asset-index/preview", "/projects", "/series"}
+KNOWLEDGE_SECRETS = Path("/srv/lumenx/runtime/knowledge-pg-provision")
+KNOWLEDGE_MOUNT = "/run/iframe-knowledge"
+KNOWLEDGE_PATHS = {"/knowledge/collections", "/knowledge/search", "/knowledge/collections/{collection_id}/sources"}
 
 
 def run(*args, capture=True):
@@ -81,7 +84,12 @@ def verify_topology(backend, frontend):
     output = [m for m in mounts if m["Destination"] == "/app/output"]
     if len(output) != 1 or output[0]["Type"] != "bind" or output[0]["Source"] != str(OUTPUT) or not output[0]["RW"]:
         raise RuntimeError("Unexpected backend output mount")
-    if len(mounts) != 1 or NETWORK not in backend["NetworkSettings"]["Networks"]:
+    extra = [mount for mount in mounts if mount["Destination"] != "/app/output"]
+    if len(extra) > 1 or any(
+        mount["Type"] != "bind" or mount["Source"] != str(KNOWLEDGE_SECRETS)
+        or mount["Destination"] != KNOWLEDGE_MOUNT or mount["RW"]
+        for mount in extra
+    ) or NETWORK not in backend["NetworkSettings"]["Networks"]:
         raise RuntimeError("Unexpected backend mounts or network")
     binding = backend["HostConfig"]["PortBindings"].get("17177/tcp")
     if binding != [{"HostIp": "127.0.0.1", "HostPort": str(BACKEND_PORT)}]:
@@ -195,9 +203,47 @@ def managed_env():
     return ENV_FILE
 
 
+def knowledge_runtime(env_path):
+    values = {}
+    for line in env_path.read_text().splitlines():
+        if line.startswith("IFRAME_KNOWLEDGE_") and "=" in line:
+            name, value = line.split("=", 1)
+            values[name] = value
+    if not values:
+        return False
+    required = {
+        "IFRAME_KNOWLEDGE_PG_HOST", "IFRAME_KNOWLEDGE_PG_USER",
+        "IFRAME_KNOWLEDGE_PG_PASSWORD_FILE", "IFRAME_KNOWLEDGE_PG_CA_FILE",
+        "IFRAME_KNOWLEDGE_BLOB_BACKEND", "IFRAME_KNOWLEDGE_COS_REGION",
+        "IFRAME_KNOWLEDGE_COS_BUCKET", "IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE",
+        "IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE",
+    }
+    if not required <= values.keys() or not all(values[name] for name in required) or not KNOWLEDGE_SECRETS.is_dir():
+        raise RuntimeError("Incomplete knowledge runtime configuration")
+    expected = {
+        "IFRAME_KNOWLEDGE_PG_PASSWORD_FILE": f"{KNOWLEDGE_MOUNT}/knowledge-pg-app-password",
+        "IFRAME_KNOWLEDGE_PG_CA_FILE": f"{KNOWLEDGE_MOUNT}/knowledge-pg-ca.pem",
+        "IFRAME_KNOWLEDGE_COS_SECRET_ID_FILE": f"{KNOWLEDGE_MOUNT}/knowledge-cos-secret-id",
+        "IFRAME_KNOWLEDGE_COS_SECRET_KEY_FILE": f"{KNOWLEDGE_MOUNT}/knowledge-cos-secret-key",
+        "IFRAME_KNOWLEDGE_BLOB_BACKEND": "cos",
+    }
+    if any(values[name] != value for name, value in expected.items()):
+        raise RuntimeError("Knowledge runtime paths or backend are invalid")
+    if KNOWLEDGE_SECRETS.is_symlink() or KNOWLEDGE_SECRETS.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        raise RuntimeError("Knowledge secret directory is unsafe")
+    for name in ("knowledge-pg-app-password", "knowledge-pg-ca.pem",
+                 "knowledge-cos-secret-id", "knowledge-cos-secret-key"):
+        path = KNOWLEDGE_SECRETS / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise RuntimeError(f"Missing or unsafe knowledge secret: {name}")
+    return True
+
+
 def create_backend(name, image, env_path, output, host_port, *, restart=False):
     args = ["docker", "create", "--name", name, "--network", NETWORK, "--network-alias", "backend" if restart else name,
             "--env-file", str(env_path), "-v", f"{output}:/app/output", "-p", f"127.0.0.1:{host_port}:17177"]
+    if knowledge_runtime(env_path):
+        args += ["-v", f"{KNOWLEDGE_SECRETS}:{KNOWLEDGE_MOUNT}:ro"]
     if restart:
         args += ["--restart", "unless-stopped"]
     run(*(args + [image]))
@@ -260,7 +306,11 @@ def prepare(repo, expected):
         store_identity(image, isolated)
         create_backend(candidate, image, env_path, isolated, CANDIDATE_PORT)
         run("docker", "start", candidate)
-        wait_http(f"http://127.0.0.1:{CANDIDATE_PORT}/openapi.json", REQUIRED_PATHS)
+        required_paths = REQUIRED_PATHS | (KNOWLEDGE_PATHS if knowledge_runtime(env_path) else set())
+        wait_http(f"http://127.0.0.1:{CANDIDATE_PORT}/openapi.json", required_paths)
+        if knowledge_runtime(env_path):
+            run("docker", "exec", candidate, "python", "-c",
+                "from src.apps.knowledge import store; c = store.connect(); c.close(); print('knowledge_db=ok')")
         store_identity(image, isolated)
         if store_ids(isolated) != baseline:
             raise RuntimeError("Candidate startup changed project or series identities")
@@ -308,7 +358,8 @@ def deploy(repo, expected):
         backend_renamed = True
         create_backend(BACKEND, image, env_path, OUTPUT, BACKEND_PORT, restart=True)
         run("docker", "start", BACKEND)
-        wait_http(f"http://127.0.0.1:{BACKEND_PORT}/openapi.json", REQUIRED_PATHS)
+        required_paths = REQUIRED_PATHS | (KNOWLEDGE_PATHS if knowledge_runtime(env_path) else set())
+        wait_http(f"http://127.0.0.1:{BACKEND_PORT}/openapi.json", required_paths)
         store_identity(image, OUTPUT)
         if store_ids(OUTPUT) != prepared["ids"]:
             raise RuntimeError("Project/series identities changed after backend start")

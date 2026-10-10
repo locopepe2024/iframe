@@ -58,7 +58,7 @@ def put(kind: str, content: bytes) -> tuple[str, str]:
         client, bucket = _cos_client()
         try:
             client.put_object(Bucket=bucket, Key=f"knowledge/{key}", Body=content,
-                              ContentType="application/octet-stream", ACL="private")
+                              ContentType="application/octet-stream")
         except Exception as exc:
             raise RuntimeError("Knowledge COS write failed") from exc
         return key, digest
