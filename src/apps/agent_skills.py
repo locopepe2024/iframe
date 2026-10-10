@@ -15,7 +15,9 @@ from .identity import UserContext, require_user_context
 
 router = APIRouter(prefix="/skills", tags=["agent-skills"])
 CATALOG_DIR = Path(__file__).resolve().parents[2] / "config" / "agent_skills"
-MAX_GUIDANCE_CHARS = 16000
+# The catalog includes the character workbench's evidence and route guidance;
+# keep enough room for the curated set while still bounding owner-scoped prompt context.
+MAX_GUIDANCE_CHARS = 20000
 
 
 def catalog():

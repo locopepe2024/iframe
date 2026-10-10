@@ -1,5 +1,10 @@
 # Director Shooting Plan v1
 
+For typed identities across Script, plan nodes, semantic assets, material, and
+shot-scoped keyframes, see `2026-10-10-script-plan-asset-material-identity-v1.md`.
+In particular, plan `scene_id` is not `scene_asset_id`, and `person_id` is not
+automatically a Character asset ID.
+
 ## Goal
 
 Add a reviewable Director shooting-plan resource that converts the current script and a confirmed Director story map into a scene → beat → shot proposal. The user can generate, edit, save, restore and explicitly confirm the plan. A confirmed plan is a planning artifact; it does not create storyboard frames or Motion tasks.

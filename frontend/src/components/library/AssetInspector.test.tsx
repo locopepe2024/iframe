@@ -3,7 +3,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import AssetInspector from "./AssetInspector";
 import { useProjectStore } from "@/store/projectStore";
 
-const mocked = vi.hoisted(() => ({ setAssetCoverVariant: vi.fn(), success: vi.fn(), error: vi.fn() }));
+const mocked = vi.hoisted(() => ({ setAssetCoverVariant: vi.fn(), getAssetRevisions: vi.fn(),
+  confirmAssetRevision: vi.fn(), getProject: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ api: mocked, API_URL: "" }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: mocked.success, error: mocked.error, progress: vi.fn(), update: vi.fn() } }));
@@ -32,6 +33,29 @@ beforeEach(() => {
   vi.clearAllMocks();
   useProjectStore.setState({ currentProject: null, projects: [] });
   mocked.setAssetCoverVariant.mockResolvedValue(result);
+  mocked.getAssetRevisions.mockResolvedValue({ current_revision: 1, revisions: [] });
+  mocked.confirmAssetRevision.mockResolvedValue({ revision: { revision: 2 } });
+  mocked.getProject.mockResolvedValue({ id: "project-1" });
+});
+
+it("confirms variants across all character image containers", async () => {
+  const character = {
+    ...asset,
+    full_body_asset: { selected_id: "full-body", variants: [
+      { id: "full-body", url: "assets/full-body.png", created_at: 3 },
+    ] },
+  };
+  render(<AssetInspector asset={character as any} type="characters" sourceName="Episode 1"
+    sourceId="project-project-1" sourceKind="project" starred={false}
+    onClose={vi.fn()} onToggleStar={vi.fn()} />);
+
+  await screen.findByRole("button", { name: "confirmAssetRevision" });
+  fireEvent.click(screen.getByRole("button", { name: "confirmAssetRevision" }));
+
+  await waitFor(() => expect(mocked.confirmAssetRevision).toHaveBeenCalledWith(
+    "project-1", "character", "character-1", 1,
+    ["cover-1", "headshot-variant", "full-body"], "cover-1",
+  ));
 });
 
 it("persists an explicitly chosen cover and reports the saved result", async () => {

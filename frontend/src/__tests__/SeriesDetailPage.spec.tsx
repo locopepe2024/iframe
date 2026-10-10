@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
-import messages from '../../../../messages/zh.json';
+import messages from '../../messages/zh.json';
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -23,7 +24,8 @@ vi.mock('framer-motion', () => ({
 }));
 
 // Mock lucide-react icons
-vi.mock('lucide-react', () => ({
+vi.mock('lucide-react', async (importOriginal) => ({
+    ...await importOriginal<typeof import('lucide-react')>(),
     ArrowLeft: (props: any) => <span data-testid="icon-arrow-left" {...props} />,
     Users: (props: any) => <span data-testid="icon-users" {...props} />,
     MapPin: (props: any) => <span data-testid="icon-map-pin" {...props} />,
@@ -43,6 +45,7 @@ vi.mock('lucide-react', () => ({
     AlertTriangle: (props: any) => <span data-testid="icon-alert-triangle" {...props} />,
     Film: (props: any) => <span data-testid="icon-film" {...props} />,
     Loader2: (props: any) => <span data-testid="icon-loader" {...props} />,
+    Trash2: (props: any) => <span data-testid="icon-trash" {...props} />,
     Layout: (props: any) => <span data-testid="icon-layout" {...props} />,
     Check: (props: any) => <span data-testid="icon-check" {...props} />,
     Clock: (props: any) => <span data-testid="icon-clock" {...props} />,
@@ -69,6 +72,7 @@ const mockAddEpisodeToSeries = vi.fn();
 const mockCreateEpisodeForSeries = vi.fn();
 const mockSaveAssemblyPlan = vi.fn();
 const mockRenderAssemblyPlan = vi.fn();
+const mockDeleteSeriesAsset = vi.fn();
 
 vi.mock('@/lib/api', () => ({
     API_URL: 'http://localhost:17177',
@@ -81,10 +85,11 @@ vi.mock('@/lib/api', () => ({
         createEpisodeForSeries: (...args: any[]) => mockCreateEpisodeForSeries(...args),
         saveAssemblyPlan: (...args: any[]) => mockSaveAssemblyPlan(...args),
         renderAssemblyPlan: (...args: any[]) => mockRenderAssemblyPlan(...args),
+        deleteSeriesAsset: (...args: any[]) => mockDeleteSeriesAsset(...args),
     },
 }));
 
-import SeriesDetailPage from '../SeriesDetailPage';
+import SeriesDetailPage from '../components/series/SeriesDetailPage';
 
 // ── Test Data ──
 
@@ -127,6 +132,7 @@ describe('SeriesDetailPage', () => {
         vi.clearAllMocks();
         mockGetSeries.mockResolvedValue(mockSeries);
         mockGetSeriesEpisodes.mockResolvedValue(mockEpisodes);
+        mockDeleteSeriesAsset.mockResolvedValue({ status: 'deleted' });
     });
 
     // ── Rendering ──
@@ -191,6 +197,15 @@ describe('SeriesDetailPage', () => {
             expect(screen.getByText('角色B')).toBeInTheDocument();
         });
 
+        it('deletes a shared character and refreshes the series list', async () => {
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            renderPage();
+            await screen.findByText('角色A');
+            fireEvent.click(screen.getByRole('button', { name: '删除 角色A' }));
+            await waitFor(() => expect(mockDeleteSeriesAsset).toHaveBeenCalledWith('series-1', 'character', 'char-1'));
+            await waitFor(() => expect(mockGetSeries).toHaveBeenCalledTimes(2));
+        });
+
         it('switches to scenes when clicked in sidebar', async () => {
             renderPage();
             await waitFor(() => {
@@ -228,6 +243,21 @@ describe('SeriesDetailPage', () => {
     // ── Episode list in sidebar ──
 
     describe('Episode list', () => {
+        it('shows readable series context without exposing Director execution metadata', async () => {
+            mockGetSeries.mockResolvedValue({
+                ...mockSeries,
+                art_direction: { director_profile: {
+                    revision: 2,
+                    setting: { premise: '苏砚追查旧案。' },
+                    execution_summary: 'Chinese Ink Fantasy\nCURRENT_DIRECTOR_EDITS: GUARDRAILS: {}',
+                } },
+            });
+            renderPage();
+            fireEvent.click(await screen.findByText('第一集'));
+            expect(await screen.findByText('苏砚追查旧案。')).toBeInTheDocument();
+            expect(screen.queryByText(/CURRENT_DIRECTOR_EDITS/)).not.toBeInTheDocument();
+        });
+
         it('shows episode list with titles in sidebar', async () => {
             renderPage();
             await waitFor(() => {

@@ -12,6 +12,8 @@ from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
     DirectorProfile,
+    build_episode_readable_summary,
+    EpisodeUnderstandingHandoff,
     DirectorStoryMap,
     DIRECTOR_STORY_MAP_EXECUTION_MAX_CHARS,
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
@@ -76,6 +78,11 @@ def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     series_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "Series 全剧导演理解" in series_prompt
     assert "不要把梗概中的结局当作第一集事实" in series_prompt
+    assert "逐集事件映射和来源覆盖是分析任务" in series_prompt
+    assert "角色年龄、脸型、服色、兵器规格等视觉设计选择交给资产设计" in series_prompt
+    assert "制作媒介和风格 preset 的关系交给风格定调" in series_prompt
+    assert "虚构纪年不必对应真实历史朝代" in series_prompt
+    assert "摘要未提及不能证明原文未交代" in series_prompt
 
     processor.llm.chat.reset_mock()
     processor.analyze_director_profile(
@@ -335,6 +342,20 @@ def test_director_binding_resolves_semantic_character_and_person_refs():
     arc = payload["story_map"]["relationship_arcs"][0]
     assert arc["person_ids"] == ["shen"]
     assert arc["unresolved_person_refs"] == ["未知人物"]
+
+
+def test_director_binding_accepts_source_entity_projection_dicts():
+    pipeline, script = make_pipeline()
+    payload = profile_payload()
+    payload["story_map"] = valid_story_map()
+    payload["story_map"]["source_revision_id"] = ""
+    payload["story_map"]["phases"][0]["events"][0]["character_ids"] = []
+    payload["story_map"]["phases"][0]["events"][0]["character_refs"] = ["沈夏"]
+
+    pipeline._bind_director_story_map(script, {"characters": [{"id": "shen", "name": "沈夏"}]}, payload)
+
+    assert payload["story_map"]["people"][0]["person_id"] == "shen"
+    assert payload["story_map"]["phases"][0]["events"][0]["character_ids"] == ["shen"]
 
 
 def test_director_binding_keeps_extra_relationship_refs_for_review():
@@ -1221,7 +1242,71 @@ def test_apply_director_profile_archives_only_changed_confirmations():
     assert changed.director_profile_revisions[-1].profile.pacing == changed_draft["pacing"]
 
 
-def test_episode_director_profile_preserves_inherited_series_visual_style():
+def test_episode_director_confirmation_marks_legacy_summary_as_compatibility():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "execution_summary": "本集核心事件"}
+
+    confirmed = pipeline.apply_director_profile("film", draft)
+    understanding = confirmed.episode_understanding
+    assert understanding.status == "compatibility"
+    assert understanding.episode_summary == "异地开始。"
+    assert "CURRENT_DIRECTOR_EDITS" in confirmed.art_direction.director_profile.execution_summary
+    assert understanding.source_revision == script.source_revision
+    assert understanding.episode_director_revision == 1
+    assert understanding.incoming_handoff == {}
+    assert understanding.outgoing_handoff == {}
+
+
+def test_episode_readable_summary_projects_ordered_story_events_without_execution_metadata():
+    profile = {
+        "execution_summary": "真人动漫。\nCURRENT_DIRECTOR_EDITS: GUARDRAILS: {\"prohibitions\": []}",
+        "setting": {"season_time": "暮秋残阳", "primary_location": "青溪镇长街"},
+        "timeline": [
+            {"order": 2, "event": "苏砚出手制服匪寇", "source_ref": "scene-2"},
+            {"order": 1, "event": "粮铺遭劫", "source_ref": "scene-1"},
+        ],
+    }
+    summary = build_episode_readable_summary(profile)
+    assert summary == "暮秋残阳，青溪镇长街。粮铺遭劫。苏砚出手制服匪寇。"
+    assert "CURRENT_DIRECTOR_EDITS" not in summary
+    assert "GUARDRAILS" not in summary
+
+
+def test_episode_director_reconfirmation_preserves_only_matching_analyzed_handoff():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "execution_summary": "本集核心事件"}
+    first = pipeline.apply_director_profile("film", draft)
+    script.episode_understanding = EpisodeUnderstandingHandoff(
+        status="confirmed", episode_summary=first.episode_understanding.episode_summary,
+        source_revision=script.source_revision, episode_director_revision=1,
+        source_refs=["episode:film:r1:0-5"], outgoing_handoff={"state": "离开村庄"},
+    )
+
+    same = pipeline.apply_director_profile("film", draft).episode_understanding
+    assert same.status == "confirmed"
+    assert same.outgoing_handoff == {"state": "离开村庄"}
+
+    revised = pipeline.apply_director_profile("film", {**draft, "pacing": "加快"}).episode_understanding
+    assert revised.status == "compatibility"
+    assert revised.outgoing_handoff == {}
+    assert revised.source_refs == []
+
+
+def test_source_change_stales_and_clears_episode_handoff():
+    pipeline, script = make_pipeline()
+    script.episode_understanding = EpisodeUnderstandingHandoff(
+        status="confirmed", episode_summary="旧摘要", source_revision=1,
+        episode_director_revision=1, source_refs=["old"],
+        incoming_handoff={"state": "旧状态"},
+    )
+
+    pipeline.update_script_text("film", "场景21至45")
+    assert script.episode_understanding.status == "stale"
+    assert script.episode_understanding.incoming_handoff == {}
+    assert script.episode_understanding.source_refs == []
+
+
+def test_episode_director_profile_keeps_series_visual_style_live():
     pipeline, script = make_pipeline()
     script.art_direction = None
     script.series_id = "series"
@@ -1237,8 +1322,9 @@ def test_episode_director_profile_preserves_inherited_series_visual_style():
 
     pipeline.apply_director_profile("film", profile_payload())
 
-    assert script.art_direction.selected_style_id == "jp-live-action"
-    assert script.art_direction.style_config["positive_prompt"] == "restrained"
+    assert script.art_direction.style_config == {}
+    assert pipeline.effective_art_direction(script).selected_style_id == "jp-live-action"
+    assert pipeline.effective_art_direction(script).style_config["positive_prompt"] == "restrained"
     assert script.art_direction.director_profile.revision == 1
 
 
@@ -1576,6 +1662,47 @@ def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
     refs = [item["source_ref"] for item in payload["chunk_summaries"]]
     assert peak > 1
     assert refs == [chunk["source_ref"] for chunk in split_director_source(source)]
+
+
+def test_long_director_source_reduces_many_chunks_without_losing_audit_ranges():
+    from contextvars import ContextVar
+
+    request_owner = ContextVar("test_director_reduce_owner", default=None)
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True, provider="mock")
+    processor.llm._get_default_model.return_value = "mock-director"
+    source = "".join(f"第{i}段：人物经历转折并留下线索。\n" for i in range(26000))
+    chunks = split_director_source(source)
+    assert len(chunks) > 50
+    seen_owners = []
+
+    def chat_side_effect(**kwargs):
+        seen_owners.append(request_owner.get())
+        prompt = kwargs["messages"][0]["content"]
+        if "<source_note_batch>" in prompt:
+            return json.dumps({"summary": "连续事件与人物关系变化", "continuity_in": "此前线索未解", "continuity_out": "新的线索出现"}, ensure_ascii=False)
+        return json.dumps({"summary": "本段事件与关系变化", "continuity_in": "此前线索未解", "continuity_out": "新的线索出现"}, ensure_ascii=False)
+
+    processor.llm.chat.side_effect = chat_side_effect
+    token = request_owner.set("owner-a")
+    try:
+        digest = processor._director_source_digest(source)
+    finally:
+        request_owner.reset(token)
+    payload = json.loads(digest.removeprefix("<source_digest>").removesuffix("</source_digest>"))
+    audit = processor._last_director_source_audit
+    assert len(payload["chunk_summaries"]) < len(chunks)
+    assert len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))) <= 3000
+    assert audit["reduction_rounds"] >= 1
+    assert seen_owners and all(owner == "owner-a" for owner in seen_owners)
+    assert len(audit["chunk_ranges"]) == len(chunks)
+    assert len(audit["mapped_notes"]) == len(chunks)
+    assert payload["chunk_summaries"][0]["char_start"] == 0
+    assert payload["chunk_summaries"][-1]["char_end"] == len(source)
+    call_count = processor.llm.chat.call_count
+    assert processor._director_source_digest(source) == digest
+    assert processor.llm.chat.call_count == call_count
+    assert len(processor._last_director_source_audit["chunk_ranges"]) == len(chunks)
 
 
 def test_long_director_source_propagates_request_context_to_map_workers(monkeypatch):

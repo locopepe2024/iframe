@@ -57,6 +57,10 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
     const [editingPositive, setEditingPositive] = useState("");
     const [editingNegative, setEditingNegative] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [newStyleOpen, setNewStyleOpen] = useState(false);
+    const [newStyleSaving, setNewStyleSaving] = useState(false);
+    const [newStyleCover, setNewStyleCover] = useState<File | null>(null);
+    const [newStyleDraft, setNewStyleDraft] = useState({ name: "", description: "", tags: "", positive: "", negative: "", sample: "" });
 
     const filteredPresets = useMemo(() => {
         if (activeCategory === "all") return presets;
@@ -65,6 +69,7 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
     // Series baseline (inherit source)
     const [seriesBaseline, setSeriesBaseline] = useState<StyleConfig | null>(null);
+    const [seriesDirectorRevision, setSeriesDirectorRevision] = useState<number | null>(null);
     const [seriesBaselineLoading, setSeriesBaselineLoading] = useState(false);
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
@@ -81,18 +86,23 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
         const seriesId = currentProject?.series_id;
         if (!seriesId) {
             setSeriesBaseline(null);
+            setSeriesDirectorRevision(null);
             return;
         }
         setSeriesBaselineLoading(true);
         api.getSeries(seriesId)
             .then((s: any) => {
-                setSeriesBaseline(s?.art_direction?.style_config ?? null);
+                const style = s?.art_direction?.style_config;
+                setSeriesBaseline(style && Object.keys(style).length > 0 ? style : null);
+                setSeriesDirectorRevision(s?.director_profile_revisions?.at(-1)?.revision
+                    ?? s?.art_direction?.director_profile?.revision ?? null);
             })
-            .catch(() => setSeriesBaseline(null))
+            .catch(() => { setSeriesBaseline(null); setSeriesDirectorRevision(null); })
             .finally(() => setSeriesBaselineLoading(false));
     }, [currentProject?.series_id, currentProject?.id]);
 
-    const projectStyle = currentProject?.art_direction?.style_config ?? null;
+    const storedProjectStyle = currentProject?.art_direction?.style_config;
+    const projectStyle = storedProjectStyle && Object.keys(storedProjectStyle).length > 0 ? storedProjectStyle : null;
     const inSeries = !!currentProject?.series_id;
     const isInherit = inSeries && !!seriesBaseline && !projectStyle;
     const isOverridden = inSeries && !!seriesBaseline && !!projectStyle;
@@ -127,11 +137,16 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
     };
 
     const handlePromoteToSeries = async () => {
-        if (!currentProject?.series_id || !currentProject?.art_direction) return;
+        if (!currentProject?.series_id || !currentProject?.art_direction || !projectStyle) return;
         setBannerBusy(true);
         try {
             await api.updateSeries(currentProject.series_id, {
-                art_direction: currentProject.art_direction as any,
+                art_direction: {
+                    selected_style_id: currentProject.art_direction.selected_style_id,
+                    style_config: projectStyle,
+                    custom_styles: currentProject.art_direction.custom_styles,
+                    ai_recommendations: currentProject.art_direction.ai_recommendations,
+                } as any,
             });
             const s = await api.getSeries(currentProject.series_id);
             setSeriesBaseline(s?.art_direction?.style_config ?? null);
@@ -158,7 +173,8 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
     useEffect(() => {
         const projectAD = currentProject?.art_direction;
-        const projectStyleConfig = projectAD?.style_config ?? null;
+        const styleConfig = projectAD?.style_config;
+        const projectStyleConfig = styleConfig && Object.keys(styleConfig).length > 0 ? styleConfig : null;
         if (projectStyleConfig) {
             setSelectedStyle(projectStyleConfig);
             setEditingName(projectStyleConfig.name || "");
@@ -371,6 +387,19 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
             negative_prompt: editingNegative
         };
 
+        if (isInherit && seriesBaseline && !overrideAccepted) {
+            const sameAsBaseline = finalConfig.id === seriesBaseline.id
+                && finalConfig.name === seriesBaseline.name
+                && finalConfig.positive_prompt === resolvePositivePrompt(seriesBaseline)
+                && finalConfig.negative_prompt === (seriesBaseline.negative_prompt || "");
+            if (sameAsBaseline) {
+                toast.info(ta("styleInheritedNoSave"));
+                return;
+            }
+            setPendingOverrideStyle(finalConfig);
+            return;
+        }
+
         setIsSaving(true);
         try {
             const updated = await api.saveArtDirection(
@@ -395,6 +424,42 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
             });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleCreateStyle = async () => {
+        if (!currentProject || !newStyleDraft.name.trim() || !newStyleDraft.positive.trim() || newStyleSaving) return;
+        setNewStyleSaving(true);
+        try {
+            const thumbnail = newStyleCover ? (await api.uploadLibraryImage(newStyleCover)).image_url : undefined;
+            const style: StyleConfig = {
+                id: `custom-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+                name: newStyleDraft.name.trim(),
+                description: newStyleDraft.description.trim(),
+                positive_prompt: newStyleDraft.positive.trim(),
+                negative_prompt: newStyleDraft.negative.trim(),
+                thumbnail_url: thumbnail,
+                tags: newStyleDraft.tags.split(",").map(item => item.trim()).filter(Boolean),
+                sample_prompt: newStyleDraft.sample.trim(),
+                is_custom: true,
+            };
+            const nextCustomStyles = [...customStyles, style];
+            const updated = await api.saveArtDirection(currentProject.id, style.id, style, nextCustomStyles, aiRecommendations);
+            updateProject(currentProject.id, updated);
+            setCustomStyles(nextCustomStyles);
+            setSelectedStyle(style);
+            setEditingName(style.name);
+            setEditingPositive(style.positive_prompt);
+            setEditingNegative(style.negative_prompt);
+            setNewStyleOpen(false);
+            setNewStyleCover(null);
+            setNewStyleDraft({ name: "", description: "", tags: "", positive: "", negative: "", sample: "" });
+            toast.success(ta("styleAdded"), { projectId: currentProject.id, projectTitle: currentProject.title });
+        } catch (error) {
+            console.error("Failed to add custom style:", error);
+            toast.error(ta("styleAddFailed"), { projectId: currentProject?.id, projectTitle: currentProject?.title });
+        } finally {
+            setNewStyleSaving(false);
         }
     };
 
@@ -472,6 +537,13 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                         hidden={activeDirectorTab !== "understanding"}
                         className="space-y-8"
                     >
+                        {inSeries && !seriesBaselineLoading && (
+                            <p className="rounded-lg border border-border bg-background/40 px-4 py-3 text-xs text-text-secondary">
+                                {seriesDirectorRevision
+                                    ? ta("seriesDirectorInherited", { revision: seriesDirectorRevision })
+                                    : ta("seriesDirectorMissing")}
+                            </p>
+                        )}
                         <DirectorProfilePanel onApplied={() => setActiveDirectorTab("shooting_plan")} />
                     </section>
                     <section
@@ -601,10 +673,21 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
 
                 {/* Built-in Presets v2 */}
                 <div>
-                    <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                        <Palette size={20} className="text-blue-400" />
-                        {ta("builtInPresets")}
-                    </h3>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                            <Palette size={20} className="text-blue-400" />
+                            {ta("builtInPresets")}
+                        </h3>
+                        <WorkflowActionButton
+                            variant="secondary"
+                            size="sm"
+                            leftIcon={<Pencil />}
+                            onClick={() => setNewStyleOpen(true)}
+                        >
+                            {ta("addStyle")}
+                        </WorkflowActionButton>
+                    </div>
+
 
                     {/* Category tabs */}
                     <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
@@ -793,6 +876,30 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                                 {ta("overrideConfirmBtn")}
                             </WorkflowActionButton>
                         </footer>
+                    </div>
+                </div>
+            )}
+
+            {newStyleOpen && (
+                <div className="fixed inset-0 z-[120] grid place-items-center bg-overlay/80 p-4 backdrop-blur-sm" onClick={() => setNewStyleOpen(false)}>
+                    <div className="w-full max-w-3xl rounded-xl border border-glass-border bg-elevated shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <header className="flex items-center justify-between border-b border-glass-border px-6 py-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-foreground">{ta("addStyleTitle")}</h2>
+                                <p className="mt-1 text-xs text-text-muted">{ta("addStyleHint")}</p>
+                            </div>
+                            <button type="button" aria-label={ta("cancelBtn")} onClick={() => setNewStyleOpen(false)} className="text-text-muted hover:text-foreground"><X size={18} /></button>
+                        </header>
+                        <div className="grid gap-4 p-6 md:grid-cols-2">
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("coverLabel")}</span><input type="file" accept="image/*" onChange={event => setNewStyleCover(event.target.files?.[0] ?? null)} className="block w-full text-xs text-text-secondary" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("styleNameLabel")}</span><input value={newStyleDraft.name} onChange={event => setNewStyleDraft({ ...newStyleDraft, name: event.target.value })} className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("tagsLabel")}</span><input value={newStyleDraft.tags} onChange={event => setNewStyleDraft({ ...newStyleDraft, tags: event.target.value })} placeholder={ta("tagsPlaceholder")} className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground" /></label>
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("summaryLabel")}</span><textarea value={newStyleDraft.description} onChange={event => setNewStyleDraft({ ...newStyleDraft, description: event.target.value })} rows={2} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("positivePromptLabel")}</span><textarea value={newStyleDraft.positive} onChange={event => setNewStyleDraft({ ...newStyleDraft, positive: event.target.value })} rows={5} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label><span className="mb-1 block text-sm text-foreground">{ta("negativePromptLabel")}</span><textarea value={newStyleDraft.negative} onChange={event => setNewStyleDraft({ ...newStyleDraft, negative: event.target.value })} rows={5} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                            <label className="md:col-span-2"><span className="mb-1 block text-sm text-foreground">{ta("sampleDescriptionLabel")}</span><textarea value={newStyleDraft.sample} onChange={event => setNewStyleDraft({ ...newStyleDraft, sample: event.target.value })} rows={3} className="w-full rounded-md border border-border bg-surface p-3 text-sm text-foreground" /></label>
+                        </div>
+                        <footer className="flex justify-end gap-2 border-t border-glass-border px-6 py-3"><WorkflowActionButton variant="ghost" onClick={() => setNewStyleOpen(false)}>{ta("cancelBtn")}</WorkflowActionButton><WorkflowActionButton variant="primary" loading={newStyleSaving} onClick={() => void handleCreateStyle()} disabled={!newStyleDraft.name.trim() || !newStyleDraft.positive.trim()}>{ta("addStyle")}</WorkflowActionButton></footer>
                     </div>
                 </div>
             )}

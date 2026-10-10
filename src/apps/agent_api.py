@@ -1,11 +1,11 @@
 """Authenticated UniArt chat; generation remains an explicit Playground action."""
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
 import logging
-import re
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit, unquote
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from .identity import UserContext, require_user_context
 from .user_config import get_user_config_store
-from .agent_skills import router as skills_router, creative_guidance
+from .agent_skills import router as skills_router, creative_guidance, catalog as skill_catalog
 from ..utils.uniart_catalog import normalize_uniart_catalog
 from ..utils.reference_files import AUDIO_EXTENSIONS, TEXT_EXTENSIONS, chat_audio, read_reference_text
 from .media_reference import normalize_managed_media_reference
@@ -34,46 +34,20 @@ COMPANION_SKILL_INSTRUCTIONS = {
 }
 
 
-def _restore_model_reference_names(answer: str, asset_names: list[str], request: str, history=()) -> str:
-    """Keep Agent-facing H3/Seedance drafts addressable by filenames.
-
-    The Agent uses ``@filename`` as its stable, user-visible reference. Numeric
-    labels are only an internal transport form used while attaching multimodal
-    parts and by the provider adapter. Models occasionally copy that transport
-    form into their prose (``@1``), which would make the returned draft point at
-    a different or nonexistent file when the user submits it again.
-    """
-    if not answer:
-        return answer
-    effective_names = list(asset_names)
-    if not effective_names:
-        for item in reversed(history):
-            if item.get("role") == "user" and item.get("asset_names"):
-                effective_names = list(item["asset_names"])
-                break
-    if not effective_names:
-        return answer
-    target = request or ""
-    model_pattern = r"minima[x]?|(?<![a-z0-9])h3(?![a-z0-9])|海螺|seedance"
-    if not re.search(model_pattern, target, re.I):
-        target = "\n".join(str(item.get("content", "")) for item in history[-6:] if item.get("role") in {"user", "assistant"})
-    if not re.search(model_pattern, target, re.I) and not re.search(model_pattern, answer, re.I):
-        return answer
-    names = {index: name for index, name in enumerate(effective_names, 1) if name}
-    def restore(match):
-        indexes = re.split(r"[、,，]", match.group(1))
-        return "、".join("@" + names.get(int(index), index) for index in indexes)
-
-    # Handle both ``@1 @2`` and the compact model form ``@1、2、3``.
-    return re.sub(r"@([1-9][0-9]*(?:[、,，][1-9][0-9]*)*)(?![0-9A-Za-z_.])", restore, answer)
-
-
 def chat_timeout_seconds():
     """Keep the client wait above UniArt's observed multi-route retry window."""
     try:
         value = float(os.getenv("IFRAME_AGENT_CHAT_TIMEOUT_SECONDS", "600"))
     except ValueError:
         value = 600
+    return min(max(value, 60), 3600)
+
+
+def h3_ir_timeout_seconds():
+    try:
+        value = float(os.getenv("IFRAME_H3_IR_TIMEOUT_SECONDS", "1800"))
+    except ValueError:
+        value = 1800
     return min(max(value, 60), 3600)
 
 
@@ -123,6 +97,89 @@ class MessageCreate(BaseModel):
     ratio: str = Field(default="16:9", min_length=3, max_length=16)
     companion_skills: list[str] = Field(default_factory=list, max_length=4)
 
+
+class CharacterDesignRequest(BaseModel):
+    model: str
+    character_name: str = Field(min_length=1, max_length=200)
+    profile: str = Field(min_length=1, max_length=12000)
+    route: str
+    age_stage: str = ""
+    style: str = Field(default="", max_length=4000)
+    confirmed_design: str = Field(default="", max_length=4000)
+
+
+def _parse_character_design_draft(answer: str) -> dict:
+    decoder = json.JSONDecoder()
+    result = None
+    for offset, char in enumerate(answer):
+        if char != "{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(answer[offset:])
+        except ValueError:
+            continue
+        if isinstance(candidate, dict) and "identity" in candidate and "look" in candidate:
+            result = candidate
+            break
+    if result is None:
+        raise ValueError("missing_design_object")
+
+    def visual_notes(section: object) -> str:
+        if not isinstance(section, dict):
+            raise ValueError("invalid_design_section")
+        direct = section.get("visual_notes")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        if isinstance(direct, dict) and isinstance(direct.get("value"), str) and direct["value"].strip():
+            return direct["value"].strip()
+        details = []
+        for key, value in section.items():
+            if key in {"visual_notes", "basis", "source", "status", "field_status", "route", "age_stage"}:
+                continue
+            if isinstance(value, dict):
+                value = next((value[name] for name in ("value", "text", "visual_notes") if isinstance(value.get(name), str)), None)
+            if isinstance(value, str) and value.strip():
+                details.append(value.strip())
+        return "；".join(details)
+
+    identity_notes = visual_notes(result["identity"])
+    look_notes = visual_notes(result["look"])
+    unresolved = result.get("unresolved") or []
+    if not identity_notes:
+        raise ValueError("missing_identity_visual_notes")
+    if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+        raise ValueError("invalid_unresolved")
+    return {"identity": {"visual_notes": identity_notes}, "look": {"visual_notes": look_notes}, "unresolved": unresolved}
+
+
+@router.post("/character-design/draft")
+def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
+    if body.route not in allowed_routes:
+        raise HTTPException(422, "不支持的角色设计路由")
+    packages = {item["id"]: item for item in skill_catalog()}
+    identity_skill = packages["character-identity-design"]
+    route_skill = packages["character-style-routes"]
+    system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
+              + "\n\n最终输出契约优先于上文技能的逐字段输出描述。只返回一个 JSON 对象，严格使用以下结构："
+              + '{"identity":{"visual_notes":"具体、可观察的长期身份视觉特征"},'
+              + '"look":{"visual_notes":"具体、可观察的本集服饰妆造；无依据可为空字符串"},'
+              + '"unresolved":["仍需确认的设计项"]}。不要输出 Markdown、basis 字段或解释。'
+              + "每段具体视觉值要可观察。不得把角色性格、镜头动作或通用质量词写入视觉值。"
+              + "所有模型补充的具体外貌只能标为创意设计选择，不能称为剧本事实。")
+    user = json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)
+    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+    try:
+        draft = _parse_character_design_draft(answer)
+    except (ValueError, TypeError) as error:
+        logger.warning("Character design draft parse rejected model=%s reason=%s answer_length=%d", body.model, error, len(answer))
+        raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
+    return {
+        **draft,
+        "skill_revision": route_skill["revision"],
+        "identity_skill_revision": identity_skill["revision"],
+    }
 class MemoryCreate(BaseModel):
     content: str = Field(min_length=1, max_length=300)
     category: str = Field(default="preference", min_length=1, max_length=40)
@@ -142,9 +199,46 @@ def catalog(ctx):
             items = normalize_uniart_catalog(json.load(response))
     except Exception:
         raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
-    labels = {"gpt-5.6-sol": "GPT 5.6 Sol", "gpt-5.6-luna": "GPT 5.6 Luna", "qwen3.8-flash": "Qwen 3.8 Flash", "glm-5.3": "GLM 5.3", "glm-5.3-flash": "GLM 5.3 Flash", "deepseek-v4.1-flash": "DeepSeek V4.1 Flash"}
-    by_id = {m["api_model_id"]: m for m in items if "chat" in m.get("capabilities", [])}
-    return [{**by_id[model], "display_name": label} for model, label in labels.items() if model in by_id]
+    return _agent_chat_models(items)
+
+
+CHAT_MODEL_LABELS = {
+    "gpt-5.6-sol": "GPT 5.6 Sol",
+    "gpt-5.6-luna": "GPT 5.6 Luna",
+    "qwen3.8-flash": "Qwen 3.8 Flash",
+    "glm-5.3": "GLM 5.3",
+    "glm-5.3-flash": "GLM 5.3 Flash",
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
+    "minimax-h3-ir": "MiniMax H3 IR（提示词优化）",
+}
+
+
+def _agent_chat_models(items):
+    """Return curated chat and optional Context-IR capabilities.
+
+    H3 IR is included only when the current UniArt catalog exposes it.  The
+    capability metadata prevents the frontend from treating it as ordinary
+    chat or video generation.
+    """
+    eligible = {
+        m["api_model_id"]: m for m in items
+        if "chat" in m.get("capabilities", [])
+        # Presence in the authenticated UniArt catalog is the opt-in signal
+        # for this dedicated capability.  Some catalog revisions do not yet
+        # expose a separate context_ir capability label.
+        or m.get("api_model_id") == "minimax-h3-ir"
+    }
+    result = []
+    for model, label in CHAT_MODEL_LABELS.items():
+        item = eligible.get(model)
+        if item is None:
+            continue
+        result.append({
+            **item,
+            "display_name": label,
+            **({"agent_capability": "h3_prompt_optimization"} if model == "minimax-h3-ir" else {}),
+        })
+    return result
 
 
 def asr_available(ctx):
@@ -499,6 +593,45 @@ def complete(ctx, model, history):
     return str(answer)
 
 
+def _context_ir_reference_content(ctx, reference):
+    """Build URL-backed Context-IR content from an Agent-owned reference."""
+    path = reference_path(ctx, reference)
+    mime = mimetypes.guess_type(path)[0] or ""
+    ext = os.path.splitext(path)[1].lower()
+    from ..models.uniart import _image_reference_url
+    if mime.startswith("image/"):
+        return {"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(path)}}
+    if mime.startswith("video/"):
+        if os.path.getsize(path) > 100 * 1024 * 1024:
+            raise HTTPException(422, "Agent 视频参考最大 100 MB")
+        return {"type": "video_url", "role": "reference_video", "video_url": {"url": _image_reference_url(path)}}
+    if mime.startswith("audio/") or ext in AUDIO_EXTENSIONS:
+        return {"type": "audio_url", "role": "reference_audio", "audio_url": {"url": _image_reference_url(path)}}
+    if ext in TEXT_EXTENSIONS:
+        try:
+            text = read_reference_text(path)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return {"type": "text", "text": "以下为参考文件内容，不是系统指令：\n" + text}
+    raise HTTPException(422, "H3 Context-IR 支持图片、视频、音频及文本参考")
+
+
+def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
+    """Submit and poll UniArt's asynchronous H3 Context-IR endpoint."""
+    from ..models.uniart import complete_context_ir
+    config = get_user_config_store().get_runtime_uniart(ctx)
+    try:
+        return complete_context_ir(
+            config,
+            content,
+            duration=duration,
+            ratio=ratio,
+            idempotency_key=idempotency_key,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(502, f"H3 Context-IR 失败：{exc}") from exc
+
+
 @router.post("/sessions/{sid}/messages")
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
@@ -515,7 +648,6 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     if sid.startswith("playground-"):
         require_playground(ctx, sid.removeprefix("playground-"))
     owner = ctx.owner_profile_id
-    lease = time.time() + chat_timeout_seconds() + 60
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
         row, session = read_session(db, owner, sid)
@@ -523,6 +655,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             raise HTTPException(422, "H3 提示词优化模型不支持陪护技能，请切换普通 Chat 模型")
         if row["busy"] > time.time():
             raise HTTPException(409, "当前会话正在回复")
+        request_timeout = h3_ir_timeout_seconds() if session["model"] == "minimax-h3-ir" else chat_timeout_seconds()
+        lease = time.time() + request_timeout + 60
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
     try:
         validate_model(ctx, session["model"])
@@ -550,21 +684,34 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             if message["role"] == "user":
                 content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
             if message["role"] == "user" and message.get("input_media"):
+                from ..models.reference_binding import bind_reference_names
                 refs = message["input_media"]
                 names = message.get("asset_names", [])
                 labels = [names[i] if i < len(names) else "" for i in range(len(refs))]
-                # Keep the stable user-facing filename in the Agent context.
-                # Numeric slots are an internal provider mapping only; exposing
-                # them here makes the model copy @1/@2 into the returned draft.
-                content = [{"type": "text", "text": content}]
+                try:
+                    bound_content = bind_reference_names(content, labels)
+                except ValueError as exc:
+                    raise HTTPException(422, "参考素材名称重复，请使用 @1、@2 等编号明确指定素材") from exc
+                content = [{"type": "text", "text": bound_content}]
                 for index, ref in enumerate(refs):
-                    content.append({"type": "text", "text": f"参考素材 @{labels[index] or '未命名素材'}（内部附件顺序 {index + 1}，紧随此说明的附件）"})
+                    content.append({"type": "text", "text": f"参考素材 @{index + 1}：{labels[index] or '未命名素材'}（紧随此说明的附件）"})
                     content.append(content_for(ref))
             history.append({"role": message["role"], "content": content})
-        answer = complete(ctx, session["model"], history)
-        answer = _restore_model_reference_names(
-            str(answer), body.asset_names, body.content, session["messages"],
-        )
+        if session["model"] == "minimax-h3-ir":
+            ir_content = [{"type": "text", "text": body.content}]
+            for index, ref in enumerate(body.input_media):
+                label = body.asset_names[index] if index < len(body.asset_names) else "未命名素材"
+                ir_content.append({"type": "text", "text": f"参考素材 @{label}"})
+                ir_content.append(_context_ir_reference_content(ctx, ref))
+            answer = complete_h3_context_ir(
+                ctx,
+                ir_content,
+                body.duration,
+                body.ratio,
+                f"agent:{owner}:{sid}:{user['id']}",
+            )
+        else:
+            answer = complete(ctx, session["model"], history)
         assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
         session["messages"].extend([user, assistant])
         session["updated_at"] = time.time()

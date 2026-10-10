@@ -267,6 +267,22 @@ export interface AssetCoverSelectionResult {
     };
 }
 
+export interface AssetRevisionRecord {
+    revision: number;
+    content_hash: string;
+    confirmation_status: "legacy_attached" | "user_confirmed";
+    created_at: number;
+    snapshot: Record<string, unknown>;
+}
+
+export interface AssetRevisionHistory {
+    asset_type: "character" | "scene" | "prop";
+    asset_id: string;
+    source: "script" | "series" | "global";
+    current_revision: number;
+    revisions: AssetRevisionRecord[];
+}
+
 export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
@@ -984,6 +1000,36 @@ export const api = {
         return res.data;
     },
 
+    getAssetRevisions: async (scriptId: string, assetType: string, assetId: string): Promise<AssetRevisionHistory> => {
+        const res = await axios.get<AssetRevisionHistory>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions`,
+        );
+        return res.data;
+    },
+
+    confirmAssetRevision: async (
+        scriptId: string, assetType: string, assetId: string,
+        expectedRevision: number, activeVariantIds: string[], selectedVariantId?: string,
+    ): Promise<{ revision: AssetRevisionRecord }> => {
+        const res = await axios.post<{ revision: AssetRevisionRecord }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions/confirm`,
+            { expected_revision: expectedRevision, active_variant_ids: activeVariantIds,
+                selected_variant_id: selectedVariantId },
+        );
+        return res.data;
+    },
+
+    restoreAssetRevision: async (
+        scriptId: string, assetType: string, assetId: string,
+        revision: number, expectedRevision: number,
+    ): Promise<{ revision: AssetRevisionRecord }> => {
+        const res = await axios.post<{ revision: AssetRevisionRecord }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions/${revision}/restore`,
+            { expected_revision: expectedRevision },
+        );
+        return res.data;
+    },
+
     selectAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, generationType?: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/select`, {
             asset_id: assetId,
@@ -1314,6 +1360,9 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
+        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizationSkills: string[] = [],
+        targetRatio: string = "16:9",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
@@ -1323,6 +1372,9 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            optimizer_provider: optimizerProvider,
+            optimization_skills: optimizationSkills,
+            target_ratio: targetRatio,
             generate_audio: generateAudio,
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
@@ -1342,6 +1394,9 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
+        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizationSkills: string[] = [],
+        targetRatio: string = "16:9",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -1352,6 +1407,9 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            optimizer_provider: optimizerProvider,
+            optimization_skills: optimizationSkills,
+            target_ratio: targetRatio,
             generate_audio: generateAudio,
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
@@ -1373,6 +1431,15 @@ export const api = {
             asset_id: assetId,
             asset_type: assetType,
             attributes: attributes
+        });
+        return res.data;
+    },
+
+    updateSeriesAssetAttributes: async (seriesId: string, assetId: string, assetType: string, attributes: Record<string, unknown>) => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/update_attributes`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            attributes,
         });
         return res.data;
     },
@@ -1411,6 +1478,7 @@ export const api = {
                 media_id?: string | null;
                 label?: string | null;
                 source_asset_id?: string | null;
+                source_variant_id?: string | null;
             }>;
             confirmed?: boolean;
         };
@@ -2100,7 +2168,10 @@ export const api = {
     // Series Episodes
     getSeriesEpisodes: async (seriesId: string) => {
         const response = await axios.get(`${API_URL}/series/${seriesId}/episodes`);
-        return response.data;
+        return response.data.map((episode: any) => ({
+            ...episode,
+            originalText: episode.original_text,
+        }));
     },
     addEpisodeToSeries: async (seriesId: string, scriptId: string, episodeNumber?: number) => {
         const response = await axios.post(`${API_URL}/series/${seriesId}/episodes`, { script_id: scriptId, episode_number: episodeNumber });
@@ -2114,6 +2185,10 @@ export const api = {
     // Series Assets
     getSeriesAssets: async (seriesId: string) => {
         const response = await axios.get(`${API_URL}/series/${seriesId}/assets`);
+        return response.data;
+    },
+    deleteSeriesAsset: async (seriesId: string, assetType: "character" | "scene" | "prop", assetId: string, force = false) => {
+        const response = await axios.delete(`${API_URL}/series/${seriesId}/assets/${assetType}/${assetId}`, { params: { force } });
         return response.data;
     },
     importSeriesAssets: async (seriesId: string, sourceSeriesId: string, assetIds: string[]) => {
@@ -2418,13 +2493,13 @@ export const playgroundApi = {
       }
       throw new Error(detail);
     }
-    return response.json() as Promise<{ path: string }>;
+    return response.json() as Promise<{ media_id: string; path: string }>;
   },
 };
 
 export interface ChatSession { id: string; title: string; model: string; updated_at: number }
 export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; created_at?: number; model?: string }
-export interface ChatModel { id: string; api_model_id: string; display_name: string }
+export interface ChatModel { id: string; api_model_id: string; display_name: string; agent_capability?: string }
 export async function agentTranscribe(file: File): Promise<{ text: string; model: string }> {
   const form = new FormData();
   form.append('file', file);

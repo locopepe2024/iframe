@@ -23,6 +23,7 @@ import { R2V_SELECTION_MODEL_ID, getR2vRouteModelId, isR2vImageBased } from "@/l
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import { characterImageUrl, characterReferenceVariants } from "@/lib/characterImage";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
+import OptimizerSelector, { type OptimizerProvider } from "./storyboard-r2v/OptimizerSelector";
 import type { VideoParams } from "@/store/projectStore";
 
 interface VideoCreatorProps {
@@ -156,6 +157,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
+    const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
+    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
 
     const handlePolish = async (feedback: string = "") => {
         const draftPrompt = feedback ? (polishedPrompt?.en || prompt) : prompt;
@@ -171,10 +174,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     .map((slot) => ({
                         description: slot.name || 'Unknown character'
                     }));
-                res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId);
+                res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
             } else {
                 // I2V mode: use video polish
-                res = await api.polishVideoPrompt(draftPrompt, feedback, scriptId);
+                res = await api.polishVideoPrompt(draftPrompt, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
             }
             if (res.prompt_cn && res.prompt_en) {
                 setPolishedPrompt({ cn: res.prompt_cn, en: res.prompt_en });
@@ -1114,6 +1117,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         </button>
                                     </div>
                                 )}
+                                <OptimizerSelector
+                                    provider={optimizerProvider}
+                                    skills={optimizationSkills}
+                                    onProviderChange={(provider) => {
+                                        setOptimizerProvider(provider);
+                                        setOptimizationSkills(provider === "minimax_context_ir" ? [] : ["minimax-h3-director"]);
+                                    }}
+                                    onToggleSkill={(skillId) => setOptimizationSkills((current) => current.includes(skillId)
+                                        ? current.filter((id) => id !== skillId)
+                                        : [...current, skillId])}
+                                />
                                 <button
                                     onClick={() => handlePolish()}
                                     disabled={isPolishing || !prompt}

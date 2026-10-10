@@ -219,6 +219,124 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
     raise RuntimeError(f"UniArt task timed out after {max_wait}s")
 
 
+def submit_context_ir(
+    config: Dict[str, Any],
+    content: list[Dict[str, Any]],
+    *,
+    duration: int,
+    ratio: str,
+    idempotency_key: str,
+) -> Dict[str, Any]:
+    """Submit an asynchronous MiniMax H3 Context-IR interaction.
+
+    Context-IR is a prompt-optimization API.  It is deliberately kept
+    separate from ``/videos`` and chat: the returned id is an interaction id
+    that must be queried through the matching ``/video/context-ir`` route.
+    """
+    body = {
+        "model": "minimax-h3-ir",
+        "content": content,
+        "duration": duration,
+        "ratio": ratio,
+        "idempotency_key": idempotency_key,
+    }
+    resp = requests.post(
+        f"{_base_url(config)}/video/context-ir",
+        headers=_headers(config),
+        json=body,
+        timeout=90,
+    )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(_provider_error_detail(resp)) from exc
+    data = resp.json()
+    interaction_id = data.get("id")
+    if not interaction_id:
+        raise RuntimeError("UniArt Context-IR response has no interaction id")
+    return data
+
+
+def _poll_context_ir(
+    config: Dict[str, Any],
+    interaction_id: str,
+    *,
+    max_wait: int | None = None,
+    interval: float | None = None,
+) -> Dict[str, Any]:
+    """Poll Context-IR until succeeded or failed.
+
+    ``pending`` and ``processing`` are normal asynchronous states.  Network
+    and transient upstream errors are observation failures and are retried;
+    only the provider's terminal ``failed`` state is treated as task failure.
+    """
+    if max_wait is None:
+        try:
+            max_wait = int(os.getenv("IFRAME_H3_IR_TIMEOUT_SECONDS", "1800"))
+        except ValueError:
+            max_wait = 1800
+    if interval is None:
+        try:
+            interval = float(os.getenv("IFRAME_H3_IR_POLL_SECONDS", "4"))
+        except ValueError:
+            interval = 4.0
+    interval = max(1.0, interval)
+    started = time.time()
+    while time.time() - started < max_wait:
+        try:
+            resp = requests.get(
+                f"{_base_url(config)}/video/context-ir/{interaction_id}",
+                headers=_headers(config),
+                timeout=30,
+            )
+        except (requests.Timeout, requests.ConnectionError):
+            time.sleep(interval)
+            continue
+        if resp.status_code in {408, 429} or resp.status_code >= 500:
+            time.sleep(interval)
+            continue
+        if resp.status_code >= 400:
+            raise RuntimeError(_provider_error_detail(resp))
+        data = resp.json()
+        status = str(data.get("status") or "").lower()
+        if status in {"succeeded", "success", "completed"}:
+            prompt = data.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise RuntimeError("UniArt Context-IR succeeded without a prompt")
+            return data
+        if status in {"failed", "error", "cancelled", "canceled"}:
+            error = data.get("error") or data.get("message") or data
+            raise RuntimeError(f"UniArt Context-IR task {status}: {error}")
+        time.sleep(interval)
+    raise RuntimeError(f"UniArt Context-IR task timed out after {max_wait}s")
+
+
+def complete_context_ir(
+    config: Dict[str, Any],
+    content: list[Dict[str, Any]],
+    *,
+    duration: int,
+    ratio: str,
+    idempotency_key: str,
+    max_wait: int | None = None,
+) -> str:
+    """Submit and observe one Context-IR request, returning its prompt."""
+    created = submit_context_ir(
+        config,
+        content,
+        duration=duration,
+        ratio=ratio,
+        idempotency_key=idempotency_key,
+    )
+    interaction_id = str(created["id"])
+    if str(created.get("status") or "").lower() in {"succeeded", "success", "completed"}:
+        prompt = created.get("prompt")
+        if isinstance(prompt, str) and prompt.strip():
+            return prompt.strip()
+    result = _poll_context_ir(config, interaction_id, max_wait=max_wait)
+    return str(result["prompt"]).strip()
+
+
 def _download(config: Dict[str, Any], url: str, output_path: str, attempts: int = 6) -> str:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     # UniArt's signed COS URLs authenticate through their query string. Sending

@@ -9,6 +9,7 @@ export interface SeriesDirectorState {
   draft_revision: number;
   draft_name?: string | null;
   confirmed_revisions: Array<{ revision: number; profile: SeriesDirectorDraft }>;
+  style_review_required: boolean;
 }
 
 export interface SeriesDirectorAnalysisResult {

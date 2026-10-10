@@ -184,7 +184,6 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
         )}
 
         <div className="px-4 pt-3 md:px-5 md:pt-4">
-          {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           <PromptInput
             onSubmit={handleSubmit}
             onOpenReferences={() => togglePanel('reference')}
@@ -211,6 +210,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             label={`陪护技能${agent.companionSkills?.length ? ` ${agent.companionSkills.length}` : ''}`}
             onClick={() => togglePanel('companion')}
           />}
+          {agent?.active && <VoiceTranscriptionButton onTranscribed={text => setPrompt([usePlaygroundStore.getState().prompt.trim(), text].filter(Boolean).join('\n'))} />}
           {!agent?.active && <>
           <ToolButton
             active={activePanel === 'method'}

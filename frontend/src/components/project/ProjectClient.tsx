@@ -12,7 +12,6 @@ import type { BreadcrumbSegment } from "@/components/layout/BreadcrumbBar";
 // have their own SidePanelHeader-driven side columns.
 import ScriptProcessor from "@/components/modules/ScriptProcessor";
 import Cast from "@/components/modules/Cast";
-import VideoGenerator from "@/components/modules/VideoGenerator";
 import VideoAssembly from "@/components/modules/VideoAssembly";
 import ConsistencyVault from "@/components/modules/ConsistencyVault";
 import ArtDirection from "@/components/modules/ArtDirection";
@@ -26,25 +25,24 @@ import dynamic from "next/dynamic";
 
 const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"), { ssr: false });
 
-// PR-3m · Steps 7-9 (Voice / Final Mix / Export) deprecated. Their
+// PR-3m · Old steps (Voice / Final Mix / Export) deprecated. Their
 // functionality moved into:
 //   - Voice  → Cast voice binding + Storyboard DialogueAudioRow (PR-3g-3j)
 //   - Mix    → Assembly Mix phase tab (PR-3k)
 //   - Export → Assembly Export phase tab (PR-3k)
-// Both legacy and unified projects keep the same final Assembly boundary;
-// unified additionally separates scene references from Shot Design.
+// Both context modes keep the same Director, Assets, Storyboard, Shot Design,
+// and Assembly components. Current series projects additionally expose Cast.
 const LEGACY_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "assets", label: "3. Assets", icon: Users },
     { id: "storyboard", label: "4. Storyboard", icon: Layout },
-    { id: "motion", label: "5. Motion", icon: Video },
+    { id: "shot_design", label: "5. Shot Design", icon: Video },
     { id: "assembly", label: "6. Assembly", icon: Film },
 ];
 
-// Unified workflow: keep Cast as the character/voice surface, then expose
-// Assets, Storyboard scene references, and Shot Design as separate decisions.
-// The backend enum remains "r2v" for backward compatibility.
+// Current series workflow: Cast is an additional context capability. The
+// production stages after Cast remain the same as the standalone workflow.
 const UNIFIED_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
@@ -125,7 +123,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                             ? { status: "ready", statusLabel: tp("railCastBound", { n: chars.length, m: bound }) }
                             : { status: "ready", statusLabel: tp("railCast", { n: chars.length }) })
                         : { status: "idle" };
-                case "storyboard":
                 case "shot_design":
                     return frameCount > 0 ? { status: "ready", statusLabel: tp("railShots", { n: frameCount }) } : { status: "idle" };
                 case "assembly":
@@ -282,7 +279,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                         {activeStep === "assets" && <ConsistencyVault />}
                         {activeStep === "storyboard" && <StoryboardComposer />}
                         {activeStep === "shot_design" && <StoryboardR2V />}
-                        {activeStep === "motion" && <VideoGenerator />}
                         {activeStep === "assembly" && <VideoAssembly />}
                     </div>
                 </div>

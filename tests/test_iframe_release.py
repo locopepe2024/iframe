@@ -56,6 +56,15 @@ def test_release_requires_explicit_matching_remote_revision(monkeypatch, tmp_pat
         release.require_release_authority(tmp_path, sha)
 
 
+def test_release_rejects_non_release_branch(monkeypatch, tmp_path):
+    sha = "a" * 40
+    monkeypatch.setattr(release.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(release, "revision", lambda _repo, expected: sha)
+    monkeypatch.setattr(release, "run", lambda *args: "main")
+    with pytest.raises(RuntimeError, match="Unexpected release branch"):
+        release.require_release_authority(tmp_path, sha)
+
+
 def test_github_check_uses_source_owner_identity(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(release, "run", lambda *args: calls.append(args) or "revision")

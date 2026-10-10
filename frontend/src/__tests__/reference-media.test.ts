@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { referenceKey, referenceName } from '@/components/modules/playground/referenceMedia';
+import { mediaReferenceLabel, referenceKey, referenceName } from '@/components/modules/playground/referenceMedia';
 import { usePlaygroundStore } from '@/components/modules/playground/usePlaygroundStore';
 
 describe('reference display names', () => {
@@ -11,10 +11,16 @@ describe('reference display names', () => {
         expect(referenceName(b, names, [])).toBe('portrait.png');
         expect(referenceKey(a)).not.toBe(referenceKey(b));
     });
-    it('retains a generated name across delivery signature refresh', () => {
-        const history = [{ prompt: 'Rainy street', outputs: [{ media_path: '/playground/media/g/o?signature=old', media_type: 'image' }] }];
-        expect(referenceName('/playground/media/g/o?signature=new', {}, history)).toBe('Rainy street');
+    it('uses session, time and output identity instead of generated prompt text', () => {
+        const history = [{ session_id: 'session-123', created_at: '2026-10-08T02:03:04.123Z', prompt: '@优化@images (7).jpeg 设计角色', outputs: [{ id: 'output-456', media_path: '/playground/media/g/o?signature=old', media_type: 'image' }] }];
+        const label = mediaReferenceLabel('session-123', '2026-10-08T02:03:04.123Z', 'output-456');
+        expect(referenceName('/playground/media/g/o?signature=new', {}, history)).toBe(label);
+        expect(referenceName('/playground/media/g/o?signature=new', { '/playground/media/g/o': history[0].prompt }, history)).toBe(label);
         expect(referenceName('/playground/media/g/o?signature=new', { '/playground/media/g/o': 'My street' }, history)).toBe('My street');
+    });
+    it('ignores a legacy prompt-derived media name containing @', () => {
+        const path = '/playground/input-media/12345678-1234-1234-1234-123456789abc.jpeg';
+        expect(referenceName(path, { [path]: '@优化@images (7).jpeg 设计角色' }, [])).toBe('素材-12345678');
     });
     it('decodes filenames without including signed query parameters', () => {
         expect(referenceName('/files/my%20picture.png?signature=secret', {}, [])).toBe('my picture.png');

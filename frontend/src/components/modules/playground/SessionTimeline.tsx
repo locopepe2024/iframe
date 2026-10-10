@@ -210,7 +210,7 @@ export default function SessionTimeline({ messages = [], busy = false, error = '
         const element = event.currentTarget;
         stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
       }}
-      className="flex-1 overflow-y-auto px-4 py-5 scrollbar-thin md:px-6"
+      className="playground-scrollbar flex-1 overflow-y-auto px-4 py-5 md:px-6"
     >
       <div className="mx-auto max-w-5xl">
         {sorted.map(entry => entry.kind === 'generation' ? <GenerationTurn key={'generation-' + entry.id} generation={entry.generation} /> : <ChatCard key={'chat-' + entry.id} message={entry.message} onDelete={onDeleteMessage} />)}

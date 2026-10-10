@@ -131,6 +131,8 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         content: snapshot.prompt, input_media: snapshot.inputMedia,
         companion_skills: companionSkills,
         asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
+        duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
+        ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
       });
       if (active.current === sessionId) {
         setMessages(m => [...m.filter(x => x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
