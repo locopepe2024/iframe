@@ -1,12 +1,12 @@
 # iFrame Knowledge: Agent Handoff and Acceptance v1
 
-Date: 2026-10-10. Status: owner import/search API deployed; collector and Agent tool loop pending. This is the short handoff for agents building collection, indexing, and domain workflows. The product rules remain in `2026-10-10-iframe-knowledge-platform-spec-v1.md`.
+Date: 2026-10-10. Status: owner import/search API and explicit Playground Agent search deployed; collector and model-proposed tool loop pending. This is the short handoff for agents building collection, indexing, and domain workflows. The product rules remain in `2026-10-10-iframe-knowledge-platform-spec-v1.md`.
 
 ## Observed
 
 - TencentDB PostgreSQL 16 is provisioned privately in Tokyo with migrations v1/v2; the deployed API connects through TLS. Private COS storage is configured with scoped credentials.
 - The deployed API accepts owner collections and text/image/short-video source units, annotations and searches. An isolated candidate and the live localhost API passed two-identity HTTP tests of import, idempotency, media retrieval, type-filtered search and private isolation.
-- There is no web crawler, Agent tool loop or public curator API yet. Existing Agent skills are prompt instructions, not executable retrieval tools. The HTTP smoke did not test public publication.
+- There is no web crawler, model-proposed Agent tool loop or public curator API yet. The Playground Agent can perform user-enabled read-only search and persist returned citations. Existing Agent skills remain prompt instructions. The HTTP smoke did not test public publication.
 
 ## Direct implication
 
