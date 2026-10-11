@@ -3409,6 +3409,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "heading": last["heading"],
                         "location": last["location"],
                         "time_anchor": last["time_anchor"],
+                        "place_continuity_id": last.get("place_continuity_id") or "",
+                        "time_continuity_id": last.get("time_continuity_id") or "",
                         "environment_atmosphere": last["environment_atmosphere"],
                         "last_beat": last["beats"][-1]["title"] if last["beats"] else "",
                         # Explicit handoff state keeps the next chunk grounded
@@ -3457,6 +3459,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                         target["location"] = str(raw_scene.get("location", ""))[:240]
                     if not target["time_anchor"]:
                         target["time_anchor"] = str(raw_scene.get("time_anchor", ""))[:160]
+                    for continuity_key in ("place_continuity_id", "time_continuity_id"):
+                        incoming_id = str(raw_scene.get(continuity_key) or "").strip()[:120]
+                        if incoming_id and target.get(continuity_key) and incoming_id != target[continuity_key]:
+                            unresolved_questions.append(
+                                f"连续场景 {target['scene_id']} 的 {continuity_key} 在片段间不一致，请复核")
+                        elif incoming_id and not target.get(continuity_key):
+                            target[continuity_key] = incoming_id
                     if not target["environment_atmosphere"]:
                         target["environment_atmosphere"] = str(raw_scene.get("environment_atmosphere", ""))[:1600]
                     if not target["continuity_in"]:
@@ -3474,6 +3483,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "heading": str(raw_scene.get("heading", ""))[:240],
                         "location": str(raw_scene.get("location", ""))[:240],
                         "time_anchor": str(raw_scene.get("time_anchor", ""))[:160],
+                        "place_continuity_id": str(raw_scene.get("place_continuity_id") or "").strip()[:120] or None,
+                        "time_continuity_id": str(raw_scene.get("time_continuity_id") or "").strip()[:120] or None,
                         "environment_atmosphere": str(raw_scene.get("environment_atmosphere", ""))[:1600],
                         "continues_previous_scene": continuation,
                         "continuity_in": str(raw_scene.get("continuity_in", ""))[:1200],
@@ -3594,9 +3605,28 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise RuntimeError("Director shooting-plan analysis returned no scenes")
         if unbound_entity_refs:
             unresolved_questions.append("模型返回了未登记实体引用，已忽略：" + ", ".join(sorted(unbound_entity_refs)[:20]))
+        lighting_baselines = []
+        seen_pairs = set()
+        for scene in scenes:
+            pair = (scene.get("place_continuity_id"), scene.get("time_continuity_id"))
+            if not all(pair) or pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            first_shot = next((shot for beat in scene["beats"] for shot in beat["shots"]), None)
+            scene_binding = (first_shot.get("scene_binding") or {}) if first_shot else {}
+            first_lighting = (first_shot.get("lighting") or {}) if first_shot else {}
+            lighting_baselines.append({
+                "place_continuity_id": pair[0], "time_continuity_id": pair[1],
+                "story_time": scene["time_anchor"],
+                "daylight_phase": scene_binding.get("time_of_day") or "",
+                "weather": scene_binding.get("weather") or "",
+                "shadow_direction": "",
+                "lighting": first_lighting,
+            })
         plan = DirectorShootingPlan(
             **lineage,
             scenes=scenes,
+            lighting_baselines=lighting_baselines,
             unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
             generated_at=time.time(),
         )
@@ -3608,6 +3638,30 @@ class ComicGenPipeline(StudioOwnerMixin):
         # details remain editable in the shot and storyboard stages.
         if not value.scenes:
             raise ValueError("Add at least one scene before confirming the shooting plan")
+        baselines = {(item.place_continuity_id, item.time_continuity_id): item
+                     for item in value.lighting_baselines}
+        for scene in value.scenes:
+            place_id = scene.place_continuity_id
+            time_id = scene.time_continuity_id
+            if bool(place_id) != bool(time_id):
+                raise ValueError(f"Scene {scene.scene_id} needs both place and time continuity IDs")
+            if not place_id:
+                continue
+            baseline = baselines.get((place_id, time_id))
+            if baseline is None:
+                raise ValueError(f"Scene {scene.scene_id} has no reviewed place/time lighting baseline")
+            if not baseline.lighting.key_source.strip() or not baseline.lighting.color_tone.strip():
+                raise ValueError(f"Scene {scene.scene_id} lighting baseline needs key source and color tone")
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    if shot.lighting_override_reason.strip():
+                        continue
+                    for field in ("key_source", "color_tone", "contrast"):
+                        authored = getattr(shot.lighting, field).strip()
+                        if authored and authored != getattr(baseline.lighting, field).strip():
+                            raise ValueError(f"Shot {shot.shot_id} lighting conflicts with place/time baseline; add an override reason")
+                    if shot.lighting.practical_sources and shot.lighting.practical_sources != baseline.lighting.practical_sources:
+                        raise ValueError(f"Shot {shot.shot_id} lighting conflicts with place/time baseline; add an override reason")
 
     def save_director_shooting_plan_draft(
         self,
@@ -3718,6 +3772,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Confirm the shooting plan before syncing episode assets")
         revision = script.director_shooting_plan_revisions[-1]
         plan = revision.plan
+        self._validate_director_shooting_plan_for_confirmation(plan)
+        baselines = {(item.place_continuity_id, item.time_continuity_id): item
+                     for item in plan.lighting_baselines}
         resolved_assets = self.resolve_episode_assets(script)
         def current_asset_id(asset_type: str, plan_asset_id: Optional[str]) -> Optional[str]:
             if not plan_asset_id:
@@ -3773,6 +3830,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scene_ref=scene.scene_ref,
                 location=scene.location,
                 time_anchor=scene.time_anchor,
+                place_continuity_id=scene.place_continuity_id,
+                time_continuity_id=scene.time_continuity_id,
                 interior_exterior=binding.interior_exterior if binding else None,
                 time_of_day=binding.time_of_day if binding else None,
                 season=binding.season if binding else None,
@@ -3782,6 +3841,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             ))
             for beat in scene.beats:
                 for shot in beat.shots:
+                    baseline = baselines.get((scene.place_continuity_id, scene.time_continuity_id))
+                    lighting = shot.lighting.model_dump()
+                    if baseline:
+                        inherited = baseline.lighting.model_dump()
+                        inherited["shadow_direction"] = baseline.shadow_direction
+                        for field, value in lighting.items():
+                            if value and shot.lighting_override_reason.strip():
+                                inherited[field] = value
+                        lighting = inherited
                     cast_items = [DirectorPlanCastBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.cast_bindings]
                     prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
                     known_people = {cast.person_id for cast in cast_items}
@@ -3813,7 +3881,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                         prop_ids=shot_prop_ids,
                         visual_intent=shot.visual_intent, performance_action=shot.performance_action,
                         composition=shot.composition, camera_movement=shot.camera_movement,
-                        lighting=shot.lighting.model_dump(),
+                        lighting=lighting,
+                        place_continuity_id=scene.place_continuity_id,
+                        time_continuity_id=scene.time_continuity_id,
+                        lighting_override_reason=shot.lighting_override_reason,
                     ))
                     for cast in cast_items:
                         key = (cast.person_id, scene.scene_id, cast.era_variant_id, cast.scene_look_id,
