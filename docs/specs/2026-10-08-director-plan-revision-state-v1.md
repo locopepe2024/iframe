@@ -7,16 +7,29 @@
 The model proposes a lighting description for each shot. The runtime derives
 one baseline from the first shot for each reviewed place/time pair. For shots
 sharing that pair, the generated per-shot lighting is treated as inherited
-unless the model explicitly supplies a reason for a deliberate lighting
-change. Inherited shots store empty lighting fields and use the baseline in
-the episode visual context. A justified exception keeps its shot lighting and
-reason. The model is asked to return an exception reason only for a real
-change; the runtime never invents a reason from differing prose.
+unless the user explicitly selects independent lighting and enters a reason.
+Inherited shots store empty lighting fields and use the baseline in the episode
+visual context. A justified exception keeps its shot lighting and reason. The
+model never selects an exception for the user.
 
-Existing saved drafts are not rewritten. The editor presents those conflicts
-as review items with both values. Generation should yield a confirmable
-baseline by default, so the user reviews exceptions instead of filling every
-shot field. Editing the scene baseline or an individual shot remains possible.
+Legacy saved drafts may contain a model-generated lighting paraphrase on every
+shot. When a shot has a reviewed place/time pair but lacks the persisted
+user-selection marker, any reason or lighting text is not an authored lighting decision:
+the editor and confirmation path treat the shot as inheriting the baseline.
+The legacy text is normalized away in the editable draft projection, so it
+does not create a conflict list or require a user to repair each shot. An
+intentional exception keeps its user-selected non-empty reason and only its
+explicitly provided lighting fields override the baseline. The editor should
+make this inheritance visible and require a reason before enabling custom
+shot-lighting fields.
+
+Saving a draft with one or more newly entered override reasons shows one
+summary confirmation. The confirmation explains that those shots will use
+independent lighting and keeps the reason with the draft. After the user
+accepts that save, confirming the shooting plan does not show the same prompt
+again and does not compare the independent wording with the baseline. A shot
+without a user selection and reason is always normalized back to inheritance
+before persistence.
 
 ## Review-first shooting-plan interaction (2026-10-11)
 
@@ -42,8 +55,9 @@ Keep the review surface focused:
 The AI is responsible for proposing the plan and its bindings. A user normally
 reviews the story and shot intent, then opens a detail only to fix an error or
 approve a deliberate exception. Never present raw internal IDs as a normal
-manual task. A lighting conflict deep-links to the relevant scene and shot and
-shows the baseline and shot values side by side at the point of decision.
+manual task. An intentional lighting exception is reviewed in the relevant
+scene and shot; the editor shows that the reason makes the shot independent
+rather than comparing its wording with the baseline.
 
 The confirmed plan is projected into `episode_visual_context`. Storyboard
 generation and storyboard refinement receive only the context whose

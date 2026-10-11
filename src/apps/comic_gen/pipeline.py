@@ -28,6 +28,7 @@ from .models import (
     EpisodeUnderstandingHandoff,
     DirectorShootingPlan,
     DirectorShootingPlanRevision,
+    DirectorPlanLighting,
     DirectorPlanAssetIdentity,
     DirectorPlanSceneBinding,
     DirectorPlanCastBinding,
@@ -3591,7 +3592,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "composition": str(raw_shot.get("composition", ""))[:1200],
                             "camera_movement": str(raw_shot.get("camera_movement", ""))[:500],
                             "lighting": raw_shot.get("lighting", {}),
-                            "lighting_override_reason": str(raw_shot.get("lighting_override_reason") or "")[:500],
+                            # A model suggestion is not a user decision. An
+                            # independent-lighting reason becomes effective
+                            # only after the editor explicitly enters it.
+                            "lighting_override_reason": "",
+                            "lighting_override_selected": False,
                             "duration_seconds": raw_shot.get("duration_seconds"),
                             "dialogue": dialogue,
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
@@ -3634,7 +3639,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 continue
             for beat in scene["beats"]:
                 for shot in beat["shots"]:
-                    if not shot["lighting_override_reason"].strip():
+                    if not shot["lighting_override_selected"] or not shot["lighting_override_reason"].strip():
                         shot["lighting"] = {}
         plan = DirectorShootingPlan(
             **lineage,
@@ -3644,6 +3649,33 @@ class ComicGenPipeline(StudioOwnerMixin):
             generated_at=time.time(),
         )
         return self._validate_director_shooting_plan(script, plan)
+
+    @staticmethod
+    def normalize_director_shooting_plan_lighting(value: Any) -> DirectorShootingPlan:
+        """Project unreasoned shots onto their reviewed place/time baseline.
+
+        Older AI-generated drafts may store a different natural-language
+        paraphrase on each shot. Within a reviewed place/time pair, only a
+        explicit user selection plus a non-empty reason makes shot lighting
+        independent; an AI-generated or legacy reason alone does not.
+        """
+        plan = value if isinstance(value, DirectorShootingPlan) else DirectorShootingPlan(**value)
+        normalized = plan.model_copy(deep=True)
+        baselines = {
+            (item.place_continuity_id, item.time_continuity_id): item
+            for item in normalized.lighting_baselines
+        }
+        for scene in normalized.scenes:
+            pair = (scene.place_continuity_id, scene.time_continuity_id)
+            has_baseline = all(pair) and pair in baselines
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    if not shot.lighting_override_selected or not shot.lighting_override_reason.strip():
+                        shot.lighting_override_selected = False
+                        shot.lighting_override_reason = ""
+                        if has_baseline:
+                            shot.lighting = DirectorPlanLighting()
+        return normalized
 
     @staticmethod
     def _validate_director_shooting_plan_for_confirmation(value: DirectorShootingPlan) -> None:
@@ -3665,16 +3697,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError(f"Scene {scene.scene_id} has no reviewed place/time lighting baseline")
             if not baseline.lighting.key_source.strip() or not baseline.lighting.color_tone.strip():
                 raise ValueError(f"Scene {scene.scene_id} lighting baseline needs key source and color tone")
-            for beat in scene.beats:
-                for shot in beat.shots:
-                    if shot.lighting_override_reason.strip():
-                        continue
-                    for field in ("key_source", "color_tone", "contrast"):
-                        authored = getattr(shot.lighting, field).strip()
-                        if authored and authored != getattr(baseline.lighting, field).strip():
-                            raise ValueError(f"Shot {shot.shot_id} lighting conflicts with place/time baseline; add an override reason")
-                    if shot.lighting.practical_sources and shot.lighting.practical_sources != baseline.lighting.practical_sources:
-                        raise ValueError(f"Shot {shot.shot_id} lighting conflicts with place/time baseline; add an override reason")
 
     def save_director_shooting_plan_draft(
         self,
@@ -3694,6 +3716,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if expected_draft_revision != script.director_shooting_plan_draft_revision:
                 raise ValueError("Shooting-plan draft revision changed; reload before saving")
             validated = self._validate_director_shooting_plan_structure(script, plan) if allow_stale_lineage else self._validate_director_shooting_plan(script, plan)
+            validated = self.normalize_director_shooting_plan_lighting(validated)
             script.director_shooting_plan_draft = validated.model_copy(deep=True)
             script.director_shooting_plan_draft_revision += 1
             script.director_shooting_plan_draft_updated_at = time.time()
@@ -3724,8 +3747,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not script.director_shooting_plan_draft:
                 raise ValueError("Save the shooting-plan draft before confirming")
             validated = self._validate_director_shooting_plan_structure(script, plan) if allow_stale_lineage else self._validate_director_shooting_plan(script, plan)
+            validated = self.normalize_director_shooting_plan_lighting(validated)
             self._validate_director_shooting_plan_for_confirmation(validated)
-            if self._shooting_plan_content(script.director_shooting_plan_draft) != self._shooting_plan_content(validated):
+            normalized_draft = self.normalize_director_shooting_plan_lighting(script.director_shooting_plan_draft)
+            if self._shooting_plan_content(normalized_draft) != self._shooting_plan_content(validated):
                 raise ValueError("Shooting plan has unsaved edits; save it before confirming")
             content = self._shooting_plan_content(validated)
             content_hash = hashlib.sha256(json.dumps(
@@ -3768,7 +3793,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             if snapshot is None:
                 raise ValueError("Shooting-plan revision not found")
-            restored = self._validate_director_shooting_plan(script, snapshot.plan)
+            restored = self.normalize_director_shooting_plan_lighting(
+                self._validate_director_shooting_plan(script, snapshot.plan)
+            )
             script.director_shooting_plan_draft = restored.model_copy(deep=True)
             script.director_shooting_plan_draft_revision += 1
             script.director_shooting_plan_draft_updated_at = time.time()
@@ -3863,9 +3890,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                         inherited = baseline.lighting.model_dump()
                         inherited["shadow_direction"] = baseline.shadow_direction
                         for field, value in lighting.items():
-                            if value and shot.lighting_override_reason.strip():
+                            if value and shot.lighting_override_selected and shot.lighting_override_reason.strip():
                                 inherited[field] = value
                         lighting = inherited
+                    override_reason = (
+                        shot.lighting_override_reason
+                        if shot.lighting_override_selected and shot.lighting_override_reason.strip()
+                        else ""
+                    )
                     cast_items = [DirectorPlanCastBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.cast_bindings]
                     prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
                     known_people = {cast.person_id for cast in cast_items}
@@ -3908,7 +3940,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         lighting=lighting,
                         place_continuity_id=scene.place_continuity_id,
                         time_continuity_id=scene.time_continuity_id,
-                        lighting_override_reason=shot.lighting_override_reason,
+                        lighting_override_reason=override_reason,
                     ))
                     for cast in cast_items:
                         key = (cast.person_id, scene.scene_id, cast.era_variant_id, cast.scene_look_id,

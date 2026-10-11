@@ -188,10 +188,12 @@ The reviewed time interval records its story time, daylight phase, and
 weather. Each reviewed place/time pair owns a lighting baseline: key light
 source and world direction, color tone, and shadow direction. Shots with the
 same pair inherit that baseline. A deliberate lighting difference records an
-explicit override and reason. A confirmed plan revision pins both IDs and
-the baseline revision used for generation; changing one requires review of
-affected shots. Before render, validation must flag contradictory shot
-lighting. Matching names or a shared word such as “黄昏” cannot by itself
+explicit user selection and reason. A confirmed plan revision pins both IDs
+and the baseline revision used for generation; changing one requires review of
+affected shots. The plan confirmation path does not compare natural-language
+shot lighting with the baseline: model paraphrases inherit it, and a
+user-selected exception is accepted after the save confirmation. Matching
+names or a shared word such as “黄昏” cannot by itself
 establish continuity; the user confirms the join when the script does not
 provide an unambiguous place or continuous interval.
 

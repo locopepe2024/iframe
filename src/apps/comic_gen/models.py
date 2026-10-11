@@ -1194,6 +1194,7 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     camera_movement: str = Field("", max_length=500)
     lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
     lighting_override_reason: str = Field("", max_length=500)
+    lighting_override_selected: bool = False
     duration_seconds: Optional[int] = Field(None, ge=1, le=30)
     dialogue: List[DirectorPlanDialogueLine] = Field(default_factory=list, max_length=20)
     ambient_sound: str = Field("", max_length=1000)

@@ -21,10 +21,17 @@ end-to-end view and storyboard contract.
    `time_continuity_id`. These are reviewed narrative joins, not asset IDs or
    conclusions from similar text. Legacy plans without them remain readable.
 2. A plan may record one reviewed lighting baseline per place/time pair. A
-   shot in that pair inherits the baseline unless it has an explicit override
-   reason. Conflicting nonempty shot lighting without that reason is rejected
-   at plan confirmation and asset handoff. The plan revision pins the baseline
-   snapshot.
+   shot in that pair inherits the baseline unless the user explicitly selects
+   independent lighting and enters an override reason. Model-generated wording
+   or a legacy reason without that selection is treated as a paraphrase, not as
+   a separate lighting decision; it is normalized to inheritance in the
+   editable draft projection and does not block confirmation. Natural-language
+   string inequality is not evidence of a lighting contradiction. A deliberate
+   exception keeps its user-selected reason and explicitly populated fields,
+   which override only those baseline fields. The plan revision pins the
+   baseline snapshot. Saving a draft with an explicit override reason asks for
+   one summary confirmation; after that decision, plan confirmation does not
+   run another lighting-difference check.
 3. The editor exposes the IDs and baseline for review. Generated plan text may
    suggest continuity, but only confirmed structured values establish a join.
 4. Current re-extraction creates fresh Scene and Prop IDs; this is the runtime
@@ -40,8 +47,12 @@ end-to-end view and storyboard contract.
 
 - Confirm and reload a plan containing two views of one place/time pair;
   verify IDs and baseline persist and projected shots inherit the same light.
-- A conflicting shot with no override is flagged; an explicit override reason
-  survives confirmation and projection. Legacy plans remain valid.
+- Load a legacy draft whose model-generated lighting fields paraphrase the
+  baseline on many shots but have no override reasons; verify the editor treats
+  them as inherited and the plan can be confirmed without per-shot cleanup.
+- Verify a user-selected override reason preserves the shot's populated
+  override fields through confirmation and projection; omitted fields still
+  inherit.
 - Re-extract an existing episode with a confirmed plan. Under current runtime,
   verify fresh Scene/Prop IDs leave plan requirements visible. For the target
   resolver, verify `same_as_existing` preserves IDs, `new_entity` allocates

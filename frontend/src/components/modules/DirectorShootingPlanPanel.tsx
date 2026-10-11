@@ -30,7 +30,7 @@ import type {
 } from "@/lib/directorShootingPlan";
 import { useProjectStore, type DirectorProfile } from "@/store/projectStore";
 import { extractErrorDetail } from "@/lib/utils";
-import { planLightingConflicts } from "@/lib/directorPlanLighting";
+import { changedLightingOverrideCount } from "@/lib/directorPlanLighting";
 
 type Action = "load" | "generate" | "save" | "confirm" | "restore" | null;
 
@@ -42,7 +42,7 @@ function emptyShot(order: number): DirectorPlanShot {
     return {
         shot_id: newId("plan-shot"), order, title: "", visual_intent: "", director_effect: "", performance_action: "",
         action_physics: "", shot_size: "", camera_angle: "", composition: "", camera_movement: "",
-        lighting: emptyLighting(), lighting_override_reason: "", duration_seconds: 3, dialogue: [], ambient_sound: "",
+        lighting: emptyLighting(), lighting_override_reason: "", lighting_override_selected: false, duration_seconds: 3, dialogue: [], ambient_sound: "",
         character_ids: [], prop_ids: [],
         cast_bindings: [], scene_binding: null, prop_bindings: [],
     };
@@ -226,7 +226,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const beats = scenes.flatMap(scene => scene.beats);
     const shots = beats.flatMap(beat => beat.shots);
     const duration = shots.reduce((total, shot) => total + (shot.duration_seconds ?? 0), 0);
-    const lightingConflicts = planLightingConflicts(plan);
     const viewedDirectorRevision = viewedDirector?.revision ?? Number(currentLineage?.director_profile_revision ?? 0);
     const viewedDirectorHash = viewedDirector?.content_hash ?? String(currentLineage?.director_profile_hash ?? "");
     const matchingHistory = history.filter(item => item.director_profile_revision === viewedDirectorRevision
@@ -384,6 +383,8 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
 
     const save = async () => {
         if (!projectId || !plan) return;
+        const independentLightingChanges = changedLightingOverrideCount(savedPlan, plan);
+        if (independentLightingChanges > 0 && !window.confirm(t("lightingOverrideSaveConfirm", { count: independentLightingChanges }))) return;
         setAction("save");
         setError("");
         try {
@@ -412,11 +413,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
 
     const confirmPlan = async () => {
         if (!projectId || !plan || dirty || draftStale || serverState?.readiness_error) return;
-        if (lightingConflicts.length) {
-            openLightingConflict(lightingConflicts[0]);
-            setError(t("lightingConflictSummary", { count: lightingConflicts.length }));
-            return;
-        }
         setAction("confirm");
         setError("");
         try {
@@ -526,14 +522,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const openPlanEditor = () => {
         requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("director-plan-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })));
     };
-    const openLightingConflict = (conflict: (typeof lightingConflicts)[number]) => {
-        setExpandedSceneIds(previous => new Set(previous).add(conflict.sceneId));
-        setExpandedSceneContextIds(previous => new Set(previous).add(conflict.sceneId));
-        setExpandedShots(previous => new Set(previous).add(conflict.shotId));
-        setExpandedShotContextIds(previous => new Set(previous).add(conflict.shotId));
-        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`director-plan-shot-${conflict.shotId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" })));
-    };
-
     return (
         <section className="space-y-5" aria-labelledby="director-shooting-plan-title">
             <header className="flex flex-wrap items-start justify-between gap-4">
@@ -561,13 +549,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             {action === "load" && <p className="flex items-center gap-2 text-sm text-text-secondary" role="status"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("loading")}</p>}
             {error && <div className="flex items-start gap-2 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" role="alert"><AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{error}</div>}
             {notice && <div className="flex items-start gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100" role="status"><CheckCircle2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{notice}</div>}
-            {lightingConflicts.length > 0 && <div className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
-                <p className="font-medium">{t("lightingConflictSummary", { count: lightingConflicts.length })}</p>
-                <p className="mt-1 text-xs">{t("lightingConflictHint")}</p>
-                <ul className="mt-2 flex flex-wrap gap-2">
-                    {lightingConflicts.map(conflict => <li key={conflict.shotId}><button type="button" onClick={() => openLightingConflict(conflict)} className="rounded border border-amber-300/40 px-2 py-1 text-xs hover:bg-amber-300/10">{t("lightingConflictShot", { scene: conflict.sceneIndex + 1, shot: conflict.shotTitle || conflict.shotId })}</button></li>)}
-                </ul>
-            </div>}
             {serverState?.readiness_error && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
                     <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -877,31 +858,25 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                                         <fieldset className="rounded-md border border-border p-3">
                                                                             <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
                                                                             {(() => {
-                                                                                const conflict = lightingConflicts.find(item => item.shotId === shot.shot_id);
                                                                                 const baseline = (plan.lighting_baselines ?? []).find(item =>
                                                                                     item.place_continuity_id === scene.place_continuity_id && item.time_continuity_id === scene.time_continuity_id);
-                                                                                if (!conflict || !baseline) return null;
-                                                                                const fieldNames = { key_source: "keySource", color_tone: "colorTone", contrast: "contrast", practical_sources: "practicalSources" } as const;
-                                                                                return <div className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
-                                                                                    <p className="font-medium">{t("lightingConflictComparisonTitle")}</p>
-                                                                                    <p className="mt-1 leading-5">{t("lightingConflictComparisonHint")}</p>
-                                                                                    <div className="mt-3 space-y-2">
-                                                                                        {conflict.fields.map(field => <div key={field} className="rounded border border-amber-300/20 bg-background/50 p-2">
-                                                                                            <p className="font-medium">{t(`fields.${fieldNames[field]}`)}</p>
-                                                                                            <p className="mt-1"><span className="text-text-muted">{t("lightingBaselineValue")}</span> {Array.isArray(baseline.lighting[field]) ? baseline.lighting[field].join("、") || t("lightingEmptyValue") : baseline.lighting[field] || t("lightingEmptyValue")}</p>
-                                                                                            <p className="mt-1"><span className="text-text-muted">{t("lightingShotValue")}</span> {Array.isArray(shot.lighting[field]) ? shot.lighting[field].join("、") || t("lightingEmptyValue") : shot.lighting[field] || t("lightingEmptyValue")}</p>
-                                                                                            <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, [field]: baseline.lighting[field] } })} className="mt-2 rounded border border-amber-300/40 px-2 py-1 hover:bg-amber-300/10">{t("lightingUseBaseline")}</button>
-                                                                                        </div>)}
-                                                                                    </div>
-                                                                                </div>;
+                                                                                const hasOverrideReason = Boolean(shot.lighting_override_selected && shot.lighting_override_reason?.trim());
+                                                                                const inheritsBaseline = Boolean(baseline && !hasOverrideReason);
+                                                                                return <>
+                                                                                    <p className="mb-3 text-xs leading-5 text-text-muted">
+                                                                                        {baseline && !hasOverrideReason
+                                                                                            ? `${t("lightingInheritedHint")} ${[baseline.lighting.key_source, baseline.lighting.color_tone, baseline.lighting.contrast].filter(Boolean).join(" · ")}`
+                                                                                            : hasOverrideReason ? t("lightingOverrideActiveHint") : t("lightingNoBaselineHint")}
+                                                                                    </p>
+                                                                                    <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} hint={baseline ? t("lightingOverrideReasonHint") : t("lightingNoBaselineReasonHint")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value, lighting_override_selected: Boolean(value.trim()) })} /></div>
+                                                                                    {!inheritsBaseline && <div className="grid gap-3 sm:grid-cols-3">
+                                                                                        <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
+                                                                                        <Field label={t("fields.colorTone")} value={shot.lighting.color_tone} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, color_tone: value } })} />
+                                                                                        <Field label={t("fields.contrast")} value={shot.lighting.contrast} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, contrast: value } })} />
+                                                                                        <div className="sm:col-span-3"><Field label={t("fields.practicalSources")} value={shot.lighting.practical_sources.join("\n")} multiline hint={t("practicalSourceHint")} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, practical_sources: value.split("\n").map(item => item.trim()).filter(Boolean) } })} /></div>
+                                                                                    </div>}
+                                                                                </>;
                                                                             })()}
-                                                                            <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
-                                                                            <div className="grid gap-3 sm:grid-cols-3">
-                                                                                <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
-                                                                                <Field label={t("fields.colorTone")} value={shot.lighting.color_tone} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, color_tone: value } })} />
-                                                                                <Field label={t("fields.contrast")} value={shot.lighting.contrast} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, contrast: value } })} />
-                                                                                <div className="sm:col-span-3"><Field label={t("fields.practicalSources")} value={shot.lighting.practical_sources.join("\n")} multiline hint={t("practicalSourceHint")} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, practical_sources: value.split("\n").map(item => item.trim()).filter(Boolean) } })} /></div>
-                                                                            </div>
                                                                         </fieldset>
                                                                         <div className="grid gap-3 lg:grid-cols-2">
                                                                             <MultiSelect label={t("fields.characters")} values={shot.character_ids} options={characterOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { character_ids: values })} />
@@ -977,7 +952,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { const previous = savedPlan ?? serverState?.draft ?? null; setPlan(previous); setSavedPlan(previous); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
                             <button type="button" onClick={() => void save()} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
-                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error) || lightingConflicts.length > 0} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
+                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>
                 </>

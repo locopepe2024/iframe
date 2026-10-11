@@ -5341,7 +5341,9 @@ def get_director_shooting_plan(
         "project_id": script.id,
         "draft_revision": script.director_shooting_plan_draft_revision,
         "draft_updated_at": script.director_shooting_plan_draft_updated_at,
-        "draft": script.director_shooting_plan_draft.model_dump() if script.director_shooting_plan_draft else None,
+        "draft": pipeline.normalize_director_shooting_plan_lighting(
+            script.director_shooting_plan_draft
+        ).model_dump() if script.director_shooting_plan_draft else None,
         "current_revision": confirmed.revision if confirmed else 0,
         "current": _director_shooting_plan_revision_summary(confirmed) if confirmed else None,
         "current_lineage": lineage,
@@ -5475,7 +5477,8 @@ def get_director_shooting_plan_revision(
     snapshot = next((item for item in script.director_shooting_plan_revisions if item.revision == revision), None)
     if snapshot is None:
         raise HTTPException(404, "Shooting-plan revision not found")
-    return {**_director_shooting_plan_revision_summary(snapshot), "plan": snapshot.plan.model_dump()}
+    plan = pipeline.normalize_director_shooting_plan_lighting(snapshot.plan)
+    return {**_director_shooting_plan_revision_summary(snapshot), "plan": plan.model_dump()}
 
 
 @app.put("/projects/{script_id}/director-shooting-plan/draft")

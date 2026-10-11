@@ -61,6 +61,7 @@ export interface DirectorPlanShot {
     camera_movement: string;
     lighting: DirectorPlanLighting;
     lighting_override_reason?: string;
+    lighting_override_selected?: boolean;
     duration_seconds: number | null;
     dialogue: DirectorPlanDialogueLine[];
     ambient_sound: string;

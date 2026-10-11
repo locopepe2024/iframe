@@ -553,7 +553,7 @@ def test_reextracted_scene_and_prop_require_explicit_plan_rebinding():
     assert resolved["context"]["props"][0]["prop_id"] == "new-ticket"
 
 
-def test_place_time_baseline_is_inherited_across_views_and_conflicts_need_reason():
+def test_unreasoned_shot_lighting_inherits_place_time_baseline_without_conflict_check():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
     first = plan.scenes[0]
@@ -578,21 +578,20 @@ def test_place_time_baseline_is_inherited_across_views_and_conflicts_need_reason
             key_source="西侧夕阳", color_tone="暖金", contrast="中等",
             practical_sources=[]))]
     second.beats[0].shots[0].lighting.color_tone = "冷蓝"
-    with pytest.raises(ValueError, match="shot-shop lighting conflicts"):
-        pipeline._validate_director_shooting_plan_for_confirmation(plan)
-    second.beats[0].shots[0].lighting_override_reason = "粮铺门廊遮挡夕阳"
+    pipeline._validate_director_shooting_plan_for_confirmation(plan)
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
 
     restored = Script.model_validate(script.model_dump()).director_shooting_plan_revisions[-1].plan
     assert restored.lighting_baselines[0].shadow_direction == "向东"
+    assert restored.scenes[1].beats[0].shots[0].lighting.color_tone == ""
     context = pipeline.project_episode_visual_context("film")
     assert {item.place_continuity_id for item in context.scenes} == {"place-street"}
     assert {item.time_continuity_id for item in context.shots} == {"time-dusk"}
     assert context.shots[0].lighting["key_source"] == "西侧夕阳"
     assert context.shots[0].lighting["shadow_direction"] == "向东"
-    assert context.shots[1].lighting["color_tone"] == "冷蓝"
-    assert context.shots[1].lighting_override_reason == "粮铺门廊遮挡夕阳"
+    assert context.shots[1].lighting["color_tone"] == "暖金"
+    assert context.shots[1].lighting_override_reason == ""
 
 
 def test_generated_continuity_ids_create_reviewable_baseline_without_name_matching():
@@ -616,7 +615,7 @@ def test_generated_continuity_ids_create_reviewable_baseline_without_name_matchi
     pipeline._validate_director_shooting_plan_for_confirmation(proposal)
 
 
-def test_generated_lighting_exception_keeps_justified_shot_change():
+def test_model_cannot_select_independent_lighting_but_user_override_survives():
     pipeline, _ = make_pipeline()
     first = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
     second = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
@@ -629,9 +628,20 @@ def test_generated_lighting_exception_keeps_justified_shot_change():
 
     proposal = pipeline.preview_director_shooting_plan("film")
     shot = proposal.scenes[1].beats[0].shots[0]
-    assert shot.lighting.key_source == "粮铺灯照亮人物正面"
-    assert shot.lighting_override_reason == "人物走入粮铺灯光范围"
+    assert shot.lighting.key_source == ""
+    assert shot.lighting_override_reason == ""
+    assert not shot.lighting_override_selected
     pipeline._validate_director_shooting_plan_for_confirmation(proposal)
+
+    shot.lighting.key_source = "粮铺灯照亮人物正面"
+    shot.lighting_override_reason = "人物走入粮铺灯光范围"
+    shot.lighting_override_selected = True
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, proposal)
+    pipeline.apply_director_shooting_plan("film", proposal, 0, 1)
+    context = pipeline.project_episode_visual_context("film")
+    assert context.shots[0].lighting["key_source"] == raw_shot()["lighting"]["key_source"]
+    assert context.shots[1].lighting["key_source"] == "粮铺灯照亮人物正面"
+    assert context.shots[1].lighting_override_reason == "人物走入粮铺灯光范围"
 
 
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
@@ -1083,6 +1093,29 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
                 "id": "event-cinema", "label": "大学阶段 · 走向电影院",
             }]
             assert state.json()["source_chunks"][0]["source_ref"] == plan.scenes[0].source_chunk_refs[0]
+
+            legacy_draft = make_plan(pipeline)
+            legacy_scene = legacy_draft.scenes[0]
+            legacy_scene.place_continuity_id = "place-cinema"
+            legacy_scene.time_continuity_id = "time-day"
+            legacy_shot = legacy_scene.beats[0].shots[0]
+            legacy_shot.lighting = DirectorPlanLighting(
+                key_source="Model paraphrase", color_tone="Warm paraphrase",
+                contrast="Soft paraphrase",
+            )
+            legacy_shot.lighting_override_reason = "Model generated this reason"
+            legacy_draft.lighting_baselines = [DirectorPlanLightingBaseline(
+                place_continuity_id="place-cinema", time_continuity_id="time-day",
+                lighting=DirectorPlanLighting(key_source="Window west", color_tone="Warm"),
+            )]
+            script.director_shooting_plan_draft = legacy_draft
+            projected = client.get("/projects/film/director-shooting-plan").json()["draft"]
+            projected_shot = projected["scenes"][0]["beats"][0]["shots"][0]
+            assert projected_shot["lighting"]["key_source"] == ""
+            assert projected_shot["lighting_override_reason"] == ""
+            assert projected_shot["lighting_override_selected"] is False
+            assert script.director_shooting_plan_draft.scenes[0].beats[0].shots[0].lighting.key_source == "Model paraphrase"
+            script.director_shooting_plan_draft = None
 
             draft = client.put(
                 "/projects/film/director-shooting-plan/draft",

@@ -1948,7 +1948,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
    已确认 Director profile 中的地点、城市、时代或地域要求属于导演视觉约束。它们应影响 location、environment_atmosphere 和相关镜头的 visual_intent；当剧本没有明确写出对应地标、饮食或生活细节时，可以提出“可选导演视觉锚点”（例如城市地标、地方饮食环境或街巷质感）作为可供用户修改的拍摄计划建议。此类建议必须明确是可选导演补充，不得伪装成已发生的剧本事实，不得凭空增加人物行为、对白或剧情事件；没有合适的剧情承载位置时，写入 unresolved_questions 供用户决定是否增加建立镜头。
 3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
-5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。只有剧情或镜头设计确实需要不同光影时，填写 lighting_override_reason 说明具体原因，并在 lighting 写差异。普通镜头的 lighting_override_reason 留空。
+5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
