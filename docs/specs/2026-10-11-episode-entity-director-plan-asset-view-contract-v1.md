@@ -82,6 +82,15 @@ storyboard chooses exact per-shot references. A later stage may propose a
 correction, but changing a confirmed upstream decision requires a new reviewed
 revision. Sync must not create entities or regenerate/overwrite visual media.
 
+Director scene summaries carry source-backed `location`, `time_anchor`,
+`daylight_phase`, and `lighting_cues` into the shooting-plan proposal. A phrase
+such as "dusk street" proves the stated daylight phase for that scene, but
+does not itself prove that another dusk scene shares its physical place or
+continuous interval. Unstated light direction, color, and shadow treatment are
+production interpretations requiring review. A shared light baseline belongs
+to a confirmed place/time continuity pair; the current prompt handoff does not
+by itself enforce that baseline on rendered images.
+
 ## View and Variant Lifecycle
 
 1. A confirmed plan scene creates a **requirement** for each present person's
@@ -95,16 +104,25 @@ revision. Sync must not create entities or regenerate/overwrite visual media.
    Historical assets and their media appear as reusable source material with
    lineage, never as competing live descriptions. An old image may be attached
    to the live asset/view only after explicit review and a new revision/binding.
-3. Character view imagery can have full-body, face/close, three-quarter, and
+3. The current asset revision may have **several live, approved variants**.
+   Selecting one as `primary_variant_id` changes the default cover/reference,
+   not the live status of its siblings. Each variant has an immutable
+   `variant_id` and an editable semantic `display_name`, for example
+   `苏砚 / 粮店黄昏 / 黑衣持剑 / 远景`. The name is for people and search; links
+   and pins always use IDs. An explicit live/candidate/archived state and
+   revision membership must protect approved variants from automatic pruning.
+   Current `selected_image_id` supplies one default and the saved image pool
+   contains other variants, but there is no explicit multi-live approval state.
+4. Character view imagery can have full-body, face/close, three-quarter, and
    distant silhouette/reference roles. These are media variants of one look,
    not new Character IDs. A held sword is a separate Prop asset reference plus
    a state/interaction in the view or shot. It may appear in a composite
    reference image without becoming part of the Character identity.
-4. Scene view imagery can have establishing, storefront, interior, or camera
+5. Scene view imagery can have establishing, storefront, interior, or camera
    angle roles under the chosen Scene asset. A particular first/last frame or
    fight composition remains shot-scoped. Promoting it to a reusable view
    variant is explicit and retains its source shot/media lineage.
-5. Changing look state invalidates dependent scene views and shot selections
+6. Changing look state invalidates dependent scene views and shot selections
    for review. Changing entry blocking invalidates affected shots, not the
    Character identity. Changing a shot pose or crop invalidates only that
    shot's reference package. Changing an asset default never changes a
@@ -116,6 +134,16 @@ Character base variant. A fallback is labeled incomplete when it cannot
 demonstrate the required state or framing, and must not be silently presented
 as an accepted match. There is no automatic image-content proof: review or a
 future validated classifier is required for visual suitability.
+
+In the Character workbench, a single asset shows all current live variants
+with their names, look/view affiliation, framing role, and approval state.
+Renaming a variant does not replace it or change its ID. The primary action is
+`Set as main view`; a separate approval/archive action controls whether it is
+eligible for shot selection. A storyboard expression such as “at grain-shop
+scene ID, long shot: Su Yan.long-view fights Jiang Zhuo.long-view” resolves
+each named view to `(character_asset_id, character_view_id, variant_id)` before
+generation. The plan scene ID and shot size remain separate typed inputs; the
+display name is never parsed as an identity or used as the sole match key.
 
 ## Example: Grain Shop Fight
 

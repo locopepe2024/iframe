@@ -787,7 +787,7 @@ function StoryMapSection({
     });
     const addSceneSummary = () => onChange({
         ...profile,
-        scene_summaries: [...sceneSummaries, { scene_ref: "", summary: "", state_in: "", state_out: "" }],
+        scene_summaries: [...sceneSummaries, { scene_ref: "", summary: "", state_in: "", state_out: "", location: "", time_anchor: "", daylight_phase: "", lighting_cues: "" }],
     });
     const newMap = () => onChange({
         ...profile,
@@ -1297,6 +1297,12 @@ function StoryMapSection({
                             <div className="mt-3 grid gap-3">
                                 <Field label={t("sceneRef")} value={asText(scene.scene_ref)} onChange={value => updateSceneSummary(index, { scene_ref: value })} placeholder={t("sceneRefPlaceholder")} />
                                 <Field label={t("sceneSummary")} value={asText(scene.summary)} onChange={value => updateSceneSummary(index, { summary: value })} multiline />
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <Field label={t("sceneLocation")} value={asText(scene.location)} onChange={value => updateSceneSummary(index, { location: value })} />
+                                    <Field label={t("sceneTimeAnchor")} value={asText(scene.time_anchor)} onChange={value => updateSceneSummary(index, { time_anchor: value })} />
+                                    <Field label={t("sceneDaylightPhase")} value={asText(scene.daylight_phase)} onChange={value => updateSceneSummary(index, { daylight_phase: value })} />
+                                    <Field label={t("sceneLightingCues")} value={asText(scene.lighting_cues)} onChange={value => updateSceneSummary(index, { lighting_cues: value })} multiline />
+                                </div>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <Field label={t("sceneStateIn")} value={asText(scene.state_in)} onChange={value => updateSceneSummary(index, { state_in: value })} multiline />
                                     <Field label={t("sceneStateOut")} value={asText(scene.state_out)} onChange={value => updateSceneSummary(index, { state_out: value })} multiline />

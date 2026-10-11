@@ -721,10 +721,32 @@ def test_scene_memory_is_bounded_and_keeps_transition_fields():
     assert len(serialized) <= DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
     assert len(execution["scene_summaries"]) == 16
     assert set(execution["scene_summaries"][0]) <= {
-        "scene_ref", "summary", "state_in", "state_out",
+        "scene_ref", "summary", "state_in", "state_out", "location",
+        "time_anchor", "daylight_phase", "lighting_cues",
     }
     assert execution["scene_summaries"][0]["state_in"]
     assert execution["scene_summaries"][0]["state_out"]
+
+
+def test_director_scene_time_and_light_cues_survive_execution_projection():
+    payload = {
+        **profile_payload(),
+        "scene_summaries": [{
+            "scene_ref": "第一集·青溪镇长街",
+            "summary": "苏砚走向粮铺",
+            "state_in": "苏砚持剑入街",
+            "state_out": "苏砚到达粮铺门前",
+            "location": "青溪镇青石板长街",
+            "time_anchor": "第一集连续行进",
+            "daylight_phase": "黄昏",
+            "lighting_cues": "夕阳从街西侧照入",
+        }],
+    }
+
+    restored = DirectorProfile.model_validate(DirectorProfile(**payload).model_dump())
+    scene = director_execution_payload(restored)["scene_summaries"][0]
+
+    assert scene == payload["scene_summaries"][0]
 
 
 def test_legacy_scene_memory_uses_global_fallback_when_no_local_events_exist():

@@ -167,6 +167,7 @@ class ProviderRoutingConfig(BaseModel):
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
+    display_name: Optional[str] = Field(None, max_length=120, description="User-reviewed semantic label for finding this variant")
     # ``url`` is retained as the API/browser projection for compatibility.
     # Durable asset identity is ``storage_key`` and must not be a signed URL.
     url: str = Field(..., description="Delivery URL projection (legacy field)")
@@ -1512,7 +1513,7 @@ def _director_value_as_text(value: Any) -> str:
 
 
 DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS = 16
-DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 3200
+DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 6000
 DIRECTOR_SCENE_REF_MAX_CHARS = 40
 DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS = 64
 DIRECTOR_SCENE_STATE_MAX_CHARS = 48
@@ -1874,8 +1875,7 @@ def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
     """Project one model/user scene-memory item to the execution contract.
 
     Scene memory is intentionally a projection rather than a second source of
-    truth. Unknown keys stay in the editable full profile, while downstream
-    receives only the four stable fields needed to bridge scene boundaries.
+    truth. Unknown keys stay in the editable full profile.
     """
     if not isinstance(item, dict):
         item = {"summary": _director_value_as_text(item)}
@@ -1912,6 +1912,11 @@ def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
         entry["state_out"] = _bounded_director_text(
             state_out, DIRECTOR_SCENE_STATE_MAX_CHARS
         )
+    for key, limit in (("location", 80), ("time_anchor", 80),
+                       ("daylight_phase", 40), ("lighting_cues", 120)):
+        value = _director_first_text(item, (key,))
+        if value:
+            entry[key] = _bounded_director_text(value, limit)
     return entry
 
 
@@ -1971,15 +1976,20 @@ def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, st
     def serialized_length() -> int:
         return len(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
-    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16, "scene_ref": 8}
+    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16,
+                       "location": 0, "time_anchor": 0, "daylight_phase": 0,
+                       "lighting_cues": 0, "scene_ref": 8}
     # Preserve the transition fields when compressing: a short state bridge is
     # more useful for cross-scene continuity than a verbose local description.
-    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1, "scene_ref": 2}
+    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1,
+                    "location": 2, "time_anchor": 2, "lighting_cues": 3,
+                    "daylight_phase": 3, "scene_ref": 4}
     while serialized_length() > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
         shrinkable = [
             (shrink_order[key], -len(entry[key]), index, key)
             for index, entry in enumerate(result)
-            for key in ("state_in", "state_out", "summary", "scene_ref")
+            for key in ("state_in", "state_out", "summary", "location",
+                        "time_anchor", "daylight_phase", "lighting_cues", "scene_ref")
             if key in entry and len(entry[key]) > minimum_lengths[key]
         ]
         if not shrinkable:

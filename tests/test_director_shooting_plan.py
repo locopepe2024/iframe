@@ -267,6 +267,38 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "视觉风格摘要约束镜头的可见表达" in prompt
 
 
+def test_shooting_plan_prompt_receives_director_daylight_and_lighting_cues():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
+    profile = DirectorProfile(scene_summaries=[{
+        "scene_ref": "第一集·青溪镇长街",
+        "summary": "苏砚走向粮铺",
+        "location": "青溪镇青石板长街",
+        "time_anchor": "第一集连续行进",
+        "daylight_phase": "黄昏",
+        "lighting_cues": "夕阳从街西侧照入",
+    }])
+
+    processor.plan_director_shooting_chunk(
+        "黄昏的青溪镇街道，苏砚走向粮铺。",
+        {"characters": [], "props": []},
+        profile.model_dump(),
+        {"style": "写实"},
+        source_ref="source:chars-0-20",
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    confirmed = prompt.split("<confirmed_director_profile>", 1)[1].split(
+        "</confirmed_director_profile>", 1
+    )[0]
+    scene = json.loads(confirmed)["scene_summaries"][0]
+    assert scene["daylight_phase"] == "黄昏"
+    assert scene["lighting_cues"] == "夕阳从街西侧照入"
+    assert "不得无理由变成白天或夜晚" in prompt
+    assert "不按相似地点名或“黄昏”等词猜测关联" in prompt
+
+
 def test_plan_lineage_ignores_style_changes_but_rejects_director_changes_and_unknown_references():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
