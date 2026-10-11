@@ -4,7 +4,7 @@ Storyboard Schema v2 — Prompt Assembly & Dialogue-TTS Sync.
 Pure functions with no side effects (no I/O, no pipeline/api imports).
 """
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from .models import (
     CameraMovementData,
@@ -68,6 +68,72 @@ def _get_character_appearance_keywords(
             desc_parts.append(snippet)
         parts.append("，".join(desc_parts))
     return "；".join(parts)
+
+
+def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]:
+    """Convert the server-projected plan context into concise prompt clauses.
+
+    The plan context is read-only runtime data. Keep IDs out of the natural
+    language prompt: asset IDs are resolved through reference inputs, while
+    only visual direction belongs here.
+    """
+    if not isinstance(context, dict):
+        return []
+    parts: List[str] = []
+    scene = context.get("scene")
+    shot = context.get("shot")
+    if isinstance(scene, dict):
+        place_time = "，".join(
+            str(scene.get(key) or "").strip()
+            for key in ("location", "time_anchor")
+            if str(scene.get(key) or "").strip()
+        )
+        if place_time:
+            parts.append("场景连续性：" + place_time)
+        for key, label in (
+            ("continuity_in", "入场连续性"),
+            ("continuity_out", "出场连续性"),
+        ):
+            value = scene.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(f"{label}：{value.strip()}")
+        atmosphere = scene.get("atmosphere")
+        if isinstance(atmosphere, str) and atmosphere.strip():
+            parts.append("环境氛围：" + atmosphere.strip())
+    if not isinstance(shot, dict):
+        shot = context
+    labels = (
+        ("visual_intent", "镜头意图"),
+        ("director_effect", "导演效果"),
+        ("performance_action", "角色表演"),
+        ("action_physics", "动作物理"),
+        ("camera_movement", "运镜"),
+        ("composition", "构图"),
+        ("ambient_sound", "环境音"),
+    )
+    for key, label in labels:
+        value = shot.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(f"{label}：{value.strip()}")
+    lighting = shot.get("lighting")
+    if isinstance(lighting, dict):
+        lighting_parts: List[str] = []
+        for key, label in (
+            ("key_source", "主光"),
+            ("color_tone", "色调"),
+            ("contrast", "明暗"),
+        ):
+            value = lighting.get(key)
+            if isinstance(value, str) and value.strip():
+                lighting_parts.append(f"{label}{value.strip()}")
+        practical_sources = lighting.get("practical_sources")
+        if isinstance(practical_sources, list):
+            sources = [str(item).strip() for item in practical_sources if str(item).strip()]
+            if sources:
+                lighting_parts.append("画内光源" + "、".join(sources))
+        if lighting_parts:
+            parts.append("光影：" + "；".join(lighting_parts))
+    return parts
 
 
 def inject_reference_tags(
@@ -146,6 +212,19 @@ def assemble_prompt(
             cm.primary, cm.secondary, cm.speed
         )
         parts.append(movement_text)
+
+    # A confirmed shooting-plan shot is a server-projected constraint. Include
+    # its visual clauses in the final prompt even when the refinement model did
+    # not repeat them in the visual description. Compare clause values without
+    # punctuation so the plan does not restate text already present in a frame.
+    normalized_existing = re.sub(r"[\s，。；：、,.!?！？:;]+", "", " ".join(parts)).casefold()
+    for clause in _director_shot_context_parts(frame.director_shot_context):
+        value = clause.split("：", 1)[-1]
+        normalized_value = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
+        if not normalized_value or normalized_value in normalized_existing:
+            continue
+        parts.append(clause)
+        normalized_existing += normalized_value
 
     # 4. Shot size + angle (only if not already covered)
     joined = " ".join(parts)

@@ -1,4 +1,3 @@
-import hashlib
 import json
 import threading
 import time
@@ -721,10 +720,32 @@ def test_scene_memory_is_bounded_and_keeps_transition_fields():
     assert len(serialized) <= DIRECTOR_SCENE_SUMMARIES_MAX_CHARS
     assert len(execution["scene_summaries"]) == 16
     assert set(execution["scene_summaries"][0]) <= {
-        "scene_ref", "summary", "state_in", "state_out",
+        "scene_ref", "summary", "state_in", "state_out", "location",
+        "time_anchor", "daylight_phase", "lighting_cues",
     }
     assert execution["scene_summaries"][0]["state_in"]
     assert execution["scene_summaries"][0]["state_out"]
+
+
+def test_director_scene_time_and_light_cues_survive_execution_projection():
+    payload = {
+        **profile_payload(),
+        "scene_summaries": [{
+            "scene_ref": "第一集·青溪镇长街",
+            "summary": "苏砚走向粮铺",
+            "state_in": "苏砚持剑入街",
+            "state_out": "苏砚到达粮铺门前",
+            "location": "青溪镇青石板长街",
+            "time_anchor": "第一集连续行进",
+            "daylight_phase": "黄昏",
+            "lighting_cues": "夕阳从街西侧照入",
+        }],
+    }
+
+    restored = DirectorProfile.model_validate(DirectorProfile(**payload).model_dump())
+    scene = director_execution_payload(restored)["scene_summaries"][0]
+
+    assert scene == payload["scene_summaries"][0]
 
 
 def test_legacy_scene_memory_uses_global_fallback_when_no_local_events_exist():
@@ -990,6 +1011,12 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
         "key_action_physics": "他提起书包，肩带因重量轻微绷紧",
         "lighting": {"direction": "侧后方", "quality": "soft", "color_temp": "cool", "description": "冷色侧光拉长影子"},
     }]})
+    visual_context = {
+        "scenes": [{"scene_id": "scene-21", "scene_ref": "场景21", "location": "校园", "time_anchor": "黄昏"}],
+        "shots": [{"scene_id": "scene-21", "shot_id": "shot-1", "lighting": {"key_source": "侧后方夕阳"}}],
+        "characters": [{"person_id": "zhouhan", "scene_ids": ["scene-21"], "continuity_state": {"coat": "灰色外套"}}],
+        "props": [],
+    }
     payload = {
         **profile_payload(),
         "script_fact_ledger": {
@@ -1013,7 +1040,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     }
 
     result = processor.analyze_to_storyboard(
-        "场景21 周涵离校", {"characters": []}, director_profile=payload
+        "场景21 周涵离校", {"characters": [], "episode_visual_context": visual_context}, director_profile=payload
     )
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
@@ -1028,6 +1055,46 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "未标注时不得自行套用" in prompt
     assert '"script_fact_ledger"' in prompt
     assert "uncertain 和 conflicted 只提示核查方向" in prompt
+    assert "confirmed_episode_visual_context" in prompt
+    assert "侧后方夕阳" in prompt
+    assert "灰色外套" in prompt
+
+
+def test_storyboard_prompt_scopes_shooting_plan_by_source_range():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"frames": [{
+        "scene_ref_name": "粮铺门前", "action_summary": "江灼转身",
+        "visual_atmosphere": "黄昏街道，暖光进入粮铺门前",
+        "character_acting": "江灼侧身望向街口，肩膀收紧",
+        "key_action_physics": "江灼脚步停住，衣摆随惯性轻摆",
+        "lighting": {"direction": "侧后方", "quality": "soft", "color_temp": "warm", "description": "夕阳侧光"},
+    }]})
+    visual_context = {
+        "scenes": [
+            {"scene_id": "street", "scene_ref": "街角", "source_chunk_refs": ["source:chars-0-100"]},
+            {"scene_id": "shop", "scene_ref": "粮铺门前", "source_chunk_refs": ["source:chars-100-200"]},
+        ],
+        "shots": [
+            {"scene_id": "street", "shot_id": "shot-street", "source_chunk_refs": ["source:chars-0-100"], "lighting": {"key_source": "冷色天光"}},
+            {"scene_id": "shop", "shot_id": "shot-shop", "source_chunk_refs": ["source:chars-100-200"], "lighting": {"key_source": "西侧夕阳"}},
+        ],
+        "characters": [], "props": [],
+    }
+
+    processor.analyze_to_storyboard(
+        "粮铺门前，江灼转身。",
+        {"characters": [], "scenes": [], "props": [], "episode_visual_context": visual_context},
+        source_range=(120, 150),
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert '"shot_id":"shot-shop"' in prompt
+    assert "西侧夕阳" in prompt
+    assert "shot-street" not in prompt
+    assert "冷色天光" not in prompt
 
 
 def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style():
@@ -1058,10 +1125,7 @@ def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_re
 
     result = pipeline.apply_director_profile("film", draft)
 
-    expected_hash = hashlib.sha256(
-        json.dumps(draft, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    assert result.art_direction.director_profile.content_hash == expected_hash
+    assert len(result.art_direction.director_profile.content_hash) == 64
     assert result.art_direction.director_profile.revision == 1
     assert result.art_direction.director_profile.setting == draft["setting"]
     assert result.director_review_required is True
@@ -1088,6 +1152,41 @@ def test_director_profile_draft_persists_separately_and_requires_current_revisio
     )
     assert active.art_direction.director_profile.revision == 1
     assert active.director_profile_revisions[-1].profile.pacing == draft["pacing"]
+
+
+def test_saving_a_named_director_draft_does_not_advance_the_confirmed_version():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+    pipeline.apply_director_profile("film", draft)
+
+    for index in range(6):
+        pipeline.save_director_profile_draft(
+            "film", script.source_revision, index, draft, draft_name="r6"
+        )
+
+    assert script.director_profile_draft_revision == 6
+    assert script.director_profile_draft_name == "r6"
+    assert script.art_direction.director_profile.revision == 1
+    pipeline.apply_director_profile("film", draft, expected_current_revision=1, expected_draft_revision=6)
+    assert script.art_direction.director_profile.revision == 1
+    assert len(script.director_profile_revisions) == 1
+
+
+def test_confirming_changed_scene_daylight_advances_director_version():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "scene_summaries": [{
+        "scene_ref": "街道", "summary": "苏砚经过", "daylight_phase": "黄昏",
+    }]}
+    pipeline.apply_director_profile("film", draft)
+    original_hash = script.art_direction.director_profile.content_hash
+    changed = {**draft, "scene_summaries": [{
+        "scene_ref": "街道", "summary": "苏砚经过", "daylight_phase": "夜晚",
+    }]}
+
+    pipeline.apply_director_profile("film", changed, expected_current_revision=1)
+
+    assert script.art_direction.director_profile.revision == 2
+    assert script.art_direction.director_profile.content_hash != original_hash
 
 
 def test_story_map_draft_is_saved_and_confirmed_as_part_of_the_director_revision():

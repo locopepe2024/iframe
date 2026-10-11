@@ -215,6 +215,9 @@ export function frameToShotNode(
         directorSnapshotMediaId: typeof frame.workbench_director_snapshot_media_id === "string"
             ? frame.workbench_director_snapshot_media_id
             : null,
+        directorShotContext: frame.director_shot_context && typeof frame.director_shot_context === "object"
+            ? frame.director_shot_context
+            : null,
         videoUrl,
         videoStatus,
         videoTaskId,
@@ -223,13 +226,13 @@ export function frameToShotNode(
         t2iSelectedIndex: typeof frame.t2i_selected_index === "number"
             ? frame.t2i_selected_index
             : 0,
-        duration: frame.duration ?? null,
+        duration: frame.duration ?? frame.director_shot_context?.shot?.duration_seconds ?? null,
         visualDescription: frame.visual_description ?? null,
         assembledPrompt: frame.assembled_prompt ?? null,
         dialogueStructured: frame.dialogue_structured ?? null,
         cameraMovementStructured: frame.camera_movement_structured ?? null,
-        shotSize: frame.shot_size ?? null,
-        cameraAngle: frame.camera_angle ?? null,
+        shotSize: frame.shot_size ?? frame.director_shot_context?.shot?.shot_size ?? null,
+        cameraAngle: frame.camera_angle ?? frame.director_shot_context?.shot?.camera_angle ?? null,
         transitionHint: frame.transition_hint ?? null,
         stylePromptOverride: frame.style_prompt_override ?? null,
         lightingOverride: frame.lighting_override ?? null,

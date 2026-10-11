@@ -244,6 +244,15 @@ def test_update_reference_variant_view_metadata(kind):
     assert variant.reference_distance == 'close'
     p._save_data.assert_called_once()
 
+    p.update_asset_variant_metadata(
+        'project', entity.id, kind, variant.id,
+        display_name='粮店黄昏·持剑近景',
+    )
+    assert variant.display_name == '粮店黄昏·持剑近景'
+    assert variant.id == (unit.image_variants if kind == 'character' else unit.variants)[0].id
+    assert variant.reference_view_role == 'three_quarter_right'
+    assert variant.reference_distance == 'close'
+
 
 @pytest.mark.parametrize('source', ['series', 'global'])
 def test_delete_shared_reference_persists_owner_and_project_cleanup(source):

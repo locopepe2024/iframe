@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ImageAsset, ImageVariant } from '@/store/projectStore';
-import { Trash2, Check, ChevronLeft, ChevronRight, Layers, X, Maximize2, Star } from 'lucide-react';
+import { Trash2, Check, ChevronLeft, ChevronRight, Layers, X, Maximize2, Star, Save } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { useTranslations } from "next-intl";
@@ -14,6 +14,7 @@ interface VariantSelectorProps {
     onSelect: (variantId: string) => void | Promise<void>;
     onDelete: (variantId: string) => void | Promise<void>;
     onFavorite?: (variantId: string, isFavorited: boolean) => void;
+    onRename?: (variantId: string, displayName: string) => Promise<void>;
     onGenerate: (batchSize: number) => void;
     isGenerating: boolean;
     generatingBatchSize?: number; // Persisted batch size from parent/store
@@ -31,6 +32,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     onSelect,
     onDelete,
     onFavorite,
+    onRename,
     onGenerate,
     isGenerating,
     generatingBatchSize: propGeneratingBatchSize,
@@ -43,6 +45,9 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [zoomedImage, setZoomedImage] = useState<string | null>(null);
     const [pendingSelection, setPendingSelection] = useState<string | null>(null);
     const [pendingDeletions, setPendingDeletions] = useState<string[]>([]);
+    const [variantName, setVariantName] = useState('');
+    const [savingName, setSavingName] = useState(false);
+    const [renameError, setRenameError] = useState(false);
     const prevIsGenerating = useRef(isGenerating);
 
     // Automatically save batchSize when generation starts
@@ -63,6 +68,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         ? pendingSelection
         : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id;
     const selectedVariant = variants.find(v => v.id === selectedId);
+    useEffect(() => {
+        setVariantName(selectedVariant?.display_name || '');
+        setRenameError(false);
+    }, [selectedVariant?.id, selectedVariant?.display_name]);
     const apiBase = getApiBaseUrl();
     const displayUrl = selectedVariant
         ? getAssetUrl(selectedVariant.url)
@@ -91,6 +100,19 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         Promise.resolve().then(() => onDelete(variantId)).catch(() => {
             setPendingDeletions(current => current.filter(id => id !== variantId));
         });
+    };
+
+    const saveVariantName = async () => {
+        if (!onRename || !selectedVariant || savingName) return;
+        setSavingName(true);
+        try {
+            await onRename(selectedVariant.id, variantName.trim());
+            setRenameError(false);
+        } catch {
+            setRenameError(true);
+        } finally {
+            setSavingName(false);
+        }
     };
 
     // Helper to calculate aspect ratio class
@@ -191,7 +213,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                 {variants.length > 0 && (
                     <div className="relative">
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
-                            {variants.map((variant) => {
+                            {variants.map((variant, index) => {
                                 const isSelected = variant.id === selectedId;
                                 const isFavorited = (variant as any).is_favorited || false;
                                 const url = getAssetUrl(variant.url);
@@ -200,18 +222,21 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                     <div
                                         key={variant.id}
                                         className={`
-                                            relative flex-shrink-0 w-20 h-20 rounded-md overflow-hidden border-2 transition-all snap-start group/variant
+                                            relative flex-shrink-0 w-24 rounded-md overflow-hidden border-2 transition-all snap-start group/variant
                                             ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/30' : isFavorited ? 'border-yellow-500/50' : 'border-transparent hover:border-gray-500'}
                                         `}
                                     >
                                         {/* Clickable image area */}
                                         <img
                                             src={url}
-                                            alt="Variant"
+                                            alt={variant.display_name || `未命名素材 ${index + 1}`}
                                             loading="lazy"
-                                            className="w-full h-full object-cover cursor-pointer"
+                                            className="h-20 w-full object-cover cursor-pointer"
                                             onClick={() => selectVariant(variant.id)}
                                         />
+                                        <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || `未命名素材 ${index + 1}`}>
+                                            {variant.display_name || `未命名素材 ${index + 1}`}
+                                        </span>
 
                                         {/* Selected indicator */}
                                         {isSelected && (
@@ -265,6 +290,24 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         </div>
                     </div>
                 )}
+                {onRename && selectedVariant && (
+                    <div className="flex min-w-0 items-center gap-2">
+                        <label htmlFor={`variant-name-${selectedVariant.id}`} className="shrink-0 text-xs text-text-secondary">素材名称</label>
+                        <input
+                            id={`variant-name-${selectedVariant.id}`}
+                            value={variantName}
+                            maxLength={120}
+                            onChange={(event) => { setVariantName(event.target.value); setRenameError(false); }}
+                            onKeyDown={(event) => { if (event.key === 'Enter') void saveVariantName(); }}
+                            placeholder="例如：粮店黄昏·黑衣持剑·近景"
+                            className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                        />
+                        <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title="保存素材名称" aria-label="保存素材名称" className="grid h-9 w-9 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
+                            <Save size={16} />
+                        </button>
+                    </div>
+                )}
+                {renameError && <p role="alert" className="text-xs text-red-400">素材名称保存失败</p>}
             </div>
 
             {/* Lightbox Modal */}

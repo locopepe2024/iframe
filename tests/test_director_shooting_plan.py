@@ -12,6 +12,7 @@ from src.apps.comic_gen.models import (
     DirectorPlanBeat,
     DirectorPlanCastBinding,
     DirectorPlanLighting,
+    DirectorPlanLightingBaseline,
     DirectorPlanPropBinding,
     DirectorPlanSceneBinding,
     DirectorPlanShot,
@@ -21,6 +22,7 @@ from src.apps.comic_gen.models import (
     DirectorStoryMap,
     EpisodeAssetBinding,
     Prop,
+    Scene,
     Script,
     StoryboardFrame,
 )
@@ -265,6 +267,38 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "视觉风格摘要约束镜头的可见表达" in prompt
 
 
+def test_shooting_plan_prompt_receives_director_daylight_and_lighting_cues():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
+    profile = DirectorProfile(scene_summaries=[{
+        "scene_ref": "第一集·青溪镇长街",
+        "summary": "苏砚走向粮铺",
+        "location": "青溪镇青石板长街",
+        "time_anchor": "第一集连续行进",
+        "daylight_phase": "黄昏",
+        "lighting_cues": "夕阳从街西侧照入",
+    }])
+
+    processor.plan_director_shooting_chunk(
+        "黄昏的青溪镇街道，苏砚走向粮铺。",
+        {"characters": [], "props": []},
+        profile.model_dump(),
+        {"style": "写实"},
+        source_ref="source:chars-0-20",
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    confirmed = prompt.split("<confirmed_director_profile>", 1)[1].split(
+        "</confirmed_director_profile>", 1
+    )[0]
+    scene = json.loads(confirmed)["scene_summaries"][0]
+    assert scene["daylight_phase"] == "黄昏"
+    assert scene["lighting_cues"] == "夕阳从街西侧照入"
+    assert "不得无理由变成白天或夜晚" in prompt
+    assert "不按相似地点名或“黄昏”等词猜测关联" in prompt
+
+
 def test_plan_lineage_ignores_style_changes_but_rejects_director_changes_and_unknown_references():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
@@ -316,6 +350,8 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
 def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].continuity_in = "They enter from the street together."
+    plan.scenes[0].continuity_out = "They cross the lobby toward the ticket window."
     plan.scenes[0].beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(**{
         "person_id": "shen-xia-young",
         "era_variant_id": "era-campus",
@@ -338,10 +374,16 @@ def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
 
     context = pipeline.project_episode_visual_context("film")
+    assert context.scenes[0].continuity_in == plan.scenes[0].continuity_in
+    assert context.scenes[0].continuity_out == plan.scenes[0].continuity_out
     assert context.scenes[0].season == "winter"
     assert context.characters[0].scene_look_id == "look-winter-outdoor"
     assert context.characters[0].shot_ids == [plan.scenes[0].beats[0].shots[0].shot_id]
     assert context.props[0].state == "held"
+    assert context.shots[0].shot_size == plan.scenes[0].beats[0].shots[0].shot_size
+    assert context.shots[0].performance_action == plan.scenes[0].beats[0].shots[0].performance_action
+    assert context.shots[0].action_physics == plan.scenes[0].beats[0].shots[0].action_physics
+    assert context.shots[0].ambient_sound == plan.scenes[0].beats[0].shots[0].ambient_sound
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert len(result["new_bindings"]) == 3
     assert script.episode_visual_context is not None
@@ -421,6 +463,185 @@ def test_unbound_shot_scene_remains_visible_beside_bound_shot():
     assert [(item["scene_id"], item.get("shot_id")) for item in result["unresolved_bindings"]
             if item.get("reason") == "scene_asset_unbound"] == [
                 ("scene-cinema", "shot-unbound")]
+
+
+def test_unbound_plan_scene_can_bind_existing_asset_without_mutating_confirmed_plan():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    before = script.director_shooting_plan_revisions[-1].model_dump()
+    script.episode_scene_asset_replacements["cinema"] = "other-scene"
+
+    result = pipeline.bind_episode_plan_scene("film", "scene-cinema", None, "cinema", 1)
+
+    assert result["context"]["scenes"][0]["scene_asset_id"] == "cinema"
+    assert result["context"]["shots"][0]["scene_asset_id"] == "cinema"
+    assert not any(item.get("reason") == "scene_asset_unbound" for item in result["unresolved_bindings"])
+    assert script.director_shooting_plan_revisions[-1].model_dump() == before
+    assert Script.model_validate(script.model_dump()).episode_plan_scene_asset_bindings == {
+        "scene:scene-cinema": "cinema"}
+    assert pipeline.sync_episode_assets_from_shooting_plan("film")["context"]["shots"][0]["scene_asset_id"] == "cinema"
+
+
+def test_unbound_plan_shot_binding_is_scoped_to_one_shot_and_rejects_stale_revision():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-second"
+    second.order = 1
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.bind_episode_plan_scene("film", "scene-cinema", "shot-second", "cinema", 1)
+
+    assert [item["scene_asset_id"] for item in result["context"]["shots"]] == [None, "cinema"]
+    assert [(item["scene_id"], item.get("shot_id")) for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"] == [("scene-cinema", "shot-entry")]
+    with pytest.raises(ValueError, match="revision changed"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", "shot-second", "cinema", 0)
+    with pytest.raises(ValueError, match="not in the confirmed shooting plan"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", "unknown", "cinema", 1)
+
+
+def test_plan_scene_picker_rejects_existing_plan_asset_id():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    with pytest.raises(ValueError, match="already has a plan asset ID"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", None, "cinema", 1)
+
+
+def test_reextracted_scene_and_prop_require_explicit_plan_rebinding():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    plan.scenes[0].prop_ids = ["ticket"]
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    fresh_scene = Scene(id="new-cinema", name="电影院入口", description="重新提炼")
+    fresh_prop = Prop(id="new-ticket", name="电影票", description="重新提炼")
+    extracted = Script(id="draft", title=script.title, original_text=script.original_text,
+                       created_at=2, updated_at=2, scenes=[fresh_scene], props=[fresh_prop])
+    pipeline.script_processor._create_script_from_data.return_value = extracted
+    pipeline._extraction_cache = {}
+    pipeline.reparse_project("film", script.original_text, {
+        "characters": [], "scenes": [{"name": "电影院入口"}],
+        "props": [{"name": "电影票"}],
+    })
+    pipeline.resolve_episode_assets.return_value = {
+        "characters": [], "scenes": [fresh_scene], "props": [fresh_prop],
+    }
+
+    pending = pipeline.sync_episode_assets_from_shooting_plan("film")
+    assert {item["asset_id"] for item in pending["unresolved_bindings"]
+            if item.get("asset_id")} == {"cinema", "ticket"}
+    assert [item.id for item in pipeline.scripts["film"].scenes] == ["new-cinema"]
+    assert [item.id for item in pipeline.scripts["film"].props] == ["new-ticket"]
+
+    pipeline.bind_episode_plan_asset("film", "scene", ["cinema"], "new-cinema", 1)
+    resolved = pipeline.bind_episode_plan_asset("film", "prop", ["ticket"], "new-ticket", 1)
+    assert not [item for item in resolved["unresolved_bindings"]
+                if item["asset_type"] in {"scene", "prop"}]
+    assert resolved["context"]["scenes"][0]["scene_asset_id"] == "new-cinema"
+    assert resolved["context"]["props"][0]["prop_id"] == "new-ticket"
+
+
+def test_unreasoned_shot_lighting_inherits_place_time_baseline_without_conflict_check():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0]
+    first.place_continuity_id = "place-street"
+    first.time_continuity_id = "time-dusk"
+    first.beats[0].shots[0].lighting = DirectorPlanLighting()
+    second = first.model_copy(deep=True)
+    second.scene_id = "scene-shop-front"
+    second.order = 1
+    second.location = "粮铺门前"
+    second.beats[0].beat_id = "beat-shop"
+    second.beats[0].shots[0].shot_id = "shot-shop"
+    plan.scenes.append(second)
+
+    with pytest.raises(ValueError, match="no reviewed place/time lighting baseline"):
+        pipeline._validate_director_shooting_plan_for_confirmation(plan)
+
+    plan.lighting_baselines = [DirectorPlanLightingBaseline(
+        place_continuity_id="place-street", time_continuity_id="time-dusk",
+        story_time="同一段黄昏", daylight_phase="落日前", weather="晴",
+        shadow_direction="向东", lighting=DirectorPlanLighting(
+            key_source="西侧夕阳", color_tone="暖金", contrast="中等",
+            practical_sources=[]))]
+    second.beats[0].shots[0].lighting.color_tone = "冷蓝"
+    pipeline._validate_director_shooting_plan_for_confirmation(plan)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    restored = Script.model_validate(script.model_dump()).director_shooting_plan_revisions[-1].plan
+    assert restored.lighting_baselines[0].shadow_direction == "向东"
+    assert restored.scenes[1].beats[0].shots[0].lighting.color_tone == ""
+    context = pipeline.project_episode_visual_context("film")
+    assert {item.place_continuity_id for item in context.scenes} == {"place-street"}
+    assert {item.time_continuity_id for item in context.shots} == {"time-dusk"}
+    assert context.shots[0].lighting["key_source"] == "西侧夕阳"
+    assert context.shots[0].lighting["shadow_direction"] == "向东"
+    assert context.shots[1].lighting["color_tone"] == "暖金"
+    assert context.shots[1].lighting_override_reason == ""
+
+
+def test_generated_continuity_ids_create_reviewable_baseline_without_name_matching():
+    pipeline, _ = make_pipeline()
+    first = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second["scene_ref"] = "粮铺门前"
+    second["location"] = "粮铺门前"
+    second["beats"][0]["shots"][0]["lighting"]["key_source"] = "同一夕阳从门廊侧面照入"
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = {
+        "scenes": [first, second], "unresolved_questions": [],
+    }
+
+    proposal = pipeline.preview_director_shooting_plan("film")
+
+    assert len(proposal.lighting_baselines) == 1
+    assert proposal.lighting_baselines[0].place_continuity_id == "place-street"
+    assert [item.time_continuity_id for item in proposal.scenes] == ["time-dusk", "time-dusk"]
+    assert proposal.lighting_baselines[0].lighting.key_source == raw_shot()["lighting"]["key_source"]
+    assert proposal.scenes[1].beats[0].shots[0].lighting.key_source == ""
+    pipeline._validate_director_shooting_plan_for_confirmation(proposal)
+
+
+def test_model_cannot_select_independent_lighting_but_user_override_survives():
+    pipeline, _ = make_pipeline()
+    first = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second["scene_ref"] = "粮铺门前"
+    second["beats"][0]["shots"][0]["lighting"]["key_source"] = "粮铺灯照亮人物正面"
+    second["beats"][0]["shots"][0]["lighting_override_reason"] = "人物走入粮铺灯光范围"
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = {
+        "scenes": [first, second], "unresolved_questions": [],
+    }
+
+    proposal = pipeline.preview_director_shooting_plan("film")
+    shot = proposal.scenes[1].beats[0].shots[0]
+    assert shot.lighting.key_source == ""
+    assert shot.lighting_override_reason == ""
+    assert not shot.lighting_override_selected
+    pipeline._validate_director_shooting_plan_for_confirmation(proposal)
+
+    shot.lighting.key_source = "粮铺灯照亮人物正面"
+    shot.lighting_override_reason = "人物走入粮铺灯光范围"
+    shot.lighting_override_selected = True
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, proposal)
+    pipeline.apply_director_shooting_plan("film", proposal, 0, 1)
+    context = pipeline.project_episode_visual_context("film")
+    assert context.shots[0].lighting["key_source"] == raw_shot()["lighting"]["key_source"]
+    assert context.shots[1].lighting["key_source"] == "粮铺灯照亮人物正面"
+    assert context.shots[1].lighting_override_reason == "人物走入粮铺灯光范围"
 
 
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
@@ -788,6 +1009,30 @@ def test_long_plan_batch_cache_shape_resumes_completed_chunks(monkeypatch):
     assert len(plan.scenes[0].beats) == 2
 
 
+def test_continued_scene_retains_first_continuity_ids_and_flags_chunk_conflict(monkeypatch):
+    pipeline, _ = make_pipeline()
+    chunks = [
+        {"source_ref": "source:first", "text": "scene start"},
+        {"source_ref": "source:second", "text": "scene continuation"},
+    ]
+    monkeypatch.setattr("src.apps.comic_gen.llm.split_director_source", lambda *args, **kwargs: chunks)
+    pipeline.script_processor.plan_director_shooting_chunk.side_effect = [
+        valid_chunk(raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")),
+        valid_chunk(raw_scene(continues_previous_scene=True,
+                              place_continuity_id="place-shop", time_continuity_id="time-dusk")),
+    ]
+
+    plan = pipeline.preview_director_shooting_plan("film")
+
+    assert len(plan.scenes) == 1
+    assert plan.scenes[0].place_continuity_id == "place-street"
+    assert plan.scenes[0].time_continuity_id == "time-dusk"
+    assert any("place_continuity_id" in item for item in plan.unresolved_questions)
+    previous_scene = pipeline.script_processor.plan_director_shooting_chunk.call_args_list[1].args[4]
+    assert previous_scene["place_continuity_id"] == "place-street"
+    assert previous_scene["time_continuity_id"] == "time-dusk"
+
+
 def test_job_batch_reload_preserves_result_wrapper_consistently(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     from src.apps.comic_gen.extraction_jobs import ExtractionJobs
@@ -844,7 +1089,33 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
             state = client.get("/projects/film/director-shooting-plan")
             assert state.status_code == 200
             assert state.json()["draft"] is None
+            assert state.json()["current_story_events"] == [{
+                "id": "event-cinema", "label": "大学阶段 · 走向电影院",
+            }]
             assert state.json()["source_chunks"][0]["source_ref"] == plan.scenes[0].source_chunk_refs[0]
+
+            legacy_draft = make_plan(pipeline)
+            legacy_scene = legacy_draft.scenes[0]
+            legacy_scene.place_continuity_id = "place-cinema"
+            legacy_scene.time_continuity_id = "time-day"
+            legacy_shot = legacy_scene.beats[0].shots[0]
+            legacy_shot.lighting = DirectorPlanLighting(
+                key_source="Model paraphrase", color_tone="Warm paraphrase",
+                contrast="Soft paraphrase",
+            )
+            legacy_shot.lighting_override_reason = "Model generated this reason"
+            legacy_draft.lighting_baselines = [DirectorPlanLightingBaseline(
+                place_continuity_id="place-cinema", time_continuity_id="time-day",
+                lighting=DirectorPlanLighting(key_source="Window west", color_tone="Warm"),
+            )]
+            script.director_shooting_plan_draft = legacy_draft
+            projected = client.get("/projects/film/director-shooting-plan").json()["draft"]
+            projected_shot = projected["scenes"][0]["beats"][0]["shots"][0]
+            assert projected_shot["lighting"]["key_source"] == ""
+            assert projected_shot["lighting_override_reason"] == ""
+            assert projected_shot["lighting_override_selected"] is False
+            assert script.director_shooting_plan_draft.scenes[0].beats[0].shots[0].lighting.key_source == "Model paraphrase"
+            script.director_shooting_plan_draft = None
 
             draft = client.put(
                 "/projects/film/director-shooting-plan/draft",

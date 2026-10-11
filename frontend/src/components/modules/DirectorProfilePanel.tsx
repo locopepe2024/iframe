@@ -52,7 +52,7 @@ type LocalDirectorDraft = {
     savedAt: number;
 };
 
-export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }: { mindMapOnly?: boolean; onApplied?: () => void }) {
+export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, historicalProfile = null }: { mindMapOnly?: boolean; onApplied?: () => void; historicalProfile?: DirectorProfile | null }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
     const confirmed = currentProject?.art_direction?.director_profile;
@@ -235,11 +235,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         try { window.localStorage.removeItem(directorLocalDraftKey(currentProject.id, sourceRevision)); } catch { /* storage unavailable */ }
     };
 
-    const saveDraftWithRecovery = async (draft: Record<string, unknown>, expectedRevision: number) => {
+    const saveDraftWithRecovery = async (draft: Record<string, unknown>, expectedRevision: number, name = draftName) => {
         if (!currentProject) throw new Error(t("directorDraftSaveFailed"));
         try {
-            return draftName
-                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft, draftName)
+            return name
+                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft, name)
                 : await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, expectedRevision, draft);
         } catch (error) {
             const detail = extractErrorDetail(error, "");
@@ -251,9 +251,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
             }
             const latestText = latest.draft ? JSON.stringify(latest.draft) : "";
             const draftTextValue = JSON.stringify(draft);
-            if (latestText === draftTextValue) return latest;
-            return draftName
-                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft, draftName)
+            if (latestText === draftTextValue && (!name || latest.draft_name === name)) return latest;
+            return name
+                ? await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft, name)
                 : await api.saveDirectorProfileDraft(currentProject.id, sourceRevision, latest.draft_revision, draft);
         }
     };
@@ -367,7 +367,11 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
             );
             updateProject(currentProject.id, updated);
             setStatus({ kind: "success", action: "apply", jobStatus: "completed" });
-            toast.success(t("directorApplied"), { projectId: currentProject.id, projectTitle: currentProject.title });
+            const appliedRevision = updated.art_direction?.director_profile?.revision;
+            toast.success(appliedRevision === confirmed?.revision
+                ? t("directorConfirmedUnchanged", { revision: appliedRevision ?? 0 })
+                : t("directorConfirmedVersion", { revision: appliedRevision ?? 0 }),
+            { projectId: currentProject.id, projectTitle: currentProject.title });
             onApplied?.();
         } catch (error) {
             const message = extractErrorDetail(error, t("directorApplyFailed"));
@@ -387,7 +391,6 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
             toast.info(t("directorDraftNameRequired"));
             return;
         }
-        setDraftName(trimmedName);
         setBusy("save");
         setStatus({ kind: "running", action: "save" });
         try {
@@ -395,7 +398,8 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                 throw new Error(t("directorDraftStaleActionRequired"));
             }
             const draft = parseDraft();
-            const saved = await saveDraftWithRecovery(draft, draftRevision);
+            const saved = await saveDraftWithRecovery(draft, draftRevision, trimmedName);
+            setDraftName(trimmedName);
             setDraftRevision(saved.draft_revision);
             setDraftSourceRevision(saved.source_revision);
             setDraftContextSourceRevision(saved.source_revision);
@@ -440,6 +444,22 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
             : "border-red-500/30 bg-red-500/10 text-red-300";
 
+    if (historicalProfile) {
+        return (
+            <section className="space-y-4" aria-label={t("directorRevision", { revision: historicalProfile.revision })}>
+                <h2 className="text-lg font-semibold text-foreground">{t("directorRevision", { revision: historicalProfile.revision })}</h2>
+                <fieldset disabled className="pointer-events-none opacity-80">
+                    <DirectorInterpretationVisualEditor
+                        profile={historicalProfile as unknown as Record<string, unknown>}
+                        onChange={() => undefined}
+                        sourceRevision={sourceRevision}
+                        characters={currentProject?.characters ?? []}
+                    />
+                </fieldset>
+            </section>
+        );
+    }
+
     return (
         <>
         <section className="border-b border-border pb-8" aria-labelledby="director-profile-title">
@@ -457,6 +477,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
                     )}
                     {draftRevision > 0 && (
                         <span className={`text-xs ${draftSourceRevision !== sourceRevision ? "text-amber-300" : "text-text-muted"}`}>
+                            {draftName && <span>{t("directorDraftNameLabel", { name: draftName })} · </span>}
                             {draftSourceRevision !== sourceRevision
                                 ? t("directorDraftStale", { revision: draftRevision, sourceRevision: draftSourceRevision ?? 0, currentSourceRevision: sourceRevision })
                                 : t("directorDraftRevision", { revision: draftRevision })}

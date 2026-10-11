@@ -191,7 +191,8 @@ export default function AssetDrawer({
                                                                 <div className="mt-2 grid grid-cols-4 gap-1.5" aria-label={t("selectProductViews")}>
                                                                     {variants.map((variant: any, variantIndex: number) => {
                                                                         const selected = effectiveSelected.includes(variant.id);
-                                                                        const label = variant.reference_view_role
+                                                                        const label = variant.display_name
+                                                                            || variant.reference_view_role
                                                                             || variant.reference_distance
                                                                             || t("productViewNumber", { number: variantIndex + 1 });
                                                                         return (

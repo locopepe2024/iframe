@@ -11,6 +11,9 @@ from src.apps.comic_gen.models import (
     ArtifactLineage,
     ArtDirection,
     Character,
+    EpisodeVisualContext,
+    EpisodeVisualShotContext,
+    Prop,
     DirectorProfile,
     Scene,
     Script,
@@ -305,6 +308,142 @@ def test_storyboard_prefers_exact_temporal_character_variant():
     assert result.frames[0].character_ids == [college.id]
 
 
+def test_storyboard_apply_keeps_confirmed_shot_id_and_asset_context():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    character = Character(id="host", name="主播", description="")
+    prop = Prop(id="cup", name="茶杯", description="")
+    scene = Scene(id="room", name="房间", description="")
+    context = EpisodeVisualContext(
+        source_revision=1,
+        director_profile_revision=1,
+        shooting_plan_revision=1,
+        shooting_plan_hash="plan-hash",
+        scenes=[
+            {
+                "scene_id": "plan-scene", "scene_ref": "房间", "source_chunk_refs": ["source:chars-0-6"],
+                "continuity_in": "主播推门进入直播间", "continuity_out": "主播抬眼看向镜头",
+            },
+            {"scene_id": "street-scene", "scene_ref": "街口", "source_chunk_refs": ["source:chars-0-6"]},
+        ],
+        shots=[
+            EpisodeVisualShotContext(
+                scene_id="plan-scene", beat_id="beat-1", shot_id="shot-plan",
+                character_ids=["host"], prop_ids=["cup"], shot_size="近景",
+                camera_angle="平视", camera_movement="缓慢推近", duration_seconds=6,
+                composition="人物在桌边偏右", performance_action="主播抬眼",
+                action_physics="茶杯停在桌面", dialogue=[{"speaker": "主播", "line": "等一等"}],
+            ),
+            EpisodeVisualShotContext(
+                scene_id="street-scene", beat_id="beat-2", shot_id="shot-street",
+                character_ids=["host"], shot_size="远景", lighting={"key_source": "冷色路灯"},
+            ),
+        ],
+    )
+    script = Script(
+        id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+        characters=[character], scenes=[scene], props=[prop], frames=[],
+        episode_visual_context=context,
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script,
+        {"characters": [], "scenes": [], "props": [], "episode_visual_context": context.model_dump()},
+        "prompt",
+    )
+    pipeline.resolve_episode_assets = lambda current: {
+        "characters": [character], "scenes": [scene], "props": [prop],
+    }
+    pipeline.stamp_owned_children = Mock()
+    pipeline._save_data = Mock()
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.return_value = [{
+        "scene_ref_name": "房间", "shot_id": "shot-plan", "character_ref_names": [],
+        "prop_ref_names": [], "action_summary": "主播抬眼", "visual_atmosphere": "室内",
+        "character_acting": "主播抬眼", "key_action_physics": "茶杯停在桌面",
+        "lighting": {"direction": "左侧", "quality": "soft", "color_temp": "warm", "description": "暖光"},
+    }]
+
+    result = pipeline.analyze_text_to_frames("project", "source")
+
+    assert result.frames[0].shot_id == "shot-plan"
+    assert result.frames[0].character_ids == ["host"]
+    assert result.frames[0].prop_ids == ["cup"]
+    assert result.frames[0].director_shot_context is not None
+    assert result.frames[0].director_shot_context["scene"]["scene_ref"] == "房间"
+    assert result.frames[0].director_shot_context["scene"]["continuity_in"] == "主播推门进入直播间"
+    assert result.frames[0].director_shot_context["shot"]["shot_id"] == "shot-plan"
+    assert result.frames[0].director_shot_context["shot"]["performance_action"] == "主播抬眼"
+    assert result.frames[0].director_shot_context["shot"]["action_physics"] == "茶杯停在桌面"
+    assert result.frames[0].director_shot_context["shot"]["shot_id"] != "shot-street"
+    assert result.frames[0].shot_size == "近景"
+    assert result.frames[0].camera_angle == "平视"
+    assert result.frames[0].camera_movement == "缓慢推近"
+    assert result.frames[0].duration == 6
+    assert result.frames[0].composition == "人物在桌边偏右"
+    assert result.frames[0].dialogue_structured.line == "等一等"
+
+
+def test_final_storyboard_prompt_contains_bound_director_visual_constraints():
+    from src.apps.comic_gen.prompt_assembly import assemble_prompt
+
+    frame = StoryboardFrame(
+        id="frame-1",
+        scene_id="room",
+        visual_description="主播端起茶杯，目光转向镜头。",
+        director_shot_context={
+            "scene": {
+                "location": "茶室", "time_anchor": "黄昏", "atmosphere": "窗外夕光变暗",
+                "continuity_in": "人物接着上一镜坐到茶桌旁", "continuity_out": "人物离开茶桌走向门口",
+            },
+            "shot": {
+                "visual_intent": "先交代人物与桌面关系",
+                "director_effect": "保持亲近感",
+                "performance_action": "主播端杯后停顿并抬眼",
+                "action_physics": "茶杯平稳落回桌面",
+                "composition": "人物位于画面右侧，桌面留出前景",
+                "camera_movement": "缓慢推近",
+                "ambient_sound": "窗外远处车声",
+                "lighting": {"key_source": "窗外夕光从左后方进入", "color_tone": "暖色", "contrast": "柔和"},
+            },
+        },
+    )
+
+    assembled = assemble_prompt(frame, [])
+
+    assert "保持亲近感" in assembled
+    assert "人物接着上一镜坐到茶桌旁" in assembled
+    assert "人物离开茶桌走向门口" in assembled
+    assert "茶杯平稳落回桌面" in assembled
+    assert "缓慢推近" in assembled
+    assert "窗外远处车声" in assembled
+    assert "窗外夕光从左后方进入" in assembled
+    assert "人物位于画面右侧" in assembled
+
+
+def test_final_storyboard_prompt_does_not_repeat_plan_text_already_in_description():
+    from src.apps.comic_gen.prompt_assembly import assemble_prompt
+
+    frame = StoryboardFrame(
+        id="frame-2",
+        scene_id="room",
+        visual_description="缓慢推近镜头，窗外远处车声中，人物抬眼。",
+        director_shot_context={
+            "shot": {
+                "camera_movement": "缓慢推近",
+                "ambient_sound": "窗外远处车声",
+            },
+        },
+    )
+
+    assembled = assemble_prompt(frame, [])
+
+    assert assembled.count("缓慢推近") == 1
+    assert assembled.count("窗外远处车声") == 1
+
+
 def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history():
     from src.apps.comic_gen.llm import ScriptProcessor
 
@@ -315,7 +454,15 @@ def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history
 
     result = processor.refine_storyboard_analysis(
         "原始剧本",
-        {"characters": [{"name": "主播"}], "scenes": [], "props": []},
+        {
+            "characters": [{"name": "主播"}], "scenes": [], "props": [],
+            "episode_visual_context": {
+                "scenes": [{"scene_id": "scene-live", "scene_ref": "原始剧本", "time_anchor": "黄昏"}],
+                "shots": [{"scene_id": "scene-live", "shot_id": "shot-live", "lighting": {"key_source": "侧后方夕阳"}}],
+                "characters": [{"person_id": "anchor", "scene_ids": ["scene-live"], "continuity_state": {"coat": "灰色外套"}}],
+                "props": [],
+            },
+        },
         draft,
         ["拆成两个镜头", "保留总时长"],
         visual_style={
@@ -331,6 +478,8 @@ def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history
     assert "1. 拆成两个镜头" in prompt and "2. 保留总时长" in prompt
     assert "黑白电影质感" in prompt and "彩色" in prompt
     assert "空间方位" in prompt and "对白原文" in prompt
+    assert "confirmed_episode_visual_context" in prompt
+    assert "侧后方夕阳" in prompt and "灰色外套" in prompt
     assert result[0]["action_summary"] == "修订镜头"
 
 
@@ -552,7 +701,7 @@ def test_rich_frame_pipeline_forwards_style_and_confirmed_continuity():
     )
     current = StoryboardFrame(
         id="current", scene_id=scene.id, character_ids=[character.id],
-        action_description="主播举起产品", shot_size="近景", camera_angle="平视",
+        action_description="主播举起产品", shot_size="近景", camera_angle="平视", shot_id="shot-current",
     )
     following = StoryboardFrame(
         id="following", scene_id=scene.id, character_ids=[character.id],
@@ -562,6 +711,17 @@ def test_rich_frame_pipeline_forwards_style_and_confirmed_continuity():
         id="project", title="Story", original_text="source", created_at=1, updated_at=1,
         characters=[character], scenes=[scene], frames=[previous, current, following],
         art_direction=style,
+        episode_visual_context=EpisodeVisualContext(
+            source_revision=1, director_profile_revision=2, shooting_plan_revision=1,
+            shooting_plan_hash="plan-hash",
+            scenes=[{"scene_id": "plan-scene", "scene_ref": "直播间", "location": "直播间"}],
+            shots=[EpisodeVisualShotContext(
+                scene_id="plan-scene", beat_id="beat", shot_id="shot-current",
+                character_ids=[character.id], shot_size="近景", camera_angle="平视",
+                performance_action="主播抬眼看向镜头", action_physics="产品停在桌面",
+                lighting={"key_source": "左侧暖光"},
+            )],
+        ),
     )
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
@@ -576,6 +736,8 @@ def test_rich_frame_pipeline_forwards_style_and_confirmed_continuity():
     kwargs = pipeline.script_processor.refine_frame_to_rich.call_args.kwargs
     assert kwargs["visual_style"]["style_config"]["positive_prompt"] == "统一胶片质感"
     assert "保持人物朝向和服装" in kwargs["director_context"]
+    assert "shot-current" in kwargs["director_context"]
+    assert "左侧暖光" in kwargs["director_context"]
     assert "暖色顶光" in pipeline.script_processor.refine_frame_to_rich.call_args.args[3]
     assert "将产品放回桌面" in pipeline.script_processor.refine_frame_to_rich.call_args.args[4]
 
@@ -614,6 +776,7 @@ def test_storyboard_analysis_context_passes_project_style_to_all_frames():
             "selected_style_id": "film-noir",
             "style_config": {"positive_prompt": "黑白电影质感", "negative_prompt": "彩色"},
         },
+        source_range=(0, 6),
     )
 
 

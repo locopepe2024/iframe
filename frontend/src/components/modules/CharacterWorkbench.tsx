@@ -112,10 +112,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 item?.id,
                 item?.updated_at,
                 item?.image_asset?.variants?.map((variant: any) => variant.id),
-                item?.reference_sheet?.image_variants?.map((variant: any) => variant.id),
-                item?.full_body_asset?.variants?.map((variant: any) => variant.id),
-                item?.three_view_asset?.variants?.map((variant: any) => variant.id),
-                item?.headshot_asset?.variants?.map((variant: any) => variant.id),
+                item?.reference_sheet?.image_variants?.map((variant: any) => [variant.id, variant.display_name]),
+                item?.full_body_asset?.variants?.map((variant: any) => [variant.id, variant.display_name]),
+                item?.three_view_asset?.variants?.map((variant: any) => [variant.id, variant.display_name]),
+                item?.headshot_asset?.variants?.map((variant: any) => [variant.id, variant.display_name]),
             ]) : [],
         ),
     );
@@ -173,8 +173,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             const variants = entry.variants || [];
             variants.forEach((variant, index) => {
                 if (!variant.id) return;
-                const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
-                const baseLabel = variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
+                const variantLabel = variant.display_name || variant.reference_view_role || variant.reference_distance || `未命名素材 ${index + 1}`;
+                const baseLabel = variants.length > 1 || variant.display_name ? `${entry.name} · ${variantLabel}` : entry.name;
                 let label = baseLabel;
                 let suffix = 2;
                 while (usedLabels.has(label)) label = `${baseLabel} ${suffix++}`;
@@ -544,6 +544,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
     };
 
+    const handleRenameVariant = async (variantId: string, displayName: string) => {
+        if (!currentProject) return;
+        const updatedProject = await api.updateAssetVariantMetadata(currentProject.id, asset.id, "character", variantId, undefined, undefined, displayName);
+        updateProject(currentProject.id, updatedProject);
+    };
+
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
             <motion.div
@@ -664,6 +670,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
+                        onRename={handleRenameVariant}
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
@@ -711,6 +718,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
+                        onRename={handleRenameVariant}
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
@@ -739,6 +747,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
+                        onRename={handleRenameVariant}
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
@@ -876,6 +885,7 @@ export function WorkbenchPanel({
     onSelect,
     onDelete,
     onFavorite,
+    onRename,
 
     prompt,
     setPrompt,
@@ -1152,6 +1162,7 @@ export function WorkbenchPanel({
                             onSelect={onSelect}
                             onDelete={onDelete}
                             onFavorite={onFavorite}
+                            onRename={onRename}
                             onGenerate={onGenerate}
                             isGenerating={isGenerating}
                             generatingBatchSize={generatingBatchSize}

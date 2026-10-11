@@ -134,7 +134,8 @@ it("requires an explicit user action to build a map from legacy phases and keeps
     const onChange = vi.fn();
     renderEditor(profile, onChange);
 
-    expect(screen.getByText("Initial: Close · Change: Long distance · Ending: Separated")).toBeInTheDocument();
+    expect(screen.getByText(/Found 3 legacy summary items/)).toBeInTheDocument();
+    expect(screen.queryByText("Initial: Close · Change: Long distance · Ending: Separated")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Enter mind map" }));
 
     const changed = onChange.mock.lastCall?.[0] as Record<string, unknown> | undefined;
@@ -171,16 +172,20 @@ it("builds an explicit story map from a legacy timeline without inventing phase 
 
 it("edits scene analysis summaries without changing the story map or unknown fields", () => {
     const onChange = vi.fn();
-    renderEditor({ ...profile, story_map: storyMap, scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet", state_in: "Separate", state_out: "Curious" }] }, onChange);
+    renderEditor({ ...profile, story_map: storyMap, scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet", state_in: "Separate", state_out: "Curious", daylight_phase: "Day" }] }, onChange);
 
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
 
     fireEvent.change(screen.getByLabelText("Scene summary"), { target: { value: "They meet beside the window" } });
     fireEvent.change(screen.getByLabelText("State out"), { target: { value: "Exchange books" } });
+    fireEvent.change(screen.getByLabelText("Location in source"), { target: { value: "Library entrance" } });
+    fireEvent.change(screen.getByLabelText("Story time"), { target: { value: "After school" } });
+    fireEvent.change(screen.getByLabelText("Daylight phase"), { target: { value: "Dusk" } });
+    fireEvent.change(screen.getByLabelText("Lighting cues in source"), { target: { value: "Low sun through west windows" } });
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
         story_map: storyMap,
-        scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet beside the window", state_in: "Separate", state_out: "Exchange books" }],
+        scene_summaries: [{ scene_ref: "INT. LIBRARY - DAY", summary: "They meet beside the window", state_in: "Separate", state_out: "Exchange books", location: "Library entrance", time_anchor: "After school", daylight_phase: "Dusk", lighting_cues: "Low sun through west windows" }],
         future_field: profile.future_field,
     }));
 });

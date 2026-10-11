@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .models import (
     Script,
@@ -96,8 +96,10 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "每个值尽量控制在 120 字以内；六个方向文本字段各不超过 240 字；"
     "continuity_constraints、prohibitions、unresolved_questions 各最多 8 项、"
     "每项不超过 120 字；scene_summaries 最多 16 项，每项只能有 scene_ref、"
-    "summary、state_in、state_out 四个键；scene_ref 不超过 40 字，summary 不超过 64 字，"
-    "state_in/state_out 各不超过 48 字，总计不超过 3200 字。"
+    "summary、state_in、state_out、location、time_anchor、daylight_phase、lighting_cues；"
+    "scene_ref 不超过 40 字，summary 不超过 64 字，state_in/state_out 各不超过 48 字，"
+    "location/time_anchor 各不超过 80 字，daylight_phase 不超过 40 字，"
+    "lighting_cues 不超过 120 字，总计不超过 6000 字。"
     f"canon_state 最多 {DIRECTOR_CANON_STATE_MAX_ITEMS} 条事实、最多 {DIRECTOR_CANON_STATE_MAX_CHARS} 个字符；"
     "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
     "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
@@ -126,7 +128,7 @@ DIRECTOR_RAW_RESPONSE_MAX_CHARS = 300000
 
 
 _DIRECTOR_PRESET_FALLBACKS = {
-    "director-interpretation": """阶段：Director 理解。先确认原作的时间、地点、人物关系、事件因果、剧情线和叙事场景。原文事实、导演解释、用户要求和未决问题必须分开。不得改写剧本原文，不得把来源不明的推断写成事实。输出必须可回指 source_ref、事件或事实账本；结果进入 draft，等待用户审阅和采用。""",
+    "director-interpretation": """阶段：Director 理解。先确认原作的时间、地点、人物关系、事件因果、剧情线和叙事场景。逐场记录原文支持的地点、时段、昼夜阶段和光影线索，审查跨场承接；同为黄昏不能单独证明时段连续。原文事实、导演解释、用户要求和未决问题必须分开。不得改写剧本原文，不得把来源不明的推断写成事实。输出必须可回指 source_ref、事件或事实账本；结果进入 draft，等待用户审阅和采用。""",
     "director-intent": """阶段：导演意图。基于已采用的 Director 理解提出视觉、表演、声音、节奏和连续性方向。新增的地标、生活细节或视觉锚点必须标记为导演补充或可选建议，不得伪装成剧本事件。导演意图不能反向修改剧本原文。""",
     "shooting-plan-handoff": """阶段：拍摄计划。只读取已采用的 Director 理解/意图、当前剧本片段、实体和上一段 continuity handoff。按 scene → beat → shot 组织提案。source chunk 边界不是语义场景边界；只有明确连续证据才合并场景。缺失的环境声、灯光或未绑定实体可以作为待补项，不得因此拒绝整份计划。""",
 }
@@ -678,6 +680,7 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 每帧字段:
 {
     "scene_ref_name": "场景名",
+    "shot_id": "对应已确认拍摄计划镜头 ID；无匹配时为空字符串",
     "character_ref_names": ["角色名"],
     "prop_ref_names": ["道具名"],
     "action_summary": "一句话概括这帧发生什么（含角色动作 + 物理事件 + 神态表情）",
@@ -1665,6 +1668,10 @@ execution_summary 是供后续分镜和资产设计读取的唯一摘要：只�
 {BOOKEND_NARRATIVE_EXECUTION_GUIDANCE}
 scene_summaries 是场景级连续性记忆，不是第二份完整剧本：每项必须使用原文中可定位的
 scene_ref，并用 summary、state_in、state_out 记录该场景的局部事件及入场/出场状态。
+逐场填写原文支持的 location、time_anchor、daylight_phase（如“黄昏”）和 lighting_cues；
+lighting_cues 只记录有依据的自然光、画内光源、方向或阴影，不要把创意补光当成原文事实。
+同一连续时段的跨场共享约束写入 continuity_constraints，指明相关 scene_ref 与改变条件；
+导演建议的主光、色调和阴影方向须标为待审阅的解释，不得仅凭两个场景都叫“黄昏”认定连续。
 场景之间存在明确承接时，state_out 与下一场相关的 state_in 应能对应；发生时间跳跃、地点转换
 或状态变化时记录其原文依据，无法判断时留空或标记待核验，不要把不同拍摄场次强行合并。
 只要剧本存在可定位的事件或场景，就至少输出 1 条 scene_summary；每个事件至少归入一个叙事场景候选。没有明确的入场/出场状态时留空，不要因此省略场景记录。scene_summary 是叙事场景候选，不是 Assets 场景实体，也不是最终拍摄场次。
@@ -1770,8 +1777,9 @@ execution_summary 或相应方向字段中，并标记为用户要求；它们�
 不要回显未变化的字段，不要返回完整 Director profile，不要返回 revision、content_hash 或
 confirmed_at。数组字段一旦变化，返回该字段的完整替换数组；未变化的数组不要返回。
 execution_summary 必须最多 {DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS} 个字符、最多 20 条短句；
-scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，并且只保留后续分镜和
-资产设计需要的事实与约束。若 story_map 发生变化，返回完整替换对象；对未更改的 phase/event/
+scene_summaries 必须保留场景之间的 state_out → state_in 因果衔接，以及受影响场景的
+location、time_anchor、daylight_phase、lighting_cues；时间或光影约束变化时同步更新相关的
+continuity_constraints。若 story_map 发生变化，返回完整替换对象；对未更改的 phase/event/
 relationship/thread 保留稳定 ID，states 仍使用 phase_id 与真实 trigger_event_ids。只可保留当前 story_map
 中已有 source_fact_ids，不得编造新证据 ID；用户新加且无引用的解释维持 interpretation。
 canon_state 只返回本次受影响的事实分类；优先复用已有
@@ -1808,6 +1816,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             return "unresolved_questions 必须是字符串数组"
         scene_keys = {
             "scene_ref", "heading", "location", "time_anchor",
+            "place_continuity_id", "time_continuity_id",
             "environment_atmosphere", "prop_ids", "unresolved_questions",
             "continues_previous_scene", "continuity_in", "continuity_out",
             "duration_seconds", "beats",
@@ -1816,7 +1825,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         shot_keys = {
             "title", "visual_intent", "director_effect", "performance_action", "action_physics",
             "shot_size", "camera_angle", "composition", "camera_movement",
-            "lighting", "duration_seconds", "dialogue", "ambient_sound",
+            "lighting", "lighting_override_reason", "duration_seconds", "dialogue", "ambient_sound",
             "character_ids", "prop_ids", "unresolved_entity_refs",
         }
         lighting_keys = {"key_source", "color_tone", "contrast", "practical_sources"}
@@ -1829,6 +1838,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 return f"scene {scene_index + 1} 字段不符合结构"
             if any(key in scene and not isinstance(scene[key], str) for key in ("heading", "location", "time_anchor")):
                 return f"scene {scene_index + 1} 的场景标记、地点和时间必须是字符串"
+            if any(key in scene and not isinstance(scene[key], str) for key in ("place_continuity_id", "time_continuity_id")):
+                return f"scene {scene_index + 1} 的地点/时间连续性 ID 必须是字符串"
             if "continues_previous_scene" in scene and not isinstance(scene["continues_previous_scene"], bool):
                 return f"scene {scene_index + 1} continues_previous_scene 必须是布尔值"
             for key in ("continuity_in", "continuity_out"):
@@ -1871,6 +1882,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
                     if "director_effect" in shot and not isinstance(shot["director_effect"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
+                    if "lighting_override_reason" in shot and not isinstance(shot["lighting_override_reason"], str):
+                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} lighting_override_reason 必须是字符串"
                     # Shot details are editable downstream. Generation validates shape and types;
                     # missing creative details remain visible as fields to complete later.
                     for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
@@ -1930,11 +1943,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
 规划要求：
 1. 先判断场景，再组织每场戏的戏剧 beat，最后根据叙事目的决定 shots。不要把每个动作或每句对白机械拆成一个 shot；连续动作可以放在同一镜头，只有视线/情绪/空间/信息变化值得剪切时才增加镜头。
-2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。
+2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、place_continuity_id、time_continuity_id、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。地点与时段 ID 是供用户审阅的关联建议：只有剧本或已确认 Director 理解明确支持同一物理地点、同一连续剧情时段时才复用相同 ID；不同视角可共享地点 ID，但不自动共享时段 ID。证据不足时两个 ID 留空，不按相似地点名或“黄昏”等词猜测关联。
+   对照已确认 Director 的 scene_summaries：原文写明“黄昏”时，本场 time_anchor 和相关镜头光影不得无理由变成白天或夜晚；同一已确认连续时段内的相关场景沿用相容的自然光、光源方向、色调和阴影。Director 的 lighting_cues 是有依据的线索，不等于已确认摄影布光；没有具体光源依据时由本计划提出待审阅光影基线。明确时间跳跃、天气变化或画内新光源须记录改变原因，不静默覆盖前场状态。
    已确认 Director profile 中的地点、城市、时代或地域要求属于导演视觉约束。它们应影响 location、environment_atmosphere 和相关镜头的 visual_intent；当剧本没有明确写出对应地标、饮食或生活细节时，可以提出“可选导演视觉锚点”（例如城市地标、地方饮食环境或街巷质感）作为可供用户修改的拍摄计划建议。此类建议必须明确是可选导演补充，不得伪装成已发生的剧本事实，不得凭空增加人物行为、对白或剧情事件；没有合适的剧情承载位置时，写入 unresolved_questions 供用户决定是否增加建立镜头。
 3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
-5. lighting 必须严格包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。镜头内环境光应符合场景与风格。
+5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
@@ -2007,10 +2021,107 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 </project_visual_style>
 """ % json.dumps(visual_style, ensure_ascii=False, indent=2)
 
+    @staticmethod
+    def _storyboard_episode_visual_context(
+        entities_json: Dict[str, Any],
+        text: str,
+        source_range: Optional[Tuple[int, int]] = None,
+    ) -> str:
+        """Return only the confirmed shooting-plan context for the matched scene.
+
+        Episode context is a scene-scoped handoff. Sending every scene to a
+        storyboard request would make a character look or lighting baseline
+        from one scene available to another unrelated scene.
+        """
+        visual_context = entities_json.get("episode_visual_context")
+        if not isinstance(visual_context, dict):
+            return ""
+        context_scenes = visual_context.get("scenes", [])
+        if not isinstance(context_scenes, list):
+            return ""
+        def overlaps_source(refs: Any) -> bool:
+            if not source_range or not isinstance(refs, list):
+                return False
+            for ref in refs:
+                match = re.fullmatch(r"source:chars-(\d+)-(\d+)", str(ref))
+                if not match:
+                    continue
+                start, end = int(match.group(1)), int(match.group(2))
+                if start < source_range[1] and source_range[0] < end:
+                    return True
+            return False
+
+        has_source_maps = any(
+            isinstance(scene, dict) and scene.get("source_chunk_refs")
+            for scene in context_scenes
+        )
+        matched_scenes = [
+            scene for scene in context_scenes
+            if isinstance(scene, dict) and overlaps_source(scene.get("source_chunk_refs"))
+        ] if source_range else []
+        if not matched_scenes:
+            matched_scenes = [
+                scene for scene in context_scenes
+                if isinstance(scene, dict) and scene.get("scene_ref")
+                and str(scene["scene_ref"]) in text
+            ]
+        if not matched_scenes and len(context_scenes) == 1 and not has_source_maps:
+            matched_scenes = [scene for scene in context_scenes if isinstance(scene, dict)]
+        scene_ids = {
+            scene.get("scene_id") for scene in matched_scenes
+            if scene.get("scene_id")
+        }
+        if not scene_ids:
+            return ""
+
+        def belongs_to_scene(item: Any) -> bool:
+            return isinstance(item, dict) and bool(
+                scene_ids.intersection(item.get("scene_ids") or [])
+            )
+
+        context_shots = [
+            shot for shot in visual_context.get("shots", [])
+            if isinstance(shot, dict) and shot.get("scene_id") in scene_ids
+        ]
+        shots_with_source_maps = [shot for shot in context_shots if shot.get("source_chunk_refs")]
+        if source_range and shots_with_source_maps:
+            matched_shots = [
+                shot for shot in shots_with_source_maps
+                if overlaps_source(shot.get("source_chunk_refs"))
+            ]
+            if matched_shots:
+                context_shots = matched_shots
+
+        scoped = {
+            "scenes": matched_scenes,
+            "shots": context_shots,
+            "characters": [
+                item for item in visual_context.get("characters", [])
+                if belongs_to_scene(item)
+            ],
+            "props": [
+                item for item in visual_context.get("props", [])
+                if belongs_to_scene(item)
+            ],
+        }
+        return (
+            "\n拍摄计划视觉上下文按已匹配场景提供。仅用于对应场景的分镜；"
+            "场景的入场和出场连续性已附在对应场景上下文中；镜头光影已继承地点时段基线，"
+            "不能把不同场景的角色状态或光影混用。"
+            "每个 confirmed_episode_visual_context.shots 项代表一个已确认镜头；"
+            "如果当前分镜对应其中一个镜头，必须原样回传其 shot_id，并继承其景别、机位、构图、"
+            "运镜、表演、动作物理、导演效果、对白和光影意图。一个计划镜头可以拆成多个分镜帧，"
+            "但不得把不同 shot_id 的约束混在同一帧；没有匹配镜头时 shot_id 返回空字符串。"
+            "\n<confirmed_episode_visual_context>\n"
+            + _prompt_json(scoped)
+            + "\n</confirmed_episode_visual_context>\n"
+        )
+
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
                               director_profile: Optional[Dict[str, Any]] = None,
                               visual_style: Optional[Dict[str, Any]] = None,
-                              previous_frames: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+                              previous_frames: Optional[List[Dict[str, Any]]] = None,
+                              source_range: Optional[Tuple[int, int]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -2035,6 +2146,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             "scenes": scenes_list,
             "props": props_list,
         }, ensure_ascii=False, indent=2)
+        system_visual_context = self._storyboard_episode_visual_context(entities_json, text, source_range)
 
         template = (
             custom_extraction_prompt
@@ -2042,6 +2154,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += system_visual_context
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
         if previous_frames:
@@ -2153,6 +2266,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         custom_extraction_prompt: str = "",
         director_profile: Optional[Dict[str, Any]] = None,
         visual_style: Optional[Dict[str, Any]] = None,
+        source_range: Optional[Tuple[int, int]] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -2164,6 +2278,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        baseline += self._storyboard_episode_visual_context(entities_json, text, source_range)
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
@@ -2301,7 +2416,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve and refine the supplied visual_atmosphere, character_acting, key_action_physics, shot_size, camera, and lighting; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.

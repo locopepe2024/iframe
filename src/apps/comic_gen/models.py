@@ -167,6 +167,7 @@ class ProviderRoutingConfig(BaseModel):
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
+    display_name: Optional[str] = Field(None, max_length=120, description="User-reviewed semantic label for finding this variant")
     # ``url`` is retained as the API/browser projection for compatibility.
     # Durable asset identity is ``storage_key`` and must not be a signed URL.
     url: str = Field(..., description="Delivery URL projection (legacy field)")
@@ -663,6 +664,10 @@ class StoryboardFrame(BaseModel):
     generation_lineage: Optional[ArtifactLineage] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     shot_id: Optional[str] = Field(None, description="Optional confirmed shooting-plan shot ID")
+    director_shot_context: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Server-projected read-only context from the confirmed shooting-plan shot",
+    )
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
     
@@ -1142,6 +1147,16 @@ class DirectorPlanLighting(_DirectorShootingPlanModel):
     practical_sources: List[str] = Field(default_factory=list, max_length=12)
 
 
+class DirectorPlanLightingBaseline(_DirectorShootingPlanModel):
+    place_continuity_id: str = Field(..., min_length=1, max_length=120)
+    time_continuity_id: str = Field(..., min_length=1, max_length=120)
+    story_time: str = Field("", max_length=160)
+    daylight_phase: str = Field("", max_length=120)
+    weather: str = Field("", max_length=160)
+    shadow_direction: str = Field("", max_length=160)
+    lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
+
+
 class DirectorPlanCastBinding(_DirectorShootingPlanModel):
     person_id: str = Field(..., min_length=1, max_length=120)
     era_variant_id: Optional[str] = Field(None, max_length=120)
@@ -1178,6 +1193,8 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     composition: str = Field("", max_length=1200)
     camera_movement: str = Field("", max_length=500)
     lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
+    lighting_override_reason: str = Field("", max_length=500)
+    lighting_override_selected: bool = False
     duration_seconds: Optional[int] = Field(None, ge=1, le=30)
     dialogue: List[DirectorPlanDialogueLine] = Field(default_factory=list, max_length=20)
     ambient_sound: str = Field("", max_length=1000)
@@ -1238,6 +1255,8 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
     heading: str = Field("", max_length=240)
     location: str = Field("", max_length=240)
     time_anchor: str = Field("", max_length=160)
+    place_continuity_id: Optional[str] = Field(None, max_length=120)
+    time_continuity_id: Optional[str] = Field(None, max_length=120)
     continues_previous_scene: bool = False
     continuity_in: str = Field("", max_length=1200)
     continuity_out: str = Field("", max_length=1200)
@@ -1271,6 +1290,7 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
     director_profile_hash: str = Field(..., min_length=1, max_length=128)
     effective_style_hash: str = Field(..., min_length=1, max_length=128)
     scenes: List[DirectorPlanScene] = Field(default_factory=list, max_length=160)
+    lighting_baselines: List[DirectorPlanLightingBaseline] = Field(default_factory=list, max_length=160)
     unresolved_questions: List[str] = Field(default_factory=list, max_length=80)
     generated_at: Optional[float] = Field(None, ge=0)
 
@@ -1288,6 +1308,10 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
             raise ValueError("shooting-plan beat IDs must be unique")
         if len(shot_ids) != len(set(shot_ids)):
             raise ValueError("shooting-plan shot IDs must be unique")
+        baseline_keys = [(item.place_continuity_id, item.time_continuity_id)
+                         for item in self.lighting_baselines]
+        if len(baseline_keys) != len(set(baseline_keys)):
+            raise ValueError("shooting-plan lighting baselines must have unique place/time pairs")
         return self
 
 
@@ -1313,8 +1337,13 @@ class EpisodeVisualSceneContext(BaseModel):
     scene_asset_id: Optional[str] = None
     plan_scene_asset_id: Optional[str] = None
     scene_ref: str = ""
+    source_chunk_refs: List[str] = Field(default_factory=list)
     location: str = ""
     time_anchor: str = ""
+    continuity_in: str = ""
+    continuity_out: str = ""
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
     interior_exterior: Optional[str] = None
     time_of_day: Optional[str] = None
     season: Optional[str] = None
@@ -1346,16 +1375,27 @@ class EpisodeVisualShotContext(BaseModel):
     scene_id: str
     beat_id: str
     shot_id: str
+    source_chunk_refs: List[str] = Field(default_factory=list)
     scene_asset_id: Optional[str] = None
     plan_scene_asset_id: Optional[str] = None
     character_ids: List[str] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
     visual_intent: str = ""
+    director_effect: str = ""
     performance_action: str = ""
+    action_physics: str = ""
+    shot_size: str = ""
+    camera_angle: str = ""
     composition: str = ""
     camera_movement: str = ""
+    duration_seconds: Optional[int] = None
+    dialogue: List[Dict[str, str]] = Field(default_factory=list)
+    ambient_sound: str = ""
     lighting: Dict[str, Any] = Field(default_factory=dict)
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
+    lighting_override_reason: str = ""
 
 
 class EpisodeVisualContext(BaseModel):
@@ -1489,7 +1529,7 @@ def _director_value_as_text(value: Any) -> str:
 
 
 DIRECTOR_SCENE_SUMMARIES_MAX_ITEMS = 16
-DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 3200
+DIRECTOR_SCENE_SUMMARIES_MAX_CHARS = 6000
 DIRECTOR_SCENE_REF_MAX_CHARS = 40
 DIRECTOR_SCENE_SUMMARY_VALUE_MAX_CHARS = 64
 DIRECTOR_SCENE_STATE_MAX_CHARS = 48
@@ -1851,8 +1891,7 @@ def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
     """Project one model/user scene-memory item to the execution contract.
 
     Scene memory is intentionally a projection rather than a second source of
-    truth. Unknown keys stay in the editable full profile, while downstream
-    receives only the four stable fields needed to bridge scene boundaries.
+    truth. Unknown keys stay in the editable full profile.
     """
     if not isinstance(item, dict):
         item = {"summary": _director_value_as_text(item)}
@@ -1889,6 +1928,11 @@ def _director_scene_memory_entry(item: Any, index: int) -> Dict[str, str]:
         entry["state_out"] = _bounded_director_text(
             state_out, DIRECTOR_SCENE_STATE_MAX_CHARS
         )
+    for key, limit in (("location", 80), ("time_anchor", 80),
+                       ("daylight_phase", 40), ("lighting_cues", 120)):
+        value = _director_first_text(item, (key,))
+        if value:
+            entry[key] = _bounded_director_text(value, limit)
     return entry
 
 
@@ -1948,15 +1992,20 @@ def build_director_scene_summaries(profile: Dict[str, Any]) -> List[Dict[str, st
     def serialized_length() -> int:
         return len(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
-    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16, "scene_ref": 8}
+    minimum_lengths = {"state_in": 0, "state_out": 0, "summary": 16,
+                       "location": 0, "time_anchor": 0, "daylight_phase": 0,
+                       "lighting_cues": 0, "scene_ref": 8}
     # Preserve the transition fields when compressing: a short state bridge is
     # more useful for cross-scene continuity than a verbose local description.
-    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1, "scene_ref": 2}
+    shrink_order = {"summary": 0, "state_in": 1, "state_out": 1,
+                    "location": 2, "time_anchor": 2, "lighting_cues": 3,
+                    "daylight_phase": 3, "scene_ref": 4}
     while serialized_length() > DIRECTOR_SCENE_SUMMARIES_MAX_CHARS:
         shrinkable = [
             (shrink_order[key], -len(entry[key]), index, key)
             for index, entry in enumerate(result)
-            for key in ("state_in", "state_out", "summary", "scene_ref")
+            for key in ("state_in", "state_out", "summary", "location",
+                        "time_anchor", "daylight_phase", "lighting_cues", "scene_ref")
             if key in entry and len(entry[key]) > minimum_lengths[key]
         ]
         if not shrinkable:
@@ -2740,6 +2789,9 @@ class Script(BaseModel):
     )
     episode_scene_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Scene asset ID to current episode-visible asset ID"
+    )
+    episode_plan_scene_asset_bindings: Dict[str, str] = Field(
+        default_factory=dict, description="Explicit plan scene/shot requirement to episode-visible Scene asset ID"
     )
     episode_prop_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"

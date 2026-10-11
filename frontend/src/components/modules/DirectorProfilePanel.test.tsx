@@ -22,6 +22,7 @@ const profile = {
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(window, "prompt").mockReturnValue("Named draft");
     vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
         project_id: "film", draft_revision: 0, source_revision: null, draft: null, updated_at: null,
     });
@@ -62,7 +63,7 @@ it("keeps director analysis as a draft until explicit confirmation", async () =>
     ).toContain("Chinese university and Beijing"));
     expect(apply).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Apply Director understanding/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirm Director interpretation/ }));
     await waitFor(() => expect(apply).toHaveBeenCalledWith("film", profile, undefined, 1));
     expect(api.saveDirectorProfileDraft).toHaveBeenCalledWith("film", 1, 0, profile);
 });
@@ -154,8 +155,9 @@ it("saves an editable Director draft without making it active", async () => {
         1,
         0,
         expect.objectContaining({ setting: expect.objectContaining({ format_genre: "Romantic drama" }) }),
+        "Named draft",
     ));
-    expect(await screen.findByText("Saved draft v1")).toBeInTheDocument();
+    expect(await screen.findByText("Director draft save r1 (not confirmed)")).toBeInTheDocument();
     expect(apply).not.toHaveBeenCalled();
 });
 
@@ -173,8 +175,40 @@ it("restores a saved Director draft independently from the confirmed profile", a
         </NextIntlClientProvider>,
     );
 
-    expect(await screen.findByText("Saved draft v3")).toBeInTheDocument();
+    expect(await screen.findByText("Director draft save r3 (not confirmed)")).toBeInTheDocument();
     expect(screen.getByLabelText("geography")).toHaveValue("User-edited geography");
+});
+
+it("keeps a draft named r6 separate from confirmed Director v5", async () => {
+    useProjectStore.setState(state => ({
+        currentProject: {
+            ...state.currentProject!,
+            art_direction: {
+                selected_style_id: "director-profile",
+                style_config: { id: "director-profile", name: "Director", positive_prompt: "", negative_prompt: "", is_custom: false },
+                custom_styles: [], ai_recommendations: [],
+                director_profile: { ...profile, revision: 5, content_hash: "confirmed-v5", confirmed_at: 10 },
+            },
+        },
+    }));
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 6, draft_name: "r6", source_revision: 1,
+        draft: profile, updated_at: 10,
+    });
+    const apply = vi.spyOn(api, "applyDirectorProfile");
+    const save = vi.spyOn(api, "saveDirectorProfileDraft");
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+
+    expect(await screen.findByText("Confirmed Director v5")).toBeInTheDocument();
+    expect(screen.getByText(/Draft name: r6/)).toBeInTheDocument();
+    expect(screen.getByText("Director draft save r6 (not confirmed)")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("geography"), { target: { value: "Revised geography" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 6, expect.anything(), "Named draft"));
+    expect(await screen.findByText("Director draft save r7 (not confirmed)")).toBeInTheDocument();
+    expect(screen.getByText(/Draft name: Named draft/)).toBeInTheDocument();
+    expect(screen.getByText("Confirmed Director v5")).toBeInTheDocument();
+    expect(apply).not.toHaveBeenCalled();
 });
 
 it("restores a browser draft when the previous server save failed", async () => {
@@ -210,12 +244,12 @@ it("retries a draft save against the latest server revision without losing edits
             draft, updated_at: 11,
         }));
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
-    await screen.findByText("Saved draft v4");
+    await screen.findByText("Director draft save r4 (not confirmed)");
     fireEvent.click(screen.getAllByRole("button", { name: "Add item" })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1]?.[2]).toBe(4);
-    expect(await screen.findByText("Saved draft v5")).toBeInTheDocument();
+    expect(await screen.findByText("Director draft save r5 (not confirmed)")).toBeInTheDocument();
 });
 
 it("requires a fresh analysis after the source changes, then allows saving it against the new revision", async () => {
@@ -243,7 +277,7 @@ it("requires a fresh analysis after the source changes, then allows saving it ag
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
     await waitFor(() => expect(save).toHaveBeenCalledWith(
-        "film", 2, 3, profile,
+        "film", 2, 3, profile, "Named draft",
     ));
 });
 

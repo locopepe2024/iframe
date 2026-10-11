@@ -3719,6 +3719,7 @@ class UpdateVariantMetadataRequest(BaseModel):
     variant_id: str
     reference_view_role: Optional[str] = None
     reference_distance: Optional[str] = None
+    display_name: Optional[str] = None
 
 @app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
 def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
@@ -3731,6 +3732,7 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
             request.variant_id,
             request.reference_view_role,
             request.reference_distance,
+            request.display_name,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -5324,11 +5326,24 @@ def get_director_shooting_plan(
     )
     revisions = script.director_shooting_plan_revisions
     confirmed = revisions[-1] if revisions else None
+    director_profile = pipeline.effective_director_profile(script)
+    story_map = pipeline._effective_shooting_story_map(script, director_profile) if director_profile else None
+    story_events = [
+        {
+            "id": event["event_id"],
+            "label": f"{phase.get('label') or phase.get('phase_id') or ''} · {event.get('title') or str(event.get('description') or '')[:48]}",
+        }
+        for phase in (story_map or {}).get("phases", [])
+        for event in phase.get("events", [])
+        if event.get("event_id")
+    ]
     return {
         "project_id": script.id,
         "draft_revision": script.director_shooting_plan_draft_revision,
         "draft_updated_at": script.director_shooting_plan_draft_updated_at,
-        "draft": script.director_shooting_plan_draft.model_dump() if script.director_shooting_plan_draft else None,
+        "draft": pipeline.normalize_director_shooting_plan_lighting(
+            script.director_shooting_plan_draft
+        ).model_dump() if script.director_shooting_plan_draft else None,
         "current_revision": confirmed.revision if confirmed else 0,
         "current": _director_shooting_plan_revision_summary(confirmed) if confirmed else None,
         "current_lineage": lineage,
@@ -5337,6 +5352,7 @@ def get_director_shooting_plan(
             script.director_shooting_plan_draft, lineage,
         )),
         "current_stale": bool(confirmed and _director_plan_lineage_changed(confirmed.plan, lineage)),
+        "current_story_events": story_events,
         "source_chunks": [{
             "source_ref": item["source_ref"],
             "char_start": item["char_start"],
@@ -5391,6 +5407,27 @@ class EpisodePlanAssetBindingRequest(BaseModel):
     expected_plan_revision: int = Field(..., ge=1)
 
 
+class EpisodePlanSceneBindingRequest(BaseModel):
+    scene_id: str = Field(..., min_length=1, max_length=120)
+    shot_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    asset_id: str = Field(..., min_length=1, max_length=120)
+    expected_plan_revision: int = Field(..., ge=1)
+
+
+@app.put("/projects/{script_id}/episode-visual-context/plan-scene")
+def bind_episode_plan_scene(script_id: str, request: EpisodePlanSceneBindingRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(404, "Project not found")
+    try:
+        return pipeline.bind_episode_plan_scene(
+            script_id, request.scene_id, request.shot_id,
+            request.asset_id, request.expected_plan_revision)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(409 if "revision changed" in message else 422, message) from exc
+
+
 @app.put("/projects/{script_id}/episode-visual-context/plan-asset")
 def bind_episode_plan_asset(script_id: str, request: EpisodePlanAssetBindingRequest,
                             user: UserContext = Depends(require_studio_user)):
@@ -5440,7 +5477,8 @@ def get_director_shooting_plan_revision(
     snapshot = next((item for item in script.director_shooting_plan_revisions if item.revision == revision), None)
     if snapshot is None:
         raise HTTPException(404, "Shooting-plan revision not found")
-    return {**_director_shooting_plan_revision_summary(snapshot), "plan": snapshot.plan.model_dump()}
+    plan = pipeline.normalize_director_shooting_plan_lighting(snapshot.plan)
+    return {**_director_shooting_plan_revision_summary(snapshot), "plan": plan.model_dump()}
 
 
 @app.put("/projects/{script_id}/director-shooting-plan/draft")

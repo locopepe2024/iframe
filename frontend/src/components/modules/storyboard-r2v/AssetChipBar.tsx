@@ -73,7 +73,8 @@ export default function AssetChipBar({
                                 <div className="grid grid-cols-4 gap-2" role="group" aria-label={t("selectAssetViews", { name: asset.name })}>
                                     {variants.map((variant, index) => {
                                         const active = selected.includes(variant.id);
-                                        const label = variant.reference_view_role
+                                        const label = variant.display_name
+                                            || variant.reference_view_role
                                             || variant.reference_distance
                                             || t("productViewNumber", { number: index + 1 });
                                         return (

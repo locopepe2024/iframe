@@ -420,7 +420,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
         const labels = new Set<string>();
         return visibleAvailableReferences.flatMap(({ reference, asset, variant }, index) => {
-            const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const variantLabel = variant.display_name || variant.reference_view_role || variant.reference_distance || `未命名素材 ${index + 1}`;
             const baseLabel = asset.variants.length > 1 ? `${asset.name} · ${variantLabel}` : asset.name;
             let label = baseLabel;
             let suffix = 2;

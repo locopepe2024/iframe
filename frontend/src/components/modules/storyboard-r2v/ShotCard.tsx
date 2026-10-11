@@ -49,6 +49,35 @@ export interface ShotNode {
     referenceVariantIds?: Record<string, string[]>;
     poseReferenceVariantIds?: Record<string, string[]>;
     directorSnapshotMediaId?: string | null;
+    /** Server-projected, read-only visual direction from the confirmed plan. */
+    directorShotContext?: {
+        scene?: {
+            location?: string;
+            time_anchor?: string;
+            continuity_in?: string;
+            continuity_out?: string;
+            atmosphere?: string;
+        };
+        shot?: {
+            shot_size?: string;
+            camera_angle?: string;
+            camera_movement?: string;
+            duration_seconds?: number | null;
+            visual_intent?: string;
+            director_effect?: string;
+            performance_action?: string;
+            action_physics?: string;
+            composition?: string;
+            ambient_sound?: string;
+            lighting?: {
+                key_source?: string;
+                color_tone?: string;
+                contrast?: string;
+                practical_sources?: string[];
+            };
+            dialogue?: Array<{ speaker?: string; line?: string }>;
+        };
+    } | null;
 
     // T2I stage (only for t2i_i2v mode). Single-task fields stay here
     // for backward compat with existing shot drafts and the legacy
@@ -300,7 +329,7 @@ export default function ShotCard({
 
     const assembledPromptPreview = useMemo(() => buildAssembledPrompt(shot, false, globalStylePrompt), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
-        shot.stylePromptOverride, shot.lightingOverride, globalStylePrompt,
+        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
     ]);
 
     useEffect(() => {
@@ -919,7 +948,7 @@ export default function ShotCard({
                         )}
 
                         {/* Assembled prompt preview (read-only, collapsible) — uses buildAssembledPrompt for real-time computation */}
-                        {(shot.prompt || shot.shotSize || shot.cameraMovementStructured || shot.stylePromptOverride || shot.lightingOverride) && (
+                        {(shot.prompt || shot.shotSize || shot.cameraMovementStructured || shot.directorShotContext || shot.stylePromptOverride || shot.lightingOverride) && (
                             <div className="mt-1">
                                 <button
                                     type="button"

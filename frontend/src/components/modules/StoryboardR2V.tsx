@@ -842,6 +842,7 @@ export default function StoryboardR2V() {
             variants: (unit?.image_variants ?? unit?.variants ?? []).map((variant: any) => ({
                 id: variant.id,
                 url: variant.url,
+                display_name: variant.display_name,
                 reference_view_role: variant.reference_view_role,
                 reference_distance: variant.reference_distance,
             })),
