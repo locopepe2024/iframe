@@ -10,6 +10,7 @@ import type {
     DirectorShootingPlanState,
 } from "@/lib/directorShootingPlan";
 import { useProjectStore } from "@/store/projectStore";
+import type { DirectorProfile } from "@/store/projectStore";
 import DirectorShootingPlanPanel from "../components/modules/DirectorShootingPlanPanel";
 
 const plan: DirectorShootingPlan = {
@@ -262,17 +263,16 @@ it("requires a new plan from the current Director before confirmation", async ()
         </NextIntlClientProvider>,
     );
 
-    expect(await screen.findByText(/Saved shooting-plan draft r2 is based on confirmed Director v1; current confirmed Director is v2/i)).toBeInTheDocument();
-    expect(screen.getByText(/old draft is reference only/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /link Director v2/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate plan from Director v2" }));
+    expect(await screen.findByText("No confirmed shooting plan matches Director v2.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm shooting plan" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Director v1/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate plan draft" }));
     await waitFor(() => expect(generate).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(
         "film", 1, 2, expect.objectContaining({ director_profile_revision: 2, director_profile_hash: "director-hash" }),
     ));
-    expect(await screen.findByText(/Confirmed shooting plan v2 still uses older upstream inputs/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Confirmed shooting plan v2 still uses older upstream inputs/i)).not.toBeInTheDocument();
     const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
     expect(confirmButton).toBeEnabled();
     fireEvent.click(confirmButton);
@@ -281,7 +281,7 @@ it("requires a new plan from the current Director before confirmation", async ()
     ));
 });
 
-it("keeps obsolete old-plan events as references without relabeling the old plan", async () => {
+it("hides obsolete old-plan events from the current Director workspace", async () => {
     const oldPlan = {
         ...plan,
         director_profile_revision: 4,
@@ -293,28 +293,15 @@ it("keeps obsolete old-plan events as references without relabeling the old plan
         current_lineage: { ...state().current_lineage, director_profile_revision: 5, director_profile_hash: "new-director-hash" },
         draft_stale: true,
     });
-    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({
-        project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft,
-    }));
     vi.spyOn(api, "generateDirectorShootingPlan").mockResolvedValue({
         ...plan, director_profile_revision: 5, director_profile_hash: "new-director-hash",
     });
 
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
 
-    expect(await screen.findByText(/Saved shooting-plan draft r5 is based on confirmed Director v4; current confirmed Director is v5/i)).toBeInTheDocument();
-    expect(screen.getByText(/evt_03/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /link Director v5/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open scene" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open beat" }));
-    fireEvent.click(screen.getByRole("button", { name: "Remove obsolete event evt_03" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 5,
-        expect.objectContaining({ director_profile_revision: 4 }), true,
-    ));
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate plan from Director v5" }));
+    expect(await screen.findByText("No confirmed shooting plan matches Director v5.")).toBeInTheDocument();
+    expect(screen.queryByText(/evt_03/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText(/Unsaved plan draft generated from confirmed Director v5/i)).toBeInTheDocument();
     expect(screen.queryByText(/Old plan events evt_03/)).not.toBeInTheDocument();
 });
@@ -332,14 +319,14 @@ it("regenerates a new unsaved plan from the current confirmed Director and can r
 
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
 
-    expect(await screen.findByText(/Saved shooting-plan draft r5 is based on confirmed Director v4; current confirmed Director is v6/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate plan from Director v6" }));
+    expect(await screen.findByText("No confirmed shooting plan matches Director v6.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate plan draft" }));
     await waitFor(() => expect(generate).toHaveBeenCalledWith("film", expect.any(Function)));
     expect(await screen.findByText(/Unsaved plan draft generated from confirmed Director v6.*replace server draft r5/i)).toBeInTheDocument();
     expect(screen.queryByText(/Saved shooting-plan draft r5 is based on confirmed Director v4/i)).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
-    expect(await screen.findByText(/Saved shooting-plan draft r5 is based on confirmed Director v4/i)).toBeInTheDocument();
+    expect(await screen.findByText("No confirmed shooting plan matches Director v6.")).toBeInTheDocument();
 });
 
 it("does not stale a plan when only the visual style changes", async () => {
@@ -379,10 +366,8 @@ it("does not relabel a draft from an older script source", async () => {
         </NextIntlClientProvider>,
     );
 
-    expect(await screen.findByText("Script revision changed from 1 to 2.")).toBeInTheDocument();
-    expect(screen.getByText(/old draft is reference only/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /link Director/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    expect(await screen.findByText("No confirmed shooting plan matches Director v2.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm shooting plan" })).not.toBeInTheDocument();
 });
 
 it("lets the user discard a generated but unsaved proposal", async () => {
@@ -397,5 +382,42 @@ it("lets the user discard a generated but unsaved proposal", async () => {
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
     expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
-    expect(await screen.findByText("No shooting-plan draft yet")).toBeInTheDocument();
+    expect(await screen.findByText("No confirmed shooting plan matches Director v2.")).toBeInTheDocument();
+});
+
+it("reads only plans matching the selected historical Director content", async () => {
+    const oldPlan = { ...plan, director_profile_revision: 4, director_profile_hash: "director-v4-hash" };
+    const historicalDirector = { revision: 4, content_hash: "director-v4-hash" } as DirectorProfile;
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue(state(plan, 6, 6));
+    vi.spyOn(api, "listDirectorShootingPlanRevisions").mockResolvedValue([
+        {
+            revision: 5, content_hash: "plan-v5", confirmed_at: 20,
+            source_revision: 1, source_revision_id: plan.source_revision_id,
+            director_profile_revision: 4, director_profile_hash: "director-v4-hash",
+            effective_style_hash: "style-hash", scene_count: 1, beat_count: 1, shot_count: 1, duration_seconds: 4,
+        },
+        {
+            revision: 6, content_hash: "plan-v6", confirmed_at: 30,
+            source_revision: 1, source_revision_id: plan.source_revision_id,
+            director_profile_revision: 6, director_profile_hash: "director-v6-hash",
+            effective_style_hash: "style-hash", scene_count: 1, beat_count: 1, shot_count: 1, duration_seconds: 4,
+        },
+    ]);
+    const read = vi.spyOn(api, "getDirectorShootingPlanRevision").mockResolvedValue({
+        revision: 5, content_hash: "plan-v5", confirmed_at: 20,
+        source_revision: 1, source_revision_id: plan.source_revision_id,
+        director_profile_revision: 4, director_profile_hash: "director-v4-hash",
+        effective_style_hash: "style-hash", scene_count: 1, beat_count: 1, shot_count: 1, duration_seconds: 4,
+        plan: oldPlan,
+    });
+
+    render(<NextIntlClientProvider locale="en" messages={messages}>
+        <DirectorShootingPlanPanel selectedDirector={historicalDirector} historical />
+    </NextIntlClientProvider>);
+
+    expect(await screen.findByText("Shooting plan v5 · from Director v4")).toBeInTheDocument();
+    expect(screen.getByText(/Follow the couple · Medium shot/)).toBeInTheDocument();
+    expect(read).toHaveBeenCalledWith("film", 5);
+    expect(screen.queryByRole("button", { name: "Generate plan draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm shooting plan" })).not.toBeInTheDocument();
 });

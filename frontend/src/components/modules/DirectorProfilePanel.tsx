@@ -52,7 +52,7 @@ type LocalDirectorDraft = {
     savedAt: number;
 };
 
-export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }: { mindMapOnly?: boolean; onApplied?: () => void }) {
+export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, historicalProfile = null }: { mindMapOnly?: boolean; onApplied?: () => void; historicalProfile?: DirectorProfile | null }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
     const confirmed = currentProject?.art_direction?.director_profile;
@@ -443,6 +443,22 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied }:
         : status.kind === "success"
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
             : "border-red-500/30 bg-red-500/10 text-red-300";
+
+    if (historicalProfile) {
+        return (
+            <section className="space-y-4" aria-label={t("directorRevision", { revision: historicalProfile.revision })}>
+                <h2 className="text-lg font-semibold text-foreground">{t("directorRevision", { revision: historicalProfile.revision })}</h2>
+                <fieldset disabled className="pointer-events-none opacity-80">
+                    <DirectorInterpretationVisualEditor
+                        profile={historicalProfile as unknown as Record<string, unknown>}
+                        onChange={() => undefined}
+                        sourceRevision={sourceRevision}
+                        characters={currentProject?.characters ?? []}
+                    />
+                </fieldset>
+            </section>
+        );
+    }
 
     return (
         <>

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Palette, Wand2, Plus, Check, ChevronRight, Lock, RotateCcw, ArrowUp, AlertTriangle, X, Image as ImageIcon, Pencil, BookOpen, Clapperboard } from "lucide-react";
-import { useProjectStore, type StyleConfig, type StylePreset, type StylePresetCategory } from "@/store/projectStore";
+import { useProjectStore, type DirectorProfileRevision, type StyleConfig, type StylePreset, type StylePresetCategory } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
@@ -79,6 +79,25 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
             ? "understanding"
             : "understanding"
     ));
+    const [selectedDirectorRevision, setSelectedDirectorRevision] = useState<number | null>(null);
+    const [directorRevisions, setDirectorRevisions] = useState<DirectorProfileRevision[]>([]);
+    const confirmedDirector = currentProject?.art_direction?.director_profile;
+    const selectedDirector = selectedDirectorRevision === null
+        ? confirmedDirector
+        : directorRevisions.find(item => item.revision === selectedDirectorRevision)?.profile;
+
+    useEffect(() => {
+        setSelectedDirectorRevision(null);
+        if (!currentProject?.id) {
+            setDirectorRevisions([]);
+            return;
+        }
+        let active = true;
+        api.listDirectorProfileRevisions(currentProject.id)
+            .then(value => { if (active) setDirectorRevisions(value as DirectorProfileRevision[]); })
+            .catch(() => { if (active) setDirectorRevisions([]); });
+        return () => { active = false; };
+    }, [currentProject?.id, confirmedDirector?.revision, confirmedDirector?.content_hash]);
 
     useEffect(() => {
         setOverrideAccepted(false);
@@ -530,6 +549,23 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                 </div>
 
                 <div className="p-4 sm:p-8">
+                    {confirmedDirector && (
+                        <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-border pb-4 text-sm">
+                            <label htmlFor="direction-source-version" className="font-medium text-foreground">{ta("directorSelectedVersion")}</label>
+                            <select
+                                id="direction-source-version"
+                                value={selectedDirectorRevision ?? confirmedDirector.revision}
+                                onChange={event => setSelectedDirectorRevision(Number(event.target.value) === confirmedDirector.revision ? null : Number(event.target.value))}
+                                className="min-h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                                <option value={confirmedDirector.revision}>{ta("directorCurrentVersion", { revision: confirmedDirector.revision })}</option>
+                                {directorRevisions.filter(item => item.revision !== confirmedDirector.revision).slice().reverse().map(item => (
+                                    <option key={item.revision} value={item.revision}>{ta("directorHistoricalVersion", { revision: item.revision })}</option>
+                                ))}
+                            </select>
+                            {selectedDirectorRevision !== null && <span className="text-xs text-text-secondary">{ta("directorHistoryReadOnly")}</span>}
+                        </div>
+                    )}
                     <section
                         id="director-panel-understanding"
                         role="tabpanel"
@@ -544,7 +580,9 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                                     : ta("seriesDirectorMissing")}
                             </p>
                         )}
-                        <DirectorProfilePanel onApplied={() => setActiveDirectorTab("shooting_plan")} />
+                        {selectedDirectorRevision !== null && !selectedDirector
+                            ? <p className="text-sm text-text-secondary">{ta("directorHistoryLoading")}</p>
+                            : <DirectorProfilePanel historicalProfile={selectedDirectorRevision === null ? null : selectedDirector ?? null} onApplied={() => setActiveDirectorTab("shooting_plan")} />}
                     </section>
                     <section
                         id="director-panel-shooting_plan"
@@ -552,7 +590,9 @@ export default function ArtDirection({ mindMapOnly = false }: { mindMapOnly?: bo
                         aria-labelledby="director-tab-shooting_plan"
                         hidden={activeDirectorTab !== "shooting_plan"}
                     >
-                        <DirectorShootingPlanPanel />
+                        {selectedDirectorRevision !== null && !selectedDirector
+                            ? <p className="text-sm text-text-secondary">{ta("directorHistoryLoading")}</p>
+                            : <DirectorShootingPlanPanel selectedDirector={selectedDirector ?? null} historical={selectedDirectorRevision !== null} />}
                     </section>
                     <section
                         id="director-panel-style"

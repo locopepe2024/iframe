@@ -29,7 +29,7 @@ import type {
     DirectorShootingPlanRevisionSummary,
     DirectorShootingPlanState,
 } from "@/lib/directorShootingPlan";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjectStore, type DirectorProfile } from "@/store/projectStore";
 import { extractErrorDetail } from "@/lib/utils";
 
 type Action = "load" | "generate" | "save" | "confirm" | "restore" | null;
@@ -262,11 +262,12 @@ function ShotFlowMap({
     );
 }
 
-export default function DirectorShootingPlanPanel() {
+export default function DirectorShootingPlanPanel({ selectedDirector = null, historical = false }: { selectedDirector?: DirectorProfile | null; historical?: boolean }) {
     const t = useTranslations("artDirection.directorPlan");
     const { currentProject } = useProjectStore();
     const projectId = currentProject?.id;
     const confirmedProfile = currentProject?.art_direction?.director_profile;
+    const viewedDirector = selectedDirector ?? confirmedProfile;
     const examples = Array.isArray(confirmedProfile?.sample_plan)
         ? confirmedProfile.sample_plan.filter(value => value && typeof value === "object" && !Array.isArray(value)) as Record<string, unknown>[]
         : [];
@@ -275,6 +276,9 @@ export default function DirectorShootingPlanPanel() {
     const [plan, setPlan] = useState<DirectorShootingPlan | null>(null);
     const [savedPlan, setSavedPlan] = useState<DirectorShootingPlan | null>(null);
     const [history, setHistory] = useState<DirectorShootingPlanRevisionSummary[]>([]);
+    const [selectedPlanRevision, setSelectedPlanRevision] = useState<number | null>(null);
+    const [previewPlan, setPreviewPlan] = useState<DirectorShootingPlan | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
     const [action, setAction] = useState<Action>(null);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -293,7 +297,6 @@ export default function DirectorShootingPlanPanel() {
     const sourceRevision = currentProject?.source_revision ?? 1;
     const currentLineage = serverState?.current_lineage;
     const draftStale = Boolean(serverState?.draft_stale || stableLineageChanged(plan, currentLineage));
-    const currentStale = Boolean(serverState?.current_stale);
     const storyEventOptions = serverState?.current_story_events ?? [];
     const knownStoryEventIds = new Set(storyEventOptions.map(event => event.id));
     const unknownStoryEventIds = Array.from(new Set((plan?.scenes ?? []).flatMap(scene =>
@@ -304,6 +307,35 @@ export default function DirectorShootingPlanPanel() {
     const beats = scenes.flatMap(scene => scene.beats);
     const shots = beats.flatMap(beat => beat.shots);
     const duration = shots.reduce((total, shot) => total + (shot.duration_seconds ?? 0), 0);
+    const viewedDirectorRevision = viewedDirector?.revision ?? Number(currentLineage?.director_profile_revision ?? 0);
+    const viewedDirectorHash = viewedDirector?.content_hash ?? String(currentLineage?.director_profile_hash ?? "");
+    const matchingHistory = history.filter(item => item.director_profile_revision === viewedDirectorRevision
+        && item.director_profile_hash === viewedDirectorHash).sort((a, b) => b.revision - a.revision);
+    const selectedSummary = matchingHistory.find(item => item.revision === selectedPlanRevision) ?? matchingHistory[0];
+    const editableForSelection = !historical && Boolean(plan && currentLineage
+        && plan.director_profile_revision === viewedDirectorRevision
+        && plan.director_profile_hash === viewedDirectorHash
+        && !stableLineageChanged(plan, currentLineage));
+
+    useEffect(() => {
+        setSelectedPlanRevision(null);
+    }, [projectId, viewedDirector?.revision, viewedDirector?.content_hash]);
+
+    useEffect(() => {
+        if (!projectId || !selectedSummary || (editableForSelection && !historical)) {
+            setPreviewPlan(null);
+            setPreviewLoading(false);
+            return;
+        }
+        let active = true;
+        setPreviewPlan(null);
+        setPreviewLoading(true);
+        api.getDirectorShootingPlanRevision(projectId, selectedSummary.revision)
+            .then(result => { if (active) setPreviewPlan(result.plan); })
+            .catch(() => { if (active) setPreviewPlan(null); })
+            .finally(() => { if (active) setPreviewLoading(false); });
+        return () => { active = false; };
+    }, [projectId, selectedSummary?.revision, editableForSelection, historical]);
     const localDirtyRef = useRef(dirty);
     localDirtyRef.current = dirty;
     const activeProjectId = useRef<string | undefined>(projectId);
@@ -504,9 +536,62 @@ export default function DirectorShootingPlanPanel() {
         return <p className="rounded-lg border border-border p-5 text-sm text-text-secondary">{t("noProject")}</p>;
     }
 
+    if (!serverState) {
+        return <p role="status" className="text-sm text-text-secondary">{error || t("loading")}</p>;
+    }
+
+    if (historical || !editableForSelection) {
+        return (
+            <section className="space-y-5" aria-labelledby="director-shooting-plan-title">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 id="director-shooting-plan-title" className="text-lg font-semibold text-foreground">{t("title")}</h2>
+                        <p className="mt-1 text-sm text-text-secondary">{t("selectedSource", { revision: viewedDirectorRevision })}</p>
+                    </div>
+                    {!historical && <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={generate} disabled={action !== null || dirty || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
+                        <button type="button" onClick={createBlank} disabled={action !== null || dirty || !serverState?.current_lineage} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground disabled:opacity-50"><Plus size={16} />{t("blankPlan", { revision: viewedDirectorRevision })}</button>
+                    </div>}
+                </div>
+                {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+                {action === "generate" && <p role="status" className="text-sm text-text-secondary">{t("jobStatus", { status: jobStatus || "running" })}</p>}
+                {selectedSummary && matchingHistory.length > 1 && (
+                    <label className="flex items-center gap-2 text-sm text-text-secondary">
+                        {t("planVersion")}
+                        <select value={selectedSummary.revision} onChange={event => setSelectedPlanRevision(Number(event.target.value))} className="min-h-10 rounded-md border border-border bg-background px-2 text-foreground">
+                            {matchingHistory.map(item => <option key={item.revision} value={item.revision}>v{item.revision}</option>)}
+                        </select>
+                    </label>
+                )}
+                {!selectedSummary && <p className="border-y border-border py-5 text-sm text-text-secondary">{t("noPlanForSource", { revision: viewedDirectorRevision })}</p>}
+                {(previewLoading || action === "load") && <p role="status" className="text-sm text-text-secondary">{t("loading")}</p>}
+                {selectedSummary && !previewLoading && !previewPlan && <p role="alert" className="text-sm text-red-300">{t("loadFailed")}</p>}
+                {previewPlan && (
+                    <div className="space-y-4">
+                        <p className="text-sm font-medium text-foreground">{t("planSourcePair", { plan: selectedSummary.revision, director: previewPlan.director_profile_revision })}</p>
+                        <ol className="divide-y divide-border border-y border-border">
+                            {previewPlan.scenes.map(scene => <li key={scene.scene_id} className="py-3">
+                                <p className="font-medium text-foreground">{scene.heading || scene.scene_id}</p>
+                                <p className="mt-1 text-xs text-text-secondary">{scene.location} · {scene.time_anchor}</p>
+                                <ol className="mt-2 space-y-1 pl-4 text-sm text-text-secondary">
+                                    {scene.beats.map(beat => <li key={beat.beat_id}>
+                                        <p>{beat.title || beat.beat_id}</p>
+                                        <ol className="mt-1 space-y-1 pl-4 text-xs">
+                                            {beat.shots.map(shot => <li key={shot.shot_id}>{shot.title || shot.shot_id} · {shot.shot_size} · {shot.performance_action}</li>)}
+                                        </ol>
+                                    </li>)}
+                                </ol>
+                            </li>)}
+                        </ol>
+                    </div>
+                )}
+            </section>
+        );
+    }
+
     const locked = action !== null;
-    const showLineageNotice = Boolean(plan && (draftStale || currentStale || serverState?.readiness_error));
-    const staleReferences = (draftStale ? [plan] : currentStale ? [serverState?.current] : [])
+    const showLineageNotice = Boolean(plan && (draftStale || serverState?.readiness_error));
+    const staleReferences = (draftStale ? [plan] : [])
         .filter((item): item is NonNullable<typeof plan> => Boolean(item));
     const staleChanges = Array.from(new Set(staleReferences.flatMap(reference => [
         serverState?.current_lineage?.source_revision !== undefined && reference.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: reference.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
@@ -533,6 +618,7 @@ export default function DirectorShootingPlanPanel() {
                         <h2 id="director-shooting-plan-title" className="text-lg font-semibold text-foreground">{t("title")}</h2>
                     </div>
                     <p className="mt-1 text-sm leading-6 text-text-secondary">{t("hint")}</p>
+                    {plan && <p className="mt-1 text-xs font-medium text-text-secondary">{t("draftSourcePair", { draft: serverState?.draft_revision ?? 0, director: plan.director_profile_revision })}</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <button
@@ -977,17 +1063,17 @@ export default function DirectorShootingPlanPanel() {
                 </div>
             )}
 
-            {history.length > 0 && (
+            {matchingHistory.length > 0 && (
                 <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-plan-history-title">
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h3 id="director-plan-history-title" className="text-sm font-semibold text-foreground">{t("historyTitle")}</h3>
                             <p className="mt-1 text-xs text-text-muted">{t("historyHint")}</p>
                         </div>
-                        <span className="rounded-full border border-border px-2 py-1 text-xs text-text-secondary">{t("currentVersion", { revision: serverState?.current_revision ?? 0 })}</span>
+                        <span className="rounded-full border border-border px-2 py-1 text-xs text-text-secondary">{t("currentVersion", { revision: matchingHistory[0].revision })}</span>
                     </div>
                     <ol className="space-y-2">
-                        {history.map(item => {
+                        {matchingHistory.map(item => {
                             const lineage = serverState?.current_lineage;
                             const isStale = !lineage
                                 || item.source_revision !== lineage.source_revision
