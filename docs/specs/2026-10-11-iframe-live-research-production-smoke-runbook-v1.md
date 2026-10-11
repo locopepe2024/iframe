@@ -6,7 +6,8 @@
 
 - 2026-10-11 只读检查：生产源码、后端、静态版本同为 `101eae72365752e333c31b8595cc9e6dcbb33755`；健康检查正常，worker running 且重启计数 0，知识 schema 为 v1-v3。容器内 discovery provider 和 capture hosts 都未配置。
 - 本地离线测试与一次性 PostgreSQL API/worker 子进程测试通过。它们没有验证真实 GDELT 响应、HTTPS 站点采集、生产 COS 或模型对原文的支持判断。
-- GDELT DOC API 一次只读候选查询返回 HTTP 429，未取得可用响应。不能据此确认服务格式、可用配额或站点候选。
+- GDELT 官方 [DOC 2.0 说明](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/)给出直接访问 `api.gdeltproject.org/api/v2/doc/doc` 的无凭据示例，未列出账户或 API key 参数；这支持匿名请求的接口形式，但不是无限制使用承诺。该说明明确 `STARTDATETIME`/`ENDDATETIME` 必须在最近三个月内。已查页面未给出固定请求频率或生产使用配额。
+- GDELT DOC API 的匿名候选请求返回 HTTP 429（2026-10-11），未取得可用响应；另一 HEAD 请求也返回 429。不能据此确认当前服务格式、可用配额或站点候选，也不能断言是缺少账户所致。无成功响应前不启用生产发现配置。
 - `347ff27b` 的枪术种子是 owner API 主动提交数据，PDF URL 不会被当前 HTML worker 抓取；它不能充当真实联网采集 smoke 来源。
 
 ## 执行前门槛
