@@ -329,6 +329,43 @@ def test_memory_candidate_requires_confirmation_and_source_deletion_removes_memo
     assert agent.memories(setup)['memories'] == []
 
 
+def test_repeated_confirmed_memory_is_not_offered_or_saved_again(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好的'))
+    first_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(first_sid, agent.MessageCreate(content='我喜欢下棋'), setup)
+    first = agent.extract_memories(setup)['candidates'][0]
+    agent.create_memory(agent.MemoryCreate(**first), setup)
+
+    second_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(second_sid, agent.MessageCreate(content='我喜欢下棋。'), setup)
+    assert agent.extract_memories(setup)['candidates'] == []
+    second_message = agent.messages(second_sid, setup)['messages'][0]
+    with pytest.raises(HTTPException) as duplicate:
+        agent.create_memory(agent.MemoryCreate(
+            content=' 我喜欢下棋。 ', category='preference', source_session_id=second_sid,
+            source_message_id=second_message['id'], source_quote='我喜欢下棋'), setup)
+    assert duplicate.value.status_code == 409
+    assert len(agent.memories(setup)['memories']) == 1
+
+
+def test_memory_edit_cannot_duplicate_another_confirmed_memory(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好的'))
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='我喜欢下棋。我的名字是小明'), setup)
+    message = agent.messages(sid, setup)['messages'][0]
+    first = agent.create_memory(agent.MemoryCreate(
+        content='我喜欢下棋', category='preference', source_session_id=sid,
+        source_message_id=message['id'], source_quote='我喜欢下棋'), setup)['memory']
+    second = agent.create_memory(agent.MemoryCreate(
+        content='我的名字是小明', category='profile', source_session_id=sid,
+        source_message_id=message['id'], source_quote='我的名字是小明'), setup)['memory']
+    with pytest.raises(HTTPException) as duplicate:
+        agent.patch_memory(second['id'], agent.MemoryPatch(content=' 我喜欢下棋。 '), setup)
+    assert duplicate.value.status_code == 409
+    assert agent.memories(setup)['memories'][0]['content'] == second['content']
+    assert first['id'] != second['id']
+
+
 def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):
     ctx = setup
     sid = agent.create(agent.SessionCreate(model='qwen'), ctx)['session']['id']

@@ -6,6 +6,7 @@ import sqlite3
 import time
 import uuid
 import logging
+import unicodedata
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit, unquote
@@ -347,13 +348,24 @@ def memories(ctx: UserContext = Depends(require_user_context)):
         rows = db.execute("SELECT * FROM agent_memories WHERE owner=? ORDER BY updated_at DESC", (ctx.owner_profile_id,)).fetchall()
     return {"memories": [dict(row) for row in rows]}
 
+
+def _memory_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"\s+", "", normalized).rstrip("。！？.!?；;，,")
+
+
+def _duplicate_memory(rows, content: str, quote: str = "", exclude_id: str = "") -> bool:
+    keys = {_memory_key(value) for value in (content, quote) if value.strip()}
+    return any(row["id"] != exclude_id and keys.intersection(
+        {_memory_key(row["content"]), _memory_key(row["source_quote"])}) for row in rows)
+
 @router.post("/memories/extract")
 def extract_memories(ctx: UserContext = Depends(require_user_context)):
     candidates = []
     patterns = (("preference", r"(?:我喜欢|我爱|我最喜欢)([^。！？\n]{1,80})"), ("profile", r"(?:我叫|我的名字是)([^。！？\n]{1,40})"), ("date", r"(?:我的生日是|生日是)([^。！？\n]{1,40})"))
     with database() as db:
         rows = db.execute("SELECT id,payload FROM sessions WHERE owner=? ORDER BY CAST(json_extract(payload, '$.updated_at') AS REAL) DESC LIMIT 20", (ctx.owner_profile_id,)).fetchall()
-        saved = {(row["source_message_id"], row["source_quote"]) for row in db.execute("SELECT source_message_id,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()}
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
     for row in rows:
         session = json.loads(row["payload"])
         for message in reversed(session.get("messages", [])[-30:]):
@@ -363,7 +375,7 @@ def extract_memories(ctx: UserContext = Depends(require_user_context)):
                 match = re.search(pattern, text)
                 if match:
                     quote = match.group(0).strip()
-                    if (message["id"], quote) not in saved and not any(item["source_message_id"] == message["id"] and item["source_quote"] == quote for item in candidates):
+                    if not _duplicate_memory(saved, quote) and not any(_memory_key(item["content"]) == _memory_key(quote) for item in candidates):
                         candidates.append({"content": quote, "category": category, "source_session_id": session["id"], "source_message_id": message["id"], "source_quote": quote})
             if len(candidates) >= 3: return {"candidates": candidates}
     return {"candidates": candidates}
@@ -374,14 +386,16 @@ def create_memory(body: MemoryCreate, ctx: UserContext = Depends(require_user_co
         raise HTTPException(422, "记忆分类无效")
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        count = db.execute("SELECT COUNT(*) FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchone()[0]
-        if count >= 100: raise HTTPException(409, "记忆已达到 100 条上限，请先删除旧记忆")
         row = db.execute("SELECT payload FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, body.source_session_id)).fetchone()
         if row is None: raise HTTPException(404, "来源会话不存在")
         session = json.loads(row[0]); source = next((m for m in session.get("messages", []) if m.get("id") == body.source_message_id), None)
         if not source or source.get("role") != "user" or body.source_quote not in source.get("content", ""): raise HTTPException(422, "记忆来源无法验证")
         existing = db.execute("SELECT id FROM agent_memories WHERE owner=? AND source_session_id=? AND source_message_id=? AND source_quote=?", (ctx.owner_profile_id, body.source_session_id, body.source_message_id, body.source_quote)).fetchone()
         if existing: raise HTTPException(409, "这条来源已经保存为记忆")
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
+        if _duplicate_memory(saved, body.content, body.source_quote):
+            raise HTTPException(409, "这条记忆已经保存")
+        if len(saved) >= 100: raise HTTPException(409, "记忆已达到 100 条上限，请先删除旧记忆")
         now = time.time(); item = {"id": str(uuid.uuid4()), "owner": ctx.owner_profile_id, "content": body.content.strip(), "category": body.category, "source_session_id": body.source_session_id, "source_message_id": body.source_message_id, "source_quote": body.source_quote, "created_at": now, "updated_at": now}
         db.execute("INSERT INTO agent_memories VALUES (?,?,?,?,?,?,?,?,?)", tuple(item.values()))
     return {"memory": item}
@@ -389,6 +403,10 @@ def create_memory(body: MemoryCreate, ctx: UserContext = Depends(require_user_co
 @router.patch("/memories/{memory_id}")
 def patch_memory(memory_id: str, body: MemoryPatch, ctx: UserContext = Depends(require_user_context)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
+        if _duplicate_memory(saved, body.content, exclude_id=memory_id):
+            raise HTTPException(409, "这条记忆已经保存")
         result = db.execute("UPDATE agent_memories SET content=?,updated_at=? WHERE id=? AND owner=?", (body.content.strip(), time.time(), memory_id, ctx.owner_profile_id))
         if result.rowcount != 1: raise HTTPException(404, "记忆不存在")
     return {"ok": True}
