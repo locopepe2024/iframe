@@ -2512,6 +2512,7 @@
     "missingRefs": "{model} needs reference images. Use @ in the prompt to attach a character / scene / prop — at least one required.",
     "invalidProductViews": "This shot references product views that no longer exist. Reselect the views before generating.",
     "tooManyH3References": "This shot has {count} reference images. MiniMax H3 supports at most {max} per request.",
+    "h3LongShotAdvice": "Long H3 shots may drift in motion and pacing. Consider shorter shots at action transitions.",
     "promptExpand": "Expand editor",
     "promptExpandTitle": "Editing {shot} description",
     "promptExpandChars": "chars",

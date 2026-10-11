@@ -49,8 +49,9 @@ beforeEach(() => {
 it("sends the selected shot video model when polishing", async () => {
     render(
         <ShotCard
-            shot={shot}
+            shot={{ ...shot, duration: 15 }}
             videoModel="uniart/minimax-h3-vip"
+            targetDuration={15}
             index={0}
             totalShots={1}
             characters={[]}
@@ -72,6 +73,7 @@ it("sends the selected shot video model when polishing", async () => {
         />,
     );
 
+    expect(screen.getByText("h3LongShotAdvice")).toBeInTheDocument();
     fireEvent.click(screen.getByTitle("polish"));
 
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());

@@ -796,6 +796,9 @@ export default function ShotCard({
                                 }
                                 onChange={(v) => onUpdateField("duration", v)}
                             />
+                            {videoModel?.toLowerCase().includes("minimax-h3") && (targetDuration ?? shot.duration ?? 0) > 10 && (
+                                <span className="text-xs text-amber-300" role="status">{t("h3LongShotAdvice")}</span>
+                            )}
                             {/* Shot size: visible when has value */}
                             {shot.shotSize !== undefined && shot.shotSize !== null && (
                                 <FieldTagChip
