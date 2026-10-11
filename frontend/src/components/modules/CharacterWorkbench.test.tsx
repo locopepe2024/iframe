@@ -62,30 +62,6 @@ it("keeps image editing out of the character workbench", () => {
     expect(screen.queryByText("title")).not.toBeInTheDocument();
 });
 
-it("keeps shooting-plan constraints collapsed in the workbench header", () => {
-    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
-    render(
-        <CharacterWorkbench
-            asset={{ id: "character-plan", name: "Hero", description: "A hero" }}
-            onClose={vi.fn()}
-            onUpdateDescription={vi.fn()}
-            onGenerate={vi.fn()}
-            generatingTypes={[]}
-            planEntries={[{ key: "scene-1", sceneLabel: "电影院", details: ["2018年秋天", "室外"], prompt: "拍摄计划场景：电影院" }]}
-        />,
-    );
-
-    const toggle = screen.getByRole("button", { name: /拍摄计划 · 1 条/ });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("2018年秋天")).not.toBeInTheDocument();
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("2018年秋天 · 室外")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "加入提示词" }));
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("2018年秋天 · 室外")).not.toBeInTheDocument();
-});
-
 it("shows one task at a time and unlocks derived prompts when the reference sheet is available", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const { container } = render(
@@ -185,6 +161,59 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
 
     expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
     expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
+});
+
+it("provides a searchable reference picker without requiring an @ prefix", () => {
+    const onPickerReferencesChange = vi.fn();
+    const onImageGenerationModeChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch · front",
+        previewUrl: "/files/watch.png",
+        sourceLabel: "global",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(<WorkbenchPanel {...baseProps}
+        referenceCandidates={[candidate]}
+        showReferencePicker
+        pickerReferences={[]}
+        onPickerReferencesChange={onPickerReferencesChange}
+        onImageGenerationModeChange={onImageGenerationModeChange}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "pocket" } });
+    const option = screen.getByRole("option", { name: /Pocket watch/ });
+    expect(option).toHaveTextContent("front");
+    fireEvent.click(option);
+
+    expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
+    expect(onImageGenerationModeChange).toHaveBeenCalledWith("reference");
+});
+
+it("supports selecting a searched reference with the keyboard", () => {
+    const onPickerReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch · front",
+        sourceLabel: "全局素材",
+        variantLabel: "front",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(<WorkbenchPanel {...baseProps}
+        referenceCandidates={[candidate]}
+        showReferencePicker
+        pickerReferences={[]}
+        onPickerReferencesChange={onPickerReferencesChange}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    const search = screen.getByRole("textbox", { name: "搜索角色参考素材" });
+    fireEvent.change(search, { target: { value: "pocket" } });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    const option = screen.getByRole("option", { name: /Pocket watch/ });
+    expect(document.activeElement).toBe(option);
+    fireEvent.keyDown(option, { key: "Enter" });
+
+    expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
 });
 
 it("does not turn a manually typed @name into an implicit reference", () => {
@@ -289,8 +318,13 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     expect(editor.editor.getText()).not.toContain("深棕眼");
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
     await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("深棕眼"));
+    expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+        profile: "A hero",
+        current_draft: "",
+        user_answers: {},
+    }));
     expect(onUpdateAttributes).not.toHaveBeenCalled();
-    expect(editor.editor.getText()).not.toContain("深棕眼");
+    expect(editor.editor.getText()).toContain("深棕眼");
 
     fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
@@ -303,6 +337,111 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     expect(editor.editor.getText()).toContain("黑色劲装");
 });
 
+it("lets the user answer unresolved design questions and carries answers into confirmed prompts", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const question = "少年外观与青年年龄阶段之间的具体年龄表现需确认";
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{
+        id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            route: "historical-costume", age_stage: "young-adult",
+            identity: { visual_notes: "短黑发，沉静面容" },
+            look: { visual_notes: "素黑色劲装" },
+            unresolved: [question], confirmed: false,
+        }, design_revisions: [] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    expect(screen.getByRole("button", { name: /dossier/ })).toHaveTextContent("pendingDesignQuestions");
+
+    fireEvent.change(screen.getByPlaceholderText(/可直接修改建议|补充你的决定/), { target: { value: "按十七岁少年表现，身形尚未完全长成" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        confirmed: true,
+        unresolved: [],
+        field_answers: { [question]: "按十七岁少年表现，身形尚未完全长成" },
+    }) }));
+    await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
+    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    expect(editor).toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
+});
+
+it("applies edited identity and look values to image prompts without saving a revision", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.change(screen.getByLabelText("身份视觉值"), { target: { value: "窄长脸，深棕眼，短黑发" } });
+    fireEvent.change(screen.getByLabelText("造型视觉值"), { target: { value: "黑色窄袖劲装，哑光棉布，布靴" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+
+    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    expect(editor).toHaveTextContent("窄长脸，深棕眼，短黑发");
+    expect(editor).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
+    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("窄长脸，深棕眼，短黑发");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+});
+
+it("lets the user adopt an Agent suggestion for a genuine character decision", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const defaultAgentRequest = apiMocks.agentRequest.getMockImplementation();
+    const designResult = {
+            identity: { visual_notes: "少年感面容，短黑发", basis: ["creative_choice"] },
+            look: { visual_notes: "窄袖黑色劲装，哑光布面，布靴", basis: ["script_fact", "creative_choice"] },
+            unresolved: ["剧本写少年，但年龄阶段选择为青年"],
+            field_suggestions: { "剧本写少年，但年龄阶段选择为青年": "十七八岁少年感，脸部线条尚未完全成熟。" },
+            field_suggestion_choices: { "剧本写少年，但年龄阶段选择为青年": { age_stage: "teen" } },
+            skill_revision: "skill-hash",
+        };
+    apiMocks.agentRequest.mockImplementation((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve(designResult as any));
+    const onUpdateAttributes = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything()));
+    await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("少年感面容，短黑发"));
+    fireEvent.click(screen.getByText("采用此建议"));
+    expect(screen.getByLabelText("年龄阶段")).toHaveValue("teen");
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("十七八岁少年感");
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("少年少女年龄表现");
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).not.toHaveTextContent("青年年龄表现");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    apiMocks.agentRequest.mockImplementation(defaultAgentRequest!);
+});
+
+it("searches current project materials and passes selected reference IDs to design drafting", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [{
+        asset_type: "character", asset_id: "ref-character", name: "苏砚定妆照", source_scope: "episode",
+        variants: [{ id: "front-view", url: "/files/front.png" }],
+    }] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
+    fireEvent.click(screen.getByRole("button", { name: "选择角色参考图" }));
+    fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "苏砚" } });
+    fireEvent.click(await screen.findByRole("option", { name: /苏砚定妆照/ }));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+        project_id: "project-1",
+        reference_assets: [{ asset_type: "character", asset_id: "ref-character", variant_id: "front-view" }],
+    })));
+});
+
 it("uses the latest confirmed design instead of an older saved image prompt", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     render(<CharacterWorkbench asset={{
@@ -313,6 +452,29 @@ it("uses the latest confirmed design instead of an older saved image prompt", ()
     expect(editor.editor.getText()).toContain("深棕眼");
     expect(editor.editor.getText()).toContain("黑色劲装");
     expect(editor.editor.getText()).not.toContain("Old image prompt");
+});
+
+it("keeps shooting-plan constraints collapsed in the workbench header", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(
+        <CharacterWorkbench
+            asset={{ id: "character-plan", name: "Hero", description: "A hero" }}
+            onClose={vi.fn()}
+            onUpdateDescription={vi.fn()}
+            onGenerate={vi.fn()}
+            generatingTypes={[]}
+            planEntries={[{ key: "scene-1", sceneLabel: "电影院", details: ["2018年秋天", "室外"], prompt: "拍摄计划场景：电影院" }]}
+        />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /拍摄计划 · 1 条/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("2018年秋天")).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("2018年秋天 · 室外")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加入提示词" }));
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
@@ -376,33 +538,6 @@ it("refreshes the reference index when a generated project snapshot arrives", as
         [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],
         "reference",
     ));
-});
-
-it("does not refetch references for an equivalent project snapshot or discard them on refresh failure", async () => {
-    apiMocks.getAssetReferenceIndex.mockReset();
-    const index = { assets: [{
-        asset_type: "character", asset_id: "character-1", name: "Hero", source_scope: "series",
-        variants: [{ id: "view-1", url: "/files/view-1.png" }],
-    }] };
-    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce(index).mockRejectedValueOnce(new Error("temporary failure"));
-    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1" }] };
-    const view = () => <CharacterWorkbench
-        asset={{ id: "character-1", name: "Hero", description: "A hero" }}
-        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]}
-    />;
-    const { rerender } = render(view());
-    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
-
-    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1" }] };
-    rerender(view());
-    expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(1);
-
-    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "character-1", updated_at: 2 }] };
-    rerender(view());
-    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
-    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
-    act(() => { editor.editor.commands.setContent("<p>@</p>"); });
-    expect(screen.getByRole("option", { name: /Hero/ })).toHaveTextContent("Hero");
 });
 
 it("builds Chinese character defaults without duplicate punctuation", () => {

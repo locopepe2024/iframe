@@ -15,9 +15,11 @@ export type ReferenceCandidate = {
   label: string;
   reference?: AssetLibraryReference;
   previewUrl?: string;
+  mediaUrl?: string;
   sourceLabel?: string;
   variantLabel?: string;
   isActive?: boolean;
+  description?: string;
 };
 
 export type ReferenceSuggestion = {
