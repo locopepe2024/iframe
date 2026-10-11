@@ -5,7 +5,7 @@
 - [国际武联《2024 年武术套路竞赛规则与裁判法》](https://www.iwuf.org/xhimg/soft/240912/WUSHU-TAOLU-COMPETITION-RULES-AND-JUDGING-METHODS-2024.pdf)的印刷第 22 页列出枪术八种枪法和五种步型；附录印刷第 109–111 页定义枪法并引用长拳步型，步型定义在印刷第 103 页。页码、短引和可见判据已逐条写入[可导入种子数据](../context/2026-10-11-qiangshu-knowledge-seed-v1.json)。这是竞赛套路规则，不代表所有传统枪法流派的完整词典。
 - 官方枪法：拦、拿、扎、穿、崩、点、舞花、挑把。官方步型：弓步、马步、仆步、虚步、歇步。八种枪法的动作方向、枪尖/枪把端和力点不能互换。尤其穿枪的“贴近喉”不代表枪杆能穿过头部。
 - 当前视频 `[90,210)` 源片窗口在局部约 1–2 秒的“扫、转身、腾空、扎”来自用户观察；4 fps 采样只支持粗略时序。转身时枪杆与头颈的不合理交叉是已记录的 H3 输出问题。两条内容作为单独的项目观察来源，未冒充官方技法定义。
-- iFrame 已有 owner 集合及文本条目导入 API。开发计划记载 TencentDB 迁移已验证，但线上 API、凭据和 COS 接入尚未完成；本次未写入 PostgreSQL。
+- iFrame 已有 owner 集合及文本条目导入 API。开发计划记录的是 2026-10-10 的历史状态；本次在服务器核实在线后端、PostgreSQL 与私有 COS 已接通，并完成了实际导入，详情见下文。
 
 ## Direct implication
 
@@ -17,21 +17,21 @@
 
 - 该源片的“扫”属于哪一种正式枪法，以及扎枪是否满足“后手触及前手”的规则要求。
 - 知识检索是否改善 H3 结果；现有 IR 和手写提示词试验没有固定随机种子和重复次数，不能把输出差异归因于词典或措辞。
-- 线上知识 API 当前是否能接受此数据，以及 PostgreSQL 是否已有同名集合。种子文件只是可审阅的导入输入。
+- 知识检索对 H3 时序或头颈几何的独立因果作用。一次对照输出不能排除生成随机性，也不能证明词典适用于其他枪法动作。
 
 ## Import boundary
 
 种子文件的 `collection` 对应 `POST /knowledge/collections`，每个 `sources[]` 元素分别对应 `POST /knowledge/collections/{collection_id}/sources`。API 使用登录身份确定 owner；不能通过输入数据提升为 public collection。两份来源分开导入，保证官方规则与项目观察有独立修订和引用。官方 PDF 只保留 URL、页码和必要短引，不存整份 PDF；`rights_status` 暂为 `unknown`，公开发布需另行完成版权与策展审查。
 
-待服务端知识 API、私有 blob 存储和身份凭据接通后，先在 owner 范围导入。核对返回的 `source_id`、`revision_id`、`unit_id`，再以“扎枪”“转身 枪杆 头颈”等查询验证命中来源与 locator；重复导入应返回 `created=false`。不要直写 PostgreSQL 表，因为 API 同时负责原始输入存储、修订哈希和 owner 校验。
+本次已通过 owner 范围 API 导入并回读。后续更新仍须核对 `source_id`、`revision_id`、`unit_id`，并验证来源和 locator；不要直写 PostgreSQL 表，因为 API 同时负责原始输入存储、修订哈希和 owner 校验。
 
 ## What would verify it
 
-对源片关键窗口逐帧标注枪尖、枪把、双手、头部轮廓和双脚接地，确认术语及每个动作的起止帧。固定 H3 输入图、时长和随机种子，分别测试“基础提示词”与“检索增强提示词”；逐帧比较动作先后、起跳/落地、枪尖轨迹、握点和头颈穿模，并记录原始输出与判定。完成一次私有 owner API 导入和检索回读，才能把“可导入”升级为“数据库已收录”。
+对源片关键窗口逐帧标注枪尖、枪把、双手、头部轮廓和双脚接地，确认术语及每个动作的起止帧。固定 H3 输入图、时长和随机种子，分别测试“基础提示词”与“检索增强提示词”；逐帧比较动作先后、起跳/落地、枪尖轨迹、握点和头颈穿模，并记录原始输出与判定。私有 owner API 导入和检索回读已完成。
 
 ## Live import verification (2026-10-11)
 
 - 后端 `/knowledge/collections` 经 SSH 端口转发返回 200。使用本次 H3 实验 UniArt 密钥的 SHA-256 指纹作为 API-key workspace 身份；密钥本体没有提交、复制到服务器或写入日志。
 - 通过[导入工具](../tools/import_qiangshu_knowledge.py)创建私有集合 `b8170831-742e-493b-ab5e-96929d74e9bf`，导入 2 份来源共 16 个文本单元。官方来源修订版为 `79ed72da-9842-4e22-b30b-eaf95dcbffce`，项目观察修订版为 `271f3e57-5dfc-48a8-b310-42fcb60464b7`。两份来源的 locator 回读均与种子一致，再次提交均返回 `created=false`。
 - 查询“扎枪”命中枪法定义和官方目录；查询“头颈”命中项目观察和穿枪条目。服务器通过 COS 适配器回读两份原始输入，摘要校验通过。另一临时 workspace 对官方来源读取返回 404、同领域检索返回零条。这验证了本次导入与隔离路径，不等于完整备份恢复或 Agent 自动检索已经验收。
-- 此前文档里的“线上 API 未部署”是 2026-10-10 的历史状态；本次服务器实际运行的后端已有知识路由及 PostgreSQL/COS 配置。公网 Nginx 当时尚未转发 `/knowledge/`，返回的是前端 HTML；需要单独验证代理配置。
+- 此前文档里的“线上 API 未部署”是 2026-10-10 的历史状态；本次服务器实际运行的后端已有知识路由及 PostgreSQL/COS 配置。公网 Nginx 原先未转发 `/knowledge/`，返回前端 HTML；路由已在服务器提交 `87dc3b487` 中补齐。重启后 `https://garage.uniart.fun/knowledge/collections` 返回 JSON，当前 workspace 能看到枪术集合。
