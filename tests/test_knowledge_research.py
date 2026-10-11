@@ -3,6 +3,8 @@ import json
 from datetime import date, timedelta
 from unittest.mock import Mock
 import socket
+import subprocess
+import sys
 import uuid
 
 import pytest
@@ -222,6 +224,23 @@ def test_worker_imports_raw_capture_and_finishes_job(monkeypatch):
     assert calls[0][0:2] == ("owner-a", "collection-a")
     assert calls[0][3] == "raw/key"
     assert calls[1] == ("source-a", "revision-a", None)
+
+
+def test_idle_worker_exits_cleanly_on_sigterm():
+    process = subprocess.Popen([sys.executable, "-c",
+        "from src.apps.knowledge import worker; "
+        "worker.run_once = lambda: (print('ready', flush=True), False)[1]; "
+        "worker.main()"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert process.stdout.readline().strip() == "ready"
+        process.terminate()
+        _, errors = process.communicate(timeout=5)
+        assert process.returncode == 0, errors
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
 
 
 def test_selection_rejects_unlisted_or_blocked_sources(monkeypatch):

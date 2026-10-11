@@ -1,6 +1,6 @@
 # iFrame Federal Reserve RSS 候选发现 smoke
 
-日期：2026-10-12。状态：候选代码与本地验证完成；生产配置保持关闭。
+日期：2026-10-12。状态：候选真实发现和采集通过；检索排序修复待候选回读，模型引用未测；生产配置保持关闭。
 
 ## Observed
 
@@ -38,3 +38,13 @@ RSS 的 HTTP 200 与单篇 HTML 可抓取不证明长期可用或来源许可。
 - 主机上用候选适配器实际读取官方 Feed，查询 `Survey of Consumer Finances`、日期 2026-10-01 至 2026-10-12，返回唯一候选 `other20261009a.htm`，`access_status=public`，发布时间 `2026-10-09T14:00:00+00:00`。
 - `tests/test_knowledge_research.py tests/test_agent_chat.py` 本地 57 通过；一次性 PostgreSQL 18 上 `tests/test_knowledge_research_postgres.py` 3 通过，包含 provider 独立预算、API 创建选源、独立 worker 入库和 owner 隔离；临时数据库已关闭。此次 worker 集成测试使用固定 HTML，不代表真实生产 COS 或模型回答通过。
 - 线上版本 `021277d84275b7cd4568b03cebb91c6a08403851` 尚无单 owner 门控；候选代码基于 PR #85，不应直接替换生产后端。候选 API 与 worker 将用独立进程、隔离 Studio 输出目录和测试 owner 配置运行；正式生产切换仍须合并代码与发布审核。
+
+## 候选环境真实链路记录
+
+候选 API 在主机回环 `127.0.0.1:17178` 运行，源码为 `e9ebae9b94b1a0ba97b77fd52346b82e02c37a3b`；使用隔离 Studio 输出目录、现有受管数据库/COS 凭据、`fed_rss`、单个 capture host `www.federalreserve.gov` 和 `/opt/.iframe` 对应的唯一测试 owner。未切换生产 API 或静态页面。生产 worker 队列为空后暂停，候选 worker 完成一条任务后生产 worker 已恢复；候选 API 仍待检索复测后关闭。
+
+- 测试 owner 的能力接口为 true；另一 owner 为 false，直接创建研究返回 403。
+- 真实 Feed 发现产生 run `444b1973-c8af-490c-a8c5-80b6fe5c17b7`，唯一候选为 `other20261009a.htm`。选中后 job `75a8e44f-55a7-44b5-b2cc-268362b4fa6e` 从 queued 到 ready，来源 `e6f7b790-bb80-4c7c-a42d-e177dc6e81f7` 有 42 个文本单元；相关正文见 `block:28`。另一 owner 读取来源返回 404。
+- 原始 HTML 经私有 COS 回读为 86,767 字节，SHA-256 与数据库修订一致；测试集合、来源及原文保留在该测试 owner 的生产 PostgreSQL/COS。未调用模型，也未验证回答语义。
+- 检索复核发现真实缺陷：来源标题含整句查询时，默认 `limit=10` 先返回页面导航块，相关正文 `block:28` 被挤出结果。一次性 PostgreSQL 测试先复现失败，再把正文命中排在标题命中前；修复已通过本地测试，仍需更新候选 API 后对真实来源回读。
+- 停止旧 worker 时 `docker stop --time 30` 超时并以 137 退出；生产 worker 后续已恢复且队列无活动任务。候选代码已加入 SIGTERM/SIGINT 退出处理并通过子进程测试，仍需容器级复测。

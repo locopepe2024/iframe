@@ -71,6 +71,36 @@ def test_fed_rss_budget_is_distinct_from_gdelt_budget():
         connection.close()
 
 
+@pytest.mark.skipif(not os.getenv("IFRAME_KNOWLEDGE_TEST_PG_SOCKET"),
+                    reason="Disposable PostgreSQL socket is not configured")
+def test_search_prioritizes_body_evidence_over_source_title():
+    connection = pg8000.dbapi.connect(
+        unix_sock=os.environ["IFRAME_KNOWLEDGE_TEST_PG_SOCKET"],
+        user=os.environ["USER"], database="postgres",
+    )
+    try:
+        store.migrate(connection)
+        collection = store.create_owner_collection(connection, "search-owner", "Research", "finance")
+        units = [{"kind": "text", "locator": f"block:{index}",
+                  "body": f"Navigation item {index}", "labels": [], "annotation": None}
+                 for index in range(1, 15)]
+        units.append({"kind": "text", "locator": "block:15",
+                      "body": "Survey of Consumer Finances findings", "labels": [],
+                      "annotation": None})
+        source = store.import_source(connection, "search-owner", collection["id"], {
+            "source_uri": "https://www.federalreserve.gov/newsevents/pressreleases/test.htm",
+            "title": "Survey of Consumer Finances", "source_type": "web",
+            "rights_status": "unknown",
+        }, "raw/" + "a" * 64, "a" * 64, units)
+        hits = store.search(connection, "search-owner", "Survey of Consumer Finances",
+                            10, collection_id=collection["id"])
+        assert hits[0]["source_id"] == source["source_id"]
+        assert hits[0]["locator"] == "block:15"
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 @pytest.mark.skipif(not (os.getenv("IFRAME_KNOWLEDGE_TEST_PG_DISPOSABLE")
                          and os.getenv("IFRAME_KNOWLEDGE_TEST_PG_SOCKET")),
                     reason="Committed integration fixtures require a disposable PostgreSQL cluster")

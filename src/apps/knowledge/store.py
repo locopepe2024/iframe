@@ -470,7 +470,7 @@ def search(connection, owner_profile_id: str, query: str, limit: int,
     if collection_id:
         filters.append("c.id = %s")
         params.append(collection_id)
-    params.append(limit)
+    params.extend((pattern, pattern, limit))
     cursor.execute(
         """SELECT u.id::text, u.kind, u.locator,
                   substr(u.body, greatest(1, strpos(lower(u.body), lower(%s)) - 150), 1200),
@@ -480,7 +480,9 @@ def search(connection, owner_profile_id: str, query: str, limit: int,
            FROM knowledge_sources s """ + _VISIBLE_JOINS + """
            JOIN knowledge_content_units u ON u.source_revision_id = r.id
            WHERE """ + _VISIBLE_RULE + " AND " + " AND ".join(filters) + """
-           ORDER BY r.captured_at DESC, u.created_at, u.id LIMIT %s""",
+           ORDER BY CASE WHEN u.body ILIKE %s THEN 0
+                         WHEN u.annotation ILIKE %s THEN 1 ELSE 2 END,
+                    r.captured_at DESC, u.created_at, u.id LIMIT %s""",
         tuple(params),
     )
     columns = ("unit_id", "kind", "locator", "excerpt", "labels", "annotation",
