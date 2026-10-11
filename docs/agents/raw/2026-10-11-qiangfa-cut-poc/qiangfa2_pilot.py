@@ -19,8 +19,14 @@ from src.utils.cos_storage import COSImageUploader
 
 ROOT = Path(__file__).resolve().parent
 MANIFEST = ROOT / "qiangfa2-24p167-28p167-preparation.json"
-RECORD = ROOT / "qiangfa2-24p167-28p167-h3-generation.json"
-OUTPUT = ROOT / "qiangfa2-24p167-28p167-h3-replacement.mp4"
+VARIANTS = {
+    "v1": ("qiangfa2-jump-24p167-28p167-h3-prompt.md",
+           "qiangfa2-24p167-28p167-h3-generation.json",
+           "qiangfa2-24p167-28p167-h3-replacement.mp4"),
+    "identity-v2": ("qiangfa2-jump-24p167-28p167-h3-identity-v2-prompt.md",
+                    "qiangfa2-24p167-28p167-h3-identity-v2-generation.json",
+                    "qiangfa2-24p167-28p167-h3-identity-v2-replacement.mp4"),
+}
 API = "https://uniart.fun/v1/videos"
 SUCCESS = {"completed", "succeeded", "success"}
 FAILURE = {"failed", "error", "cancelled", "canceled"}
@@ -34,11 +40,11 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def save_record(record):
-    RECORD.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n")
+def save_record(path, record):
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n")
 
 
-def prepared_inputs():
+def prepared_inputs(prompt_name):
     manifest = json.loads(MANIFEST.read_text())
     if manifest.get("schema") != "recreation-pilot-preparation.v1":
         raise ValueError("Unexpected pilot manifest schema")
@@ -60,7 +66,7 @@ def prepared_inputs():
             or plan["ratio"] != "16:9"
             or plan["generate_audio"] is not False):
         raise ValueError("Pilot plan differs from the reviewed four-second window")
-    prompt = (ROOT / plan["prompt_path"]).read_text(encoding="utf-8").strip()
+    prompt = (ROOT / prompt_name).read_text(encoding="utf-8").strip()
     cuts = [round(value, 3) for value in manifest["edit_review"]["confirmed_cut_local_seconds"]]
     errors = check_prompt(prompt, duration=4, pictures=1, videos=1, audios=0,
                           silent=True, cuts=cuts)
@@ -78,10 +84,12 @@ def credentials():
     return {"Authorization": "Bearer " + token, "Accept-Encoding": "identity"}
 
 
-def submit():
-    if RECORD.exists():
+def submit(variant):
+    prompt_name, record_name, _ = VARIANTS[variant]
+    record_path = ROOT / record_name
+    if record_path.exists():
         raise RuntimeError("A pilot generation record already exists; inspect it before retrying")
-    manifest, identity, motion, prompt = prepared_inputs()
+    manifest, identity, motion, prompt = prepared_inputs(prompt_name)
     headers = credentials()
     uploader = COSImageUploader()
     urls = {}
@@ -113,11 +121,12 @@ def submit():
         "target_sha256": manifest["target"]["sha256"],
         "motion_sha256": manifest["motion_reference"]["sha256"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+        "prompt_path": prompt_name,
         "model": body["model"], "mode": body["mode"],
         "duration": body["duration"], "resolution": body["resolution"],
         "ratio": body["ratio"], "generate_audio": False, "seed": body["seed"],
     }
-    save_record(record)
+    save_record(record_path, record)
     session = requests.Session()
     session.trust_env = False
     try:
@@ -130,14 +139,17 @@ def submit():
             record["provider_error"] = payload.get("error") or response.text[:500]
     except (requests.RequestException, ValueError) as exc:
         record.update(status="submission_uncertain", provider_error=str(exc))
-    save_record(record)
+    save_record(record_path, record)
     print("status", record["status"], "task_id", record.get("task_id") or "none")
 
 
-def collect():
-    if not RECORD.exists():
+def collect(variant):
+    _, record_name, output_name = VARIANTS[variant]
+    record_path = ROOT / record_name
+    output_path = ROOT / output_name
+    if not record_path.exists():
         raise RuntimeError("No pilot generation record")
-    record = json.loads(RECORD.read_text())
+    record = json.loads(record_path.read_text())
     task_id = record.get("task_id")
     if not task_id:
         raise RuntimeError("No provider task ID; do not submit a duplicate")
@@ -151,7 +163,7 @@ def collect():
     record["status"] = status
     if status in FAILURE:
         record["provider_error"] = payload.get("error")
-    if status in SUCCESS and not OUTPUT.exists():
+    if status in SUCCESS and not output_path.exists():
         urls = _result_urls(payload, "video") or [f"{API}/{task_id}/content"]
         last_error = None
         for url in urls:
@@ -159,35 +171,37 @@ def collect():
                 download_headers = headers if url.startswith(API) else {}
                 with session.get(url, headers=download_headers, timeout=180, stream=True) as result:
                     result.raise_for_status()
-                    temporary = OUTPUT.with_suffix(".mp4.part")
+                    temporary = output_path.with_suffix(".mp4.part")
                     with temporary.open("wb") as stream:
                         for chunk in result.iter_content(65536):
                             if chunk:
                                 stream.write(chunk)
-                temporary.replace(OUTPUT)
-                record["output_path"] = OUTPUT.name
-                record["output_sha256"] = sha256(OUTPUT)
+                temporary.replace(output_path)
+                record["output_path"] = output_path.name
+                record["output_sha256"] = sha256(output_path)
                 break
             except requests.RequestException as exc:
                 last_error = exc
         else:
-            save_record(record)
+            save_record(record_path, record)
             raise RuntimeError(f"Task completed but download failed: {last_error}")
-    save_record(record)
+    save_record(record_path, record)
     print("status", status, "output", record.get("output_path", "none"))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("validate", "submit", "collect"))
-    action = parser.parse_args().action
+    parser.add_argument("--variant", choices=VARIANTS, default="v1")
+    args = parser.parse_args()
+    action = args.action
     if action == "validate":
-        prepared_inputs()
+        prepared_inputs(VARIANTS[args.variant][0])
         print("Pilot prompt and input hashes valid")
     elif action == "submit":
-        submit()
+        submit(args.variant)
     else:
-        collect()
+        collect(args.variant)
 
 
 if __name__ == "__main__":
