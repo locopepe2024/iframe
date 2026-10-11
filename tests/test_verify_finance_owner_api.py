@@ -1,9 +1,10 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
 
-from scripts.verify_finance_owner_api import run
+from scripts.verify_finance_owner_api import run, session_token_for_api_key
 
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" /
@@ -74,3 +75,35 @@ def test_two_owner_mode_requires_distinct_tokens_before_writing():
     with pytest.raises(ValueError, match="Two distinct"):
         run("http://127.0.0.1:17178", FIXTURE, "owner-a", session=session)
     assert session.calls == []
+
+
+def test_api_key_file_exchanges_only_on_loopback_and_checks_owner(tmp_path):
+    key_path = tmp_path / "key"
+    key_path.write_text("test-key\n")
+
+    class AuthSession:
+        def post(self, url, **kwargs):
+            assert url == "http://127.0.0.1:17177/auth/session-token"
+            assert kwargs["json"] == {"api_key": "test-key", "ttl_seconds": 900}
+            owner = "apikey-" + hashlib.sha256(b"test-key").hexdigest()
+            return FakeResponse(200, {"auth_mode": "api_key_session",
+                                      "owner_profile_id": owner,
+                                      "access_token": "iframe-session.test.signature"})
+
+    session = AuthSession()
+    assert session_token_for_api_key("http://127.0.0.1:17177", key_path, session).startswith(
+        "iframe-session.")
+    with pytest.raises(ValueError, match="loopback HTTP origin"):
+        session_token_for_api_key("https://candidate.example.com", key_path, session)
+    with pytest.raises(ValueError, match="loopback HTTP origin"):
+        session_token_for_api_key("http://127.0.0.1:17177/other", key_path, session)
+
+    class WrongOwnerSession:
+        def post(self, url, **kwargs):
+            return FakeResponse(200, {"auth_mode": "api_key_session",
+                                      "owner_profile_id": "apikey-other",
+                                      "access_token": "iframe-session.test.signature"})
+
+    with pytest.raises(RuntimeError, match="owner or mode"):
+        session_token_for_api_key("http://127.0.0.1:17177", key_path,
+                                  WrongOwnerSession())
