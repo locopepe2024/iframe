@@ -29,7 +29,7 @@ function state(assetType: string, assetId: string, bound = true) {
                 scene_ids: ["scene-1"], shot_ids: ["shot-1"],
             }] : [],
         },
-        bindings: bound ? [{ asset_type: assetType, asset_id: assetId, status: "pending",
+        bindings: bound ? [{ asset_type: assetType, asset_id: assetId, status: "suggested",
             scene_ids: ["scene-1"], shot_ids: ["shot-1"] }] : [],
         new_bindings: [], reusable_bindings: [], changed_bindings: [], stale_bindings: [], unresolved_bindings: [],
     };
@@ -60,6 +60,7 @@ it.each([
     await screen.findByRole("region", { name: "拍摄计划资产需求" });
     fireEvent.click(screen.getByRole("button", { name: "从拍摄计划同步" }));
     await screen.findByText("拍摄计划上下文已同步：");
+    expect(screen.getByText(/新增记录 0 · 可复用记录 0 · 变更记录 0 · 过期记录 0/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: new RegExp(tab) }));
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(mocks.syncEpisodeAssetsFromShootingPlan).toHaveBeenCalledTimes(2));
@@ -186,7 +187,7 @@ it("preserves the plan display when deletion is rejected", async () => {
     await screen.findByRole("region", { name: "拍摄计划资产需求" });
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(window.alert).toHaveBeenCalled());
-    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("待生成");
+    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("候选引用");
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.syncEpisodeAssetsFromShootingPlan).not.toHaveBeenCalled();
 });

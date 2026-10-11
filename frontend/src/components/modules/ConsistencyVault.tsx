@@ -623,8 +623,8 @@ export default function ConsistencyVault() {
             {episodeAssetSync && (
                 <div className="mx-6 mt-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-text-secondary">
                     <span className="font-medium text-foreground">拍摄计划上下文已同步：</span>{" "}
-                    新增 {episodeAssetSync.new_bindings?.length || 0} · 同步记录可复用 {episodeAssetSync.reusable_bindings?.length || 0} ·
-                    变更 {episodeAssetSync.changed_bindings?.length || 0} · 过期 {episodeAssetSync.stale_bindings?.length || 0}。
+                    新增记录 {episodeAssetSync.new_bindings?.length || 0} · 可复用记录 {episodeAssetSync.reusable_bindings?.length || 0} ·
+                    变更记录 {episodeAssetSync.changed_bindings?.length || 0} · 过期记录 {episodeAssetSync.stale_bindings?.length || 0}。
                     资产不会被自动生成或覆盖。
                     {!!episodeAssetSync.unresolved_bindings.length && <span> 待处理 {episodeAssetSync.unresolved_bindings.length} 条需求（含逐镜头场景需求），请在下方关联现有资产或检查拍摄计划引用。</span>}
                 </div>
@@ -873,7 +873,7 @@ function ShootingPlanAssetRequirements({
         }
         return sources;
     };
-    const statusLabel = (status: string) => status === "accepted" ? "已采纳" : status === "stale" ? "需复核" : "待生成";
+    const statusLabel = (status: string) => status === "accepted" ? "已采纳" : status === "stale" ? "需复核" : "候选引用";
 
     return (
         <section className="mx-6 mt-3 rounded-lg border border-glass-border bg-surface px-4 py-3" aria-label="拍摄计划资产需求">
@@ -942,7 +942,7 @@ function ShootingPlanAssetRequirements({
                                                 <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", requirement.assetIds[0])}>打开资产</button>
                                             )}
                                         </div>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "待生成") : "待关联角色资产"}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "候选引用") : "待关联角色资产"}</p>
                                         <select aria-label={`为计划人物 ${requirement.label} 选择角色资产`}
                                             value={project.episode_person_asset_bindings?.[personId] ?? (requirement.assetIds.length === 1 ? requirement.assetIds[0] : "")}
                                             disabled={bindingPersonId !== null}
