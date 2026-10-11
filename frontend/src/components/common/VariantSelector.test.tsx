@@ -19,7 +19,7 @@ it('switches the main image and filmstrip before selection completes', async () 
   const onSelect = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
   render(<VariantSelector asset={asset} onSelect={onSelect} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false} />);
 
-  fireEvent.click(screen.getAllByAltText('Variant')[1]);
+  fireEvent.click(screen.getByAltText('未命名素材 2'));
   expect((screen.getByAltText('Selected Variant') as HTMLImageElement).src).toContain('second.png');
   await waitFor(() => expect(onSelect).toHaveBeenCalledWith('second'));
   await act(async () => finish());
@@ -32,13 +32,23 @@ it('hides a deleted image immediately and restores it if deletion fails', async 
   render(<VariantSelector asset={asset} onSelect={vi.fn()} onDelete={onDelete} onGenerate={vi.fn()} isGenerating={false} />);
 
   fireEvent.click(screen.getAllByTitle('deleteVariant')[0]);
-  expect(screen.getAllByAltText('Variant')).toHaveLength(1);
+  expect(screen.getAllByAltText(/未命名素材/)).toHaveLength(1);
   expect((screen.getByAltText('Selected Variant') as HTMLImageElement).src).toContain('second.png');
   await waitFor(() => expect(onDelete).toHaveBeenCalledWith('first'));
   await act(async () => reject(new Error('delete failed')));
-  expect(screen.getAllByAltText('Variant')).toHaveLength(2);
+  expect(screen.getAllByAltText(/未命名素材/)).toHaveLength(2);
   expect((screen.getByAltText('Selected Variant') as HTMLImageElement).src).toContain('first.png');
   vi.restoreAllMocks();
+});
+
+it('renames the selected variant without changing its selection', async () => {
+  const onRename = vi.fn().mockResolvedValue(undefined);
+  render(<VariantSelector asset={asset} onSelect={vi.fn()} onDelete={vi.fn()} onRename={onRename} onGenerate={vi.fn()} isGenerating={false} />);
+
+  fireEvent.change(screen.getByLabelText('素材名称'), { target: { value: '粮店黄昏·持剑近景' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存素材名称' }));
+  await waitFor(() => expect(onRename).toHaveBeenCalledWith('first', '粮店黄昏·持剑近景'));
+  expect((screen.getByAltText('Selected Variant') as HTMLImageElement).src).toContain('first.png');
 });
 
 it('does not show a stale fallback when the only image is being deleted', () => {

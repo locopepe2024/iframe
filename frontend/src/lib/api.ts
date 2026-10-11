@@ -236,6 +236,7 @@ export interface AssetLibraryReference {
 
 export interface AssetReferenceIndexVariant {
     id: string;
+    display_name?: string | null;
     media_id?: string | null;
     url: string;
     created_at?: number;
@@ -1059,6 +1060,7 @@ export const api = {
         variantId: string,
         referenceViewRole?: string,
         referenceDistance?: string,
+        displayName?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/metadata`, {
             asset_id: assetId,
@@ -1066,6 +1068,7 @@ export const api = {
             variant_id: variantId,
             reference_view_role: referenceViewRole || null,
             reference_distance: referenceDistance || null,
+            display_name: displayName,
         });
         return res.data;
     },

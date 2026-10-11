@@ -7457,6 +7457,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         variant_id: str,
         reference_view_role: Optional[str] = None,
         reference_distance: Optional[str] = None,
+        display_name: Optional[str] = None,
     ) -> Script:
         """Label a child reference view while preserving its semantic asset identity."""
         script = self.scripts.get(script_id)
@@ -7474,8 +7475,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             variant = next((item for item in variants if item.id == variant_id), None)
             if variant is None:
                 continue
-            variant.reference_view_role = reference_view_role or None
-            variant.reference_distance = reference_distance or None
+            if display_name is None or reference_view_role is not None:
+                variant.reference_view_role = reference_view_role or None
+            if display_name is None or reference_distance is not None:
+                variant.reference_distance = reference_distance or None
+            if display_name is not None:
+                variant.display_name = display_name.strip() or None
             self._save_after_asset_mutation(source)
             return script
         raise ValueError(f"Variant {variant_id} not found")

@@ -3719,6 +3719,7 @@ class UpdateVariantMetadataRequest(BaseModel):
     variant_id: str
     reference_view_role: Optional[str] = None
     reference_distance: Optional[str] = None
+    display_name: Optional[str] = None
 
 @app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
 def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
@@ -3731,6 +3732,7 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
             request.variant_id,
             request.reference_view_role,
             request.reference_distance,
+            request.display_name,
         )
         return signed_response(updated_script)
     except ValueError as e:

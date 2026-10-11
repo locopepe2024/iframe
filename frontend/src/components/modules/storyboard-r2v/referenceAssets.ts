@@ -1,6 +1,7 @@
 export interface ReferenceVariant {
     id: string;
     url: string;
+    display_name?: string | null;
     reference_view_role?: string;
     reference_distance?: string;
 }

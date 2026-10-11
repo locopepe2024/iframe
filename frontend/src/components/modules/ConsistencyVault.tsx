@@ -1031,7 +1031,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
         const labels = new Set<string>();
         return assetIndex.flatMap((entry) => (entry.variants || []).map((variant: any, index: number) => {
             if (!variant?.id) return null;
-            const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
+            const variantLabel = variant.display_name || variant.reference_view_role || variant.reference_distance || `未命名素材 ${index + 1}`;
             const isActive = entry.selected_variant_id === variant.id;
             const baseLabel = entry.variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
             let label = baseLabel;

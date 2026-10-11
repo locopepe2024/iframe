@@ -18,6 +18,7 @@ export type {
 
 export interface ImageVariant {
     id: string;
+    display_name?: string | null;
     url: string;
     created_at: number;
     prompt_used?: string;
