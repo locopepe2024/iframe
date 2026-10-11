@@ -37,4 +37,4 @@
 | B1/B2 | 本地集成完成 | 一次性 PostgreSQL 18 上 `tests/test_knowledge_research_postgres.py` 2 通过；实例已关闭。B1 使用回滚事务；B2 由 API 创建/选源、独立 worker 子进程用固定 HTML 夹具采集，本地 blob 原文、revision/单元和 A/B 隔离均通过。首次连接受沙箱 Unix socket 限制，提权重试通过。未测真实 TLS/HTTPS、COS、进程崩溃后的 lease 恢复，也不能替代生产 PostgreSQL 16 验证。 |
 | C1 | 只读复核完成，权限行为未复测 | `iframe_release.py inspect` 报源码、后端、静态均为 `101eae7` 且拓扑通过；`/health` 返回 `ok=true`；worker running、重启计数 0；数据库 schema 版本 `[1,2,3]`；容器内 provider/hosts 配置均为空。未使用真实用户身份重测授权 UI；未对生产数据库作写入。 |
 | D0 候选服务只读探测 | 受限 | 对 GDELT DOC 公共 API 发出一次 `NVIDIA`、`artlist/json`、`maxrecords=1` 请求，返回 HTTP 429；未重试。不能据此确认响应字段、访问条款或长期可用性，也不能将其解释为无候选。 |
-| D1 | 未进入 | provider 与白名单保持关闭；GDELT 条款/限额和来源站点的存储、引用权限尚待核验。 |
+| D1 | 准备中 | 已在本地实现单 owner 服务端门控，并写出[生产 smoke 执行单](2026-10-11-iframe-live-research-production-smoke-runbook-v1.md)。本地相关后端 58 通过、一次性 PostgreSQL 集成 2 通过；门控尚未合并或部署。provider 与白名单保持关闭；GDELT 条款/限额和来源站点的存储、引用权限尚待核验。 |
