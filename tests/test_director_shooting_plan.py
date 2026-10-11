@@ -263,9 +263,6 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     assert "unresolved_questions" in prompt
     assert '<stage_preset name="shooting-plan-handoff">' in prompt
     assert "视觉风格摘要约束镜头的可见表达" in prompt
-    assert "高动作密度" in prompt
-    assert "4–8 秒" in prompt
-    assert "15 秒" in prompt
 
 
 def test_plan_lineage_ignores_style_changes_but_rejects_director_changes_and_unknown_references():

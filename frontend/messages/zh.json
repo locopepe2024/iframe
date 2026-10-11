@@ -2512,7 +2512,6 @@
     "missingRefs": "{model} 需要参考图片才能生成。在 prompt 里用 @ 引用角色 / 场景 / 道具，至少一张。",
     "invalidProductViews": "当前镜头选择了已不存在的商品视图，请重新选择后再生成。",
     "tooManyH3References": "当前镜头共选择 {count} 张参考图，MiniMax H3 每次最多支持 {max} 张。",
-    "h3LongShotAdvice": "H3 长镜头动作与节奏可能漂移；建议在动作转折处拆成较短镜头。",
     "promptExpand": "放大编辑",
     "promptExpandTitle": "编辑 {shot} 的描述",
     "promptExpandChars": "字符",
