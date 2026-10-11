@@ -441,7 +441,9 @@ it("shows generated lighting conflicts before confirmation and links to the shot
     expect(await screen.findByText(/1 shots differ from the place and time lighting baseline/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Scene 1 · Follow the couple" }));
-    expect(await screen.findByText(/Different from the scene lighting baseline/)).toBeInTheDocument();
+    expect(await screen.findByText(/Compare this shot with the baseline/)).toBeInTheDocument();
+    expect(screen.getByText(/Window from west/)).toBeInTheDocument();
+    expect(screen.getByText(/Warm sign light from camera left/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Reason for lighting override"), { target: { value: "The sign changes the light on their faces." } });
     expect(screen.queryByText(/1 shots differ from the place and time lighting baseline/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));

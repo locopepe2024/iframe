@@ -615,7 +615,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
         setExpandedSceneIds(previous => new Set(previous).add(conflict.sceneId));
         setExpandedBeatIds(previous => new Set(previous).add(conflict.beatId));
         setExpandedShots(previous => new Set(previous).add(conflict.shotId));
-        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`director-plan-shot-${conflict.shotId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`director-plan-shot-${conflict.shotId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" })));
     };
     const shotsByScene = scenes.map(scene => scene.beats.reduce((total, beat) => total + beat.shots.length, 0));
     const durationByScene = scenes.map(scene => scene.beats.reduce(
@@ -994,7 +994,25 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                                 </div>
                                                                 <fieldset className="rounded-md border border-border p-3">
                                                                     <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
-                                                                    {lightingConflicts.some(conflict => conflict.shotId === shot.shot_id) && <p className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-100">{t("lightingConflictFields", { fields: lightingConflicts.find(conflict => conflict.shotId === shot.shot_id)?.fields.map(field => t(`fields.${field === "key_source" ? "keySource" : field === "color_tone" ? "colorTone" : field === "practical_sources" ? "practicalSources" : "contrast"}`)).join("、") ?? "" })}</p>}
+                                                                    {(() => {
+                                                                        const conflict = lightingConflicts.find(item => item.shotId === shot.shot_id);
+                                                                        const baseline = (plan.lighting_baselines ?? []).find(item =>
+                                                                            item.place_continuity_id === scene.place_continuity_id && item.time_continuity_id === scene.time_continuity_id);
+                                                                        if (!conflict || !baseline) return null;
+                                                                        const fieldNames = { key_source: "keySource", color_tone: "colorTone", contrast: "contrast", practical_sources: "practicalSources" } as const;
+                                                                        return <div className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
+                                                                            <p className="font-medium">{t("lightingConflictComparisonTitle")}</p>
+                                                                            <p className="mt-1 leading-5">{t("lightingConflictComparisonHint")}</p>
+                                                                            <div className="mt-3 space-y-2">
+                                                                                {conflict.fields.map(field => <div key={field} className="rounded border border-amber-300/20 bg-background/50 p-2">
+                                                                                    <p className="font-medium">{t(`fields.${fieldNames[field]}`)}</p>
+                                                                                    <p className="mt-1"><span className="text-text-muted">{t("lightingBaselineValue")}</span> {Array.isArray(baseline.lighting[field]) ? baseline.lighting[field].join("、") || t("lightingEmptyValue") : baseline.lighting[field] || t("lightingEmptyValue")}</p>
+                                                                                    <p className="mt-1"><span className="text-text-muted">{t("lightingShotValue")}</span> {Array.isArray(shot.lighting[field]) ? shot.lighting[field].join("、") || t("lightingEmptyValue") : shot.lighting[field] || t("lightingEmptyValue")}</p>
+                                                                                    <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, [field]: baseline.lighting[field] } })} className="mt-2 rounded border border-amber-300/40 px-2 py-1 hover:bg-amber-300/10">{t("lightingUseBaseline")}</button>
+                                                                                </div>)}
+                                                                            </div>
+                                                                        </div>;
+                                                                    })()}
                                                                     <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
                                                                     <div className="grid gap-3 sm:grid-cols-3">
                                                                         <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
