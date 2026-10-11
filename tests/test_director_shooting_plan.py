@@ -423,6 +423,58 @@ def test_unbound_shot_scene_remains_visible_beside_bound_shot():
                 ("scene-cinema", "shot-unbound")]
 
 
+def test_unbound_plan_scene_can_bind_existing_asset_without_mutating_confirmed_plan():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    before = script.director_shooting_plan_revisions[-1].model_dump()
+    script.episode_scene_asset_replacements["cinema"] = "other-scene"
+
+    result = pipeline.bind_episode_plan_scene("film", "scene-cinema", None, "cinema", 1)
+
+    assert result["context"]["scenes"][0]["scene_asset_id"] == "cinema"
+    assert result["context"]["shots"][0]["scene_asset_id"] == "cinema"
+    assert not any(item.get("reason") == "scene_asset_unbound" for item in result["unresolved_bindings"])
+    assert script.director_shooting_plan_revisions[-1].model_dump() == before
+    assert Script.model_validate(script.model_dump()).episode_plan_scene_asset_bindings == {
+        "scene:scene-cinema": "cinema"}
+    assert pipeline.sync_episode_assets_from_shooting_plan("film")["context"]["shots"][0]["scene_asset_id"] == "cinema"
+
+
+def test_unbound_plan_shot_binding_is_scoped_to_one_shot_and_rejects_stale_revision():
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-second"
+    second.order = 1
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    result = pipeline.bind_episode_plan_scene("film", "scene-cinema", "shot-second", "cinema", 1)
+
+    assert [item["scene_asset_id"] for item in result["context"]["shots"]] == [None, "cinema"]
+    assert [(item["scene_id"], item.get("shot_id")) for item in result["unresolved_bindings"]
+            if item.get("reason") == "scene_asset_unbound"] == [("scene-cinema", "shot-entry")]
+    with pytest.raises(ValueError, match="revision changed"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", "shot-second", "cinema", 0)
+    with pytest.raises(ValueError, match="not in the confirmed shooting plan"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", "unknown", "cinema", 1)
+
+
+def test_plan_scene_picker_rejects_existing_plan_asset_id():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    plan.scenes[0].scene_asset_id = "cinema"
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    with pytest.raises(ValueError, match="already has a plan asset ID"):
+        pipeline.bind_episode_plan_scene("film", "scene-cinema", None, "cinema", 1)
+
+
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():
     pipeline, _ = make_pipeline()
     plan = make_plan(pipeline)

@@ -6,6 +6,8 @@ import ConsistencyVault from "./ConsistencyVault";
 const mocks = vi.hoisted(() => ({
     getProject: vi.fn(), getSeries: vi.fn(), getEpisodeVisualContext: vi.fn(),
     syncEpisodeAssetsFromShootingPlan: vi.fn(), deleteSeriesAsset: vi.fn(),
+    bindEpisodePlanScene: vi.fn(),
+    getAssetReferenceIndex: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
     error: vi.fn(),
 }));
@@ -35,6 +37,7 @@ function state(assetType: string, assetId: string, bound = true) {
 
 beforeEach(() => {
     vi.resetAllMocks();
+    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
@@ -100,6 +103,56 @@ it("deletes an unsynced asset without requiring a confirmed plan", async () => {
     await waitFor(() => expect(useProjectStore.getState().currentProject?.characters).toEqual([]));
     expect(mocks.syncEpisodeAssetsFromShootingPlan).not.toHaveBeenCalled();
     expect(mocks.error).not.toHaveBeenCalled();
+});
+
+it("offers an existing scene asset for a plan scene with no asset ID", async () => {
+    const project = { id: "episode-1", characters: [], scenes: [{ id: "street", name: "长街" }], props: [] };
+    const unbound = {
+        ...state("scene", "street", false),
+        context: {
+            shooting_plan_revision: 2,
+            scenes: [{ scene_id: "plan-street", scene_ref: "粮铺门前", scene_asset_id: null }],
+            shots: [{ scene_id: "plan-street", shot_id: "shot-1", scene_asset_id: null }],
+            characters: [], props: [],
+        },
+    };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue(unbound);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.bindEpisodePlanScene.mockResolvedValue({ ...unbound,
+        context: { ...unbound.context, scenes: [{ ...unbound.context.scenes[0], scene_asset_id: "street" }],
+            shots: [{ ...unbound.context.shots[0], scene_asset_id: "street" }] },
+        bindings: [{ asset_type: "scene", asset_id: "street", status: "suggested", scene_ids: ["plan-street"], shot_ids: ["shot-1"] }],
+    });
+
+    render(<ConsistencyVault />);
+    const picker = await screen.findByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" });
+    fireEvent.change(picker, { target: { value: "street" } });
+
+    await waitFor(() => expect(mocks.bindEpisodePlanScene).toHaveBeenCalledWith(
+        "episode-1", "plan-street", null, "street", 2));
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" })).not.toBeInTheDocument());
+});
+
+it("recognizes personal-library scene and prop assets in plan requirements", async () => {
+    const project = { id: "episode-1", characters: [], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [
+        { asset_type: "scene", asset_id: "global-street", name: "长街", source_scope: "global" },
+        { asset_type: "prop", asset_id: "global-sign", name: "粮铺招牌", source_scope: "global" },
+    ] });
+    mocks.getEpisodeVisualContext.mockResolvedValue({
+        context: { shooting_plan_revision: 1, scenes: [], shots: [], characters: [], props: [] },
+        bindings: [
+            { asset_type: "scene", asset_id: "global-street", status: "suggested", scene_ids: [], shot_ids: [] },
+            { asset_type: "prop", asset_id: "global-sign", status: "suggested", scene_ids: [], shot_ids: [] },
+        ],
+    });
+
+    render(<ConsistencyVault />);
+    const requirements = await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    await waitFor(() => expect(within(requirements).getByText("长街 · 个人资产")).toBeInTheDocument());
+    expect(within(requirements).getByText("粮铺招牌 · 个人资产")).toBeInTheDocument();
 });
 
 it("preserves the plan display when deletion is rejected", async () => {

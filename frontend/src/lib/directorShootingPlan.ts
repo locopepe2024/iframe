@@ -292,6 +292,16 @@ export async function bindEpisodePlanAsset(baseUrl: string, projectId: string,
     return response.data;
 }
 
+export async function bindEpisodePlanScene(baseUrl: string, projectId: string,
+    sceneId: string, shotId: string | null, assetId: string, expectedPlanRevision: number) {
+    const response = await axios.put<EpisodeAssetSyncDiff>(
+        `${baseUrl}/projects/${encodeURIComponent(projectId)}/episode-visual-context/plan-scene`,
+        { scene_id: sceneId, shot_id: shotId, asset_id: assetId,
+          expected_plan_revision: expectedPlanRevision },
+    );
+    return response.data;
+}
+
 export async function getStoryboardAssetContext(baseUrl: string, projectId: string, frameId: string) {
     const response = await axios.get(`${baseUrl}/projects/${projectId}/storyboard/${frameId}/asset-context`);
     return response.data as { frame_id: string; scene_id: string; shot_id?: string | null; context_status: string; assets: Array<Record<string, unknown>> };

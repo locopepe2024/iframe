@@ -2741,6 +2741,9 @@ class Script(BaseModel):
     episode_scene_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Scene asset ID to current episode-visible asset ID"
     )
+    episode_plan_scene_asset_bindings: Dict[str, str] = Field(
+        default_factory=dict, description="Explicit plan scene/shot requirement to episode-visible Scene asset ID"
+    )
     episode_prop_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"
     )

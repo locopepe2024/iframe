@@ -5391,6 +5391,27 @@ class EpisodePlanAssetBindingRequest(BaseModel):
     expected_plan_revision: int = Field(..., ge=1)
 
 
+class EpisodePlanSceneBindingRequest(BaseModel):
+    scene_id: str = Field(..., min_length=1, max_length=120)
+    shot_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    asset_id: str = Field(..., min_length=1, max_length=120)
+    expected_plan_revision: int = Field(..., ge=1)
+
+
+@app.put("/projects/{script_id}/episode-visual-context/plan-scene")
+def bind_episode_plan_scene(script_id: str, request: EpisodePlanSceneBindingRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(404, "Project not found")
+    try:
+        return pipeline.bind_episode_plan_scene(
+            script_id, request.scene_id, request.shot_id,
+            request.asset_id, request.expected_plan_revision)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(409 if "revision changed" in message else 422, message) from exc
+
+
 @app.put("/projects/{script_id}/episode-visual-context/plan-asset")
 def bind_episode_plan_asset(script_id: str, request: EpisodePlanAssetBindingRequest,
                             user: UserContext = Depends(require_studio_user)):

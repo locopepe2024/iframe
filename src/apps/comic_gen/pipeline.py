@@ -3216,6 +3216,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 source_ids.remove(asset_id)
             for source_id in source_ids:
                 replacements.pop(source_id, None)
+            if asset_type == "scene":
+                script.episode_plan_scene_asset_bindings = {
+                    key: value for key, value in script.episode_plan_scene_asset_bindings.items()
+                    if value != asset_id
+                }
         for source_id in source_ids:
             if source_id not in retired:
                 retired.append(source_id)
@@ -3752,6 +3757,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         props: Dict[tuple, EpisodeVisualPropContext] = {}
         shots: List[EpisodeVisualShotContext] = []
         for scene in plan.scenes:
+            scene_requirement_asset = script.episode_plan_scene_asset_bindings.get(f"scene:{scene.scene_id}")
             scene_bindings = [
                 shot.scene_binding for beat in scene.beats for shot in beat.shots
                 if shot.scene_binding is not None
@@ -3761,7 +3767,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 binding = DirectorPlanSceneBinding.model_validate(binding)
             scenes.append(EpisodeVisualSceneContext(
                 scene_id=scene.scene_id,
-                scene_asset_id=current_asset_id("scene", scene.scene_asset_id),
+                scene_asset_id=(current_asset_id("scene", scene.scene_asset_id)
+                                if scene.scene_asset_id else scene_requirement_asset),
                 plan_scene_asset_id=scene.scene_asset_id,
                 scene_ref=scene.scene_ref,
                 location=scene.location,
@@ -3794,8 +3801,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                         shot_scene_binding = DirectorPlanSceneBinding.model_validate(shot_scene_binding)
                     shots.append(EpisodeVisualShotContext(
                         scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
-                        scene_asset_id=current_asset_id("scene", shot_scene_binding.scene_asset_id
-                            if shot_scene_binding and shot_scene_binding.scene_asset_id else scene.scene_asset_id),
+                        scene_asset_id=(current_asset_id("scene", shot_scene_binding.scene_asset_id)
+                            if shot_scene_binding and shot_scene_binding.scene_asset_id else
+                            script.episode_plan_scene_asset_bindings.get(f"shot:{shot.shot_id}") or
+                            (current_asset_id("scene", scene.scene_asset_id)
+                             if scene.scene_asset_id else scene_requirement_asset)),
                         plan_scene_asset_id=(shot_scene_binding.scene_asset_id if shot_scene_binding
                             and shot_scene_binding.scene_asset_id else scene.scene_asset_id),
                         character_ids=shot_char_ids,
@@ -3918,6 +3928,32 @@ class ComicGenPipeline(StudioOwnerMixin):
                 script.retired_plan_asset_ids.get(asset_type, []) if item not in requested_ids]
             return self.sync_episode_assets_from_shooting_plan(script_id)
 
+    def bind_episode_plan_scene(self, script_id: str, scene_id: str, shot_id: Optional[str],
+                                asset_id: str, expected_plan_revision: int) -> Dict[str, Any]:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            revisions = script.director_shooting_plan_revisions
+            if not revisions or revisions[-1].revision != expected_plan_revision:
+                raise ValueError("Shooting-plan revision changed; reload before binding")
+            scene = next((item for item in revisions[-1].plan.scenes if item.scene_id == scene_id), None)
+            if scene is None or (shot_id and not any(
+                shot.shot_id == shot_id for beat in scene.beats for shot in beat.shots
+            )):
+                raise ValueError("Scene or shot is not in the confirmed shooting plan")
+            if scene.scene_asset_id or (shot_id and any(
+                shot.shot_id == shot_id and shot.scene_binding and shot.scene_binding.scene_asset_id
+                for beat in scene.beats for shot in beat.shots
+            )):
+                raise ValueError("Scene requirement already has a plan asset ID")
+            if asset_id not in {item.id for item in self.resolve_episode_assets(script)["scenes"]}:
+                raise ValueError("Scene asset is not available in this episode")
+            script.episode_plan_scene_asset_bindings[
+                f"shot:{shot_id}" if shot_id else f"scene:{scene_id}"
+            ] = asset_id
+            return self.sync_episode_assets_from_shooting_plan(script_id)
+
     def sync_episode_assets_from_shooting_plan(self, script_id: str) -> Dict[str, Any]:
         """Persist the context and return a non-destructive, reviewable diff."""
         with self._save_lock:
@@ -3944,6 +3980,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                         for binding in shot.prop_bindings:
                             prop_sources.add(binding.prop_id)
             resolved = self.resolve_episode_assets(script)
+            valid_requirement_keys = {
+                f"scene:{scene.scene_id}" for scene in plan.scenes if not scene.scene_asset_id
+            } | {
+                f"shot:{shot.shot_id}" for scene in plan.scenes if not scene.scene_asset_id
+                for beat in scene.beats for shot in beat.shots
+                if not (shot.scene_binding and shot.scene_binding.scene_asset_id)
+            }
+            available_scene_ids = {item.id for item in resolved["scenes"]}
+            script.episode_plan_scene_asset_bindings = {
+                key: asset_id for key, asset_id in script.episode_plan_scene_asset_bindings.items()
+                if key in valid_requirement_keys and asset_id in available_scene_ids
+            }
             for asset_type, sources, replacements, collection in (
                 ("scene", scene_sources, script.episode_scene_asset_replacements, "scenes"),
                 ("prop", prop_sources, script.episode_prop_asset_replacements, "props"),
@@ -8685,6 +8733,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                         if current_id == asset_id:
                             references.append({"owner_kind": "project", "owner_id": episode.id,
                                                "owner_title": episode.title, "plan_asset_id": source_id})
+                    if asset_type == "scene":
+                        for requirement_id, current_id in episode.episode_plan_scene_asset_bindings.items():
+                            if current_id == asset_id:
+                                references.append({"owner_kind": "project", "owner_id": episode.id,
+                                                   "owner_title": episode.title, "plan_requirement_id": requirement_id})
                 for frame in episode.frames:
                     used = (frame.scene_id == asset_id if asset_type == "scene" else
                             asset_id in (frame.character_ids if asset_type == "character" else frame.prop_ids))

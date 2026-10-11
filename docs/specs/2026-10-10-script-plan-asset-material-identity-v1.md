@@ -155,6 +155,13 @@ to disambiguate before migration.
    choice or creation. It must not produce an `EpisodeAssetBinding.asset_id`.
    An accidental string match between plan and asset IDs is never a binding.
 
+   An unbound scene requirement can be explicitly associated with an existing
+   episode-visible Scene asset by its plan `scene_id` or `shot_id`. This choice
+   is stored on the episode handoff, not written into the confirmed plan. It
+   expires when the requirement or chosen asset disappears. A plan-provided
+   `scene_asset_id` remains a separate source identity and uses the existing
+   replacement binding path.
+
 ### Place and time continuity
 
 Current runtime has no `place_continuity_id` or `time_continuity_id`.
