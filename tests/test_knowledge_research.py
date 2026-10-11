@@ -84,6 +84,9 @@ def test_capture_pins_checked_ip_and_verifies_original_hostname(monkeypatch):
 
 
 def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
     run_id = uuid.uuid4()
     owner_calls = []
 
@@ -94,6 +97,7 @@ def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypat
     monkeypatch.setattr(store, "transaction", transaction)
     monkeypatch.setattr(store, "ensure_research_collection", lambda connection, owner: owner_calls.append(owner) or str(uuid.uuid4()))
     monkeypatch.setattr(store, "create_research_run", lambda connection, owner, sid, query, cid, intent: owner_calls.append((owner, sid, query, cid)) or str(run_id))
+    monkeypatch.setattr(store, "reserve_discovery", lambda connection, owner: True)
     monkeypatch.setattr(store, "finish_discovery", lambda connection, owner, rid, candidates, error: owner_calls.append((owner, rid, candidates, error)))
     monkeypatch.setattr(store, "get_research_run", lambda connection, owner, rid: {"id": rid, "status": "awaiting_selection", "candidates": [{"url": "https://example.org/a", "access_status": "public"}], "jobs": []})
     monkeypatch.setattr(store, "select_research_sources", lambda connection, owner, rid, urls: owner_calls.append((owner, urls)) or {"id": rid, "status": "capturing", "jobs": []})
@@ -102,6 +106,7 @@ def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypat
     app.include_router(api.router)
     app.dependency_overrides[require_user_context] = lambda: UserContext("user", "owner-a", "A", "token")
     with TestClient(app) as client:
+        assert client.get("/knowledge/research-capability").json() == {"enabled": True}
         created = client.post("/knowledge/research", json={"query": "NVIDIA March 2026", "session_id": "session-a"})
         assert created.status_code == 201
         assert created.json()["id"] == str(run_id)
@@ -109,6 +114,36 @@ def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypat
         assert selected.status_code == 200
         assert owner_calls[0] == "owner-a"
         assert owner_calls[-1] == ("owner-a", ["https://example.org/a"])
+
+
+def test_research_smoke_gate_rejects_other_owners_before_storage_or_discovery(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
+    calls = []
+    monkeypatch.setattr(store, "transaction", lambda: calls.append("storage"))
+    monkeypatch.setattr(discovery, "discover", lambda *args: calls.append("discovery"))
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[require_user_context] = lambda: UserContext("user", "owner-b", "B", "token")
+    with TestClient(app) as client:
+        assert client.get("/knowledge/research-capability").json() == {"enabled": False}
+        assert client.post("/knowledge/research", json={
+            "query": "NVIDIA", "session_id": "session-b",
+        }).status_code == 403
+        assert client.post(f"/knowledge/research/{uuid.uuid4()}/sources", json={
+            "urls": ["https://example.org/a"],
+        }).status_code == 403
+    assert calls == []
+
+
+def test_research_smoke_gate_fails_closed_without_owner_list(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
+    monkeypatch.delenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", raising=False)
+    assert api.research_enabled_for("owner-a") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "*")
+    assert api.research_enabled_for("owner-a") is False
 
 
 def test_worker_imports_raw_capture_and_finishes_job(monkeypatch):

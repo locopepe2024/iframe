@@ -736,7 +736,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         if body.live_research:
             if body.input_media:
                 raise HTTPException(422, "联网研究暂不支持附件，请单独提交素材")
-            from .knowledge.api import start_research
+            from .knowledge.api import require_research_enabled, start_research
+            require_research_enabled(owner)
             intent = plan_research(ctx, session["model"], body.content, session["messages"])
             if intent.needs_clarification:
                 run = None
