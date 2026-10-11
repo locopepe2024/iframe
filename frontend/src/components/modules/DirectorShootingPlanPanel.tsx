@@ -303,11 +303,17 @@ export default function DirectorShootingPlanPanel() {
     const currentLineage = serverState?.current_lineage;
     const draftStale = Boolean(serverState?.draft_stale || stableLineageChanged(plan, currentLineage));
     const currentStale = Boolean(serverState?.current_stale);
+    const storyEventOptions = serverState?.current_story_events ?? [];
+    const knownStoryEventIds = new Set(storyEventOptions.map(event => event.id));
+    const unknownStoryEventIds = Array.from(new Set((plan?.scenes ?? []).flatMap(scene =>
+        scene.beats.flatMap(beat => beat.story_event_ids.filter(id => !knownStoryEventIds.has(id))),
+    )));
     const canAlignPlan = Boolean(plan && currentLineage && !serverState?.readiness_error
         && plan.source_revision === currentLineage.source_revision
         && plan.source_revision_id === currentLineage.source_revision_id
         && (plan.director_profile_revision !== currentLineage.director_profile_revision
             || plan.director_profile_hash !== currentLineage.director_profile_hash));
+    const canAlignNow = canAlignPlan && unknownStoryEventIds.length === 0;
     const dirty = useMemo(() => planFingerprint(plan) !== planFingerprint(savedPlan), [plan, savedPlan]);
     const scenes = plan?.scenes ?? [];
     const beats = scenes.flatMap(scene => scene.beats);
@@ -316,9 +322,6 @@ export default function DirectorShootingPlanPanel() {
     const localDirtyRef = useRef(dirty);
     localDirtyRef.current = dirty;
     const activeProjectId = useRef<string | undefined>(projectId);
-    const storyEventOptions = confirmedProfile?.story_map?.phases.flatMap(phase =>
-        phase.events.map(event => ({ id: event.event_id, label: `${phase.label} · ${event.title || event.description.slice(0, 48)}` })),
-    ) ?? [];
     const characterOptions = (currentProject?.characters ?? []).map(item => ({ id: item.id, label: `${item.name}${item.persona ? ` · ${item.persona}` : ""}` }));
     const propOptions = (currentProject?.props ?? []).map(item => ({ id: item.id, label: item.name }));
 
@@ -447,8 +450,8 @@ export default function DirectorShootingPlanPanel() {
         setAction("save");
         setError("");
         try {
-            const planToSave = canAlignPlan && currentLineage ? alignPlanToDirector(plan, currentLineage) : plan;
-            const allowStaleLineage = !canAlignPlan && (draftStale || Boolean(serverState?.readiness_error));
+            const planToSave = canAlignNow && currentLineage ? alignPlanToDirector(plan, currentLineage) : plan;
+            const allowStaleLineage = !canAlignNow && (draftStale || Boolean(serverState?.readiness_error));
             const result = allowStaleLineage
                 ? await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave, true)
                 : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave);
@@ -584,9 +587,10 @@ export default function DirectorShootingPlanPanel() {
                             : t("confirmedStale", { revision: serverState?.current_revision ?? 0 })}</span>
                         {plan && <>
                             <button type="button" onClick={openPlanEditor} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
-                            {canAlignPlan && <button type="button" onClick={save} disabled={locked} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 disabled:opacity-50">{t("adoptCurrentDirector")}</button>}
+                            {canAlignPlan && <button type="button" onClick={save} disabled={locked || !canAlignNow} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 disabled:opacity-50">{t("adoptCurrentDirector", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}</button>}
                         </>}
                         {staleChanges.length > 0 && <ul className="basis-full list-disc pl-5 text-xs text-amber-100/90">{staleChanges.map(change => <li key={change}>{change}</li>)}</ul>}
+                        {canAlignPlan && unknownStoryEventIds.length > 0 && <span className="basis-full text-xs text-amber-100/90">{t("unknownStoryEvents", { ids: unknownStoryEventIds.join(", ") })}</span>}
                     </span>
                 </div>
             )}
@@ -847,7 +851,14 @@ export default function DirectorShootingPlanPanel() {
                                                     <Field label={t("fields.beatDuration")} type="number" min={1} max={300} value={beat.duration_seconds} onChange={value => updateBeat(sceneIndex, beatIndex, { duration_seconds: value ? Number(value) : null })} />
                                                     <label className="inline-flex items-center gap-2 self-end pb-2 text-xs text-text-secondary"><input type="checkbox" checked={beat.keep_with_next} onChange={event => updateBeat(sceneIndex, beatIndex, { keep_with_next: event.target.checked })} className="accent-primary" />{t("fields.keepWithNext")}</label>
                                                     <div className="sm:col-span-2"><Field label={t("fields.dramaticPurpose")} value={beat.dramatic_purpose} multiline onChange={value => updateBeat(sceneIndex, beatIndex, { dramatic_purpose: value })} /></div>
-                                                    <div className="sm:col-span-2"><MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} /></div>
+                                                    <div className="sm:col-span-2 space-y-2">
+                                                        <MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} />
+                                                        {beat.story_event_ids.filter(id => !knownStoryEventIds.has(id)).map(id => (
+                                                            <button key={id} type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { story_event_ids: beat.story_event_ids.filter(value => value !== id) })} className="rounded border border-amber-400/40 px-2 py-1 text-xs text-amber-100 hover:bg-amber-400/10" aria-label={t("removeObsoleteEvent", { id })}>
+                                                                {t("removeObsoleteEvent", { id })}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>}
                                                 {expandedBeatIds.has(beat.beat_id) && <div className="mt-4 space-y-2">
                                                     {beat.shots.map((shot, shotIndex) => (
@@ -969,7 +980,7 @@ export default function DirectorShootingPlanPanel() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
-                            <button type="button" onClick={save} disabled={locked || (!dirty && !canAlignPlan) || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : canAlignPlan ? t("saveAndAlign") : t("saveDraft")}</button>
+                            <button type="button" onClick={save} disabled={locked || (!dirty && !canAlignNow) || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : canAlignNow ? t("saveAndAlign", { revision: Number(currentLineage?.director_profile_revision ?? 0) }) : t("saveDraft")}</button>
                             <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>

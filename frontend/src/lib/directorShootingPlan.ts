@@ -153,6 +153,7 @@ export interface DirectorShootingPlanState {
     readiness_error: string | null;
     draft_stale: boolean;
     current_stale: boolean;
+    current_story_events: { id: string; label: string }[];
     source_chunks: DirectorShootingPlanSourceChunk[];
 }
 
