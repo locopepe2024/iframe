@@ -22,6 +22,7 @@ import type {
     DirectorPlanBeat,
     DirectorPlanCastBinding,
     DirectorPlanDialogueLine,
+    DirectorPlanLightingBaseline,
     DirectorPlanScene,
     DirectorPlanShot,
     DirectorShootingPlan,
@@ -41,7 +42,7 @@ function emptyShot(order: number): DirectorPlanShot {
     return {
         shot_id: newId("plan-shot"), order, title: "", visual_intent: "", director_effect: "", performance_action: "",
         action_physics: "", shot_size: "", camera_angle: "", composition: "", camera_movement: "",
-        lighting: emptyLighting(), duration_seconds: 3, dialogue: [], ambient_sound: "",
+        lighting: emptyLighting(), lighting_override_reason: "", duration_seconds: 3, dialogue: [], ambient_sound: "",
         character_ids: [], prop_ids: [],
         cast_bindings: [], scene_binding: null, prop_bindings: [],
     };
@@ -75,6 +76,7 @@ function emptyBeat(order: number): DirectorPlanBeat {
 function emptyScene(order: number): DirectorPlanScene {
     return {
         scene_id: newId("plan-scene"), order, scene_ref: "", heading: "", location: "", time_anchor: "",
+        place_continuity_id: null, time_continuity_id: null,
         continues_previous_scene: false, continuity_in: "", continuity_out: "", duration_seconds: null,
         environment_atmosphere: "", unresolved_questions: [], source_chunk_refs: [], prop_ids: [],
         beats: [emptyBeat(0)],
@@ -90,6 +92,7 @@ function emptyPlan(lineage: Record<string, unknown>): DirectorShootingPlan {
         director_profile_hash: String(lineage.director_profile_hash ?? ""),
         effective_style_hash: String(lineage.effective_style_hash ?? ""),
         scenes: [emptyScene(0)],
+        lighting_baselines: [],
         unresolved_questions: [],
         generated_at: null,
     };
@@ -370,6 +373,23 @@ export default function DirectorShootingPlanPanel() {
     const updateScene = (sceneIndex: number, patch: Partial<DirectorPlanScene>) => updatePlan(current => ({
         ...current,
         scenes: current.scenes.map((scene, index) => index === sceneIndex ? { ...scene, ...patch } : scene),
+    }));
+
+    const addLightingBaseline = (placeId: string, timeId: string) => updatePlan(current => ({
+        ...current,
+        lighting_baselines: [...(current.lighting_baselines ?? []), {
+            place_continuity_id: placeId,
+            time_continuity_id: timeId,
+            story_time: "", daylight_phase: "", weather: "", shadow_direction: "",
+            lighting: emptyLighting(),
+        }],
+    }));
+
+    const updateLightingBaseline = (placeId: string, timeId: string, patch: Partial<DirectorPlanLightingBaseline>) => updatePlan(current => ({
+        ...current,
+        lighting_baselines: (current.lighting_baselines ?? []).map(item =>
+            item.place_continuity_id === placeId && item.time_continuity_id === timeId
+                ? { ...item, ...patch } : item),
     }));
 
     const updateBeat = (sceneIndex: number, beatIndex: number, patch: Partial<DirectorPlanBeat>) => updatePlan(current => ({
@@ -705,8 +725,36 @@ export default function DirectorShootingPlanPanel() {
                                         <Field label={t("fields.heading")} value={scene.heading} placeholder={t("fields.headingPlaceholder")} hint={t("fields.headingHint")} onChange={value => updateScene(sceneIndex, { heading: value })} />
                                         <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
+                                        <Field label={t("fields.placeContinuityId")} value={scene.place_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { place_continuity_id: value.trim() || null })} />
+                                        <Field label={t("fields.timeContinuityId")} value={scene.time_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { time_continuity_id: value.trim() || null })} />
                                         <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
                                     </div>
+                                    {scene.place_continuity_id && scene.time_continuity_id && (() => {
+                                        const placeId = scene.place_continuity_id;
+                                        const timeId = scene.time_continuity_id;
+                                        const baseline = (plan.lighting_baselines ?? []).find(item =>
+                                            item.place_continuity_id === placeId && item.time_continuity_id === timeId);
+                                        return <fieldset className="border-t border-border pt-3">
+                                            <legend className="text-xs font-medium text-text-secondary">{t("fields.continuityBaseline")}</legend>
+                                            {!baseline ? <button type="button" onClick={() => addLightingBaseline(placeId, timeId)} disabled={locked}
+                                                className="mt-2 inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-surface disabled:opacity-50">
+                                                <Plus size={13} aria-hidden="true" />{t("fields.addContinuityBaseline")}
+                                            </button> : <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                                <Field label={t("fields.storyTime")} value={baseline.story_time} onChange={value => updateLightingBaseline(placeId, timeId, { story_time: value })} />
+                                                <Field label={t("fields.daylightPhase")} value={baseline.daylight_phase} onChange={value => updateLightingBaseline(placeId, timeId, { daylight_phase: value })} />
+                                                <Field label={t("fields.weather")} value={baseline.weather} onChange={value => updateLightingBaseline(placeId, timeId, { weather: value })} />
+                                                <Field label={t("fields.shadowDirection")} value={baseline.shadow_direction} onChange={value => updateLightingBaseline(placeId, timeId, { shadow_direction: value })} />
+                                                <Field label={t("fields.keySource")} value={baseline.lighting.key_source} onChange={value => updateLightingBaseline(placeId, timeId, { lighting: { ...baseline.lighting, key_source: value } })} />
+                                                <Field label={t("fields.colorTone")} value={baseline.lighting.color_tone} onChange={value => updateLightingBaseline(placeId, timeId, { lighting: { ...baseline.lighting, color_tone: value } })} />
+                                                <Field label={t("fields.contrast")} value={baseline.lighting.contrast} onChange={value => updateLightingBaseline(placeId, timeId, { lighting: { ...baseline.lighting, contrast: value } })} />
+                                                <Field label={t("fields.practicalSources")} value={baseline.lighting.practical_sources.join("\n")} multiline onChange={value => updateLightingBaseline(placeId, timeId, { lighting: { ...baseline.lighting, practical_sources: value.split("\n").map(item => item.trim()).filter(Boolean) } })} />
+                                                <button type="button" onClick={() => updatePlan(current => ({ ...current,
+                                                    lighting_baselines: (current.lighting_baselines ?? []).filter(item =>
+                                                        item.place_continuity_id !== placeId || item.time_continuity_id !== timeId),
+                                                }))} disabled={locked} className="w-fit text-xs text-red-300 hover:underline disabled:opacity-50">{t("fields.removeContinuityBaseline")}</button>
+                                            </div>}
+                                        </fieldset>;
+                                    })()}
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         <Field label={t("fields.continuityIn")} value={scene.continuity_in} multiline onChange={value => updateScene(sceneIndex, { continuity_in: value })} />
                                         <Field label={t("fields.continuityOut")} value={scene.continuity_out} multiline onChange={value => updateScene(sceneIndex, { continuity_out: value })} />
@@ -845,6 +893,7 @@ export default function DirectorShootingPlanPanel() {
                                                                 </div>
                                                                 <fieldset className="rounded-md border border-border p-3">
                                                                     <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
+                                                                    <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
                                                                     <div className="grid gap-3 sm:grid-cols-3">
                                                                         <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
                                                                         <Field label={t("fields.colorTone")} value={shot.lighting.color_tone} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, color_tone: value } })} />

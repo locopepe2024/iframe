@@ -50,6 +50,12 @@ an older document uses `scene_id` or "revision" without a namespace, use the
 definitions below. Existing JSON field names remain compatibility names until
 an explicit migration is implemented.
 
+The episode-specific look/view, shot cast, and variant lifecycle is defined in
+`2026-10-11-episode-entity-director-plan-asset-view-contract-v1.md`. In
+particular, one narrative person should resolve to one live Character asset
+per episode; scene appearance and camera distance do not allocate Character
+IDs. This is a target rule, not a claim about legacy era-variant assets.
+
 Implementation note (2026-10-11, Assets deletion refresh): after a successful
 deletion, the Assets view invalidates its prior sync diff, context, bindings,
 and series picker cache. An episode with a previously synced context reruns
@@ -155,9 +161,17 @@ to disambiguate before migration.
    choice or creation. It must not produce an `EpisodeAssetBinding.asset_id`.
    An accidental string match between plan and asset IDs is never a binding.
 
+   An unbound scene requirement can be explicitly associated with an existing
+   episode-visible Scene asset by its plan `scene_id` or `shot_id`. This choice
+   is stored on the episode handoff, not written into the confirmed plan. It
+   expires when the requirement or chosen asset disappears. A plan-provided
+   `scene_asset_id` remains a separate source identity and uses the existing
+   replacement binding path.
+
 ### Place and time continuity
 
-Current runtime has no `place_continuity_id` or `time_continuity_id`.
+The plan runtime now has `place_continuity_id` and `time_continuity_id`; legacy
+plans may lack them, and render-output compliance is not yet verified.
 `scene_asset_id` identifies reusable visual material; plan `scene_id`
 identifies one planned scene. Neither establishes that different views show
 the same physical street or occur during the same continuous dusk. Current
@@ -189,7 +203,7 @@ Script source revision -> Director profile revision -> shooting plan revision
                                                      -> Storyboard reference-package revision
                                                      -> Shot Design task/take
 
-Semantic asset ID -> asset revision (target) -> variant binding -> media ID
+Semantic asset ID -> asset revision -> variant binding -> media ID
                  \-> plan/handoff references by ID
 ```
 
@@ -198,9 +212,10 @@ Semantic asset ID -> asset revision (target) -> variant binding -> media ID
   revision; confirmation appends a confirmed plan revision only when content
   changes. Confirming a plan does not mutate asset or storyboard revisions.
 - A change of visual material, current variant, or role belongs to an asset
-  revision **under the same asset ID** in the target model. Current code often
-  appends/selects variants immediately and has no committed asset revision.
-  Changing an asset's image does not rewrite a confirmed plan.
+  revision **under the same asset ID**. Asset revision snapshots and explicit
+  confirmation status now persist; legacy attached variants may still lack
+  review or a `media_id`. Changing an asset's image does not rewrite a
+  confirmed plan.
 - Episode handoff/sync cites the confirmed plan revision/hash. It recomputes
   desired asset bindings, reuses unchanged bindings, and marks missing or
   changed ones for review. It is not an asset revision and does not prove that
@@ -222,6 +237,41 @@ Semantic asset ID -> asset revision (target) -> variant binding -> media ID
 | Plan no longer needs an asset | No new asset ID; retire placement/delete only after explicit impact review | New plan revision omits reference; old plan remains auditable. |
 | Different semantic person/place/prop replaces the old one | New `asset_id`, or choose another existing asset ID | Preview and explicitly rebind affected plan draft/shot references; confirm a new plan revision. |
 | Force-delete a referenced asset | Old asset ID is retired/unresolvable, never reused for a different object | Historical plan IDs remain; current bindings become missing/stale and require explicit replacement. Current runtime clears frame/current binding refs but has incomplete historical resolution UI. |
+
+### Identity resolution before ID assignment
+
+Extraction wording is not an asset identity decision. Two descriptions such as
+“街角的粮店” and “街边的粮店” may describe the same physical shop, but the
+extractor cannot establish that from wording alone. Extracted mentions need
+temporary candidate IDs. Before assigning formal asset IDs, resolution first
+groups mentions that are established as one semantic entity, then compares
+each group with current assets:
+
+| Resolution decision | Meaning | Allowed effect |
+| --- | --- | --- |
+| `same_as_candidate` | Two extracted mentions are confirmed to describe one entity | Keep one candidate group; assign at most one formal asset ID to the group |
+| `same_as_existing` | A candidate group is confirmed as an existing semantic asset | Reuse its `asset_id`; create a new asset revision for changed description/material decisions |
+| `new_entity` | A candidate group is confirmed distinct from current assets | Allocate one new `asset_id` for the group |
+| `needs_review` | More than one identity interpretation remains plausible | Do not allocate or rewrite a formal asset ID; ask for one review of the ambiguous candidate group |
+
+Name similarity, shared words, scene order, or a model's confidence score alone
+cannot move `needs_review` to either final state. The identity resolver may use
+structured evidence such as an explicit return to the same landmark, a stable
+script reference, or an existing asset chosen by the user. A confirmed
+`place_continuity_id` can narrow the review but does not alone prove two
+visual Scene assets are identical. A confirmed shooting plan is never
+rewritten during this step.
+
+This makes the lifecycle explicit: extraction proposes language, identity
+resolution decides semantic continuity, asset application persists the decision,
+and plan sync only projects the resulting live asset IDs. “Re-extraction creates
+a new asset ID” is therefore not a valid general rule; it is only the result of
+an explicit `new_entity` decision.
+
+This is a target contract, not current runtime behavior. The current parser
+allocates new UUIDs while creating each extracted Scene and Prop, and applying
+an edited preview creates them again. It has no candidate grouping or reviewed
+identity-resolution step.
 
 An empty asset envelope is valid. "Delete all pictures but keep this character"
 is an asset-visual reset, not semantic asset deletion. A shot-local keyframe

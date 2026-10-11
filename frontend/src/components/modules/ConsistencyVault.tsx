@@ -69,6 +69,29 @@ export default function ConsistencyVault() {
         scenes: Array<{ id: string; name: string }>;
         props: Array<{ id: string; name: string }>;
     }>({ characters: [], scenes: [], props: [] });
+    const [globalAssets, setGlobalAssets] = useState<{
+        characters: Array<{ id: string; name: string }>;
+        scenes: Array<{ id: string; name: string }>;
+        props: Array<{ id: string; name: string }>;
+    }>({ characters: [], scenes: [], props: [] });
+
+    useEffect(() => {
+        if (!currentProject?.id) {
+            setGlobalAssets({ characters: [], scenes: [], props: [] });
+            return;
+        }
+        let active = true;
+        void api.getAssetReferenceIndex(currentProject.id).then(index => {
+            if (!active) return;
+            const assets = index.assets.filter(item => item.source_scope === "global");
+            setGlobalAssets({
+                characters: assets.filter(item => item.asset_type === "character").map(item => ({ id: item.asset_id, name: item.name })),
+                scenes: assets.filter(item => item.asset_type === "scene").map(item => ({ id: item.asset_id, name: item.name })),
+                props: assets.filter(item => item.asset_type === "prop").map(item => ({ id: item.asset_id, name: item.name })),
+            });
+        }).catch(() => { if (active) setGlobalAssets({ characters: [], scenes: [], props: [] }); });
+        return () => { active = false; };
+    }, [currentProject?.id]);
 
     useEffect(() => {
         if (!currentProject?.series_id) {
@@ -508,6 +531,22 @@ export default function ConsistencyVault() {
         }
     };
 
+    const handleBindPlanScene = async (sceneId: string, assetId: string) => {
+        if (!currentProject || !episodeAssetState.context || !assetId) return;
+        setBindingPersonId(`scene:${sceneId}`);
+        try {
+            const diff = await api.bindEpisodePlanScene(currentProject.id, sceneId, null,
+                assetId, episodeAssetState.context.shooting_plan_revision);
+            setEpisodeAssetSync(diff);
+            setEpisodeAssetState({ context: diff.context, bindings: diff.bindings });
+            updateProject(currentProject.id, await api.getProject(currentProject.id));
+        } catch (error) {
+            toast.error("场景资产关联失败", { body: extractErrorDetail(error) });
+        } finally {
+            setBindingPersonId(null);
+        }
+    };
+
     // Upload handlers
     const handleOpenUploadModal = (asset: any, type: string) => {
         setUploadTarget({
@@ -584,23 +623,28 @@ export default function ConsistencyVault() {
             {episodeAssetSync && (
                 <div className="mx-6 mt-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-text-secondary">
                     <span className="font-medium text-foreground">拍摄计划上下文已同步：</span>{" "}
-                    新增 {episodeAssetSync.new_bindings?.length || 0} · 可复用 {episodeAssetSync.reusable_bindings?.length || 0} ·
-                    变更 {episodeAssetSync.changed_bindings?.length || 0} · 过期 {episodeAssetSync.stale_bindings?.length || 0}。
+                    新增记录 {episodeAssetSync.new_bindings?.length || 0} · 可复用记录 {episodeAssetSync.reusable_bindings?.length || 0} ·
+                    变更记录 {episodeAssetSync.changed_bindings?.length || 0} · 过期记录 {episodeAssetSync.stale_bindings?.length || 0}。
                     资产不会被自动生成或覆盖。
-                    {!!episodeAssetSync.unresolved_bindings.length && <span> 待绑定 {episodeAssetSync.unresolved_bindings.length}，请在拍摄计划中检查资产引用。</span>}
+                    {!!episodeAssetSync.unresolved_bindings.length && <span> 待处理 {episodeAssetSync.unresolved_bindings.length} 条需求（含逐镜头场景需求），请在下方关联现有资产或检查拍摄计划引用。</span>}
                 </div>
             )}
 
             {((episodeAssetSync?.bindings.length || episodeAssetState.bindings.length) > 0 ||
+                episodeAssetState.context?.scenes.some(scene => !scene.scene_asset_id &&
+                    (!episodeAssetState.context?.shots.some(shot => shot.scene_id === scene.scene_id) ||
+                    episodeAssetState.context?.shots.some(shot => shot.scene_id === scene.scene_id && !shot.scene_asset_id))) ||
                 getUnboundCharacterRequirements(episodeAssetState.context).length > 0) && currentProject && (
                 <ShootingPlanAssetRequirements
                     bindings={episodeAssetSync?.bindings || episodeAssetState.bindings}
                     context={episodeAssetState.context}
                     project={currentProject}
                     seriesAssets={seriesAssets}
+                    globalAssets={globalAssets}
                     bindingPersonId={bindingPersonId}
                     onBindPersonAsset={handleBindPersonAsset}
                     onBindPlanAsset={handleBindPlanAsset}
+                    onBindPlanScene={handleBindPlanScene}
                     onOpenAsset={(assetType, assetId) => {
                         setActiveTab(assetType);
                         setSelectedAssetType(assetType);
@@ -754,9 +798,11 @@ function ShootingPlanAssetRequirements({
     context,
     project,
     seriesAssets,
+    globalAssets,
     bindingPersonId,
     onBindPersonAsset,
     onBindPlanAsset,
+    onBindPlanScene,
     onOpenAsset,
 }: {
     bindings: EpisodeVisualContextState["bindings"];
@@ -764,9 +810,12 @@ function ShootingPlanAssetRequirements({
     project: any;
     seriesAssets: { characters: Array<{ id: string; name: string }>;
         scenes: Array<{ id: string; name: string }>; props: Array<{ id: string; name: string }> };
+    globalAssets: { characters: Array<{ id: string; name: string }>;
+        scenes: Array<{ id: string; name: string }>; props: Array<{ id: string; name: string }> };
     bindingPersonId: string | null;
     onBindPersonAsset: (personId: string, assetId: string | null) => Promise<void>;
     onBindPlanAsset: (assetType: "scene" | "prop", planAssetIds: string[], assetId: string) => Promise<void>;
+    onBindPlanScene: (sceneId: string, assetId: string) => Promise<void>;
     onOpenAsset: (assetType: "character" | "scene" | "prop", assetId: string) => void;
 }) {
     const scopeLabel = (source?: "episode" | "series" | "global") =>
@@ -783,6 +832,9 @@ function ShootingPlanAssetRequirements({
     }
     const representedCharacterIds = new Set(Array.from(people.values()).flatMap(item => item.assetIds));
     const currentBindings = bindings.filter(item => item.status !== "stale");
+    const unboundScenes = context?.scenes.filter(scene => !scene.scene_asset_id &&
+        (!context.shots.some(shot => shot.scene_id === scene.scene_id) ||
+        context.shots.some(shot => shot.scene_id === scene.scene_id && !shot.scene_asset_id))) ?? [];
     const groups: Array<{ type: "character" | "scene" | "prop"; label: string; items: typeof bindings }> = [
         { type: "character", label: "角色", items: currentBindings.filter(item => item.asset_type === "character" && !representedCharacterIds.has(item.asset_id)) },
         { type: "scene", label: "场景", items: currentBindings.filter(item => item.asset_type === "scene") },
@@ -791,8 +843,12 @@ function ShootingPlanAssetRequirements({
     const assetsForType = (type: "character" | "scene" | "prop") => {
         const key = type === "character" ? "characters" : type === "scene" ? "scenes" : "props";
         const local: Array<{ id: string; name: string; source?: "episode" | "series" | "global" }> = project[key] ?? [];
-        return [...local, ...seriesAssets[key].filter(asset => !local.some(item => item.id === asset.id))
-            .map(asset => ({ ...asset, source: "series" as const }))];
+        const series = seriesAssets[key].filter(asset => !local.some(item => item.id === asset.id))
+            .map(asset => ({ ...asset, source: "series" as const }));
+        const globals = globalAssets[key].filter(asset => !local.some(item => item.id === asset.id)
+            && !series.some(item => item.id === asset.id))
+            .map(asset => ({ ...asset, source: "global" as const }));
+        return [...local, ...series, ...globals];
     };
     const getAsset = (type: "character" | "scene" | "prop", id: string) =>
         assetsForType(type).find(asset => asset.id === id);
@@ -817,14 +873,14 @@ function ShootingPlanAssetRequirements({
         }
         return sources;
     };
-    const statusLabel = (status: string) => status === "accepted" ? "已采纳" : status === "stale" ? "需复核" : "待生成";
+    const statusLabel = (status: string) => status === "accepted" ? "已采纳" : status === "stale" ? "需复核" : "候选引用";
 
     return (
         <section className="mx-6 mt-3 rounded-lg border border-glass-border bg-surface px-4 py-3" aria-label="拍摄计划资产需求">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">拍摄计划资产需求</h3>
-                    <p className="mt-1 text-xs text-text-secondary">已删除的资产不会由同步恢复。仍引用旧资产的计划需重新确认或关联当前资产。</p>
+                    <p className="mt-1 text-xs text-text-secondary">重新提炼会生成新的资产 ID；场景和道具若仍显示待关联，请在对应需求中选择新资产。同步不会按名称自动关联或生成资产。</p>
                 </div>
                 <span className="text-xs text-text-muted">{currentBindings.length} 条绑定{unboundCharacters.length > 0 && ` · ${unboundCharacters.length} 个人物待绑定`}</span>
             </div>
@@ -834,7 +890,8 @@ function ShootingPlanAssetRequirements({
                         <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
                             <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? people.size : 0)}</span>
                         </div>
-                        {group.items.length === 0 && (group.type !== "character" || people.size === 0) ? (
+                        {group.items.length === 0 && (group.type !== "character" || people.size === 0)
+                            && (group.type !== "scene" || unboundScenes.length === 0) ? (
                             <p className="mt-2 text-xs text-text-muted">暂无拍摄计划需求</p>
                         ) : (
                             <div className={`mt-2 space-y-2 overflow-y-auto ${group.type === "character" ? "max-h-80" : "max-h-32"}`}>
@@ -846,7 +903,7 @@ function ShootingPlanAssetRequirements({
                                         <div key={`${group.type}:${binding.asset_id}`} className="rounded border border-glass-border/70 px-2 py-1.5">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-xs text-foreground">{asset ? `${asset.name} · ${scopeLabel(asset.source)}` : "计划需求（待关联资产）"}</p>
+                                                    <p className="truncate text-xs text-foreground">{asset ? `${asset.name} · ${scopeLabel(asset.source)}` : `计划需求（待关联资产） · ${binding.asset_id}`}</p>
                                                     <p className="text-[0.6875rem] text-text-muted">{binding.scene_ids.length} 个场景 · {binding.shot_ids.length} 个镜头 · {asset ? statusLabel(binding.status) : "待关联资产"}</p>
                                                 </div>
                                                 {asset && project[group.type === "scene" ? "scenes" : group.type === "prop" ? "props" : "characters"]?.some((item: { id: string }) => item.id === asset.id) &&
@@ -862,6 +919,21 @@ function ShootingPlanAssetRequirements({
                                         </div>
                                     );
                                 })}
+                                {group.type === "scene" && unboundScenes.map(scene => (
+                                    <div key={`unbound-scene:${scene.scene_id}`} className="rounded border border-glass-border/70 px-2 py-1.5">
+                                        <p className="text-xs text-foreground">{scene.scene_ref || scene.location || scene.scene_id}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">
+                                            {context?.shots.filter(shot => shot.scene_id === scene.scene_id && !shot.scene_asset_id).length ?? 0} 个镜头 · 场景资产待关联
+                                        </p>
+                                        <select aria-label={`为计划场景 ${scene.scene_ref || scene.location || scene.scene_id} 选择资产`}
+                                            value="" disabled={bindingPersonId !== null}
+                                            onChange={event => void onBindPlanScene(scene.scene_id, event.target.value)}
+                                            className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
+                                            <option value="">选择场景资产</option>
+                                            {assetsForType("scene").map(item => <option key={item.id} value={item.id}>{item.name} · {scopeLabel(item.source)}</option>)}
+                                        </select>
+                                    </div>
+                                ))}
                                 {group.type === "character" && Array.from(people.entries()).map(([personId, requirement]) => (
                                     <div key={`person:${personId}`} className="rounded border border-glass-border/70 px-2 py-1.5">
                                         <div className="flex items-start justify-between gap-2">
@@ -870,7 +942,7 @@ function ShootingPlanAssetRequirements({
                                                 <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", requirement.assetIds[0])}>打开资产</button>
                                             )}
                                         </div>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "待生成") : "待关联角色资产"}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "候选引用") : "待关联角色资产"}</p>
                                         <select aria-label={`为计划人物 ${requirement.label} 选择角色资产`}
                                             value={project.episode_person_asset_bindings?.[personId] ?? (requirement.assetIds.length === 1 ? requirement.assetIds[0] : "")}
                                             disabled={bindingPersonId !== null}

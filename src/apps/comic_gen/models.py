@@ -1142,6 +1142,16 @@ class DirectorPlanLighting(_DirectorShootingPlanModel):
     practical_sources: List[str] = Field(default_factory=list, max_length=12)
 
 
+class DirectorPlanLightingBaseline(_DirectorShootingPlanModel):
+    place_continuity_id: str = Field(..., min_length=1, max_length=120)
+    time_continuity_id: str = Field(..., min_length=1, max_length=120)
+    story_time: str = Field("", max_length=160)
+    daylight_phase: str = Field("", max_length=120)
+    weather: str = Field("", max_length=160)
+    shadow_direction: str = Field("", max_length=160)
+    lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
+
+
 class DirectorPlanCastBinding(_DirectorShootingPlanModel):
     person_id: str = Field(..., min_length=1, max_length=120)
     era_variant_id: Optional[str] = Field(None, max_length=120)
@@ -1178,6 +1188,7 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     composition: str = Field("", max_length=1200)
     camera_movement: str = Field("", max_length=500)
     lighting: DirectorPlanLighting = Field(default_factory=DirectorPlanLighting)
+    lighting_override_reason: str = Field("", max_length=500)
     duration_seconds: Optional[int] = Field(None, ge=1, le=30)
     dialogue: List[DirectorPlanDialogueLine] = Field(default_factory=list, max_length=20)
     ambient_sound: str = Field("", max_length=1000)
@@ -1238,6 +1249,8 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
     heading: str = Field("", max_length=240)
     location: str = Field("", max_length=240)
     time_anchor: str = Field("", max_length=160)
+    place_continuity_id: Optional[str] = Field(None, max_length=120)
+    time_continuity_id: Optional[str] = Field(None, max_length=120)
     continues_previous_scene: bool = False
     continuity_in: str = Field("", max_length=1200)
     continuity_out: str = Field("", max_length=1200)
@@ -1271,6 +1284,7 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
     director_profile_hash: str = Field(..., min_length=1, max_length=128)
     effective_style_hash: str = Field(..., min_length=1, max_length=128)
     scenes: List[DirectorPlanScene] = Field(default_factory=list, max_length=160)
+    lighting_baselines: List[DirectorPlanLightingBaseline] = Field(default_factory=list, max_length=160)
     unresolved_questions: List[str] = Field(default_factory=list, max_length=80)
     generated_at: Optional[float] = Field(None, ge=0)
 
@@ -1288,6 +1302,10 @@ class DirectorShootingPlan(_DirectorShootingPlanModel):
             raise ValueError("shooting-plan beat IDs must be unique")
         if len(shot_ids) != len(set(shot_ids)):
             raise ValueError("shooting-plan shot IDs must be unique")
+        baseline_keys = [(item.place_continuity_id, item.time_continuity_id)
+                         for item in self.lighting_baselines]
+        if len(baseline_keys) != len(set(baseline_keys)):
+            raise ValueError("shooting-plan lighting baselines must have unique place/time pairs")
         return self
 
 
@@ -1315,6 +1333,8 @@ class EpisodeVisualSceneContext(BaseModel):
     scene_ref: str = ""
     location: str = ""
     time_anchor: str = ""
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
     interior_exterior: Optional[str] = None
     time_of_day: Optional[str] = None
     season: Optional[str] = None
@@ -1356,6 +1376,9 @@ class EpisodeVisualShotContext(BaseModel):
     composition: str = ""
     camera_movement: str = ""
     lighting: Dict[str, Any] = Field(default_factory=dict)
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
+    lighting_override_reason: str = ""
 
 
 class EpisodeVisualContext(BaseModel):
@@ -2740,6 +2763,9 @@ class Script(BaseModel):
     )
     episode_scene_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Scene asset ID to current episode-visible asset ID"
+    )
+    episode_plan_scene_asset_bindings: Dict[str, str] = Field(
+        default_factory=dict, description="Explicit plan scene/shot requirement to episode-visible Scene asset ID"
     )
     episode_prop_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Prop asset ID to current episode-visible asset ID"
