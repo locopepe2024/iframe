@@ -50,6 +50,12 @@ an older document uses `scene_id` or "revision" without a namespace, use the
 definitions below. Existing JSON field names remain compatibility names until
 an explicit migration is implemented.
 
+The episode-specific look/view, shot cast, and variant lifecycle is defined in
+`2026-10-11-episode-entity-director-plan-asset-view-contract-v1.md`. In
+particular, one narrative person should resolve to one live Character asset
+per episode; scene appearance and camera distance do not allocate Character
+IDs. This is a target rule, not a claim about legacy era-variant assets.
+
 Implementation note (2026-10-11, Assets deletion refresh): after a successful
 deletion, the Assets view invalidates its prior sync diff, context, bindings,
 and series picker cache. An episode with a previously synced context reruns
@@ -164,7 +170,8 @@ to disambiguate before migration.
 
 ### Place and time continuity
 
-Current runtime has no `place_continuity_id` or `time_continuity_id`.
+The plan runtime now has `place_continuity_id` and `time_continuity_id`; legacy
+plans may lack them, and render-output compliance is not yet verified.
 `scene_asset_id` identifies reusable visual material; plan `scene_id`
 identifies one planned scene. Neither establishes that different views show
 the same physical street or occur during the same continuous dusk. Current
@@ -196,7 +203,7 @@ Script source revision -> Director profile revision -> shooting plan revision
                                                      -> Storyboard reference-package revision
                                                      -> Shot Design task/take
 
-Semantic asset ID -> asset revision (target) -> variant binding -> media ID
+Semantic asset ID -> asset revision -> variant binding -> media ID
                  \-> plan/handoff references by ID
 ```
 
@@ -205,9 +212,10 @@ Semantic asset ID -> asset revision (target) -> variant binding -> media ID
   revision; confirmation appends a confirmed plan revision only when content
   changes. Confirming a plan does not mutate asset or storyboard revisions.
 - A change of visual material, current variant, or role belongs to an asset
-  revision **under the same asset ID** in the target model. Current code often
-  appends/selects variants immediately and has no committed asset revision.
-  Changing an asset's image does not rewrite a confirmed plan.
+  revision **under the same asset ID**. Asset revision snapshots and explicit
+  confirmation status now persist; legacy attached variants may still lack
+  review or a `media_id`. Changing an asset's image does not rewrite a
+  confirmed plan.
 - Episode handoff/sync cites the confirmed plan revision/hash. It recomputes
   desired asset bindings, reuses unchanged bindings, and marks missing or
   changed ones for review. It is not an asset revision and does not prove that

@@ -1,12 +1,15 @@
 # Plan Continuity and Entity Re-extraction V1
 
-Status: implementation in progress, 2026-10-11.
+Status: partial runtime implementation; extraction identity reconciliation is a
+target design, 2026-10-11. See
+`2026-10-11-episode-entity-director-plan-asset-view-contract-v1.md` for the
+end-to-end view and storyboard contract.
 
 ## Observed
 
-- Shooting-plan scene IDs and asset IDs have different meanings. Plan location
-  and time labels are text; no place/time continuity IDs or reviewed lighting
-  baseline exist in runtime data.
+- Shooting-plan scene IDs and asset IDs have different meanings. Place/time
+  continuity IDs and reviewed lighting baselines now exist in plan runtime
+  data; their presence does not prove that generated images or video obey them.
 - Entity extraction builds a fresh Script with new entity IDs. Applying it
   replaces the extracted entity collections as intended by the asset identity
   contract. Confirmed shooting plans and extraction results therefore have
@@ -24,10 +27,14 @@ Status: implementation in progress, 2026-10-11.
    snapshot.
 3. The editor exposes the IDs and baseline for review. Generated plan text may
    suggest continuity, but only confirmed structured values establish a join.
-4. Re-extraction intentionally creates new Scene and Prop asset IDs. The
-   confirmed shooting plan remains immutable; sync must expose any old or
-   unbound reference as a typed requirement and offer an explicit choice of
-   the newly extracted asset. Similar names alone never establish identity.
+4. Current re-extraction creates fresh Scene and Prop IDs; this is the runtime
+   behavior to replace, not the target identity rule. Resolve mentions within
+   one extraction, then compare candidates with current live assets. A
+   confirmed `same_as_existing` decision keeps the asset ID and advances its
+   revision; `new_entity` receives a new ID; ambiguity stays `needs_review`.
+   The confirmed plan remains immutable. Sync reports unresolved historical
+   references and accepts reviewed current-asset choices. Similar names alone
+   never establish identity.
 
 ## Verification
 
@@ -35,9 +42,10 @@ Status: implementation in progress, 2026-10-11.
   verify IDs and baseline persist and projected shots inherit the same light.
 - A conflicting shot with no override is flagged; an explicit override reason
   survives confirmation and projection. Legacy plans remain valid.
-- Re-extract an existing episode with a confirmed plan. Verify Scene and Prop
-  proposals receive new IDs and plan requirements remain visible until the
-  user explicitly binds them to one of those IDs.
+- Re-extract an existing episode with a confirmed plan. Under current runtime,
+  verify fresh Scene/Prop IDs leave plan requirements visible. For the target
+  resolver, verify `same_as_existing` preserves IDs, `new_entity` allocates
+  IDs, and ambiguous groups stay pending review.
 - Run targeted backend and frontend tests, typecheck, build, and diff checks.
 
 ## Boundaries
