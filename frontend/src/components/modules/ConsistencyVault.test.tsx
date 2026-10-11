@@ -134,6 +134,27 @@ it("offers an existing scene asset for a plan scene with no asset ID", async () 
     await waitFor(() => expect(screen.queryByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" })).not.toBeInTheDocument());
 });
 
+it("explains that re-extracted scene and prop IDs need explicit plan bindings", async () => {
+    const project = { id: "episode-1", characters: [],
+        scenes: [{ id: "new-scene", name: "长街" }], props: [{ id: "new-prop", name: "竹篮" }] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({
+        context: { shooting_plan_revision: 1,
+            scenes: [{ scene_id: "plan-scene", scene_ref: "长街", scene_asset_id: "old-scene", plan_scene_asset_id: "old-scene" }],
+            shots: [], characters: [], props: [{ prop_id: "old-prop", plan_prop_id: "old-prop", scene_ids: ["plan-scene"], shot_ids: [] }] },
+        bindings: [
+            { asset_type: "scene", asset_id: "old-scene", status: "suggested", scene_ids: ["plan-scene"], shot_ids: [] },
+            { asset_type: "prop", asset_id: "old-prop", status: "suggested", scene_ids: ["plan-scene"], shot_ids: [] },
+        ],
+    });
+
+    render(<ConsistencyVault />);
+    const requirements = await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    expect(within(requirements).getByText(/重新提炼会生成新的资产 ID/)).toBeInTheDocument();
+    expect(within(requirements).getAllByRole("option", { name: /长街 · 本集资产/ })).toHaveLength(1);
+    expect(within(requirements).getAllByRole("option", { name: /竹篮 · 本集资产/ })).toHaveLength(1);
+});
+
 it("recognizes personal-library scene and prop assets in plan requirements", async () => {
     const project = { id: "episode-1", characters: [], scenes: [], props: [] };
     useProjectStore.setState({ currentProject: project as any });

@@ -7,6 +7,16 @@ export interface DirectorPlanLighting {
     practical_sources: string[];
 }
 
+export interface DirectorPlanLightingBaseline {
+    place_continuity_id: string;
+    time_continuity_id: string;
+    story_time: string;
+    daylight_phase: string;
+    weather: string;
+    shadow_direction: string;
+    lighting: DirectorPlanLighting;
+}
+
 export interface DirectorPlanDialogueLine {
     speaker: string;
     line: string;
@@ -50,6 +60,7 @@ export interface DirectorPlanShot {
     composition: string;
     camera_movement: string;
     lighting: DirectorPlanLighting;
+    lighting_override_reason?: string;
     duration_seconds: number | null;
     dialogue: DirectorPlanDialogueLine[];
     ambient_sound: string;
@@ -81,6 +92,8 @@ export interface DirectorPlanScene {
     heading: string;
     location: string;
     time_anchor: string;
+    place_continuity_id?: string | null;
+    time_continuity_id?: string | null;
     continues_previous_scene: boolean;
     continuity_in: string;
     continuity_out: string;
@@ -100,6 +113,7 @@ export interface DirectorShootingPlan {
     director_profile_hash: string;
     effective_style_hash: string;
     scenes: DirectorPlanScene[];
+    lighting_baselines?: DirectorPlanLightingBaseline[];
     unresolved_questions: string[];
     generated_at: number | null;
 }

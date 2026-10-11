@@ -195,6 +195,38 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     expect(screen.queryByRole("button", { name: /Create video task/ })).not.toBeInTheDocument();
 });
 
+it("saves reviewed place and time continuity with a lighting baseline", async () => {
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue(state(plan, 1, 0));
+    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({
+        project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft,
+    }));
+    render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+            <DirectorShootingPlanPanel />
+        </NextIntlClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editor view" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open scene" }));
+    fireEvent.change(screen.getByLabelText("Physical place continuity ID"), { target: { value: "place-cinema" } });
+    fireEvent.change(screen.getByLabelText("Story time continuity ID"), { target: { value: "time-day" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create lighting baseline" }));
+    fireEvent.change(screen.getAllByLabelText("Key source and direction")[0], { target: { value: "Window from west" } });
+    fireEvent.change(screen.getAllByLabelText("Warm/cool tone")[0], { target: { value: "Warm" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 1,
+        expect.objectContaining({
+            scenes: [expect.objectContaining({
+                place_continuity_id: "place-cinema", time_continuity_id: "time-day",
+            })],
+            lighting_baselines: [expect.objectContaining({
+                place_continuity_id: "place-cinema", time_continuity_id: "time-day",
+                lighting: expect.objectContaining({ key_source: "Window from west", color_tone: "Warm" }),
+            })],
+        })));
+});
+
 it("distinguishes plan v2 from Director v2 and aligns the draft before confirmation", async () => {
     const oldPlan = { ...plan, director_profile_revision: 1, director_profile_hash: "old-director-hash" };
     vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
