@@ -1,5 +1,38 @@
 # Director shooting-plan revision state
 
+## Selected Director version (2026-10-11)
+
+The Director interpretation and shooting plan share one selected Director
+revision in the Direction workspace. The selection defaults to the latest
+confirmed revision and is reset when the project or confirmed revision changes.
+Choosing an older revision is a read-only history view; it does not activate,
+restore, save, or confirm that revision. The Director's separate "copy version
+to draft" action remains an explicit editing operation.
+
+The plan view matches confirmed plans by Director revision **and content hash**.
+When several confirmed plans match, display the newest by default and allow
+selection among their own plan revisions. A historical Director selection with
+no matching plan shows an empty history state. It cannot generate or confirm a
+plan because generation uses the current confirmed Director revision.
+
+For the latest Director revision, show the editable saved plan draft only when
+its Director revision and hash match the selection and its script lineage is
+current. Otherwise show the matching confirmed plan as read-only reference and
+provide generation of a new proposal from the selected current Director. A
+draft from another Director version remains stored but must not appear as the
+current version's editable plan. Generation may replace that saved draft only
+after the user saves the new proposal; confirmed plan history is retained.
+
+Always label a plan with both numbers: plan revision and source Director
+revision. Plan revision numbers are independent and never imply equal Director
+revision numbers. Downstream production continues to use the current confirmed
+plan; merely browsing history does not change downstream inputs.
+
+Success criteria: switching Director versions switches the plan history shown;
+v6 cannot display a v4-sourced draft as its editable plan; selecting v4 shows
+only plans sourced from the exact v4 content hash; switching versions never
+mutates confirmed history or a local unsaved plan.
+
 Updated 2026-10-11: Director changes require a new plan proposal. The earlier
 Director-only alignment action below is superseded by this contract.
 
