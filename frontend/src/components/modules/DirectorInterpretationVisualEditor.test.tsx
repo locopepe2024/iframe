@@ -134,7 +134,8 @@ it("requires an explicit user action to build a map from legacy phases and keeps
     const onChange = vi.fn();
     renderEditor(profile, onChange);
 
-    expect(screen.getByText("Initial: Close · Change: Long distance · Ending: Separated")).toBeInTheDocument();
+    expect(screen.getByText(/Found 3 legacy summary items/)).toBeInTheDocument();
+    expect(screen.queryByText("Initial: Close · Change: Long distance · Ending: Separated")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Enter mind map" }));
 
     const changed = onChange.mock.lastCall?.[0] as Record<string, unknown> | undefined;
