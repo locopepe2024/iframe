@@ -1,0 +1,41 @@
+{
+  "schema": "recreation-pilot-preparation.v1",
+  "status": "local_inputs_ready_no_provider_submission",
+  "source": {
+    "path": "/Users/owen/Downloads/白模/枪法_2.mp4",
+    "sha256": "4db0b4023a2e2633eac245336cc2fffe06cb25e7cacdff8f4aec57a36bb2cec7",
+    "frame_interval": [725, 845],
+    "fps": 30
+  },
+  "target": {
+    "path": "/Users/owen/Downloads/白模/枪法.png",
+    "sha256": "43c2a7db056c523024c916423f13ad32c093c8410abbbee9c3cef8e0d12aefb8"
+  },
+  "motion_reference": {
+    "path": "qiangfa2-jump-24p167-28p167-motion.mp4",
+    "sha256": "83ad1f5b906bb848017a88ae0b4ee6637efd7b57a7f996cf58a1fbf5646d35c2",
+    "crop": {"x": 0, "y": 410, "width": 592, "height": 336},
+    "width": 592,
+    "height": 336,
+    "fps": 30,
+    "frame_count": 120,
+    "duration_seconds": 4,
+    "audio": "removed"
+  },
+  "edit_review": {
+    "evidence": "qiangfa2-24p167-28p167-cut-review.png",
+    "confirmed_cut_source_seconds": [25.233333, 26.6],
+    "confirmed_cut_local_seconds": [1.066667, 2.433333],
+    "additional_candidate_source_seconds": [25.433333, 26.633333]
+  },
+  "trial_plan": {
+    "model": "minimax-h3-vip",
+    "mode": "reference2video",
+    "requested_duration_seconds": 4,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": false,
+    "prompt_path": "qiangfa2-jump-24p167-28p167-h3-prompt.md",
+    "provider_submission": "not_started"
+  }
+}
