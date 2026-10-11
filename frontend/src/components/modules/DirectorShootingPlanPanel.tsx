@@ -298,6 +298,7 @@ export default function DirectorShootingPlanPanel() {
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
     const [revisionTitle, setRevisionTitle] = useState("");
     const [revisionSummary, setRevisionSummary] = useState("");
+    const [reviewedLineage, setReviewedLineage] = useState(false);
 
     const sourceRevision = currentProject?.source_revision ?? 1;
     const currentLineage = serverState?.current_lineage;
@@ -335,6 +336,7 @@ export default function DirectorShootingPlanPanel() {
                 api.listDirectorShootingPlanRevisions(projectId),
             ]);
             setServerState(nextState);
+            setReviewedLineage(false);
             if (!preserveLocal || !localDirtyRef.current) {
                 setPlan(nextState.draft);
                 setSavedPlan(nextState.draft);
@@ -370,6 +372,7 @@ export default function DirectorShootingPlanPanel() {
 
     const updatePlan = (update: (current: DirectorShootingPlan) => DirectorShootingPlan) => {
         setPlan(current => current ? update(current) : current);
+        setReviewedLineage(false);
         setNotice("");
     };
 
@@ -427,7 +430,10 @@ export default function DirectorShootingPlanPanel() {
             });
             setPlan(generated);
             setSavedPlan(null);
-            setNotice(t("generated"));
+            setReviewedLineage(false);
+            setNotice(serverState?.draft
+                ? t("generatedReplacing", { revision: generated.director_profile_revision, draft: serverState.draft_revision })
+                : t("generated", { revision: generated.director_profile_revision }));
             setServerState(previous => previous ? { ...previous, draft_stale: false } : previous);
         } catch (cause) {
             setError(extractErrorDetail(cause) || t("generateFailed"));
@@ -441,22 +447,25 @@ export default function DirectorShootingPlanPanel() {
         if (!serverState?.current_lineage) return;
         setPlan(emptyPlan(serverState.current_lineage));
         setSavedPlan(null);
+        setReviewedLineage(false);
         setError("");
         setNotice(t("blankCreated"));
     };
 
-    const save = async () => {
+    const save = async (align = false) => {
         if (!projectId || !plan) return;
+        if (align && (!canAlignNow || !reviewedLineage)) return;
         setAction("save");
         setError("");
         try {
-            const planToSave = canAlignNow && currentLineage ? alignPlanToDirector(plan, currentLineage) : plan;
-            const allowStaleLineage = !canAlignNow && (draftStale || Boolean(serverState?.readiness_error));
+            const planToSave = align && currentLineage ? alignPlanToDirector(plan, currentLineage) : plan;
+            const allowStaleLineage = !align && (draftStale || Boolean(serverState?.readiness_error));
             const result = allowStaleLineage
                 ? await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave, true)
                 : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, planToSave);
             setPlan(result.draft);
             setSavedPlan(result.draft);
+            setReviewedLineage(false);
             setServerState(previous => previous ? {
                 ...previous,
                 draft: result.draft,
@@ -464,7 +473,9 @@ export default function DirectorShootingPlanPanel() {
                 draft_updated_at: result.draft_updated_at,
                 draft_stale: stableLineageChanged(result.draft, previous.current_lineage),
             } : previous);
-            setNotice(t("draftSaved", { revision: result.draft_revision }));
+            setNotice(align
+                ? t("draftAligned", { revision: result.draft_revision, director: Number(currentLineage?.director_profile_revision ?? 0) })
+                : t("draftSaved", { revision: result.draft_revision }));
         } catch (cause) {
             setError(extractErrorDetail(cause) || t("saveFailed"));
         } finally {
@@ -525,8 +536,8 @@ export default function DirectorShootingPlanPanel() {
     const staleChanges = Array.from(new Set(staleReferences.flatMap(reference => [
         serverState?.current_lineage?.source_revision !== undefined && reference.source_revision !== Number(serverState.current_lineage.source_revision) ? t("changedScriptRevision", { from: reference.source_revision, to: Number(serverState.current_lineage.source_revision) }) : null,
         serverState?.current_lineage?.source_revision_id && reference.source_revision_id !== serverState.current_lineage.source_revision_id ? t("changedScriptContent") : null,
-        serverState?.current_lineage?.director_profile_revision !== undefined && reference.director_profile_revision !== Number(serverState.current_lineage.director_profile_revision) ? t("changedDirectorRevision", { from: reference.director_profile_revision, to: Number(serverState.current_lineage.director_profile_revision) }) : null,
-        serverState?.current_lineage?.director_profile_hash && reference.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
+        !draftStale && serverState?.current_lineage?.director_profile_revision !== undefined && reference.director_profile_revision !== Number(serverState.current_lineage.director_profile_revision) ? t("changedDirectorRevision", { from: reference.director_profile_revision, to: Number(serverState.current_lineage.director_profile_revision) }) : null,
+        !draftStale && serverState?.current_lineage?.director_profile_hash && reference.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
     ].filter((item): item is string => Boolean(item)))));
     const openPlanEditor = () => {
         setViewMode("editor");
@@ -556,7 +567,7 @@ export default function DirectorShootingPlanPanel() {
                         className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {action === "generate" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}
-                        {plan ? t("regenerate") : t("generate")}
+                        {plan ? t("regenerate", { revision: Number(currentLineage?.director_profile_revision ?? 0) }) : t("generate")}
                     </button>
                     <button
                         type="button"
@@ -564,7 +575,7 @@ export default function DirectorShootingPlanPanel() {
                         disabled={locked || dirty || Boolean(serverState?.readiness_error)}
                         className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <Plus size={16} aria-hidden="true" />{t("blankPlan")}
+                        <Plus size={16} aria-hidden="true" />{t("blankPlan", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}
                     </button>
                 </div>
             </header>
@@ -583,11 +594,10 @@ export default function DirectorShootingPlanPanel() {
                     <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
                         <span>{serverState?.readiness_error ? t("staleWithReadinessError") : draftStale
-                            ? t("draftStale", { draft: serverState?.draft_revision ?? 0 })
+                            ? t(canAlignPlan ? "draftStale" : "draftStaleSourceChanged", { draft: serverState?.draft_revision ?? 0, from: plan?.director_profile_revision ?? 0, to: Number(currentLineage?.director_profile_revision ?? 0) })
                             : t("confirmedStale", { revision: serverState?.current_revision ?? 0 })}</span>
                         {plan && <>
-                            <button type="button" onClick={openPlanEditor} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{t("revisePlan")}</button>
-                            {canAlignPlan && <button type="button" onClick={save} disabled={locked || !canAlignNow} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 disabled:opacity-50">{t("adoptCurrentDirector", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}</button>}
+                            <button type="button" onClick={openPlanEditor} className="rounded border border-amber-200/40 px-2 py-1 text-xs font-medium text-amber-50 hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">{draftStale ? t("reviseOldPlan", { revision: plan.director_profile_revision }) : t("revisePlan")}</button>
                         </>}
                         {staleChanges.length > 0 && <ul className="basis-full list-disc pl-5 text-xs text-amber-100/90">{staleChanges.map(change => <li key={change}>{change}</li>)}</ul>}
                         {canAlignPlan && unknownStoryEventIds.length > 0 && <span className="basis-full text-xs text-amber-100/90">{t("unknownStoryEvents", { ids: unknownStoryEventIds.join(", ") })}</span>}
@@ -979,8 +989,10 @@ export default function DirectorShootingPlanPanel() {
                             <input value={revisionSummary} onChange={event => setRevisionSummary(event.target.value)} placeholder={t("revisionSummaryPlaceholder")} aria-label={t("revisionSummary")} className="min-h-9 min-w-56 flex-[2] rounded-md border border-border bg-background px-2 text-xs text-foreground" />
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            {dirty && <button type="button" onClick={() => { setPlan(savedPlan); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
-                            <button type="button" onClick={save} disabled={locked || (!dirty && !canAlignNow) || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : canAlignNow ? t("saveAndAlign", { revision: Number(currentLineage?.director_profile_revision ?? 0) }) : t("saveDraft")}</button>
+                            {dirty && <button type="button" onClick={() => { const previous = savedPlan ?? serverState?.draft ?? null; setPlan(previous); setSavedPlan(previous); setReviewedLineage(false); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
+                            <button type="button" onClick={() => void save()} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
+                            {canAlignPlan && <label className="inline-flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={reviewedLineage} onChange={event => setReviewedLineage(event.target.checked)} disabled={locked || !canAlignNow} className="accent-primary" />{t("reviewedForDirector", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}</label>}
+                            {canAlignPlan && <button type="button" onClick={() => void save(true)} disabled={locked || !canAlignNow || !reviewedLineage} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-amber-400/40 px-3 text-sm text-amber-100 hover:bg-amber-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"><Check size={15} aria-hidden="true" />{t("adoptCurrentDirector", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}</button>}
                             <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>
