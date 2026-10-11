@@ -1712,6 +1712,10 @@
     },
     "directorPlan": {
       "title": "导演拍摄计划",
+      "lightingConflictSummary": "有 {count} 个镜头的光影与所在地点、时段的基线不一致，需在确认前处理。",
+      "lightingConflictHint": "打开镜头核对差异：若是有意变化，填写光影偏离原因；若应保持连续，请调整镜头光影或场景基线。修改后保存草稿再确认。",
+      "lightingConflictShot": "场景 {scene} · {shot}",
+      "lightingConflictFields": "与场景光影基线不同：{fields}。请调整这些字段，或填写光影偏离原因。",
       "selectedSource": "当前查看：导演确认版 v{revision}",
       "planVersion": "拍摄计划版本",
       "planSourcePair": "拍摄计划 v{plan} · 基于导演 v{director}",

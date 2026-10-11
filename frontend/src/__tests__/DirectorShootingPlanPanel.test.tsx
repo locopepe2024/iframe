@@ -421,3 +421,33 @@ it("reads only plans matching the selected historical Director content", async (
     expect(screen.queryByRole("button", { name: "Generate plan draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm shooting plan" })).not.toBeInTheDocument();
 });
+
+it("shows generated lighting conflicts before confirmation and links to the shot", async () => {
+    const conflictingPlan: DirectorShootingPlan = {
+        ...plan,
+        lighting_baselines: [{
+            place_continuity_id: "place-cinema", time_continuity_id: "time-day",
+            story_time: "Day", daylight_phase: "day", weather: "clear", shadow_direction: "",
+            lighting: { key_source: "Window from west", color_tone: "Warm", contrast: "Soft", practical_sources: [] },
+        }],
+        scenes: [{ ...plan.scenes[0], place_continuity_id: "place-cinema", time_continuity_id: "time-day" }],
+    };
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue(state(conflictingPlan, 2));
+    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({
+        project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft,
+    }));
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
+
+    expect(await screen.findByText(/1 shots differ from the place and time lighting baseline/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Scene 1 · Follow the couple" }));
+    expect(await screen.findByText(/Different from the scene lighting baseline/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Reason for lighting override"), { target: { value: "The sign changes the light on their faces." } });
+    expect(screen.queryByText(/1 shots differ from the place and time lighting baseline/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 2,
+        expect.objectContaining({ scenes: [expect.objectContaining({ beats: [expect.objectContaining({ shots: [expect.objectContaining({
+            lighting_override_reason: "The sign changes the light on their faces.",
+        })] })] })] })));
+    expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
+});

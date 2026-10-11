@@ -31,6 +31,7 @@ import type {
 } from "@/lib/directorShootingPlan";
 import { useProjectStore, type DirectorProfile } from "@/store/projectStore";
 import { extractErrorDetail } from "@/lib/utils";
+import { planLightingConflicts } from "@/lib/directorPlanLighting";
 
 type Action = "load" | "generate" | "save" | "confirm" | "restore" | null;
 
@@ -307,6 +308,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const beats = scenes.flatMap(scene => scene.beats);
     const shots = beats.flatMap(beat => beat.shots);
     const duration = shots.reduce((total, shot) => total + (shot.duration_seconds ?? 0), 0);
+    const lightingConflicts = planLightingConflicts(plan);
     const viewedDirectorRevision = viewedDirector?.revision ?? Number(currentLineage?.director_profile_revision ?? 0);
     const viewedDirectorHash = viewedDirector?.content_hash ?? String(currentLineage?.director_profile_hash ?? "");
     const matchingHistory = history.filter(item => item.director_profile_revision === viewedDirectorRevision
@@ -492,6 +494,11 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
 
     const confirmPlan = async () => {
         if (!projectId || !plan || dirty || draftStale || serverState?.readiness_error) return;
+        if (lightingConflicts.length) {
+            openLightingConflict(lightingConflicts[0]);
+            setError(t("lightingConflictSummary", { count: lightingConflicts.length }));
+            return;
+        }
         setAction("confirm");
         setError("");
         try {
@@ -603,6 +610,13 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
         setViewMode("editor");
         requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("director-plan-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })));
     };
+    const openLightingConflict = (conflict: (typeof lightingConflicts)[number]) => {
+        setViewMode("editor");
+        setExpandedSceneIds(previous => new Set(previous).add(conflict.sceneId));
+        setExpandedBeatIds(previous => new Set(previous).add(conflict.beatId));
+        setExpandedShots(previous => new Set(previous).add(conflict.shotId));
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`director-plan-shot-${conflict.shotId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
+    };
     const shotsByScene = scenes.map(scene => scene.beats.reduce((total, beat) => total + beat.shots.length, 0));
     const durationByScene = scenes.map(scene => scene.beats.reduce(
         (sceneTotal, beat) => sceneTotal + beat.shots.reduce((beatTotal, shot) => beatTotal + (shot.duration_seconds ?? 0), 0),
@@ -644,6 +658,13 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             {action === "load" && <p className="flex items-center gap-2 text-sm text-text-secondary" role="status"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("loading")}</p>}
             {error && <div className="flex items-start gap-2 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" role="alert"><AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{error}</div>}
             {notice && <div className="flex items-start gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100" role="status"><CheckCircle2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{notice}</div>}
+            {lightingConflicts.length > 0 && <div className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
+                <p className="font-medium">{t("lightingConflictSummary", { count: lightingConflicts.length })}</p>
+                <p className="mt-1 text-xs">{t("lightingConflictHint")}</p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                    {lightingConflicts.map(conflict => <li key={conflict.shotId}><button type="button" onClick={() => openLightingConflict(conflict)} className="rounded border border-amber-300/40 px-2 py-1 text-xs hover:bg-amber-300/10">{t("lightingConflictShot", { scene: conflict.sceneIndex + 1, shot: conflict.shotTitle || conflict.shotId })}</button></li>)}
+                </ul>
+            </div>}
             {serverState?.readiness_error && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status">
                     <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -973,6 +994,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                                 </div>
                                                                 <fieldset className="rounded-md border border-border p-3">
                                                                     <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
+                                                                    {lightingConflicts.some(conflict => conflict.shotId === shot.shot_id) && <p className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-100">{t("lightingConflictFields", { fields: lightingConflicts.find(conflict => conflict.shotId === shot.shot_id)?.fields.map(field => t(`fields.${field === "key_source" ? "keySource" : field === "color_tone" ? "colorTone" : field === "practical_sources" ? "practicalSources" : "contrast"}`)).join("、") ?? "" })}</p>}
                                                                     <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
                                                                     <div className="grid gap-3 sm:grid-cols-3">
                                                                         <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
@@ -1050,7 +1072,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { const previous = savedPlan ?? serverState?.draft ?? null; setPlan(previous); setSavedPlan(previous); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
                             <button type="button" onClick={() => void save()} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>
-                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
+                            <button type="button" onClick={confirmPlan} disabled={locked || dirty || !plan || draftStale || Boolean(serverState?.readiness_error) || lightingConflicts.length > 0} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 size={15} aria-hidden="true" />{action === "confirm" ? t("confirming") : t("confirmPlan")}</button>
                         </div>
                     </div>
                 </>

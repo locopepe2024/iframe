@@ -1711,6 +1711,10 @@
     },
     "directorPlan": {
       "title": "Director shooting plan",
+      "lightingConflictSummary": "{count} shots differ from the place and time lighting baseline. Resolve them before confirmation.",
+      "lightingConflictHint": "Open each shot to review the differences. Explain an intentional change, or align the shot or baseline. Save the draft before confirming.",
+      "lightingConflictShot": "Scene {scene} · {shot}",
+      "lightingConflictFields": "Different from the scene lighting baseline: {fields}. Align these fields or explain the change.",
       "selectedSource": "Viewing confirmed Director v{revision}",
       "planVersion": "Shooting plan version",
       "planSourcePair": "Shooting plan v{plan} · from Director v{director}",
