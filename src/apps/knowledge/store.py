@@ -202,10 +202,15 @@ def select_research_sources(connection, owner: str, run_id: str, urls: list[str]
     return get_research_run(connection, owner, run_id)
 
 
-def reserve_discovery(connection, owner: str) -> bool:
+def reserve_discovery(connection, owner: str, provider: str = "gdelt") -> bool:
+    provider_budget = {"gdelt": (200, "5 seconds"),
+                       "fed_rss": (20, "60 seconds")}.get(provider)
+    if provider_budget is None:
+        raise ValueError("Unsupported discovery provider")
+    provider_key = "provider:" + provider
     cursor = connection.cursor()
     cursor.execute("SELECT pg_advisory_xact_lock(42820102)")
-    for key, daily_limit in (("provider:gdelt", 200), ("owner:" + owner, 20)):
+    for key, daily_limit in ((provider_key, provider_budget[0]), ("owner:" + owner, 20)):
         cursor.execute(
             """SELECT CASE WHEN day = current_date THEN used ELSE 0 END,
                       next_at > now() FROM knowledge_discovery_limits WHERE key = %s""", (key,),
@@ -213,7 +218,7 @@ def reserve_discovery(connection, owner: str) -> bool:
         row = cursor.fetchone()
         if row and (row[0] >= daily_limit or row[1]):
             return False
-    for key, delay in (("provider:gdelt", "5 seconds"), ("owner:" + owner, "0 seconds")):
+    for key, delay in ((provider_key, provider_budget[1]), ("owner:" + owner, "0 seconds")):
         cursor.execute(
             """INSERT INTO knowledge_discovery_limits (key, day, used, next_at)
                VALUES (%s, current_date, 1, now() + %s::interval)

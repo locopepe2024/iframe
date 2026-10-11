@@ -115,7 +115,7 @@ def _source_uri(uri: str) -> str:
 
 
 def research_enabled_for(owner: str) -> bool:
-    if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") != "gdelt":
+    if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") not in {"gdelt", "fed_rss"}:
         return False
     if not os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip():
         return False
@@ -230,8 +230,8 @@ def start_research(owner: str, session_id: str, query: str,
         with store.transaction() as connection:
             target = collection_id or store.ensure_research_collection(connection, owner)
             run_id = store.create_research_run(connection, owner, session_id, query.strip(), target, intent)
-            allowed = (store.reserve_discovery(connection, owner)
-                       if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "gdelt" else True)
+            allowed = store.reserve_discovery(
+                connection, owner, os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER"))
         if not allowed:
             candidates = []
             error_code = "rate_budget"

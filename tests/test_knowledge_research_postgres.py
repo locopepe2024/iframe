@@ -51,6 +51,26 @@ def test_research_job_survives_separate_transactions_and_is_owner_scoped():
         connection.close()
 
 
+@pytest.mark.skipif(not os.getenv("IFRAME_KNOWLEDGE_TEST_PG_SOCKET"),
+                    reason="Disposable PostgreSQL socket is not configured")
+def test_fed_rss_budget_is_distinct_from_gdelt_budget():
+    connection = pg8000.dbapi.connect(
+        unix_sock=os.environ["IFRAME_KNOWLEDGE_TEST_PG_SOCKET"],
+        user=os.environ["USER"], database="postgres",
+    )
+    try:
+        store.migrate(connection)
+        assert store.reserve_discovery(connection, "fed-owner", "fed_rss") is True
+        assert store.reserve_discovery(connection, "fed-owner", "fed_rss") is False
+        assert store.reserve_discovery(connection, "gdelt-owner", "gdelt") is True
+        cursor = connection.cursor()
+        cursor.execute("SELECT key FROM knowledge_discovery_limits WHERE key LIKE 'provider:%'")
+        assert {row[0] for row in cursor.fetchall()} == {"provider:fed_rss", "provider:gdelt"}
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 @pytest.mark.skipif(not (os.getenv("IFRAME_KNOWLEDGE_TEST_PG_DISPOSABLE")
                          and os.getenv("IFRAME_KNOWLEDGE_TEST_PG_SOCKET")),
                     reason="Committed integration fixtures require a disposable PostgreSQL cluster")

@@ -40,6 +40,62 @@ def test_discovery_keeps_seen_date_separate_from_publication_date(monkeypatch):
     assert result[0]["published_at"] is None
 
 
+def test_fed_rss_discovers_only_matching_official_html_in_window(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")
+    feed = b"""<rss><channel>
+      <item><title>2025 Survey of Consumer Finances results</title>
+        <link>https://www.federalreserve.gov/newsevents/pressreleases/other20261009a.htm</link>
+        <pubDate>Fri, 09 Oct 2026 14:00:00 GMT</pubDate></item>
+      <item><title>Consumer Finances outside host</title>
+        <link>https://example.org/newsevents/pressreleases/other20261009a.htm</link>
+        <pubDate>Fri, 09 Oct 2026 14:00:00 GMT</pubDate></item>
+      <item><title>Monetary policy statement</title>
+        <link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20261009a.htm</link>
+        <pubDate>Fri, 09 Oct 2026 14:00:00 GMT</pubDate></item>
+    </channel></rss>"""
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [feed]
+    get = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "get", get)
+    results = discovery.discover("Survey of Consumer Finances", "2026-10-01", "2026-10-12")
+    assert len(results) == 1
+    assert results[0]["provider"] == "fed_rss"
+    assert results[0]["access_status"] == "public"
+    assert results[0]["published_at"] == "2026-10-09T14:00:00+00:00"
+    assert results[0]["seen_at"] != results[0]["published_at"]
+    assert get.call_args.kwargs["allow_redirects"] is False
+    assert discovery.discover("Survey of Consumer Finances", "2026-10-10", "2026-10-12") == []
+
+
+def test_fed_rss_rate_limit_and_invalid_xml_are_visible(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
+    response = Mock(status_code=429)
+    monkeypatch.setattr(discovery.requests, "get", Mock(return_value=response))
+    with pytest.raises(discovery.DiscoveryUnavailable, match="rate_limited"):
+        discovery.discover("consumer finances")
+    response.status_code = 200
+    response.iter_content.return_value = [b"not xml"]
+    with pytest.raises(discovery.DiscoveryUnavailable, match="provider_failed"):
+        discovery.discover("consumer finances")
+
+
+def test_fed_rss_uses_own_budget_and_owner_gate(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
+    assert api.research_enabled_for("owner-a") is True
+    assert api.research_enabled_for("owner-b") is False
+    cursor = Mock()
+    cursor.fetchone.side_effect = [None, None]
+    connection = Mock()
+    connection.cursor.return_value = cursor
+    assert store.reserve_discovery(connection, "owner-a", "fed_rss") is True
+    assert any(call.args[1][0] == "provider:fed_rss" and call.args[1][1] == "60 seconds"
+               for call in cursor.execute.call_args_list
+               if len(call.args) == 2 and len(call.args[1]) > 1)
+
+
 def test_capture_rejects_private_destination_and_extracts_text(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
     monkeypatch.setattr(capture.socket, "getaddrinfo", lambda *args, **kwargs:
@@ -97,7 +153,7 @@ def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypat
     monkeypatch.setattr(store, "transaction", transaction)
     monkeypatch.setattr(store, "ensure_research_collection", lambda connection, owner: owner_calls.append(owner) or str(uuid.uuid4()))
     monkeypatch.setattr(store, "create_research_run", lambda connection, owner, sid, query, cid, intent: owner_calls.append((owner, sid, query, cid)) or str(run_id))
-    monkeypatch.setattr(store, "reserve_discovery", lambda connection, owner: True)
+    monkeypatch.setattr(store, "reserve_discovery", lambda connection, owner, provider: True)
     monkeypatch.setattr(store, "finish_discovery", lambda connection, owner, rid, candidates, error: owner_calls.append((owner, rid, candidates, error)))
     monkeypatch.setattr(store, "get_research_run", lambda connection, owner, rid: {"id": rid, "status": "awaiting_selection", "candidates": [{"url": "https://example.org/a", "access_status": "public"}], "jobs": []})
     monkeypatch.setattr(store, "select_research_sources", lambda connection, owner, rid, urls: owner_calls.append((owner, urls)) or {"id": rid, "status": "capturing", "jobs": []})
