@@ -350,6 +350,8 @@ def test_save_confirm_revision_and_restore_do_not_mutate_storyboard_frames():
 def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)
+    plan.scenes[0].continuity_in = "They enter from the street together."
+    plan.scenes[0].continuity_out = "They cross the lobby toward the ticket window."
     plan.scenes[0].beats[0].shots[0].cast_bindings = [DirectorPlanCastBinding(**{
         "person_id": "shen-xia-young",
         "era_variant_id": "era-campus",
@@ -372,10 +374,16 @@ def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
 
     context = pipeline.project_episode_visual_context("film")
+    assert context.scenes[0].continuity_in == plan.scenes[0].continuity_in
+    assert context.scenes[0].continuity_out == plan.scenes[0].continuity_out
     assert context.scenes[0].season == "winter"
     assert context.characters[0].scene_look_id == "look-winter-outdoor"
     assert context.characters[0].shot_ids == [plan.scenes[0].beats[0].shots[0].shot_id]
     assert context.props[0].state == "held"
+    assert context.shots[0].shot_size == plan.scenes[0].beats[0].shots[0].shot_size
+    assert context.shots[0].performance_action == plan.scenes[0].beats[0].shots[0].performance_action
+    assert context.shots[0].action_physics == plan.scenes[0].beats[0].shots[0].action_physics
+    assert context.shots[0].ambient_sound == plan.scenes[0].beats[0].shots[0].ambient_sound
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert len(result["new_bindings"]) == 3
     assert script.episode_visual_context is not None
@@ -593,6 +601,7 @@ def test_generated_continuity_ids_create_reviewable_baseline_without_name_matchi
     second = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
     second["scene_ref"] = "粮铺门前"
     second["location"] = "粮铺门前"
+    second["beats"][0]["shots"][0]["lighting"]["key_source"] = "同一夕阳从门廊侧面照入"
     pipeline.script_processor.plan_director_shooting_chunk.return_value = {
         "scenes": [first, second], "unresolved_questions": [],
     }
@@ -603,6 +612,26 @@ def test_generated_continuity_ids_create_reviewable_baseline_without_name_matchi
     assert proposal.lighting_baselines[0].place_continuity_id == "place-street"
     assert [item.time_continuity_id for item in proposal.scenes] == ["time-dusk", "time-dusk"]
     assert proposal.lighting_baselines[0].lighting.key_source == raw_shot()["lighting"]["key_source"]
+    assert proposal.scenes[1].beats[0].shots[0].lighting.key_source == ""
+    pipeline._validate_director_shooting_plan_for_confirmation(proposal)
+
+
+def test_generated_lighting_exception_keeps_justified_shot_change():
+    pipeline, _ = make_pipeline()
+    first = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
+    second["scene_ref"] = "粮铺门前"
+    second["beats"][0]["shots"][0]["lighting"]["key_source"] = "粮铺灯照亮人物正面"
+    second["beats"][0]["shots"][0]["lighting_override_reason"] = "人物走入粮铺灯光范围"
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = {
+        "scenes": [first, second], "unresolved_questions": [],
+    }
+
+    proposal = pipeline.preview_director_shooting_plan("film")
+    shot = proposal.scenes[1].beats[0].shots[0]
+    assert shot.lighting.key_source == "粮铺灯照亮人物正面"
+    assert shot.lighting_override_reason == "人物走入粮铺灯光范围"
+    pipeline._validate_director_shooting_plan_for_confirmation(proposal)
 
 
 def test_asset_sync_marks_changed_and_stale_bindings_without_overwriting_selection():

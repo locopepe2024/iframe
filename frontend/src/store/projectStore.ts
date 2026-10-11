@@ -176,6 +176,11 @@ export interface StoryboardFrame {
     image_asset?: ImageAsset;
     rendered_image_url?: string;
     rendered_image_asset?: ImageAsset;
+    shot_id?: string | null;
+    director_shot_context?: {
+        scene?: Record<string, unknown>;
+        shot?: Record<string, unknown>;
+    } | null;
     generation_lineage?: GenerationLineage | null;
     style_prompt_override?: string | null;
     lighting_override?: string | null;

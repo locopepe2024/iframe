@@ -1011,6 +1011,12 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
         "key_action_physics": "他提起书包，肩带因重量轻微绷紧",
         "lighting": {"direction": "侧后方", "quality": "soft", "color_temp": "cool", "description": "冷色侧光拉长影子"},
     }]})
+    visual_context = {
+        "scenes": [{"scene_id": "scene-21", "scene_ref": "场景21", "location": "校园", "time_anchor": "黄昏"}],
+        "shots": [{"scene_id": "scene-21", "shot_id": "shot-1", "lighting": {"key_source": "侧后方夕阳"}}],
+        "characters": [{"person_id": "zhouhan", "scene_ids": ["scene-21"], "continuity_state": {"coat": "灰色外套"}}],
+        "props": [],
+    }
     payload = {
         **profile_payload(),
         "script_fact_ledger": {
@@ -1034,7 +1040,7 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     }
 
     result = processor.analyze_to_storyboard(
-        "场景21 周涵离校", {"characters": []}, director_profile=payload
+        "场景21 周涵离校", {"characters": [], "episode_visual_context": visual_context}, director_profile=payload
     )
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
@@ -1049,6 +1055,46 @@ def test_storyboard_prompt_filters_full_profile_to_execution_summary():
     assert "未标注时不得自行套用" in prompt
     assert '"script_fact_ledger"' in prompt
     assert "uncertain 和 conflicted 只提示核查方向" in prompt
+    assert "confirmed_episode_visual_context" in prompt
+    assert "侧后方夕阳" in prompt
+    assert "灰色外套" in prompt
+
+
+def test_storyboard_prompt_scopes_shooting_plan_by_source_range():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"frames": [{
+        "scene_ref_name": "粮铺门前", "action_summary": "江灼转身",
+        "visual_atmosphere": "黄昏街道，暖光进入粮铺门前",
+        "character_acting": "江灼侧身望向街口，肩膀收紧",
+        "key_action_physics": "江灼脚步停住，衣摆随惯性轻摆",
+        "lighting": {"direction": "侧后方", "quality": "soft", "color_temp": "warm", "description": "夕阳侧光"},
+    }]})
+    visual_context = {
+        "scenes": [
+            {"scene_id": "street", "scene_ref": "街角", "source_chunk_refs": ["source:chars-0-100"]},
+            {"scene_id": "shop", "scene_ref": "粮铺门前", "source_chunk_refs": ["source:chars-100-200"]},
+        ],
+        "shots": [
+            {"scene_id": "street", "shot_id": "shot-street", "source_chunk_refs": ["source:chars-0-100"], "lighting": {"key_source": "冷色天光"}},
+            {"scene_id": "shop", "shot_id": "shot-shop", "source_chunk_refs": ["source:chars-100-200"], "lighting": {"key_source": "西侧夕阳"}},
+        ],
+        "characters": [], "props": [],
+    }
+
+    processor.analyze_to_storyboard(
+        "粮铺门前，江灼转身。",
+        {"characters": [], "scenes": [], "props": [], "episode_visual_context": visual_context},
+        source_range=(120, 150),
+    )
+
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert '"shot_id":"shot-shop"' in prompt
+    assert "西侧夕阳" in prompt
+    assert "shot-street" not in prompt
+    assert "冷色天光" not in prompt
 
 
 def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style():

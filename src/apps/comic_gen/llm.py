@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .models import (
     Script,
@@ -680,6 +680,7 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 每帧字段:
 {
     "scene_ref_name": "场景名",
+    "shot_id": "对应已确认拍摄计划镜头 ID；无匹配时为空字符串",
     "character_ref_names": ["角色名"],
     "prop_ref_names": ["道具名"],
     "action_summary": "一句话概括这帧发生什么（含角色动作 + 物理事件 + 神态表情）",
@@ -1824,7 +1825,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         shot_keys = {
             "title", "visual_intent", "director_effect", "performance_action", "action_physics",
             "shot_size", "camera_angle", "composition", "camera_movement",
-            "lighting", "duration_seconds", "dialogue", "ambient_sound",
+            "lighting", "lighting_override_reason", "duration_seconds", "dialogue", "ambient_sound",
             "character_ids", "prop_ids", "unresolved_entity_refs",
         }
         lighting_keys = {"key_source", "color_tone", "contrast", "practical_sources"}
@@ -1881,6 +1882,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
                     if "director_effect" in shot and not isinstance(shot["director_effect"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
+                    if "lighting_override_reason" in shot and not isinstance(shot["lighting_override_reason"], str):
+                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} lighting_override_reason 必须是字符串"
                     # Shot details are editable downstream. Generation validates shape and types;
                     # missing creative details remain visible as fields to complete later.
                     for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
@@ -1945,7 +1948,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
    已确认 Director profile 中的地点、城市、时代或地域要求属于导演视觉约束。它们应影响 location、environment_atmosphere 和相关镜头的 visual_intent；当剧本没有明确写出对应地标、饮食或生活细节时，可以提出“可选导演视觉锚点”（例如城市地标、地方饮食环境或街巷质感）作为可供用户修改的拍摄计划建议。此类建议必须明确是可选导演补充，不得伪装成已发生的剧本事实，不得凭空增加人物行为、对白或剧情事件；没有合适的剧情承载位置时，写入 unresolved_questions 供用户决定是否增加建立镜头。
 3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
-5. lighting 必须严格包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。镜头内环境光应符合场景与风格。
+5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。只有剧情或镜头设计确实需要不同光影时，填写 lighting_override_reason 说明具体原因，并在 lighting 写差异。普通镜头的 lighting_override_reason 留空。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
@@ -2018,10 +2021,107 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 </project_visual_style>
 """ % json.dumps(visual_style, ensure_ascii=False, indent=2)
 
+    @staticmethod
+    def _storyboard_episode_visual_context(
+        entities_json: Dict[str, Any],
+        text: str,
+        source_range: Optional[Tuple[int, int]] = None,
+    ) -> str:
+        """Return only the confirmed shooting-plan context for the matched scene.
+
+        Episode context is a scene-scoped handoff. Sending every scene to a
+        storyboard request would make a character look or lighting baseline
+        from one scene available to another unrelated scene.
+        """
+        visual_context = entities_json.get("episode_visual_context")
+        if not isinstance(visual_context, dict):
+            return ""
+        context_scenes = visual_context.get("scenes", [])
+        if not isinstance(context_scenes, list):
+            return ""
+        def overlaps_source(refs: Any) -> bool:
+            if not source_range or not isinstance(refs, list):
+                return False
+            for ref in refs:
+                match = re.fullmatch(r"source:chars-(\d+)-(\d+)", str(ref))
+                if not match:
+                    continue
+                start, end = int(match.group(1)), int(match.group(2))
+                if start < source_range[1] and source_range[0] < end:
+                    return True
+            return False
+
+        has_source_maps = any(
+            isinstance(scene, dict) and scene.get("source_chunk_refs")
+            for scene in context_scenes
+        )
+        matched_scenes = [
+            scene for scene in context_scenes
+            if isinstance(scene, dict) and overlaps_source(scene.get("source_chunk_refs"))
+        ] if source_range else []
+        if not matched_scenes:
+            matched_scenes = [
+                scene for scene in context_scenes
+                if isinstance(scene, dict) and scene.get("scene_ref")
+                and str(scene["scene_ref"]) in text
+            ]
+        if not matched_scenes and len(context_scenes) == 1 and not has_source_maps:
+            matched_scenes = [scene for scene in context_scenes if isinstance(scene, dict)]
+        scene_ids = {
+            scene.get("scene_id") for scene in matched_scenes
+            if scene.get("scene_id")
+        }
+        if not scene_ids:
+            return ""
+
+        def belongs_to_scene(item: Any) -> bool:
+            return isinstance(item, dict) and bool(
+                scene_ids.intersection(item.get("scene_ids") or [])
+            )
+
+        context_shots = [
+            shot for shot in visual_context.get("shots", [])
+            if isinstance(shot, dict) and shot.get("scene_id") in scene_ids
+        ]
+        shots_with_source_maps = [shot for shot in context_shots if shot.get("source_chunk_refs")]
+        if source_range and shots_with_source_maps:
+            matched_shots = [
+                shot for shot in shots_with_source_maps
+                if overlaps_source(shot.get("source_chunk_refs"))
+            ]
+            if matched_shots:
+                context_shots = matched_shots
+
+        scoped = {
+            "scenes": matched_scenes,
+            "shots": context_shots,
+            "characters": [
+                item for item in visual_context.get("characters", [])
+                if belongs_to_scene(item)
+            ],
+            "props": [
+                item for item in visual_context.get("props", [])
+                if belongs_to_scene(item)
+            ],
+        }
+        return (
+            "\n拍摄计划视觉上下文按已匹配场景提供。仅用于对应场景的分镜；"
+            "场景的入场和出场连续性已附在对应场景上下文中；镜头光影已继承地点时段基线，"
+            "不能把不同场景的角色状态或光影混用。"
+            "每个 confirmed_episode_visual_context.shots 项代表一个已确认镜头；"
+            "如果当前分镜对应其中一个镜头，必须原样回传其 shot_id，并继承其景别、机位、构图、"
+            "运镜、表演、动作物理、导演效果、对白和光影意图。一个计划镜头可以拆成多个分镜帧，"
+            "但不得把不同 shot_id 的约束混在同一帧；没有匹配镜头时 shot_id 返回空字符串。"
+            "\n<confirmed_episode_visual_context>\n"
+            + _prompt_json(scoped)
+            + "\n</confirmed_episode_visual_context>\n"
+        )
+
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "",
                               director_profile: Optional[Dict[str, Any]] = None,
                               visual_style: Optional[Dict[str, Any]] = None,
-                              previous_frames: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+                              previous_frames: Optional[List[Dict[str, Any]]] = None,
+                              source_range: Optional[Tuple[int, int]] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -2046,6 +2146,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             "scenes": scenes_list,
             "props": props_list,
         }, ensure_ascii=False, indent=2)
+        system_visual_context = self._storyboard_episode_visual_context(entities_json, text, source_range)
 
         template = (
             custom_extraction_prompt
@@ -2053,6 +2154,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += system_visual_context
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
         if previous_frames:
@@ -2164,6 +2266,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         custom_extraction_prompt: str = "",
         director_profile: Optional[Dict[str, Any]] = None,
         visual_style: Optional[Dict[str, Any]] = None,
+        source_range: Optional[Tuple[int, int]] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -2175,6 +2278,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         baseline = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        baseline += self._storyboard_episode_visual_context(entities_json, text, source_range)
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
         if director_profile:
@@ -2312,7 +2416,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve and refine the supplied visual_atmosphere, character_acting, key_action_physics, shot_size, camera, and lighting; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.

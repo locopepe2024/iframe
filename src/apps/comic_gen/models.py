@@ -664,6 +664,10 @@ class StoryboardFrame(BaseModel):
     generation_lineage: Optional[ArtifactLineage] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
     shot_id: Optional[str] = Field(None, description="Optional confirmed shooting-plan shot ID")
+    director_shot_context: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Server-projected read-only context from the confirmed shooting-plan shot",
+    )
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
     
@@ -1332,8 +1336,11 @@ class EpisodeVisualSceneContext(BaseModel):
     scene_asset_id: Optional[str] = None
     plan_scene_asset_id: Optional[str] = None
     scene_ref: str = ""
+    source_chunk_refs: List[str] = Field(default_factory=list)
     location: str = ""
     time_anchor: str = ""
+    continuity_in: str = ""
+    continuity_out: str = ""
     place_continuity_id: Optional[str] = None
     time_continuity_id: Optional[str] = None
     interior_exterior: Optional[str] = None
@@ -1367,15 +1374,23 @@ class EpisodeVisualShotContext(BaseModel):
     scene_id: str
     beat_id: str
     shot_id: str
+    source_chunk_refs: List[str] = Field(default_factory=list)
     scene_asset_id: Optional[str] = None
     plan_scene_asset_id: Optional[str] = None
     character_ids: List[str] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
     visual_intent: str = ""
+    director_effect: str = ""
     performance_action: str = ""
+    action_physics: str = ""
+    shot_size: str = ""
+    camera_angle: str = ""
     composition: str = ""
     camera_movement: str = ""
+    duration_seconds: Optional[int] = None
+    dialogue: List[Dict[str, str]] = Field(default_factory=list)
+    ambient_sound: str = ""
     lighting: Dict[str, Any] = Field(default_factory=dict)
     place_continuity_id: Optional[str] = None
     time_continuity_id: Optional[str] = None

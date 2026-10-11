@@ -2,6 +2,82 @@
 
 ## Selected Director version (2026-10-11)
 
+## AI generated lighting inheritance (2026-10-11)
+
+The model proposes a lighting description for each shot. The runtime derives
+one baseline from the first shot for each reviewed place/time pair. For shots
+sharing that pair, the generated per-shot lighting is treated as inherited
+unless the model explicitly supplies a reason for a deliberate lighting
+change. Inherited shots store empty lighting fields and use the baseline in
+the episode visual context. A justified exception keeps its shot lighting and
+reason. The model is asked to return an exception reason only for a real
+change; the runtime never invents a reason from differing prose.
+
+Existing saved drafts are not rewritten. The editor presents those conflicts
+as review items with both values. Generation should yield a confirmable
+baseline by default, so the user reviews exceptions instead of filling every
+shot field. Editing the scene baseline or an individual shot remains possible.
+
+## Review-first shooting-plan interaction (2026-10-11)
+
+The shooting plan is an AI generated execution proposal, not a form that asks
+the director to author every downstream prompt. The normal review is one
+continuous scene → beat → shot reading order. Do not require users to switch
+between a graph, timeline, inspector, and a separate editor to understand one
+plan, and do not repeat the same scene/beat/shot counts in several overview
+widgets.
+
+Keep the review surface focused:
+
+1. **Scene continuity**: scene name, place/time, incoming/outgoing continuity,
+   and atmosphere are visible in the main list.
+2. **Story and shot intent**: beat purpose/emotional change and each shot's
+   intent, intended effect, visible action, framing, and duration are visible
+   in the same reading order.
+3. **Edit on demand**: editing controls are collapsed beside the item they
+   affect. Advanced IDs, asset bindings, sources, dialogue/audio details, and
+   lighting exceptions are secondary controls; ordinary users review AI's
+   proposal and do not fill each field manually.
+
+The AI is responsible for proposing the plan and its bindings. A user normally
+reviews the story and shot intent, then opens a detail only to fix an error or
+approve a deliberate exception. Never present raw internal IDs as a normal
+manual task. A lighting conflict deep-links to the relevant scene and shot and
+shows the baseline and shot values side by side at the point of decision.
+
+The confirmed plan is projected into `episode_visual_context`. Storyboard
+generation and storyboard refinement receive only the context whose
+`scene_ref` matches the requested source text (with a single-scene fallback).
+The handoff includes that scene's shots, character states, props, scene asset,
+and inherited lighting. It is an input constraint for the storyboard model;
+the runtime must still validate scene/asset/lineage references, and prompt
+presence alone does not prove that a model followed the context.
+
+## Storyboard prompt routing (2026-10-11)
+
+The plan is not copied wholesale into a list of manually maintained prompt
+fields. Its visual direction is routed by meaning:
+
+- scene entry/exit continuity, atmosphere, acting, physical action,
+  composition, and lighting are given to storyboard refinement as one
+  scene-scoped director context;
+- shot size, camera angle, and duration use the storyboard's existing
+  structured fields. Camera movement uses its existing structured field when
+  available; otherwise the confirmed plan wording is appended as a plain
+  constraint, without inventing a `static` camera setting;
+- confirmed character/prop IDs continue through the existing asset reference
+  path;
+- dialogue remains structured dialogue, while ambient sound remains audio
+  direction.
+
+When a storyboard frame is bound to one confirmed plan shot, it stores a
+server-projected read-only snapshot of that shot context. The R2V prompt
+assembler adds only the visual constraints not already present in the frame's
+visual description. The final prompt preview must show this assembled result.
+The frame may still be split from a plan shot, but context must never be
+borrowed from a different scene or shot. Frames without an unambiguous match
+keep no shot context rather than silently guessing.
+
 The Director interpretation and shooting plan share one selected Director
 revision in the Direction workspace. The selection defaults to the latest
 confirmed revision and is reset when the project or confirmed revision changes.

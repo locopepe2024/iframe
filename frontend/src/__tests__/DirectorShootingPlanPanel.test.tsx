@@ -110,7 +110,7 @@ beforeEach(() => {
     });
 });
 
-it("shows a scene-beat-shot timeline and keeps generation separate from storyboard application", async () => {
+it("shows a readable AI plan and keeps generation separate from storyboard application", async () => {
     vi.spyOn(api, "generateDirectorShootingPlan").mockResolvedValue(plan);
     const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_projectId, _sourceRevision, expectedRevision, draft) => ({
         project_id: "film",
@@ -149,23 +149,22 @@ it("shows a scene-beat-shot timeline and keeps generation separate from storyboa
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
-    expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Shot flow.*展开/i }));
-    const shotNode = screen.getByRole("button", { name: /Open shot 1: Follow the couple/i });
-    expect(shotNode).toBeInTheDocument();
-    fireEvent.click(shotNode);
-    expect(screen.getByText("Shot inspector")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open scene" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open beat" }));
-    expect(screen.getAllByText("4 sec")).toHaveLength(3);
+    expect(await screen.findByText("Cinema entrance")).toBeInTheDocument();
+    expect(screen.getByText("Emotional change: They stay comfortable and close.")).toBeInTheDocument();
+    expect(screen.getByText("Keep the cinema sign visible behind them.")).toBeInTheDocument();
+    expect(screen.getByText("Action: He holds her hand as they walk at the same pace.")).toBeInTheDocument();
+    expect(screen.getByText(/Review scene continuity and shot intent; matching context is carried into storyboard and R2V prompts/)).toBeInTheDocument();
+    expect(screen.getByText("Advanced scene continuity").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByRole("button", { name: /Create blank plan/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Input chunk 1/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Scene assets and source links"));
     fireEvent.click(screen.getByRole("button", { name: "Edit source links (1 available)" }));
     expect(screen.getByRole("checkbox", { name: /Input chunk 1/ })).toBeChecked();
     const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
     expect(confirmButton).toBeDisabled();
 
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
+    expect((await screen.findByText("Advanced shot constraints")).closest("details")).not.toHaveAttribute("open");
     const performance = await screen.findByLabelText("Character performance (gaze, expression, posture, pace)");
     fireEvent.change(performance, { target: { value: "They trade a brief smile while keeping the same pace." } });
     const effect = screen.getAllByLabelText("Director effect (audience / editorial effect)").at(-1)!;
@@ -208,8 +207,8 @@ it("saves reviewed place and time continuity with a lighting baseline", async ()
         </NextIntlClientProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Editor view" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open scene" }));
+    expect(await screen.findByText("Cinema entrance")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced scene continuity"));
     fireEvent.change(screen.getByLabelText("Physical place continuity ID"), { target: { value: "place-cinema" } });
     fireEvent.change(screen.getByLabelText("Story time continuity ID"), { target: { value: "time-day" } });
     fireEvent.click(screen.getByRole("button", { name: "Create lighting baseline" }));
@@ -380,7 +379,7 @@ it("lets the user discard a generated but unsaved proposal", async () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
-    expect(await screen.findByText("1 shots", { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText("Shot 1 · Follow the couple · Medium shot")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Discard local changes" }));
     expect(await screen.findByText("No confirmed shooting plan matches Director v2.")).toBeInTheDocument();
 });

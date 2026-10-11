@@ -30,6 +30,53 @@ export function resolveNegativePrompt(
     return [globalStyleNegative.trim(), modelNegative.trim()].filter(Boolean).join(", ");
 }
 
+function normalizedPromptText(value: string): string {
+    return value.replace(/[\s，。；：、,.!?！？:;]+/g, "").toLocaleLowerCase();
+}
+
+function directorShotConstraint(shot: ShotNode): string {
+    const context = shot.directorShotContext;
+    if (!context) return "";
+    const values: Array<[string, string | undefined]> = [
+        ["地点与时段", [context.scene?.location, context.scene?.time_anchor].filter(Boolean).join("，")],
+        ["场景入场连续性", context.scene?.continuity_in],
+        ["场景出场连续性", context.scene?.continuity_out],
+        ["环境氛围", context.scene?.atmosphere],
+        ["镜头意图", context.shot?.visual_intent],
+        ["导演效果", context.shot?.director_effect],
+        ["角色表演", context.shot?.performance_action],
+        ["动作物理", context.shot?.action_physics],
+        ["运镜", context.shot?.camera_movement],
+        ["构图", context.shot?.composition],
+        ["环境音", context.shot?.ambient_sound],
+    ];
+    const lighting = context.shot?.lighting;
+    if (lighting) {
+        const parts = [
+            lighting.key_source && `主光${lighting.key_source}`,
+            lighting.color_tone && `色调${lighting.color_tone}`,
+            lighting.contrast && `明暗${lighting.contrast}`,
+            lighting.practical_sources?.length && `画内光源${lighting.practical_sources.join("、")}`,
+        ].filter((value): value is string => Boolean(value));
+        if (parts.length) values.push(["光影", parts.join("；")]);
+    }
+    const existingFields = [
+        shot.prompt || "",
+        shot.cameraMovementStructured?.description || shot.cameraMovementStructured?.primary || "",
+        shot.shotSize || "",
+        shot.cameraAngle || "",
+        shot.transitionHint || "",
+    ].map(normalizedPromptText).filter(Boolean);
+    const clauses = values.flatMap(([label, raw]) => {
+        const value = raw?.trim();
+        const normalizedValue = value ? normalizedPromptText(value) : "";
+        if (!normalizedValue || existingFields.some(existing => existing.includes(normalizedValue))) return [];
+        existingFields.push(normalizedValue);
+        return [`${label}：${value}`];
+    });
+    return clauses.length ? `导演镜头约束：${clauses.join("；")}` : "";
+}
+
 /**
  * Real-time compute the final assembled prompt from the user's textarea
  * (visual narrative) + structured fields (camera language metadata).
@@ -64,6 +111,9 @@ export function buildAssembledPrompt(
         shot.lightingOverride,
     );
     const suffixes: string[] = [];
+
+    const directorConstraint = directorShotConstraint(shot);
+    if (directorConstraint) suffixes.push(directorConstraint);
 
     // Camera movement (natural language, speed naturally embedded)
     if (shot.cameraMovementStructured) {

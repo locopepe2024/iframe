@@ -8,7 +8,6 @@ import {
     Clapperboard,
     ChevronDown,
     ChevronUp,
-    Clock3,
     Loader2,
     Plus,
     RotateCcw,
@@ -81,21 +80,6 @@ function emptyScene(order: number): DirectorPlanScene {
         continues_previous_scene: false, continuity_in: "", continuity_out: "", duration_seconds: null,
         environment_atmosphere: "", unresolved_questions: [], source_chunk_refs: [], prop_ids: [],
         beats: [emptyBeat(0)],
-    };
-}
-
-function emptyPlan(lineage: Record<string, unknown>): DirectorShootingPlan {
-    return {
-        schema_version: 1,
-        source_revision: Number(lineage.source_revision ?? 1),
-        source_revision_id: String(lineage.source_revision_id ?? ""),
-        director_profile_revision: Number(lineage.director_profile_revision ?? 1),
-        director_profile_hash: String(lineage.director_profile_hash ?? ""),
-        effective_style_hash: String(lineage.effective_style_hash ?? ""),
-        scenes: [emptyScene(0)],
-        lighting_baselines: [],
-        unresolved_questions: [],
-        generated_at: null,
     };
 }
 
@@ -199,70 +183,6 @@ function moveItem<T>(items: T[], index: number, delta: number): T[] {
     return next;
 }
 
-function ShotFlowMap({
-    scenes,
-    onSelectShot,
-    selectedShotId,
-    labels,
-}: {
-    scenes: DirectorPlanScene[];
-    onSelectShot: (shotId: string) => void;
-    selectedShotId: string | null;
-    labels: { scene: string; beat: string; shots: string; openShot: string; untitledScene: string; untitledBeat: string; untitledShot: string; noEffect: string };
-}) {
-    return (
-        <div className="space-y-5" aria-label="Director shot flow map">
-            {scenes.map((scene, sceneIndex) => (
-                <div key={scene.scene_id} className="relative rounded-lg border border-border bg-background/45 p-3 sm:p-4">
-                    <div className="mb-3 flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 text-xs font-semibold text-primary">
-                            S{sceneIndex + 1}
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-xs font-medium uppercase tracking-wide text-primary">{labels.scene}</p>
-                            <p className="truncate text-sm font-semibold text-foreground">{scene.heading || scene.scene_ref || labels.untitledScene}</p>
-                        </div>
-                    </div>
-                    <div className="ml-4 space-y-3 border-l-2 border-primary/30 pl-4 sm:ml-5 sm:pl-6">
-                        {scene.beats.map((beat, beatIndex) => (
-                            <div key={beat.beat_id} className="relative">
-                                <span className="absolute -left-[1.55rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-primary bg-background sm:-left-[1.85rem]" aria-hidden="true" />
-                                <div className="rounded-md border border-border bg-surface/70 p-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{labels.beat} {beatIndex + 1}</span>
-                                        <span className="h-px flex-1 bg-border" aria-hidden="true" />
-                                        <span className="text-xs text-text-muted">{labels.shots}: {beat.shots.length}</span>
-                                    </div>
-                                    <p className="mt-1 text-sm font-medium text-foreground">{beat.title || labels.untitledBeat}</p>
-                                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                                        {beat.shots.map((shot, shotIndex) => (
-                                            <button
-                                                key={shot.shot_id}
-                                                type="button"
-                                                onClick={() => onSelectShot(shot.shot_id)}
-                                                className={`group relative min-h-24 rounded-md border p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedShotId === shot.shot_id ? "border-primary bg-primary/10 ring-1 ring-primary/50" : "border-border bg-background/80"}`}
-                                                aria-label={`${labels.openShot} ${shotIndex + 1}: ${shot.title || labels.untitledShot}`}
-                                            >
-                                                {shotIndex > 0 && <span className="absolute -left-2 top-1/2 hidden h-px w-2 bg-primary/50 md:block" aria-hidden="true" />}
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{labels.shots.replace(/s$/, "")} {shotIndex + 1}</span>
-                                                    <span className="text-xs text-text-muted">{shot.duration_seconds ?? 0}s</span>
-                                                </div>
-                                                <p className="mt-1 line-clamp-2 text-sm font-medium text-foreground">{shot.title || labels.untitledShot}</p>
-                                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary">{shot.director_effect || shot.visual_intent || labels.noEffect}</p>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 export default function DirectorShootingPlanPanel({ selectedDirector = null, historical = false }: { selectedDirector?: DirectorProfile | null; historical?: boolean }) {
     const t = useTranslations("artDirection.directorPlan");
     const { currentProject } = useProjectStore();
@@ -286,11 +206,9 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const [jobProgress, setJobProgress] = useState<{ completed: number; total: number } | null>(null);
     const [jobStatus, setJobStatus] = useState("");
     const [expandedShots, setExpandedShots] = useState<Set<string>>(() => new Set());
+    const [expandedShotContextIds, setExpandedShotContextIds] = useState<Set<string>>(() => new Set());
     const [expandedSceneIds, setExpandedSceneIds] = useState<Set<string>>(() => new Set());
-    const [expandedBeatIds, setExpandedBeatIds] = useState<Set<string>>(() => new Set());
-    const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
-    const [shotFlowOpen, setShotFlowOpen] = useState(false);
-    const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
+    const [expandedSceneContextIds, setExpandedSceneContextIds] = useState<Set<string>>(() => new Set());
     const [sourceEditorSceneId, setSourceEditorSceneId] = useState<string | null>(null);
     const [revisionTitle, setRevisionTitle] = useState("");
     const [revisionSummary, setRevisionSummary] = useState("");
@@ -358,8 +276,9 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                 setPlan(nextState.draft);
                 setSavedPlan(nextState.draft);
                 setExpandedShots(new Set());
-                setExpandedSceneIds(new Set());
-                setExpandedBeatIds(new Set());
+                setExpandedShotContextIds(new Set());
+                setExpandedSceneIds(new Set((nextState.draft?.scenes ?? []).map(scene => scene.scene_id)));
+                setExpandedSceneContextIds(new Set());
             }
             setHistory(nextHistory);
         } catch (cause) {
@@ -378,8 +297,9 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             setSavedPlan(null);
             setHistory([]);
             setExpandedShots(new Set());
+            setExpandedShotContextIds(new Set());
             setExpandedSceneIds(new Set());
-            setExpandedBeatIds(new Set());
+            setExpandedSceneContextIds(new Set());
             setSourceEditorSceneId(null);
             setError("");
             setNotice("");
@@ -446,6 +366,10 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             });
             setPlan(generated);
             setSavedPlan(null);
+            setExpandedShots(new Set());
+            setExpandedSceneIds(new Set(generated.scenes.map(scene => scene.scene_id)));
+            setExpandedSceneContextIds(new Set());
+            setExpandedShotContextIds(new Set());
             setNotice(serverState?.draft
                 ? t("generatedReplacing", { revision: generated.director_profile_revision, draft: serverState.draft_revision })
                 : t("generated", { revision: generated.director_profile_revision }));
@@ -456,14 +380,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             setAction(null);
             setJobStatus("");
         }
-    };
-
-    const createBlank = () => {
-        if (!serverState?.current_lineage) return;
-        setPlan(emptyPlan(serverState.current_lineage));
-        setSavedPlan(null);
-        setError("");
-        setNotice(t("blankCreated"));
     };
 
     const save = async () => {
@@ -477,6 +393,8 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                 : await api.saveDirectorShootingPlanDraft(projectId, sourceRevision, serverState?.draft_revision ?? 0, plan);
             setPlan(result.draft);
             setSavedPlan(result.draft);
+            setExpandedShots(new Set());
+            setExpandedSceneIds(new Set((result.draft?.scenes ?? []).map(scene => scene.scene_id)));
             setServerState(previous => previous ? {
                 ...previous,
                 draft: result.draft,
@@ -557,7 +475,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                     </div>
                     {!historical && <div className="flex flex-wrap gap-2">
                         <button type="button" onClick={generate} disabled={action !== null || dirty || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
-                        <button type="button" onClick={createBlank} disabled={action !== null || dirty || !serverState?.current_lineage} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground disabled:opacity-50"><Plus size={16} />{t("blankPlan", { revision: viewedDirectorRevision })}</button>
                     </div>}
                 </div>
                 {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
@@ -607,21 +524,15 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
         !draftStale && serverState?.current_lineage?.director_profile_hash && reference.director_profile_hash !== serverState.current_lineage.director_profile_hash ? t("changedDirectorContent") : null,
     ].filter((item): item is string => Boolean(item)))));
     const openPlanEditor = () => {
-        setViewMode("editor");
         requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("director-plan-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })));
     };
     const openLightingConflict = (conflict: (typeof lightingConflicts)[number]) => {
-        setViewMode("editor");
         setExpandedSceneIds(previous => new Set(previous).add(conflict.sceneId));
-        setExpandedBeatIds(previous => new Set(previous).add(conflict.beatId));
+        setExpandedSceneContextIds(previous => new Set(previous).add(conflict.sceneId));
         setExpandedShots(previous => new Set(previous).add(conflict.shotId));
+        setExpandedShotContextIds(previous => new Set(previous).add(conflict.shotId));
         requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`director-plan-shot-${conflict.shotId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" })));
     };
-    const shotsByScene = scenes.map(scene => scene.beats.reduce((total, beat) => total + beat.shots.length, 0));
-    const durationByScene = scenes.map(scene => scene.beats.reduce(
-        (sceneTotal, beat) => sceneTotal + beat.shots.reduce((beatTotal, shot) => beatTotal + (shot.duration_seconds ?? 0), 0),
-        0,
-    ));
 
     return (
         <section className="space-y-5" aria-labelledby="director-shooting-plan-title">
@@ -643,14 +554,6 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                     >
                         {action === "generate" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}
                         {plan ? t("regenerate", { revision: Number(currentLineage?.director_profile_revision ?? 0) }) : t("generate")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => serverState?.current_lineage && createBlank()}
-                        disabled={locked || dirty || Boolean(serverState?.readiness_error)}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <Plus size={16} aria-hidden="true" />{t("blankPlan", { revision: Number(currentLineage?.director_profile_revision ?? 0) })}
                     </button>
                 </div>
             </header>
@@ -693,98 +596,11 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
 
             {plan && (
                 <>
-                    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("summaryTitle")}>
-                        {[
-                            [t("sceneCount"), scenes.length],
-                            [t("beatCount"), beats.length],
-                            [t("shotCount"), shots.length],
-                            [t("totalDuration"), t("seconds", { value: duration })],
-                        ].map(([label, value]) => (
-                            <div key={String(label)} className="rounded-md border border-border bg-background/50 p-3">
-                                <p className="text-xs text-text-muted">{label}</p>
-                                <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
-                            </div>
-                        ))}
-                    </section>
+                    <p className="text-xs text-text-muted" aria-label={t("summaryTitle")}>
+                        {t("reviewSummary", { scenes: scenes.length, beats: beats.length, shots: shots.length, duration: t("seconds", { value: duration }) })}
+                    </p>
 
-                    <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-plan-timeline-title">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <h3 id="director-plan-timeline-title" className="text-sm font-semibold text-foreground">{t("timelineTitle")}</h3>
-                                <p className="mt-1 text-xs text-text-muted">{t("timelineHint")}</p>
-                            </div>
-                            <span className="inline-flex items-center gap-1 text-xs text-text-secondary"><Clock3 size={14} aria-hidden="true" />{t("seconds", { value: duration })}</span>
-                        </div>
-                        <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            {scenes.map((scene, index) => {
-                                const percent = duration > 0 ? Math.round(durationByScene[index] / duration * 100) : 0;
-                                return (
-                                    <li key={scene.scene_id} className="min-w-0 rounded-md border border-border bg-surface p-3">
-                                        <p className="truncate text-xs font-semibold text-text-muted">{t("sceneNumber", { number: index + 1 })}</p>
-                                        <p className="mt-1 truncate text-sm font-medium text-foreground">{scene.heading || scene.scene_ref || t("unnamedScene")}</p>
-                                        <p className="mt-1 text-xs text-text-secondary">{t("sceneTimelineCounts", { beats: scene.beats.length, shots: shotsByScene[index], duration: durationByScene[index] })}</p>
-                                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background" aria-label={t("sceneTimelineDuration", { percent })}>
-                                            <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ol>
-                    </section>
-
-                    <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-plan-flow-title">
-                        <button type="button" className="flex w-full items-center justify-between text-left" aria-expanded={shotFlowOpen} onClick={() => setShotFlowOpen(value => !value)}>
-                            <span><h3 id="director-plan-flow-title" className="text-sm font-semibold text-foreground">Shot flow</h3><p className="mt-1 text-xs text-text-muted">{shotFlowOpen ? "Scenes, beats and shots are connected in reading order. Select a shot to open its editable details." : "Collapsed. Open to inspect shot order and details."}</p></span>
-                            <span className="text-xs text-text-secondary">{shotFlowOpen ? "收起" : "展开"}</span>
-                        </button>
-                        {shotFlowOpen && <div className="mt-3">
-                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-                            <ShotFlowMap
-                                scenes={scenes}
-                                selectedShotId={selectedShotId}
-                                labels={{
-                                    scene: t("flow.scene"), beat: t("flow.beat"), shots: t("flow.shots"), openShot: t("flow.openShot"),
-                                    untitledScene: t("unnamedScene"), untitledBeat: t("flow.untitledBeat"), untitledShot: t("untitledShot"), noEffect: t("flow.noEffect"),
-                                }}
-                                onSelectShot={shotId => {
-                                    setSelectedShotId(shotId);
-                                    requestAnimationFrame(() => {
-                                        const target = document.getElementById(`director-plan-shot-${shotId}`);
-                                        target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-                                    });
-                                }}
-                            />
-                            <aside className="h-fit rounded-lg border border-primary/30 bg-surface/70 p-4 lg:sticky lg:top-4" aria-label={t("flow.inspector") }>
-                                {(() => {
-                                    const selected = shots.find(shot => shot.shot_id === selectedShotId);
-                                    if (!selected) return <p className="text-sm leading-6 text-text-secondary">{t("flow.selectShot")}</p>;
-                                    const location = scenes.flatMap((scene, sceneIndex) => scene.beats.flatMap((beat, beatIndex) => beat.shots.map((shot, shotIndex) => ({ shot, sceneIndex, beatIndex, shotIndex })))).find(item => item.shot.shot_id === selectedShotId);
-                                    if (!location) return null;
-                                    return (
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t("flow.inspector")}</p>
-                                                <h4 className="mt-1 text-sm font-semibold text-foreground">{t("flow.shotLabel", { number: location.shotIndex + 1 })}</h4>
-                                            </div>
-                                            <Field label={t("fields.shotTitle")} value={selected.title} onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { title: value })} />
-                                            <Field label={t("fields.directorEffect")} value={selected.director_effect} multiline onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { director_effect: value })} />
-                                            <Field label={t("fields.duration")} type="number" min={1} max={30} value={selected.duration_seconds} onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { duration_seconds: value ? Number(value) : null })} />
-                                            <Field label={t("fields.visualIntent")} value={selected.visual_intent} multiline onChange={value => updateShot(location.sceneIndex, location.beatIndex, location.shotIndex, { visual_intent: value })} />
-                                        </div>
-                                    );
-                                })()}
-                            </aside>
-                        </div></div>}
-                    </section>
-
-                    <div className="flex items-center justify-end gap-2">
-                        <div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("flow.viewMode")}>
-                            <button type="button" onClick={() => setViewMode("graph")} className={`min-h-9 rounded px-3 text-xs ${viewMode === "graph" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`} aria-pressed={viewMode === "graph"}>{t("flow.graphView")}</button>
-                            <button type="button" onClick={() => setViewMode("editor")} className={`min-h-9 rounded px-3 text-xs ${viewMode === "editor" ? "bg-primary text-white" : "text-text-secondary hover:bg-surface"}`} aria-pressed={viewMode === "editor"}>{t("flow.editorView")}</button>
-                        </div>
-                    </div>
-
-                    {viewMode === "editor" && <div id="director-plan-editor" className="space-y-4">
+                    <div id="director-plan-editor" className="space-y-4">
                         {scenes.map((scene, sceneIndex) => (
                             <section key={scene.scene_id} className="overflow-hidden rounded-lg border border-border bg-background/30" aria-labelledby={`director-plan-scene-${scene.scene_id}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/60 px-4 py-3">
@@ -814,16 +630,64 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                     </div>
                                 </div>
                                 {expandedSceneIds.has(scene.scene_id) && <div id={`director-plan-scene-body-${scene.scene_id}`} className="space-y-5 p-4">
-                                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                        <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
+                                    <div className="grid gap-3 rounded-md border border-border bg-background/35 p-3 sm:grid-cols-2">
+                                        <div>
+                                            <p className="text-xs font-medium text-text-muted">{t("fields.continuityIn")}</p>
+                                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{scene.continuity_in || t("continuityUnspecified")}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-medium text-text-muted">{t("fields.continuityOut")}</p>
+                                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{scene.continuity_out || t("continuityUnspecified")}</p>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <p className="text-xs font-medium text-text-muted">{t("fields.environmentAtmosphere")}</p>
+                                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{scene.environment_atmosphere || t("atmosphereUnspecified")}</p>
+                                        </div>
+                                    </div>
+                                    <details className="rounded-md border border-border bg-background/20">
+                                        <summary className="flex min-h-11 cursor-pointer items-center px-3 py-2 text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">{t("editSceneReview")}</summary>
+                                        <div className="space-y-4 border-t border-border p-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                         <Field label={t("fields.heading")} value={scene.heading} placeholder={t("fields.headingPlaceholder")} hint={t("fields.headingHint")} onChange={value => updateScene(sceneIndex, { heading: value })} />
                                         <Field label={t("fields.location")} value={scene.location} onChange={value => updateScene(sceneIndex, { location: value })} />
                                         <Field label={t("fields.timeAnchor")} value={scene.time_anchor} onChange={value => updateScene(sceneIndex, { time_anchor: value })} />
-                                        <Field label={t("fields.placeContinuityId")} value={scene.place_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { place_continuity_id: value.trim() || null })} />
-                                        <Field label={t("fields.timeContinuityId")} value={scene.time_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { time_continuity_id: value.trim() || null })} />
-                                        <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
                                     </div>
-                                    {scene.place_continuity_id && scene.time_continuity_id && (() => {
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <Field label={t("fields.continuityIn")} value={scene.continuity_in} multiline onChange={value => updateScene(sceneIndex, { continuity_in: value })} />
+                                        <Field label={t("fields.continuityOut")} value={scene.continuity_out} multiline onChange={value => updateScene(sceneIndex, { continuity_out: value })} />
+                                    </div>
+                                    <label className="inline-flex items-center gap-2 text-xs text-text-secondary">
+                                        <input type="checkbox" checked={scene.continues_previous_scene} onChange={event => updateScene(sceneIndex, { continues_previous_scene: event.target.checked })} className="accent-primary" />
+                                        {t("fields.continuesPreviousScene")}
+                                    </label>
+                                    <Field label={t("fields.environmentAtmosphere")} value={scene.environment_atmosphere} multiline onChange={value => updateScene(sceneIndex, { environment_atmosphere: value })} />
+                                        </div>
+                                    </details>
+                                    <details
+                                        open={expandedSceneContextIds.has(scene.scene_id)}
+                                        className="rounded-md border border-border bg-background/25"
+                                        onToggle={event => {
+                                            const isOpen = event.currentTarget.open;
+                                            setExpandedSceneContextIds(previous => {
+                                                const next = new Set(previous);
+                                                if (isOpen) next.add(scene.scene_id);
+                                                else next.delete(scene.scene_id);
+                                                return next;
+                                            });
+                                        }}
+                                    >
+                                        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                                            <span>{t("advancedSceneContextTitle")}</span>
+                                            <span className="text-text-muted">{t("advancedSceneContextHint")}</span>
+                                        </summary>
+                                        <div className="space-y-4 border-t border-border p-3">
+                                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                                <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
+                                                <Field label={t("fields.placeContinuityId")} value={scene.place_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { place_continuity_id: value.trim() || null })} />
+                                                <Field label={t("fields.timeContinuityId")} value={scene.time_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { time_continuity_id: value.trim() || null })} />
+                                                <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
+                                            </div>
+                                            {scene.place_continuity_id && scene.time_continuity_id && (() => {
                                         const placeId = scene.place_continuity_id;
                                         const timeId = scene.time_continuity_id;
                                         const baseline = (plan.lighting_baselines ?? []).find(item =>
@@ -846,19 +710,17 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                     lighting_baselines: (current.lighting_baselines ?? []).filter(item =>
                                                         item.place_continuity_id !== placeId || item.time_continuity_id !== timeId),
                                                 }))} disabled={locked} className="w-fit text-xs text-red-300 hover:underline disabled:opacity-50">{t("fields.removeContinuityBaseline")}</button>
-                                            </div>}
+                                                </div>}
                                         </fieldset>;
                                     })()}
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <Field label={t("fields.continuityIn")} value={scene.continuity_in} multiline onChange={value => updateScene(sceneIndex, { continuity_in: value })} />
-                                        <Field label={t("fields.continuityOut")} value={scene.continuity_out} multiline onChange={value => updateScene(sceneIndex, { continuity_out: value })} />
-                                    </div>
-                                    <label className="inline-flex items-center gap-2 text-xs text-text-secondary">
-                                        <input type="checkbox" checked={scene.continues_previous_scene} onChange={event => updateScene(sceneIndex, { continues_previous_scene: event.target.checked })} className="accent-primary" />
-                                        {t("fields.continuesPreviousScene")}
-                                    </label>
-                                    <Field label={t("fields.environmentAtmosphere")} value={scene.environment_atmosphere} multiline onChange={value => updateScene(sceneIndex, { environment_atmosphere: value })} />
-                                    <div className="grid gap-4 lg:grid-cols-2">
+                                        </div>
+                                    </details>
+                                    <details className="rounded-md border border-border bg-background/25">
+                                        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                                            <span>{t("sceneAssetsAndSourcesTitle")}</span>
+                                            <span className="text-text-muted">{t("sceneAssetsAndSourcesHint")}</span>
+                                        </summary>
+                                        <div className="grid gap-4 border-t border-border p-3 lg:grid-cols-2">
                                         <MultiSelect label={t("fields.sceneProps")} values={scene.prop_ids} options={propOptions} onChange={values => updateScene(sceneIndex, { prop_ids: values })} />
                                         <fieldset className="min-w-0 rounded-md border border-border p-3">
                                             <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.sourceChunks")}</legend>
@@ -906,51 +768,42 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                     ))}
                                             </div>
                                         </fieldset>
-                                    </div>
+                                        </div>
+                                    </details>
                                     <div className="space-y-4 border-l-2 border-primary/40 pl-3 sm:pl-5">
                                         {scene.beats.map((beat, beatIndex) => (
                                             <article key={beat.beat_id} className="rounded-md border border-border bg-background/55 p-3 sm:p-4">
                                                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                                     <div className="min-w-0">
                                                         <h4 className="text-sm font-semibold text-foreground">{t("beatNumber", { number: beatIndex + 1 })}</h4>
-                                                        <p className="mt-1 text-xs text-text-muted">{beat.title || t("flow.untitledBeat")} · {t("beatOverview", { shots: beat.shots.length, purpose: beat.dramatic_purpose || t("unspecified") })}</p>
+                                                        <p className="mt-1 text-xs text-text-muted">{beat.title || t("untitledBeat")} · {t("beatOverview", { shots: beat.shots.length, purpose: beat.dramatic_purpose || t("unspecified") })}</p>
+                                                        {beat.emotional_change && <p className="mt-1 text-sm leading-5 text-text-secondary">{t("beatEmotion")}: {beat.emotional_change}</p>}
                                                     </div>
                                                     <div className="flex items-center gap-1">
-                                                        <button
-                                                            type="button"
-                                                            aria-expanded={expandedBeatIds.has(beat.beat_id)}
-                                                            aria-controls={`director-plan-beat-body-${beat.beat_id}`}
-                                                            onClick={() => setExpandedBeatIds(previous => {
-                                                                const next = new Set(previous);
-                                                                if (next.has(beat.beat_id)) next.delete(beat.beat_id);
-                                                                else next.add(beat.beat_id);
-                                                                return next;
-                                                            })}
-                                                            className="min-h-9 rounded border border-border px-3 text-xs text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                                                        >
-                                                            {expandedBeatIds.has(beat.beat_id) ? t("collapseBeat") : t("expandBeat")}
-                                                        </button>
+                                                        <details className="relative">
+                                                            <summary className="flex min-h-9 cursor-pointer list-none items-center rounded border border-border px-3 text-xs text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{t("editBeat")}</summary>
+                                                            <div id={`director-plan-beat-body-${beat.beat_id}`} className="absolute right-0 z-20 mt-2 grid w-[min(34rem,calc(100vw-3rem))] gap-3 rounded-md border border-border bg-background p-3 shadow-xl sm:grid-cols-2">
+                                                                <Field label={t("fields.beatTitle")} value={beat.title} onChange={value => updateBeat(sceneIndex, beatIndex, { title: value })} />
+                                                                <Field label={t("fields.emotionalChange")} value={beat.emotional_change} onChange={value => updateBeat(sceneIndex, beatIndex, { emotional_change: value })} />
+                                                                <Field label={t("fields.beatDuration")} type="number" min={1} max={300} value={beat.duration_seconds} onChange={value => updateBeat(sceneIndex, beatIndex, { duration_seconds: value ? Number(value) : null })} />
+                                                                <label className="inline-flex items-center gap-2 self-end pb-2 text-xs text-text-secondary"><input type="checkbox" checked={beat.keep_with_next} onChange={event => updateBeat(sceneIndex, beatIndex, { keep_with_next: event.target.checked })} className="accent-primary" />{t("fields.keepWithNext")}</label>
+                                                                <div className="sm:col-span-2"><Field label={t("fields.dramaticPurpose")} value={beat.dramatic_purpose} multiline onChange={value => updateBeat(sceneIndex, beatIndex, { dramatic_purpose: value })} /></div>
+                                                                <div className="sm:col-span-2 space-y-2">
+                                                                    <MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} />
+                                                                    {beat.story_event_ids.filter(id => !knownStoryEventIds.has(id)).map(id => (
+                                                                        <button key={id} type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { story_event_ids: beat.story_event_ids.filter(value => value !== id) })} className="rounded border border-amber-400/40 px-2 py-1 text-xs text-amber-100 hover:bg-amber-400/10" aria-label={t("removeObsoleteEvent", { id })}>
+                                                                            {t("removeObsoleteEvent", { id })}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </details>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(moveItem(scene.beats, beatIndex, -1)) })} disabled={locked || beatIndex === 0} aria-label={t("moveBeatUp", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronUp size={15} aria-hidden="true" /></button>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(moveItem(scene.beats, beatIndex, 1)) })} disabled={locked || beatIndex === scene.beats.length - 1} aria-label={t("moveBeatDown", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronDown size={15} aria-hidden="true" /></button>
                                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: reindex(scene.beats.filter((_, index) => index !== beatIndex)) })} disabled={locked || scene.beats.length <= 1} aria-label={t("deleteBeat", { number: beatIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-red-400/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><Trash2 size={15} aria-hidden="true" /></button>
                                                     </div>
                                                 </div>
-                                                {expandedBeatIds.has(beat.beat_id) && <div id={`director-plan-beat-body-${beat.beat_id}`} className="grid gap-3 sm:grid-cols-2">
-                                                    <Field label={t("fields.beatTitle")} value={beat.title} onChange={value => updateBeat(sceneIndex, beatIndex, { title: value })} />
-                                                    <Field label={t("fields.emotionalChange")} value={beat.emotional_change} onChange={value => updateBeat(sceneIndex, beatIndex, { emotional_change: value })} />
-                                                    <Field label={t("fields.beatDuration")} type="number" min={1} max={300} value={beat.duration_seconds} onChange={value => updateBeat(sceneIndex, beatIndex, { duration_seconds: value ? Number(value) : null })} />
-                                                    <label className="inline-flex items-center gap-2 self-end pb-2 text-xs text-text-secondary"><input type="checkbox" checked={beat.keep_with_next} onChange={event => updateBeat(sceneIndex, beatIndex, { keep_with_next: event.target.checked })} className="accent-primary" />{t("fields.keepWithNext")}</label>
-                                                    <div className="sm:col-span-2"><Field label={t("fields.dramaticPurpose")} value={beat.dramatic_purpose} multiline onChange={value => updateBeat(sceneIndex, beatIndex, { dramatic_purpose: value })} /></div>
-                                                    <div className="sm:col-span-2 space-y-2">
-                                                        <MultiSelect label={t("fields.storyEvents")} values={beat.story_event_ids} options={storyEventOptions} onChange={values => updateBeat(sceneIndex, beatIndex, { story_event_ids: values })} />
-                                                        {beat.story_event_ids.filter(id => !knownStoryEventIds.has(id)).map(id => (
-                                                            <button key={id} type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { story_event_ids: beat.story_event_ids.filter(value => value !== id) })} className="rounded border border-amber-400/40 px-2 py-1 text-xs text-amber-100 hover:bg-amber-400/10" aria-label={t("removeObsoleteEvent", { id })}>
-                                                                {t("removeObsoleteEvent", { id })}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>}
-                                                {expandedBeatIds.has(beat.beat_id) && <div className="mt-4 space-y-2">
+                                                <div className="mt-4 space-y-2">
                                                     {beat.shots.map((shot, shotIndex) => (
                                                         <details
                                                             key={shot.shot_id}
@@ -967,11 +820,18 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                                 });
                                                             }}
                                                         >
-                                                            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
-                                                                <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                                                                    {t("shotSummary", { number: shotIndex + 1, title: shot.title || t("untitledShot"), size: shot.shot_size || t("unspecified") })}
+                                                            <summary className="flex min-h-12 cursor-pointer list-none items-start justify-between gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                                                                <span className="min-w-0 flex-1">
+                                                                    <span className="block truncate text-sm font-medium text-foreground">{t("shotSummary", { number: shotIndex + 1, title: shot.title || t("untitledShot"), size: shot.shot_size || t("unspecified") })}</span>
+                                                                    <span className="mt-1 block whitespace-normal text-sm leading-5 text-text-secondary">{shot.visual_intent || t("shotDirectionUnspecified")}</span>
+                                                                    {(shot.director_effect || shot.performance_action) && <span className="mt-1 block whitespace-normal text-xs leading-5 text-text-muted">{[shot.director_effect, shot.performance_action].filter(Boolean).join(" · ")}</span>}
+                                                                    {shot.action_physics && <span className="mt-1 block whitespace-normal text-xs leading-5 text-text-muted">{t("shotActionSummary")}: {shot.action_physics}</span>}
+                                                                    <span className="mt-1 block whitespace-normal text-xs text-text-muted">{[shot.camera_angle, shot.camera_movement].filter(Boolean).join(" · ") || t("shotFramingUnspecified")}</span>
                                                                 </span>
-                                                                <span className="shrink-0 rounded-full border border-border px-2 py-1 text-xs text-text-secondary">{t("seconds", { value: shot.duration_seconds ?? 0 })}</span>
+                                                                <span className="flex shrink-0 flex-col items-end gap-1">
+                                                                    <span className="rounded-full border border-border px-2 py-1 text-xs text-text-secondary">{t("seconds", { value: shot.duration_seconds ?? 0 })}</span>
+                                                                    <span className="text-[11px] text-primary">{t("editShotDetails")}</span>
+                                                                </span>
                                                             </summary>
                                                             {expandedShots.has(shot.shot_id) && <div className="space-y-4 border-t border-border p-3 sm:p-4">
                                                                 <div className="flex justify-end gap-1">
@@ -979,95 +839,119 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                                     <button type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { shots: reindex(moveItem(beat.shots, shotIndex, 1)) })} disabled={locked || shotIndex === beat.shots.length - 1} aria-label={t("moveShotDown", { number: shotIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><ChevronDown size={15} aria-hidden="true" /></button>
                                                                     <button type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { shots: reindex(beat.shots.filter((_, index) => index !== shotIndex)) })} disabled={locked || beat.shots.length <= 1} aria-label={t("deleteShot", { number: shotIndex + 1 })} className="rounded p-2 text-text-secondary hover:bg-red-400/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"><Trash2 size={15} aria-hidden="true" /></button>
                                                                 </div>
-                                                                <div className="grid gap-3 sm:grid-cols-2">
-                                                                    <Field label={t("fields.shotTitle")} value={shot.title} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { title: value })} />
-                                                                    <Field label={t("fields.duration")} type="number" min={1} max={30} value={shot.duration_seconds} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { duration_seconds: value ? Number(value) : null })} />
-                                                                    <div className="sm:col-span-2"><Field label={t("fields.visualIntent")} value={shot.visual_intent} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { visual_intent: value })} /></div>
-                                                                    <div className="sm:col-span-2"><Field label={t("fields.directorEffect")} value={shot.director_effect} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { director_effect: value })} /></div>
-                                                                    <Field label={t("fields.performanceAction")} value={shot.performance_action} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { performance_action: value })} />
-                                                                    <Field label={t("fields.actionPhysics")} value={shot.action_physics} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { action_physics: value })} />
-                                                                    <Field label={t("fields.shotSize")} value={shot.shot_size} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { shot_size: value })} />
-                                                                    <Field label={t("fields.cameraAngle")} value={shot.camera_angle} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { camera_angle: value })} />
-                                                                    <div className="sm:col-span-2"><Field label={t("fields.composition")} value={shot.composition} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { composition: value })} /></div>
-                                                                    <Field label={t("fields.cameraMovement")} value={shot.camera_movement} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { camera_movement: value })} />
-                                                                    <Field label={t("fields.ambientSound")} value={shot.ambient_sound} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { ambient_sound: value })} />
-                                                                </div>
-                                                                <fieldset className="rounded-md border border-border p-3">
-                                                                    <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
-                                                                    {(() => {
-                                                                        const conflict = lightingConflicts.find(item => item.shotId === shot.shot_id);
-                                                                        const baseline = (plan.lighting_baselines ?? []).find(item =>
-                                                                            item.place_continuity_id === scene.place_continuity_id && item.time_continuity_id === scene.time_continuity_id);
-                                                                        if (!conflict || !baseline) return null;
-                                                                        const fieldNames = { key_source: "keySource", color_tone: "colorTone", contrast: "contrast", practical_sources: "practicalSources" } as const;
-                                                                        return <div className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
-                                                                            <p className="font-medium">{t("lightingConflictComparisonTitle")}</p>
-                                                                            <p className="mt-1 leading-5">{t("lightingConflictComparisonHint")}</p>
-                                                                            <div className="mt-3 space-y-2">
-                                                                                {conflict.fields.map(field => <div key={field} className="rounded border border-amber-300/20 bg-background/50 p-2">
-                                                                                    <p className="font-medium">{t(`fields.${fieldNames[field]}`)}</p>
-                                                                                    <p className="mt-1"><span className="text-text-muted">{t("lightingBaselineValue")}</span> {Array.isArray(baseline.lighting[field]) ? baseline.lighting[field].join("、") || t("lightingEmptyValue") : baseline.lighting[field] || t("lightingEmptyValue")}</p>
-                                                                                    <p className="mt-1"><span className="text-text-muted">{t("lightingShotValue")}</span> {Array.isArray(shot.lighting[field]) ? shot.lighting[field].join("、") || t("lightingEmptyValue") : shot.lighting[field] || t("lightingEmptyValue")}</p>
-                                                                                    <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, [field]: baseline.lighting[field] } })} className="mt-2 rounded border border-amber-300/40 px-2 py-1 hover:bg-amber-300/10">{t("lightingUseBaseline")}</button>
-                                                                                </div>)}
-                                                                            </div>
-                                                                        </div>;
-                                                                    })()}
-                                                                    <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
-                                                                    <div className="grid gap-3 sm:grid-cols-3">
-                                                                        <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
-                                                                        <Field label={t("fields.colorTone")} value={shot.lighting.color_tone} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, color_tone: value } })} />
-                                                                        <Field label={t("fields.contrast")} value={shot.lighting.contrast} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, contrast: value } })} />
-                                                                        <div className="sm:col-span-3"><Field label={t("fields.practicalSources")} value={shot.lighting.practical_sources.join("\n")} multiline hint={t("practicalSourceHint")} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, practical_sources: value.split("\n").map(item => item.trim()).filter(Boolean) } })} /></div>
-                                                                    </div>
-                                                                </fieldset>
-                                                                <div className="grid gap-3 lg:grid-cols-2">
-                                                                    <MultiSelect label={t("fields.characters")} values={shot.character_ids} options={characterOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { character_ids: values })} />
-                                                                    <MultiSelect label={t("fields.shotProps")} values={shot.prop_ids} options={propOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { prop_ids: values })} />
-                                                                    <div className="lg:col-span-2">
-                                                                        <Field
-                                                                            label="角色造型绑定（每行：person_id|era_variant_id|scene_look_id）"
-                                                                            value={castBindingsText(shot.cast_bindings || [])}
-                                                                            multiline
-                                                                            placeholder="shenxia|shenxia-university|shenxia-dormitory"
-                                                                            onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { cast_bindings: parseCastBindings(value) })}
-                                                                        />
-                                                                    </div>
-                                                                    <Field
-                                                                        label="场景资产 ID"
-                                                                        value={shot.scene_binding?.scene_asset_id || ""}
-                                                                        onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
-                                                                            scene_binding: { ...(shot.scene_binding || { binding_status: "selected" as const }), scene_asset_id: value || null },
-                                                                        })}
-                                                                    />
-                                                                    <Field
-                                                                        label="室内/室外"
-                                                                        value={shot.scene_binding?.interior_exterior || ""}
-                                                                        placeholder="interior / exterior / mixed"
-                                                                        onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
-                                                                            scene_binding: {
-                                                                                ...(shot.scene_binding || { binding_status: "selected" as const }),
-                                                                                interior_exterior: value === "interior" || value === "exterior" || value === "mixed" ? value : null,
-                                                                            },
-                                                                        })}
-                                                                    />
-                                                                </div>
-                                                                <fieldset className="space-y-2 rounded-md border border-border p-3">
-                                                                    <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.dialogue")}</legend>
-                                                                    {shot.dialogue.map((line: DirectorPlanDialogueLine, lineIndex) => (
-                                                                        <div key={`${shot.shot_id}-line-${lineIndex}`} className="grid gap-2 sm:grid-cols-[minmax(8rem,0.35fr)_minmax(0,1fr)_auto]">
-                                                                            <input aria-label={t("fields.speaker")} value={line.speaker} onChange={event => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.map((item, index) => index === lineIndex ? { ...item, speaker: event.target.value } : item) })} className="min-h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30" />
-                                                                            <input aria-label={t("fields.dialogueLine")} value={line.line} onChange={event => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.map((item, index) => index === lineIndex ? { ...item, line: event.target.value } : item) })} className="min-h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30" />
-                                                                            <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.filter((_, index) => index !== lineIndex) })} aria-label={t("deleteDialogue", { number: lineIndex + 1 })} className="min-h-10 rounded-md border border-border px-3 text-text-secondary hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Trash2 size={15} aria-hidden="true" /></button>
+                                            <div className="rounded-md border border-border bg-background/20 p-3">
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <Field label={t("fields.shotTitle")} value={shot.title} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { title: value })} />
+                                                <Field label={t("fields.duration")} type="number" min={1} max={30} value={shot.duration_seconds} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { duration_seconds: value ? Number(value) : null })} />
+                                                <div className="sm:col-span-2"><Field label={t("fields.visualIntent")} value={shot.visual_intent} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { visual_intent: value })} /></div>
+                                                <div className="sm:col-span-2"><Field label={t("fields.directorEffect")} value={shot.director_effect} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { director_effect: value })} /></div>
+                                                <Field label={t("fields.performanceAction")} value={shot.performance_action} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { performance_action: value })} />
+                                                <Field label={t("fields.actionPhysics")} value={shot.action_physics} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { action_physics: value })} />
+                                                <Field label={t("fields.shotSize")} value={shot.shot_size} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { shot_size: value })} />
+                                                <Field label={t("fields.cameraAngle")} value={shot.camera_angle} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { camera_angle: value })} />
+                                                <div className="sm:col-span-2"><Field label={t("fields.composition")} value={shot.composition} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { composition: value })} /></div>
+                                                <Field label={t("fields.cameraMovement")} value={shot.camera_movement} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { camera_movement: value })} />
+                                            </div>
+                                            </div>
+                                                                <details
+                                                                    open={expandedShotContextIds.has(shot.shot_id)}
+                                                                    className="rounded-md border border-border bg-background/30"
+                                                                    onToggle={event => {
+                                                                        const isOpen = event.currentTarget.open;
+                                                                        setExpandedShotContextIds(previous => {
+                                                                            const next = new Set(previous);
+                                                                            if (isOpen) next.add(shot.shot_id);
+                                                                            else next.delete(shot.shot_id);
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                                                                        <span>{t("advancedShotContextTitle")}</span>
+                                                                        <span className="text-text-muted">{t("advancedShotContextHint")}</span>
+                                                                    </summary>
+                                                                    <div className="space-y-4 border-t border-border p-3">
+                                                                        <div className="grid gap-3 sm:grid-cols-2">
+                                                                            <Field label={t("fields.ambientSound")} value={shot.ambient_sound} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { ambient_sound: value })} />
                                                                         </div>
-                                                                    ))}
-                                                                    <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: [...shot.dialogue, { speaker: "", line: "" }] })} className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={14} aria-hidden="true" />{t("addDialogue")}</button>
-                                                                </fieldset>
+                                                                        <fieldset className="rounded-md border border-border p-3">
+                                                                            <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.lighting")}</legend>
+                                                                            {(() => {
+                                                                                const conflict = lightingConflicts.find(item => item.shotId === shot.shot_id);
+                                                                                const baseline = (plan.lighting_baselines ?? []).find(item =>
+                                                                                    item.place_continuity_id === scene.place_continuity_id && item.time_continuity_id === scene.time_continuity_id);
+                                                                                if (!conflict || !baseline) return null;
+                                                                                const fieldNames = { key_source: "keySource", color_tone: "colorTone", contrast: "contrast", practical_sources: "practicalSources" } as const;
+                                                                                return <div className="mb-3 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
+                                                                                    <p className="font-medium">{t("lightingConflictComparisonTitle")}</p>
+                                                                                    <p className="mt-1 leading-5">{t("lightingConflictComparisonHint")}</p>
+                                                                                    <div className="mt-3 space-y-2">
+                                                                                        {conflict.fields.map(field => <div key={field} className="rounded border border-amber-300/20 bg-background/50 p-2">
+                                                                                            <p className="font-medium">{t(`fields.${fieldNames[field]}`)}</p>
+                                                                                            <p className="mt-1"><span className="text-text-muted">{t("lightingBaselineValue")}</span> {Array.isArray(baseline.lighting[field]) ? baseline.lighting[field].join("、") || t("lightingEmptyValue") : baseline.lighting[field] || t("lightingEmptyValue")}</p>
+                                                                                            <p className="mt-1"><span className="text-text-muted">{t("lightingShotValue")}</span> {Array.isArray(shot.lighting[field]) ? shot.lighting[field].join("、") || t("lightingEmptyValue") : shot.lighting[field] || t("lightingEmptyValue")}</p>
+                                                                                            <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, [field]: baseline.lighting[field] } })} className="mt-2 rounded border border-amber-300/40 px-2 py-1 hover:bg-amber-300/10">{t("lightingUseBaseline")}</button>
+                                                                                        </div>)}
+                                                                                    </div>
+                                                                                </div>;
+                                                                            })()}
+                                                                            <div className="mb-3"><Field label={t("fields.lightingOverrideReason")} value={shot.lighting_override_reason ?? ""} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting_override_reason: value })} /></div>
+                                                                            <div className="grid gap-3 sm:grid-cols-3">
+                                                                                <Field label={t("fields.keySource")} value={shot.lighting.key_source} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, key_source: value } })} />
+                                                                                <Field label={t("fields.colorTone")} value={shot.lighting.color_tone} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, color_tone: value } })} />
+                                                                                <Field label={t("fields.contrast")} value={shot.lighting.contrast} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, contrast: value } })} />
+                                                                                <div className="sm:col-span-3"><Field label={t("fields.practicalSources")} value={shot.lighting.practical_sources.join("\n")} multiline hint={t("practicalSourceHint")} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { lighting: { ...shot.lighting, practical_sources: value.split("\n").map(item => item.trim()).filter(Boolean) } })} /></div>
+                                                                            </div>
+                                                                        </fieldset>
+                                                                        <div className="grid gap-3 lg:grid-cols-2">
+                                                                            <MultiSelect label={t("fields.characters")} values={shot.character_ids} options={characterOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { character_ids: values })} />
+                                                                            <MultiSelect label={t("fields.shotProps")} values={shot.prop_ids} options={propOptions} onChange={values => updateShot(sceneIndex, beatIndex, shotIndex, { prop_ids: values })} />
+                                                                            <div className="lg:col-span-2">
+                                                                                <Field
+                                                                                    label={t("fields.castBindings")}
+                                                                                    value={castBindingsText(shot.cast_bindings || [])}
+                                                                                    multiline
+                                                                                    placeholder={t("fields.castBindingsPlaceholder")}
+                                                                                    onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { cast_bindings: parseCastBindings(value) })}
+                                                                                />
+                                                                            </div>
+                                                                            <Field
+                                                                                label={t("fields.sceneAssetId")}
+                                                                                value={shot.scene_binding?.scene_asset_id || ""}
+                                                                                onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
+                                                                                    scene_binding: { ...(shot.scene_binding || { binding_status: "selected" as const }), scene_asset_id: value || null },
+                                                                                })}
+                                                                            />
+                                                                            <Field
+                                                                                label={t("fields.interiorExterior")}
+                                                                                value={shot.scene_binding?.interior_exterior || ""}
+                                                                                placeholder={t("fields.interiorExteriorPlaceholder")}
+                                                                                onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, {
+                                                                                    scene_binding: {
+                                                                                        ...(shot.scene_binding || { binding_status: "selected" as const }),
+                                                                                        interior_exterior: value === "interior" || value === "exterior" || value === "mixed" ? value : null,
+                                                                                    },
+                                                                                })}
+                                                                            />
+                                                                        </div>
+                                                                        <fieldset className="space-y-2 rounded-md border border-border p-3">
+                                                                            <legend className="px-1 text-xs font-medium text-text-secondary">{t("fields.dialogue")}</legend>
+                                                                            {shot.dialogue.map((line: DirectorPlanDialogueLine, lineIndex) => (
+                                                                                <div key={`${shot.shot_id}-line-${lineIndex}`} className="grid gap-2 sm:grid-cols-[minmax(8rem,0.35fr)_minmax(0,1fr)_auto]">
+                                                                                    <input aria-label={t("fields.speaker")} value={line.speaker} onChange={event => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.map((item, index) => index === lineIndex ? { ...item, speaker: event.target.value } : item) })} className="min-h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30" />
+                                                                                    <input aria-label={t("fields.dialogueLine")} value={line.line} onChange={event => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.map((item, index) => index === lineIndex ? { ...item, line: event.target.value } : item) })} className="min-h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30" />
+                                                                                    <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: shot.dialogue.filter((_, index) => index !== lineIndex) })} aria-label={t("deleteDialogue", { number: lineIndex + 1 })} className="min-h-10 rounded-md border border-border px-3 text-text-secondary hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Trash2 size={15} aria-hidden="true" /></button>
+                                                                                </div>
+                                                                            ))}
+                                                                            <button type="button" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { dialogue: [...shot.dialogue, { speaker: "", line: "" }] })} className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={14} aria-hidden="true" />{t("addDialogue")}</button>
+                                                                        </fieldset>
+                                                                    </div>
+                                                                </details>
                                                             </div>}
                                                         </details>
                                                     ))}
                                                     <button type="button" onClick={() => updateBeat(sceneIndex, beatIndex, { shots: [...beat.shots, emptyShot(beat.shots.length)] })} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={15} aria-hidden="true" />{t("addShot")}</button>
-                                                </div>}
+                                                </div>
                                             </article>
                                         ))}
                                         <button type="button" onClick={() => updateScene(sceneIndex, { beats: [...scene.beats, emptyBeat(scene.beats.length)] })} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={15} aria-hidden="true" />{t("addBeat")}</button>
@@ -1076,17 +960,20 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                             </section>
                         ))}
                         <button type="button" onClick={() => updatePlan(current => ({ ...current, scenes: [...current.scenes, emptyScene(current.scenes.length)] }))} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-dashed border-border px-4 text-sm text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Plus size={16} aria-hidden="true" />{t("addScene")}</button>
-                    </div>}
+                    </div>
 
                     <div className="sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur">
                         <div className="flex items-center gap-2 text-sm text-text-secondary">
                             {dirty ? <AlertCircle size={16} className="text-amber-300" aria-hidden="true" /> : <Check size={16} className="text-emerald-300" aria-hidden="true" />}
                             <span>{dirty ? t("unsaved") : t("savedDraft", { revision: serverState?.draft_revision ?? 0 })}</span>
                         </div>
-                        <div className="flex min-w-[18rem] flex-1 flex-wrap gap-2">
-                            <input value={revisionTitle} onChange={event => setRevisionTitle(event.target.value)} placeholder={t("revisionTitlePlaceholder")} aria-label={t("revisionTitle")} className="min-h-9 min-w-48 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground" />
-                            <input value={revisionSummary} onChange={event => setRevisionSummary(event.target.value)} placeholder={t("revisionSummaryPlaceholder")} aria-label={t("revisionSummary")} className="min-h-9 min-w-56 flex-[2] rounded-md border border-border bg-background px-2 text-xs text-foreground" />
-                        </div>
+                        <details className="min-w-0">
+                            <summary className="cursor-pointer text-xs text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{t("revisionMetadata")}</summary>
+                            <div className="mt-2 flex min-w-[18rem] flex-wrap gap-2">
+                                <input value={revisionTitle} onChange={event => setRevisionTitle(event.target.value)} placeholder={t("revisionTitlePlaceholder")} aria-label={t("revisionTitle")} className="min-h-9 min-w-48 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground" />
+                                <input value={revisionSummary} onChange={event => setRevisionSummary(event.target.value)} placeholder={t("revisionSummaryPlaceholder")} aria-label={t("revisionSummary")} className="min-h-9 min-w-56 flex-[2] rounded-md border border-border bg-background px-2 text-xs text-foreground" />
+                            </div>
+                        </details>
                         <div className="flex flex-wrap gap-2">
                             {dirty && <button type="button" onClick={() => { const previous = savedPlan ?? serverState?.draft ?? null; setPlan(previous); setSavedPlan(previous); setNotice(""); }} disabled={locked} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"><RotateCcw size={15} aria-hidden="true" />{t("discardChanges")}</button>}
                             <button type="button" onClick={() => void save()} disabled={locked || !dirty || !plan} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-foreground hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} aria-hidden="true" />{action === "save" ? t("saving") : t("saveDraft")}</button>

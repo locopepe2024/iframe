@@ -18,6 +18,7 @@ from .models import (
     Scene,
     Prop,
     StoryboardFrame,
+    DialogueStructured,
     LightingData,
     Series,
     PromptConfig,
@@ -3590,6 +3591,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "composition": str(raw_shot.get("composition", ""))[:1200],
                             "camera_movement": str(raw_shot.get("camera_movement", ""))[:500],
                             "lighting": raw_shot.get("lighting", {}),
+                            "lighting_override_reason": str(raw_shot.get("lighting_override_reason") or "")[:500],
                             "duration_seconds": raw_shot.get("duration_seconds"),
                             "dialogue": dialogue,
                             "ambient_sound": str(raw_shot.get("ambient_sound", ""))[:1000],
@@ -3623,6 +3625,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "shadow_direction": "",
                 "lighting": first_lighting,
             })
+        # A shared place/time pair has one approved baseline. The model often
+        # restates the same light in different prose; those restatements are
+        # inherited, not independent shot lighting. Keep only explicit changes.
+        for scene in scenes:
+            pair = (scene.get("place_continuity_id"), scene.get("time_continuity_id"))
+            if not all(pair) or pair not in seen_pairs:
+                continue
+            for beat in scene["beats"]:
+                for shot in beat["shots"]:
+                    if not shot["lighting_override_reason"].strip():
+                        shot["lighting"] = {}
         plan = DirectorShootingPlan(
             **lineage,
             scenes=scenes,
@@ -3828,8 +3841,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                                 if scene.scene_asset_id else scene_requirement_asset),
                 plan_scene_asset_id=scene.scene_asset_id,
                 scene_ref=scene.scene_ref,
+                source_chunk_refs=scene.source_chunk_refs,
                 location=scene.location,
                 time_anchor=scene.time_anchor,
+                continuity_in=scene.continuity_in,
+                continuity_out=scene.continuity_out,
                 place_continuity_id=scene.place_continuity_id,
                 time_continuity_id=scene.time_continuity_id,
                 interior_exterior=binding.interior_exterior if binding else None,
@@ -3869,6 +3885,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                         shot_scene_binding = DirectorPlanSceneBinding.model_validate(shot_scene_binding)
                     shots.append(EpisodeVisualShotContext(
                         scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
+                        source_chunk_refs=list(dict.fromkeys(
+                            beat.source_chunk_refs or scene.source_chunk_refs
+                        )),
                         scene_asset_id=(current_asset_id("scene", shot_scene_binding.scene_asset_id)
                             if shot_scene_binding and shot_scene_binding.scene_asset_id else
                             script.episode_plan_scene_asset_bindings.get(f"shot:{shot.shot_id}") or
@@ -3879,8 +3898,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                         character_ids=shot_char_ids,
                         person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
                         prop_ids=shot_prop_ids,
-                        visual_intent=shot.visual_intent, performance_action=shot.performance_action,
+                        visual_intent=shot.visual_intent, director_effect=shot.director_effect,
+                        performance_action=shot.performance_action, action_physics=shot.action_physics,
+                        shot_size=shot.shot_size, camera_angle=shot.camera_angle,
                         composition=shot.composition, camera_movement=shot.camera_movement,
+                        duration_seconds=shot.duration_seconds,
+                        dialogue=[line.model_dump() for line in shot.dialogue],
+                        ambient_sound=shot.ambient_sound,
                         lighting=lighting,
                         place_continuity_id=scene.place_continuity_id,
                         time_continuity_id=scene.time_continuity_id,
@@ -4358,6 +4382,30 @@ class ComicGenPipeline(StudioOwnerMixin):
             return ""
         return "本集拍摄计划视觉约束（仅用于本集资产变体，不改变全局底座）：" + json.dumps(matches, ensure_ascii=False, separators=(",", ":"))[:4000]
 
+    @staticmethod
+    def _episode_shot_context_prompt(script: Script, frame: StoryboardFrame) -> str:
+        """Return the exact confirmed shooting-plan intent for rich-frame refinement."""
+        if isinstance(frame.director_shot_context, dict):
+            return (
+                "本分镜绑定的已确认拍摄计划镜头上下文（只适用于当前 frame；不要与其他镜头混用）："
+                + json.dumps(frame.director_shot_context, ensure_ascii=False, separators=(",", ":"))[:6000]
+            )
+        context = script.episode_visual_context
+        if not context or not frame.shot_id:
+            return ""
+        shot = next((item for item in context.shots if item.shot_id == frame.shot_id), None)
+        if not shot:
+            return ""
+        scene = next((item for item in context.scenes if item.scene_id == shot.scene_id), None)
+        payload = {
+            "scene": scene.model_dump(exclude_none=True) if scene else {},
+            "shot": shot.model_dump(exclude_none=True),
+        }
+        return (
+            "本集已确认拍摄计划镜头上下文（只适用于当前 frame 的 shot_id；"
+            "不要与其他镜头混用）：" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:6000]
+        )
+
     def save_director_profile_draft(
         self,
         script_id: str,
@@ -4679,7 +4727,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }
-        if script.episode_visual_context:
+        if script.director_shooting_plan_revisions:
+            episode_context = self.project_episode_visual_context(script_id)
+            entities_json["episode_visual_context"] = episode_context.model_dump()
+        elif script.episode_visual_context:
             entities_json["episode_visual_context"] = script.episode_visual_context.model_dump()
         series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
@@ -4710,6 +4761,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             frames = self.script_processor.analyze_to_storyboard(
                 text, entities_json, custom_extraction_prompt=prompt,
                 director_profile=director_profile, visual_style=visual_style,
+                source_range=source_range,
             )
         else:
             from .llm import split_director_source
@@ -4743,6 +4795,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         ),
                         visual_style=visual_style,
                         previous_frames=frames[-3:],
+                        source_range=chunk_source_range,
                     )
                     if not batch_frames:
                         raise RuntimeError(f"分镜分析第 {index + 1}/{len(chunks)} 段没有返回镜头。")
@@ -4773,6 +4826,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             text, entities_json, draft, instructions, custom_extraction_prompt=prompt,
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
+            source_range=self._source_range_for_text(script, text),
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -4795,10 +4849,56 @@ class ComicGenPipeline(StudioOwnerMixin):
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
+        source_range = self._source_range_for_text(script, text)
+        episode_context_payload = entities_json.get("episode_visual_context")
+        episode_context_shots = (
+            episode_context_payload.get("shots", [])
+            if isinstance(episode_context_payload, dict)
+            and isinstance(episode_context_payload.get("shots"), list)
+            else []
+        )
+        episode_context_scenes = (
+            episode_context_payload.get("scenes", [])
+            if isinstance(episode_context_payload, dict)
+            and isinstance(episode_context_payload.get("scenes"), list)
+            else []
+        )
+
+        def context_source_overlap(refs: Any) -> bool:
+            if not source_range or not isinstance(refs, list):
+                return False
+            start, end = source_range
+            for ref in refs:
+                match = re.fullmatch(r"source:chars-(\d+)-(\d+)", str(ref))
+                if match and int(match.group(1)) < end and start < int(match.group(2)):
+                    return True
+            return False
+
+        has_context_source_maps = any(
+            isinstance(item, dict) and item.get("source_chunk_refs")
+            for item in episode_context_scenes
+        )
+        matched_context_scene_ids = {
+            item.get("scene_id") for item in episode_context_scenes
+            if isinstance(item, dict) and (
+                context_source_overlap(item.get("source_chunk_refs"))
+                or (not source_range and item.get("scene_ref") and str(item["scene_ref"]) in text)
+            ) and item.get("scene_id")
+        }
+        if not matched_context_scene_ids and len(episode_context_scenes) == 1 and not has_context_source_maps:
+            only_scene = episode_context_scenes[0]
+            if isinstance(only_scene, dict) and only_scene.get("scene_id"):
+                matched_context_scene_ids.add(only_scene["scene_id"])
+        scoped_episode_context_shots = [
+            item for item in episode_context_shots
+            if isinstance(item, dict) and item.get("scene_id") in matched_context_scene_ids
+        ]
+
+        def context_shot_value(item: Any, key: str, default: Any = None) -> Any:
+            return item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
 
         # An explicit reviewed draft is applied exactly as shown and never
         # triggers a second analysis call.
-        source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
         director_profile = self.director_execution_context(
             script,
@@ -4818,6 +4918,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
+            source_range=source_range,
         )
 
         if not raw_frames:
@@ -4837,6 +4938,39 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scene_id = all_scenes[0].id  # Fallback to first scene
             elif not scene_id:
                 scene_id = str(uuid.uuid4())  # Generate a placeholder ID
+
+            eligible_context_scenes = [
+                item for item in episode_context_scenes
+                if isinstance(item, dict) and item.get("scene_id") in matched_context_scene_ids
+            ]
+            normalized_scene_ref = str(scene_ref_name or "").strip().casefold()
+            named_context_scenes = [
+                item for item in eligible_context_scenes
+                if normalized_scene_ref and any(
+                    normalized_scene_ref in str(item.get(key) or "").strip().casefold()
+                    or str(item.get(key) or "").strip().casefold() in normalized_scene_ref
+                    for key in ("scene_ref", "location")
+                    if str(item.get(key) or "").strip()
+                )
+            ]
+            if named_context_scenes:
+                frame_context_scenes = named_context_scenes
+            else:
+                asset_context_scenes = [
+                    item for item in eligible_context_scenes
+                    if item.get("scene_asset_id") == scene_id
+                ]
+                if asset_context_scenes:
+                    frame_context_scenes = asset_context_scenes
+                elif len(eligible_context_scenes) == 1:
+                    frame_context_scenes = eligible_context_scenes
+                else:
+                    frame_context_scenes = []
+            frame_context_scene_ids = {item.get("scene_id") for item in frame_context_scenes}
+            frame_context_shots = [
+                item for item in scoped_episode_context_shots
+                if item.get("scene_id") in frame_context_scene_ids
+            ]
 
             # Resolve character IDs by names (case-insensitive, bidirectional contains)
             char_ref_names = frame_data.get("character_ref_names", [])
@@ -4876,27 +5010,96 @@ class ComicGenPipeline(StudioOwnerMixin):
                         break
 
             shot_id = frame_data.get("shot_id")
-            if not shot_id and script.episode_visual_context:
-                context_scene_ids = {
-                    item.scene_id for item in script.episode_visual_context.scenes
-                    if item.scene_asset_id == scene_id
-                }
-                context_scene_ids.update(
-                    item.scene_id for item in script.episode_visual_context.shots
-                    if item.scene_asset_id == scene_id
+            director_shot_context = None
+            context_shot_ids = {
+                context_shot_value(item, "shot_id") for item in frame_context_shots
+            }
+            if shot_id not in context_shot_ids:
+                shot_id = None
+            plan_shot = next((item for item in frame_context_shots
+                              if context_shot_value(item, "shot_id") == shot_id), None) if shot_id else None
+            if not shot_id and frame_context_shots:
+                candidates = [item for item in frame_context_shots
+                              if (context_shot_value(item, "scene_asset_id") is None
+                                  or context_shot_value(item, "scene_asset_id") == scene_id)
+                              and (not context_shot_value(item, "character_ids", [])
+                                   or set(context_shot_value(item, "character_ids", [])) & set(character_ids))]
+                # Do not guess between multiple plan shots. The model must
+                # return shot_id when the scene contains more than one intent.
+                shot_id = context_shot_value(candidates[0], "shot_id") if len(candidates) == 1 else None
+                plan_shot = candidates[0] if len(candidates) == 1 else None
+            if plan_shot:
+                planned_character_ids = context_shot_value(plan_shot, "character_ids", [])
+                planned_prop_ids = context_shot_value(plan_shot, "prop_ids", [])
+                if planned_character_ids:
+                    character_ids = planned_character_ids
+                if planned_prop_ids:
+                    prop_ids = planned_prop_ids
+                plan_scene = next(
+                    (item for item in episode_context_scenes
+                     if isinstance(item, dict) and item.get("scene_id") == context_shot_value(plan_shot, "scene_id")),
+                    None,
                 )
-                candidate = next((item for item in script.episode_visual_context.shots
-                                  if item.scene_id in context_scene_ids and
-                                  (item.scene_asset_id is None or item.scene_asset_id == scene_id) and
-                                  (not item.character_ids or set(item.character_ids) & set(character_ids))), None)
-                shot_id = candidate.shot_id if candidate else None
-            
+                selected_scene_asset_id = (
+                    context_shot_value(plan_shot, "scene_asset_id")
+                    or (plan_scene.get("scene_asset_id") if plan_scene else None)
+                )
+                if selected_scene_asset_id and any(item.id == selected_scene_asset_id for item in all_scenes):
+                    scene_id = selected_scene_asset_id
+                scene_context_keys = (
+                    "scene_ref", "location", "time_anchor", "continuity_in",
+                    "continuity_out", "atmosphere",
+                )
+                shot_context_keys = (
+                    "shot_id", "visual_intent", "director_effect", "performance_action",
+                    "action_physics", "shot_size", "camera_angle", "composition",
+                    "camera_movement", "duration_seconds", "dialogue", "ambient_sound", "lighting",
+                )
+                director_shot_context = {
+                    "scene": {
+                        key: plan_scene[key] for key in scene_context_keys
+                        if plan_scene and plan_scene.get(key) not in (None, "", [])
+                    },
+                    "shot": {
+                        key: context_shot_value(plan_shot, key)
+                        for key in shot_context_keys
+                        if context_shot_value(plan_shot, key) not in (None, "", [])
+                    },
+                }
+
+            planned_dialogue = context_shot_value(plan_shot, "dialogue", []) if plan_shot else []
+            planned_dialogue_lines = [
+                item for item in planned_dialogue
+                if isinstance(item, dict) and item.get("speaker") and item.get("line")
+            ] if isinstance(planned_dialogue, list) else []
+            planned_lighting = context_shot_value(plan_shot, "lighting", {}) if plan_shot else {}
+            frame_lighting = (
+                LightingData(**frame_data["lighting"])
+                if isinstance(frame_data.get("lighting"), dict) else None
+            )
+            if isinstance(planned_lighting, dict) and any(
+                planned_lighting.get(key)
+                for key in ("key_source", "color_tone", "contrast", "practical_sources")
+            ):
+                lighting_description = "；".join(
+                    str(planned_lighting.get(key) or "").strip()
+                    for key in ("key_source", "color_tone", "contrast")
+                    if str(planned_lighting.get(key) or "").strip()
+                )
+                frame_lighting = LightingData(
+                    direction=planned_lighting.get("key_source") or (frame_lighting.direction if frame_lighting else None),
+                    quality=planned_lighting.get("contrast") or (frame_lighting.quality if frame_lighting else None),
+                    color_temp=planned_lighting.get("color_tone") or (frame_lighting.color_temp if frame_lighting else None),
+                    description=lighting_description or (frame_lighting.description if frame_lighting else None),
+                )
+
             frame = StoryboardFrame(
                 id=str(uuid.uuid4()),
                 owner_user_id=script.owner_user_id,
                 owner_profile_id=script.owner_profile_id,
                 scene_id=scene_id,
                 shot_id=shot_id,
+                director_shot_context=director_shot_context,
                 character_ids=character_ids,
                 prop_ids=prop_ids,
                 action_description=frame_data.get("action_summary", frame_data.get("action_description", "")),
@@ -4905,14 +5108,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                 key_action_physics=frame_data.get("key_action_physics"),
                 facial_expression=frame_data.get("facial_expression"),
                 atmosphere=frame_data.get("atmosphere"),
-                lighting=(LightingData(**frame_data["lighting"])
-                          if isinstance(frame_data.get("lighting"), dict) else None),
-                shot_size=frame_data.get("shot_size"),
-                camera_angle=frame_data.get("camera_angle", "平视"),
-                camera_movement=frame_data.get("camera_movement"),
-                dialogue=frame_data.get("dialogue"),
-                speaker=frame_data.get("speaker"),
-                duration=frame_data.get("duration"),
+                lighting=frame_lighting,
+                composition=(context_shot_value(plan_shot, "composition") or frame_data.get("composition")) if plan_shot else frame_data.get("composition"),
+                shot_size=(context_shot_value(plan_shot, "shot_size") or frame_data.get("shot_size")) if plan_shot else frame_data.get("shot_size"),
+                camera_angle=(context_shot_value(plan_shot, "camera_angle") or frame_data.get("camera_angle", "平视")) if plan_shot else frame_data.get("camera_angle", "平视"),
+                camera_movement=(context_shot_value(plan_shot, "camera_movement") or frame_data.get("camera_movement")) if plan_shot else frame_data.get("camera_movement"),
+                dialogue=(planned_dialogue_lines[0]["line"] if len(planned_dialogue_lines) == 1 else frame_data.get("dialogue")),
+                speaker=(planned_dialogue_lines[0]["speaker"] if len(planned_dialogue_lines) == 1 else frame_data.get("speaker")),
+                dialogue_structured=(DialogueStructured(
+                    speaker=str(planned_dialogue_lines[0]["speaker"]),
+                    line=str(planned_dialogue_lines[0]["line"]),
+                ) if len(planned_dialogue_lines) == 1 else None),
+                duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot else frame_data.get("duration"),
                 director_profile_revision=(
                     generated_lineage.director_profile_revision
                 ),
@@ -4958,9 +5165,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Build coarse frame dict for LLM
         coarse = {
             "action_summary": frame.action_description,
+            "visual_atmosphere": frame.visual_atmosphere,
+            "character_acting": frame.character_acting,
+            "key_action_physics": frame.key_action_physics,
+            "lighting": frame.lighting.model_dump() if frame.lighting else None,
             "shot_size": frame.shot_size,
             "camera_angle": frame.camera_angle,
             "camera_movement": frame.camera_movement,
+            "shot_id": frame.shot_id,
             "dialogue": frame.dialogue,
             "speaker": frame.speaker,
             "duration": frame.duration,
@@ -5005,7 +5217,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         result = self.script_processor.refine_frame_to_rich(
             coarse, char_assets, scene_assets, prev_ctx, next_ctx,
             visual_style=self.storyboard_visual_style(script),
-            director_context=self.director_prompt_context(script),
+            director_context="\n".join(filter(None, [
+                self.director_prompt_context(script),
+                self._episode_shot_context_prompt(script, frame),
+            ])),
         )
         if not result:
             return frame
