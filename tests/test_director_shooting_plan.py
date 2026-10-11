@@ -1050,6 +1050,9 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
             state = client.get("/projects/film/director-shooting-plan")
             assert state.status_code == 200
             assert state.json()["draft"] is None
+            assert state.json()["current_story_events"] == [{
+                "id": "event-cinema", "label": "大学阶段 · 走向电影院",
+            }]
             assert state.json()["source_chunks"][0]["source_ref"] == plan.scenes[0].source_chunk_refs[0]
 
             draft = client.put(

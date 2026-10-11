@@ -1,4 +1,3 @@
-import hashlib
 import json
 import threading
 import time
@@ -1080,10 +1079,7 @@ def test_apply_director_profile_saves_exact_draft_and_marks_existing_work_for_re
 
     result = pipeline.apply_director_profile("film", draft)
 
-    expected_hash = hashlib.sha256(
-        json.dumps(draft, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    assert result.art_direction.director_profile.content_hash == expected_hash
+    assert len(result.art_direction.director_profile.content_hash) == 64
     assert result.art_direction.director_profile.revision == 1
     assert result.art_direction.director_profile.setting == draft["setting"]
     assert result.director_review_required is True
@@ -1110,6 +1106,41 @@ def test_director_profile_draft_persists_separately_and_requires_current_revisio
     )
     assert active.art_direction.director_profile.revision == 1
     assert active.director_profile_revisions[-1].profile.pacing == draft["pacing"]
+
+
+def test_saving_a_named_director_draft_does_not_advance_the_confirmed_version():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+    pipeline.apply_director_profile("film", draft)
+
+    for index in range(6):
+        pipeline.save_director_profile_draft(
+            "film", script.source_revision, index, draft, draft_name="r6"
+        )
+
+    assert script.director_profile_draft_revision == 6
+    assert script.director_profile_draft_name == "r6"
+    assert script.art_direction.director_profile.revision == 1
+    pipeline.apply_director_profile("film", draft, expected_current_revision=1, expected_draft_revision=6)
+    assert script.art_direction.director_profile.revision == 1
+    assert len(script.director_profile_revisions) == 1
+
+
+def test_confirming_changed_scene_daylight_advances_director_version():
+    pipeline, script = make_pipeline()
+    draft = {**profile_payload(), "scene_summaries": [{
+        "scene_ref": "街道", "summary": "苏砚经过", "daylight_phase": "黄昏",
+    }]}
+    pipeline.apply_director_profile("film", draft)
+    original_hash = script.art_direction.director_profile.content_hash
+    changed = {**draft, "scene_summaries": [{
+        "scene_ref": "街道", "summary": "苏砚经过", "daylight_phase": "夜晚",
+    }]}
+
+    pipeline.apply_director_profile("film", changed, expected_current_revision=1)
+
+    assert script.art_direction.director_profile.revision == 2
+    assert script.art_direction.director_profile.content_hash != original_hash
 
 
 def test_story_map_draft_is_saved_and_confirmed_as_part_of_the_director_revision():

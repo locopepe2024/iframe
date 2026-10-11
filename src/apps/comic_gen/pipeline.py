@@ -4442,18 +4442,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             saved_content = _director_profile_content(saved_draft) if saved_draft else None
             if saved_content != clean:
                 raise ValueError("Director draft has unsaved edits; save it before confirming")
-        # Summaries are bounded downstream projections, not a second source of
-        # narrative truth. Keep historical content hash/revision semantics
-        # based on the full Director fields only.
-        hash_payload = {
-            key: value for key, value in clean.items()
-            if key not in {"execution_summary", "scene_summaries"}
-            and not (key == "canon_state" and value in (None, {}, []))
-        }
-        content_hash = hashlib.sha256(json.dumps(
-            hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode()).hexdigest()
-        revision = (current.revision + 1) if current and current.content_hash != content_hash else (current.revision if current else 1)
+        changed = current is None or _director_profile_content(current) != clean
+        if changed:
+            # Scene summaries now carry the daylight and lighting evidence used
+            # by plans, so a confirmed change must invalidate their lineage.
+            hash_payload = {
+                key: value for key, value in clean.items()
+                if not (key == "canon_state" and value in (None, {}, []))
+            }
+            content_hash = hashlib.sha256(json.dumps(
+                hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()).hexdigest()
+        else:
+            # Preserve existing hashes when a saved draft is confirmed again
+            # without changing content, including profiles from the old scheme.
+            content_hash = current.content_hash
+        revision = (current.revision + 1) if current and changed else (1 if current is None else current.revision)
         confirmed = DirectorProfile(
             **clean, revision=revision, content_hash=content_hash, confirmed_at=time.time()
         )
@@ -4492,7 +4496,6 @@ class ComicGenPipeline(StudioOwnerMixin):
             episode_director_revision=confirmed.revision,
             generated_at=confirmed.confirmed_at,
         )
-        changed = not current or current.content_hash != content_hash
         if changed:
             # Keep the active profile as the compatibility read model, while
             # preserving each confirmed decision as an append-only snapshot.

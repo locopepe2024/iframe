@@ -5326,6 +5326,17 @@ def get_director_shooting_plan(
     )
     revisions = script.director_shooting_plan_revisions
     confirmed = revisions[-1] if revisions else None
+    director_profile = pipeline.effective_director_profile(script)
+    story_map = pipeline._effective_shooting_story_map(script, director_profile) if director_profile else None
+    story_events = [
+        {
+            "id": event["event_id"],
+            "label": f"{phase.get('label') or phase.get('phase_id') or ''} · {event.get('title') or str(event.get('description') or '')[:48]}",
+        }
+        for phase in (story_map or {}).get("phases", [])
+        for event in phase.get("events", [])
+        if event.get("event_id")
+    ]
     return {
         "project_id": script.id,
         "draft_revision": script.director_shooting_plan_draft_revision,
@@ -5339,6 +5350,7 @@ def get_director_shooting_plan(
             script.director_shooting_plan_draft, lineage,
         )),
         "current_stale": bool(confirmed and _director_plan_lineage_changed(confirmed.plan, lineage)),
+        "current_story_events": story_events,
         "source_chunks": [{
             "source_ref": item["source_ref"],
             "char_start": item["char_start"],
