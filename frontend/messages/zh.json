@@ -2369,6 +2369,7 @@
     "closeWorkbench": "关闭角色工作台",
     "materialTypes": "角色素材类型",
     "advancedSettings": "高级参数与设计依据",
+    "pendingDesignQuestions": "待核对 {count} 项",
     "guidanceTabsLabel": "角色工作台设置",
     "workbenchConstraints": "角色工作台约束",
     "characterFacetSuggestions": "设计检查项",

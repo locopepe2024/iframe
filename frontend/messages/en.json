@@ -2369,6 +2369,7 @@
     "closeWorkbench": "Close character workbench",
     "materialTypes": "Character media types",
     "advancedSettings": "Advanced settings and design context",
+    "pendingDesignQuestions": "{count} design questions pending",
     "guidanceTabsLabel": "Character workbench settings",
     "workbenchConstraints": "Workbench constraints",
     "characterFacetSuggestions": "Design checklist",
