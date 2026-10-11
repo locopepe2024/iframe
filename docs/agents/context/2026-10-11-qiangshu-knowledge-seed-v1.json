@@ -1,0 +1,136 @@
+{
+  "collection": {
+    "name": "枪术动作参考 v1",
+    "domain": "martial_arts_qiangshu"
+  },
+  "sources": [
+    {
+      "source_uri": "https://www.iwuf.org/xhimg/soft/240912/WUSHU-TAOLU-COMPETITION-RULES-AND-JUDGING-METHODS-2024.pdf",
+      "title": "国际武联《2024 年武术套路竞赛规则与裁判法》：枪术动作和步型",
+      "source_type": "paper",
+      "rights_status": "unknown",
+      "units": [
+        {
+          "kind": "text",
+          "locator": "article-29; pdf-p30; printed-p22",
+          "body": "证据级别：规则原文。枪术规定内容列出拦枪、拿枪、扎枪、穿枪、崩枪、点枪、舞花枪、挑把八种枪法，以及弓步、马步、仆步、虚步、歇步五种步型；还要求连续三个一次性完成的拦、拿、扎枪组合。这里列的是竞赛套路规定内容，不是任一具体视频的动作鉴定。",
+          "labels": ["枪术", "规则", "技法目录"],
+          "annotation": "官方中文短引：'至少包括拦枪、拿枪、扎枪、穿枪、崩枪、点枪、舞花枪、挑把八种枪法'。PDF 物理第 30 页，印刷第 22 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.1; pdf-p117; printed-p109",
+          "body": "拦枪（Lán Qiāng）。规则定义：枪尖向外划弧，高不过头、低不过胯；力点在枪身前段。可见判据：追踪枪尖相对持枪人的向外弧线及头、胯高度；遮挡或透视不足时不要仅凭一个姿态命名。",
+          "labels": ["枪术", "枪法", "拦枪"],
+          "annotation": "官方中文短引：'枪尖向外划弧，高不过头，低不过胯'。PDF 物理第 117 页，印刷第 109 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.2; pdf-p118; printed-p110",
+          "body": "拿枪（Ná Qiāng）。规则定义：枪尖向内划弧，高不过头、低不过胯；力点在枪身前段。可见判据：连续画面中枪尖相对持枪人的向内弧线；必须与向外弧线的拦枪区分。",
+          "labels": ["枪术", "枪法", "拿枪"],
+          "annotation": "官方中文短引：'枪尖向内划弧，高不过头，低不过胯'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.3; pdf-p118; printed-p110",
+          "body": "扎枪（Zhā Qiāng）。规则定义：枪尖向前直出，后手触及前手，力点在枪尖。可见判据：连续画面中枪尖前进路径近似直线，并检查双手是否在完成时接近接触；单帧枪杆水平不构成充分证据。",
+          "labels": ["枪术", "枪法", "扎枪"],
+          "annotation": "官方中文短引：'枪尖向前直出，后手触及前手'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.4; pdf-p118; printed-p110",
+          "body": "穿枪（Chuān Qiāng）。规则定义：枪杆贴近喉、腰或臂部，直线穿出。可见判据：判断枪杆沿身体邻近区域的直线运动及人体与枪杆的前后遮挡关系。'贴近喉'不等于枪杆穿过头部；生成视频中头颈与枪杆不合理交叉应单独记为几何错误。",
+          "labels": ["枪术", "枪法", "穿枪"],
+          "annotation": "官方中文短引：'枪杆贴近喉或腰或臂部直线穿出'。PDF 物理第 118 页，印刷第 110 页。末句为生成评估的直接应用，不是规则原文。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.5; pdf-p118; printed-p110",
+          "body": "崩枪（Bēng Qiāng）。规则定义：枪尖向上或向左右弹击，力点在枪尖。可见判据：观察枪尖短促的上行或侧向弹击，而非仅看整杆倾斜的静止画面。",
+          "labels": ["枪术", "枪法", "崩枪"],
+          "annotation": "官方中文短引：'枪尖向上或向左右弹击'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.6; pdf-p118; printed-p110",
+          "body": "点枪（Diǎn Qiāng）。规则定义：枪尖由上向前下点击，力点在枪尖。可见判据：枪尖从高处沿前下方向下点，需通过连续画面确认方向。",
+          "labels": ["枪术", "枪法", "点枪"],
+          "annotation": "官方中文短引：'枪尖由上向前下点击'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.7; pdf-p118; printed-p110",
+          "body": "舞花枪（Wǔ Huā Qiāng）。规则定义：枪杆贴近身体，在身体左右两侧沿立圆绕行。可见判据：枪杆的连续轨迹在左右两侧形成竖直环绕；不应将所有横向扫动都叫舞花枪。",
+          "labels": ["枪术", "枪法", "舞花枪"],
+          "annotation": "官方中文短引：'枪杆贴近身体左右立圆绕行'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-4-1.8; pdf-p118; printed-p110",
+          "body": "挑把（Tiǎo Bǎ）。规则定义：枪把从下向上挑起，力点在枪把段。可见判据：先区分枪尖端与枪把端，再追踪枪把的上挑运动；枪尖上挑不能直接命名为挑把。",
+          "labels": ["枪术", "枪法", "挑把"],
+          "annotation": "官方中文短引：'枪把由下向上挑起'。PDF 物理第 118 页，印刷第 110 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-1-5.1; pdf-p111; printed-p103; qiangshu-crossref-p118",
+          "body": "弓步（Gōng Bù）。一腿半蹲、另一腿伸直，两脚全脚着地；规则还要求前腿大腿水平、膝约与脚尖垂直。枪术章节引用长拳的同名步型定义。可见判据：前后腿姿态和双脚着地；腾空阶段不可标为弓步。",
+          "labels": ["枪术", "步型", "弓步"],
+          "annotation": "官方中文短引：'一腿半蹲，大腿成水平'。定义在 PDF 物理第 111 页、印刷第 103 页；枪术交叉引用在物理第 118 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-1-5.2; pdf-p111; printed-p103; qiangshu-crossref-p118",
+          "body": "马步（Mǎ Bù）。两腿半蹲，大腿水平，双脚约三脚长间距、脚尖向前、全脚着地。枪术章节引用长拳的同名步型定义。可见判据：左右腿同时屈蹲与双脚接地；大幅分腿腾空不等于马步。",
+          "labels": ["枪术", "步型", "马步"],
+          "annotation": "官方中文短引：'两腿半蹲，大腿成水平'。定义在 PDF 物理第 111 页、印刷第 103 页；枪术交叉引用在物理第 118 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-1-5.3; pdf-p111; printed-p103; qiangshu-crossref-p118",
+          "body": "仆步（Pū Bù）。一腿全蹲，另一腿平铺伸直，两脚全脚着地。枪术章节引用长拳的同名步型定义。可见判据：一侧低蹲、对侧伸直且有地面接触；单看低身姿势不够。",
+          "labels": ["枪术", "步型", "仆步"],
+          "annotation": "官方中文短引：'一腿全蹲...另一腿平铺伸直'。定义在 PDF 物理第 111 页、印刷第 103 页；枪术交叉引用在物理第 118 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-1-5.4; pdf-p111; printed-p103; qiangshu-crossref-p119",
+          "body": "虚步（Xū Bù）。一腿半蹲并主要承重，另一腿屈膝前伸、前脚掌虚点地面。枪术章节引用长拳的同名步型定义。可见判据：前脚轻点地、重心落后腿；视频视角不足以看清承重时标为待确认。",
+          "labels": ["枪术", "步型", "虚步"],
+          "annotation": "官方中文短引：'身体重心落于后腿'。定义在 PDF 物理第 111 页、印刷第 103 页；枪术交叉引用在物理第 119 页。"
+        },
+        {
+          "kind": "text",
+          "locator": "appendix-1-section-1-5.5; pdf-p111; printed-p103; qiangshu-crossref-p119",
+          "body": "歇步（Xiē Bù）。两腿交叉屈膝全蹲，前脚全脚着地、后脚脚跟离地。枪术章节引用长拳的同名步型定义。可见判据：交叉腿与前后脚接地关系；仅看转身交叉的一瞬不宜认定为完成歇步。",
+          "labels": ["枪术", "步型", "歇步"],
+          "annotation": "官方中文短引：'两腿交叉屈膝全蹲'。定义在 PDF 物理第 111 页、印刷第 103 页；枪术交叉引用在物理第 119 页。"
+        }
+      ]
+    },
+    {
+      "source_uri": "upload:qiangfa-shot-a-frames-90-210-review-2026-10-11",
+      "title": "枪法源片 A 段 [90,210) 的用户动作观察与生成评估",
+      "source_type": "manual",
+      "rights_status": "unknown",
+      "units": [
+        {
+          "kind": "text",
+          "locator": "shot-a-source-frames-90-210; local-time-1s-to-2s",
+          "body": "证据级别：用户对源片的动作观察。该四秒窗口的关键动作在局部时间约 1–2 秒内依次为扫、转身、腾空、扎。源片 4 fps 采样大致支持 1.0–1.5 秒腾空、约 2.0 秒低身伸枪，但不能确定每一动作的逐帧边界、握法和枪尖完整路径。'扫、转身、腾空、扎'是复合镜头描述；其中'扫'尚未根据国际武联规则鉴定为特定枪法。",
+          "labels": ["源片观察", "枪术", "动作序列"],
+          "annotation": "项目证据：docs/agents/raw/2026-10-11-qiangfa-cut-poc/review.md，Motion-fidelity correction。审阅状态：待逐帧人工确认。"
+        },
+        {
+          "kind": "text",
+          "locator": "h3-fl2va-ir-comparison; turn-head-clearance",
+          "body": "证据级别：用户审阅与稀疏帧运行观察。此前手写提示词生成的转身段，枪杆与头颈轮廓出现不合理交叉；IR 版本较常让枪杆绕过或高于头部，但仍有局部遮挡。可用于后续提示词的空间约束：转身时追踪双手握点、枪尖和枪把端，保持枪杆在头颈轮廓外的可信深度关系；不把自然遮挡一律视为穿模。该约束能否改善 H3 输出仍需对照实验。",
+          "labels": ["生成评估", "枪术", "空间约束"],
+          "annotation": "项目证据：docs/agents/raw/2026-10-11-qiangfa-cut-poc/review.md，MiniMax H3 IR prompt comparison。审阅状态：观察已记录，因果效果未证实。"
+        }
+      ]
+    }
+  ]
+}
