@@ -1,4 +1,5 @@
 import pytest
+from urllib.parse import urlsplit, parse_qs
 from src.models import uniart
 
 
@@ -74,6 +75,31 @@ def test_local_edit_material_is_uploaded_and_signed(monkeypatch, tmp_path):
             return 'https://storage.example/large.png?signature=test'
     monkeypatch.setattr(oss_utils, 'OSSImageUploader', Storage)
     assert uniart._image_reference_url(str(image)) == 'https://storage.example/large.png?signature=test'
+
+
+def test_local_media_reference_uses_owner_scoped_signed_url(monkeypatch, tmp_path):
+    from src.apps.studio_access import verify_provider_media
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('UNIART_MEDIA_BASE_URL', 'http://201.18.211.221')
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-signing-key')
+    path = tmp_path / 'output/users/0123456789abcdef01234567/playground/uploads/source.png'
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b'image')
+
+    url = uniart._image_reference_url(str(path))
+    parsed = urlsplit(url)
+    query = parse_qs(parsed.query)
+    assert parsed.path == '/provider/media/0123456789abcdef01234567/playground/uploads/source.png'
+    assert verify_provider_media('0123456789abcdef01234567', 'playground/uploads/source.png',
+                                 int(query['expires'][0]), query['signature'][0]) == str(path)
+    with pytest.raises(Exception) as invalid:
+        verify_provider_media('0123456789abcdef01234567', 'playground/uploads/source.png',
+                              int(query['expires'][0]), 'invalid')
+    assert invalid.value.status_code == 401
+    unmanaged = tmp_path / 'unmanaged.png'
+    unmanaged.write_bytes(b'image')
+    with pytest.raises(ValueError):
+        uniart._image_reference_url(str(unmanaged))
 
 
 def test_mask_edit_uses_urls_and_polls_image_task(monkeypatch):
