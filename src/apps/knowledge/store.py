@@ -202,10 +202,15 @@ def select_research_sources(connection, owner: str, run_id: str, urls: list[str]
     return get_research_run(connection, owner, run_id)
 
 
-def reserve_discovery(connection, owner: str) -> bool:
+def reserve_discovery(connection, owner: str, provider: str = "gdelt") -> bool:
+    provider_budget = {"gdelt": (200, "5 seconds"),
+                       "fed_rss": (20, "60 seconds")}.get(provider)
+    if provider_budget is None:
+        raise ValueError("Unsupported discovery provider")
+    provider_key = "provider:" + provider
     cursor = connection.cursor()
     cursor.execute("SELECT pg_advisory_xact_lock(42820102)")
-    for key, daily_limit in (("provider:gdelt", 200), ("owner:" + owner, 20)):
+    for key, daily_limit in ((provider_key, provider_budget[0]), ("owner:" + owner, 20)):
         cursor.execute(
             """SELECT CASE WHEN day = current_date THEN used ELSE 0 END,
                       next_at > now() FROM knowledge_discovery_limits WHERE key = %s""", (key,),
@@ -213,7 +218,7 @@ def reserve_discovery(connection, owner: str) -> bool:
         row = cursor.fetchone()
         if row and (row[0] >= daily_limit or row[1]):
             return False
-    for key, delay in (("provider:gdelt", "5 seconds"), ("owner:" + owner, "0 seconds")):
+    for key, delay in ((provider_key, provider_budget[1]), ("owner:" + owner, "0 seconds")):
         cursor.execute(
             """INSERT INTO knowledge_discovery_limits (key, day, used, next_at)
                VALUES (%s, current_date, 1, now() + %s::interval)
@@ -465,7 +470,7 @@ def search(connection, owner_profile_id: str, query: str, limit: int,
     if collection_id:
         filters.append("c.id = %s")
         params.append(collection_id)
-    params.append(limit)
+    params.extend((pattern, pattern, limit))
     cursor.execute(
         """SELECT u.id::text, u.kind, u.locator,
                   substr(u.body, greatest(1, strpos(lower(u.body), lower(%s)) - 150), 1200),
@@ -475,7 +480,9 @@ def search(connection, owner_profile_id: str, query: str, limit: int,
            FROM knowledge_sources s """ + _VISIBLE_JOINS + """
            JOIN knowledge_content_units u ON u.source_revision_id = r.id
            WHERE """ + _VISIBLE_RULE + " AND " + " AND ".join(filters) + """
-           ORDER BY r.captured_at DESC, u.created_at, u.id LIMIT %s""",
+           ORDER BY CASE WHEN u.body ILIKE %s THEN 0
+                         WHEN u.annotation ILIKE %s THEN 1 ELSE 2 END,
+                    r.captured_at DESC, u.created_at, u.id LIMIT %s""",
         tuple(params),
     )
     columns = ("unit_id", "kind", "locator", "excerpt", "labels", "annotation",
