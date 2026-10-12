@@ -153,11 +153,17 @@ class CharacterDesignReference(BaseModel):
     variant_id: str = Field(min_length=1, max_length=200)
 
 
+class CharacterDesignVisualRequirements(BaseModel):
+    identity: str = Field(default="", max_length=4000)
+    look: str = Field(default="", max_length=4000)
+
+
 class CharacterDesignRequest(BaseModel):
     model: str
     character_name: str = Field(min_length=1, max_length=200)
     profile: str = Field(min_length=1, max_length=12000)
     current_draft: str = Field(default="", max_length=8000)
+    user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
     user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
     route: str
     age_stage: str = ""
@@ -232,7 +238,7 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
               + "只返回 JSON 对象：identity.visual_notes、identity.basis、look.visual_notes、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
-              + "profile 是项目角色档案，current_draft 是上一轮可编辑草稿，user_answers 是用户明确回答；不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
+              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是上一轮可编辑草稿，优先级低于用户视觉约束；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
               + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
               + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
