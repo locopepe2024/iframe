@@ -2,6 +2,18 @@
 
 Status: implementation preparation. Date: 2026-10-12.
 
+## Authenticated contract check (2026-10-12)
+
+The user supplied a temporary token for validation. It was used only for live requests and was not stored in this repository or the NSFW runtime environment.
+
+- `GET /v1/models` returned the five IDs listed by `/api/pricing`, without image or video capability fields.
+- `POST /v1/images/generations` with `seedream_5.0Pro_nsfw` returned upstream `404 bad_response_status_code`.
+- `POST /v1/chat/completions` with `deepseek-v4-flash` and a one-token request returned upstream `404 bad_response_status_code`.
+- `POST /v1/videos` with `wan3.0`, `wan3.0-Prime`, and `sd_2.5_special` returned `400 model_price_error`: the gateway could not compile the configured fixed-price expression. These zero-duration probes did not reach a provider generation contract.
+- The target New API runs on the NSFW host in `/opt/new-api`; that source tree has pre-existing uncommitted pricing and frontend changes. Existing enabled OpenAI-type channel routing does not translate the GlobalStore Model Center protocol. A separate UniRoute codebase documents the proprietary Seedream submit/poll API, but that code is not deployed on this target node.
+
+These are runtime observations, not proof that the upstream provider lacks the models. Gateway pricing and protocol routing must be corrected and revalidated before the media models can be shown as working iFrame choices. The node default and local-storage transport can be released independently.
+
 ## Observed
 
 - The NSFW iFrame instance runs GitHub `main` at `12160b32` in `/srv/iframe-nsfw/repo`.
