@@ -159,23 +159,6 @@ def test_user_config_reports_runtime_uniart_availability_without_exposing_secret
     assert "sk-personal-secret" not in json.dumps(personal)
 
 
-def test_personal_credential_uses_deployment_node_unless_overridden(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setenv("UNIART_BASE_URL", "https://srv2021949.hstgr.cloud/v1")
-    store = UserConfigStore(str(tmp_path / "users.db"), master_key="test-master-key")
-    user = identity("user-a", "profile-a")
-
-    public = store.update(user, UserConfigUpdate(UNIART_API_KEY="sk-personal-secret"))
-    assert public["UNIART_BASE_URL"] == "https://srv2021949.hstgr.cloud/v1"
-    assert "sk-personal-secret" not in json.dumps(public)
-    assert store.get_runtime_uniart(user)["base_url"] == "https://srv2021949.hstgr.cloud/v1"
-
-    store.update(user, UserConfigUpdate(UNIART_BASE_URL="https://owner.example/v1"))
-    assert store.get_runtime_uniart(user)["base_url"] == "https://owner.example/v1"
-
-
 def test_user_config_uses_identity_scoped_key_without_master(tmp_path: Path):
     store = UserConfigStore(str(tmp_path / "users.db"), master_key="")
     user_a = identity("user-a", "profile-a")

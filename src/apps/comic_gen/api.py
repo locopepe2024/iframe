@@ -134,7 +134,6 @@ from ..studio_access import (
     studio_uniart_config,
     verify_studio_media,
     verify_studio_media_preview,
-    verify_provider_media,
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
@@ -384,12 +383,6 @@ def private_no_store_signed_response(data):
     response = signed_response(data)
     response.headers["Cache-Control"] = "private, no-store"
     return response
-
-
-@app.get("/provider/media/{owner_key}/{relative_path:path}")
-def get_provider_media(owner_key: str, relative_path: str, expires: int = 0, signature: str = ""):
-    path = verify_provider_media(owner_key, relative_path, expires, signature)
-    return FileResponse(path, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/studio/media/{owner_key}/{relative_path:path}")
