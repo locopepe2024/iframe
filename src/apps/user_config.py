@@ -22,6 +22,15 @@ from .identity import UserContext, _api_key_context, _set_browser_profile_cookie
 SECRET_FIELDS = {"UNIART_API_KEY"}
 
 
+def _effective_base_url(config: Dict[str, Any]) -> str:
+    return (
+        config.get("UNIART_BASE_URL")
+        or os.getenv("UNIART_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or "https://uniart.fun/v1"
+    ).rstrip("/")
+
+
 class UserConfigUpdate(BaseModel):
     UNIART_API_KEY: str | None = None
     UNIART_BASE_URL: str | None = None
@@ -127,6 +136,7 @@ class UserConfigStore:
         personal_uniart_configured = bool(secret_payload.get("UNIART_API_KEY"))
         return {
             **config,
+            "UNIART_BASE_URL": _effective_base_url(config),
             "secrets_configured": {
                 field: bool(secret_payload.get(field)) for field in SECRET_FIELDS
             },
@@ -208,15 +218,13 @@ class UserConfigStore:
                 raise HTTPException(status_code=503, detail="Stored UniArt credential cannot be decrypted") from exc
             return {
                 "api_key": key,
-                "base_url": config.get("UNIART_BASE_URL") or "https://uniart.fun/v1",
+                "base_url": _effective_base_url(config),
             }
         key = self._shared_uniart_api_key()
         if key:
             return {
                 "api_key": key,
-                "base_url": os.getenv("UNIART_BASE_URL")
-                or os.getenv("OPENAI_BASE_URL")
-                or "https://uniart.fun/v1",
+                "base_url": _effective_base_url(config),
             }
         raise HTTPException(status_code=409, detail="UniArt API key is not configured for this user")
 
