@@ -276,6 +276,7 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
               + "只返回 JSON 对象：identity.visual_notes、identity.basis、look.visual_notes、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
+              + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
               + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是上一轮可编辑草稿，优先级低于用户视觉约束；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
               + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
