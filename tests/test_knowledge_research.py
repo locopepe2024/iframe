@@ -82,12 +82,11 @@ def test_fed_rss_rate_limit_and_invalid_xml_are_visible(monkeypatch):
         discovery.discover("consumer finances")
 
 
-def test_fed_rss_uses_own_budget_and_owner_gate(monkeypatch):
+def test_fed_rss_uses_own_budget_and_source_policy(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
     assert api.research_enabled_for("owner-a") is True
-    assert api.research_enabled_for("owner-b") is False
+    assert api.research_enabled_for("owner-b") is True
     cursor = Mock()
     cursor.fetchone.side_effect = [None, None]
     connection = Mock()
@@ -96,6 +95,21 @@ def test_fed_rss_uses_own_budget_and_owner_gate(monkeypatch):
     assert any(call.args[1][0] == "provider:fed_rss" and call.args[1][1] == "60 seconds"
                for call in cursor.execute.call_args_list
                if len(call.args) == 2 and len(call.args[1]) > 1)
+
+
+def test_research_availability_requires_provider_and_capture_hosts(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")
+    assert api.research_enabled_for("browser-account") is True
+    assert api.research_enabled_for("apikey-account") is True
+    assert api.research_enabled_for("") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "")
+    assert api.research_enabled_for("browser-account") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "")
+    assert api.research_enabled_for("browser-account") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
+    assert api.research_enabled_for("browser-account") is True
 
 
 def test_capture_rejects_private_destination_and_extracts_text(monkeypatch):
@@ -144,7 +158,6 @@ def test_capture_pins_checked_ip_and_verifies_original_hostname(monkeypatch):
 def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
     run_id = uuid.uuid4()
     owner_calls = []
 
@@ -174,10 +187,9 @@ def test_research_api_uses_authenticated_owner_and_selected_candidates(monkeypat
         assert owner_calls[-1] == ("owner-a", ["https://example.org/a"])
 
 
-def test_research_smoke_gate_rejects_other_owners_before_storage_or_discovery(monkeypatch):
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
+def test_research_rejects_unconfigured_source_before_storage_or_discovery(monkeypatch):
+    monkeypatch.delenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", raising=False)
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "owner-a")
     calls = []
     monkeypatch.setattr(store, "transaction", lambda: calls.append("storage"))
     monkeypatch.setattr(discovery, "discover", lambda *args: calls.append("discovery"))
@@ -195,13 +207,11 @@ def test_research_smoke_gate_rejects_other_owners_before_storage_or_discovery(mo
     assert calls == []
 
 
-def test_research_smoke_gate_fails_closed_without_owner_list(monkeypatch):
+def test_research_does_not_use_legacy_owner_list(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
-    monkeypatch.delenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", raising=False)
-    assert api.research_enabled_for("owner-a") is False
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "*")
-    assert api.research_enabled_for("owner-a") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "other-owner")
+    assert api.research_enabled_for("owner-a") is True
 
 
 def test_worker_imports_raw_capture_and_finishes_job(monkeypatch):
