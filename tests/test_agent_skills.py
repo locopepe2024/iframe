@@ -185,6 +185,27 @@ def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ct
     assert 'current_draft 是上一轮可编辑草稿' in complete.call_args.args[2][0]['content']
 
 
+def test_character_design_draft_receives_user_visual_requirements_separately(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"日晒肤色，挺拔身形"},"look":{"visual_notes":"宋风窄袖短袍，软底布靴"},"review_items":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume',
+        current_draft='上一轮提案：白色长袍',
+        user_visual_requirements={
+            'identity': '日晒肤色，宽肩长腿',
+            'look': '宋代服装，长柄双手剑',
+        },
+    )
+
+    agent.character_design_draft(body, ctx)
+
+    user_data = complete.call_args.args[2][1]['content']
+    assert '"user_visual_requirements": {"identity": "日晒肤色，宽肩长腿", "look": "宋代服装，长柄双手剑"}' in user_data
+    assert '"current_draft": "上一轮提案：白色长袍"' in user_data
+    assert 'user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束' in complete.call_args.args[2][0]['content']
+
+
 def test_character_design_draft_sends_owner_resolved_images_as_visual_evidence(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
     complete = Mock(return_value='{"identity":{"visual_notes":"按参考图保留深棕眼和短发"},"look":{"visual_notes":"黑色劲装"},"unresolved":[]}')

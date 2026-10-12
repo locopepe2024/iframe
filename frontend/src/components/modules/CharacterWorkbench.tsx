@@ -37,6 +37,7 @@ type DesignDraft = {
     field_answers?: Record<string, string>;
     field_suggestions?: Record<string, string>;
     field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
+    user_visual_requirements?: { identity?: string; look?: string };
     reference_assets?: AssetLibraryReference[];
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
@@ -57,6 +58,11 @@ function designPromptDescription(identity: unknown, look: unknown, answers: unkn
     return [identity, look, ...answers]
         .filter((value): value is string => typeof value === "string" && !!value.trim())
         .join("。 ");
+}
+
+function preserveVisualRequirement(proposal: string, requirement: string): string {
+    const specified = requirement.trim();
+    return specified && !proposal.includes(specified) ? designPromptDescription(specified, proposal) : proposal;
 }
 
 function designScopeDescription(route?: string, ageStage?: string): string[] {
@@ -307,6 +313,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
     const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
+    const [userVisualRequirements, setUserVisualRequirements] = useState({
+        identity: savedDesign.user_visual_requirements?.identity || "",
+        look: savedDesign.user_visual_requirements?.look || "",
+    });
     const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
     const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
@@ -524,17 +534,24 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 reference_assets: designReferences,
                 character_name: asset.name,
                 profile: asset.description,
-                current_draft: designPromptDescription(designNotes, lookNotes),
+                current_draft: designSkillRevision ? designPromptDescription(designNotes, lookNotes) : "",
+                user_visual_requirements: userVisualRequirements,
                 user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
                 route: designRoute,
                 age_stage: designAgeStage,
                 style: stylePrompt,
                 confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
             });
-            setDesignNotes(result.identity.visual_notes);
-            setLookNotes(result.look.visual_notes);
-            setDesignIdentityBasis(normalizeDesignBasis(result.identity.basis));
-            setDesignLookBasis(normalizeDesignBasis(result.look.basis));
+            const nextIdentity = preserveVisualRequirement(result.identity.visual_notes, userVisualRequirements.identity);
+            const nextLook = preserveVisualRequirement(result.look.visual_notes, userVisualRequirements.look);
+            setDesignNotes(nextIdentity);
+            setLookNotes(nextLook);
+            setDesignIdentityBasis(userVisualRequirements.identity.trim()
+                ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
+                : normalizeDesignBasis(result.identity.basis));
+            setDesignLookBasis(userVisualRequirements.look.trim()
+                ? Array.from(new Set([...normalizeDesignBasis(result.look.basis), "user_specified" as const]))
+                : normalizeDesignBasis(result.look.basis));
             const questions = actionableDesignQuestions(result.unresolved, designFieldAnswers, result.field_suggestions);
             const retainedAnswers = Object.fromEntries(
                 Object.entries(designFieldAnswers).filter(([question]) => questions.includes(question)),
@@ -556,7 +573,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             );
             setDesignSkillRevision(result.skill_revision);
             setDesignStatus("draft");
-            applyDesignToPrompts(result.identity.visual_notes, result.look.visual_notes, retainedAnswers);
+            applyDesignToPrompts(nextIdentity, nextLook, retainedAnswers);
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "生成视觉草稿失败，请重试。");
         } finally {
@@ -578,6 +595,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             look: { route: designRoute, visual_notes: lookNotes || undefined, basis: designLookBasis },
             unresolved: designNotes ? unanswered : [],
             field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+            user_visual_requirements: userVisualRequirements,
             field_suggestions: Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
             field_suggestion_choices: Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
             reference_assets: designReferences,
@@ -905,6 +923,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <option value="adult">成年人</option>
                                 <option value="older-adult">老年</option>
                             </select>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
+                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
+                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <AssetReferencePicker
+                                candidates={referenceCandidates}
+                                selected={designReferences}
+                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
+                                title="选择角色参考图"
+                                description="可搜索本集、系列或全局素材；也可在下方图片 Prompt 输入 @ 选择。"
+                            />
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
                             <div className="mt-1 flex gap-2">
                                 <select id="character-design-model" value={designModel} onChange={(event) => setDesignModel(event.target.value)} disabled={!designModels.length || designing} className="h-10 min-w-0 flex-1 rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -913,18 +943,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 </select>
                                 <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
                             </div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="AI 会提出可编辑的人物外观方案；可直接微调。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="AI 会补全版型、面料、鞋履、发式及配饰；可直接微调。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            <AssetReferencePicker
-                                candidates={referenceCandidates}
-                                selected={designReferences}
-                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
-                                title="选择角色参考图"
-                                description="可搜索本集、系列或全局素材；也可在下方图片 Prompt 输入 @ 选择。"
-                            />
                             {designUnresolved.length > 0 && (
                                 <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
                                     <div className="flex items-start justify-between gap-2">

@@ -337,6 +337,39 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     expect(editor.editor.getText()).toContain("黑色劲装");
 });
 
+it("uses visual fields as editable inputs before generating a draft", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    const identity = screen.getByLabelText("身份视觉值");
+    const look = screen.getByLabelText("造型视觉值");
+    const generate = screen.getByRole("button", { name: "生成草稿" });
+    expect(identity.compareDocumentPosition(generate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(look.compareDocumentPosition(generate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.change(identity, { target: { value: "日晒肤色，宽肩长腿" } });
+    fireEvent.change(look, { target: { value: "宋代服装，长柄双手剑" } });
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.click(generate);
+
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+        current_draft: "",
+        user_visual_requirements: { identity: "日晒肤色，宽肩长腿", look: "宋代服装，长柄双手剑" },
+    })));
+    await waitFor(() => expect((identity as HTMLTextAreaElement).value).toContain("日晒肤色，宽肩长腿"));
+    expect((look as HTMLTextAreaElement).value).toContain("宋代服装，长柄双手剑");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        user_visual_requirements: { identity: "日晒肤色，宽肩长腿", look: "宋代服装，长柄双手剑" },
+        confirmed: false,
+    }) }));
+});
+
 it("lets the user answer a design conflict and carries answers into confirmed prompts", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const question = "剧本写十六岁，但确认设计为二十四岁，两者冲突";
