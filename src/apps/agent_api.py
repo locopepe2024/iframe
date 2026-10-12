@@ -257,6 +257,7 @@ CHAT_MODEL_LABELS = {
     "glm-5.3": "GLM 5.3",
     "glm-5.3-flash": "GLM 5.3 Flash",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
+    "deepseek-v4-flash": "DeepSeek V4 Flash",
     "minimax-h3-ir": "MiniMax H3 IR（提示词优化）",
 }
 

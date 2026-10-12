@@ -9,6 +9,16 @@ from src.apps import agent_api as agent
 from src.apps.identity import UserContext
 
 
+def test_nsfw_node_chat_model_requires_authenticated_catalog_presence():
+    advertised = agent._agent_chat_models([
+        {'api_model_id': 'deepseek-v4-flash', 'capabilities': ['chat']},
+    ])
+    assert [(item['api_model_id'], item['display_name']) for item in advertised] == [
+        ('deepseek-v4-flash', 'DeepSeek V4 Flash'),
+    ]
+    assert agent._agent_chat_models([]) == []
+
+
 def test_asr_requires_catalog_access_and_valid_audio(setup, monkeypatch):
     monkeypatch.setattr(agent, 'asr_available', lambda ctx: False)
     with pytest.raises(HTTPException, match='尚未开放'):
