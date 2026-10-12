@@ -101,6 +101,26 @@ def test_series_character_description_save_returns_merged_project(pipeline, monk
     assert payload["characters"][0]["description"] == "Updated profile"
 
 
+def test_series_character_rename_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=character.id, asset_type="character", attributes={"name": "清溪镇百姓"},
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["name"] == "清溪镇百姓"
+    assert payload["characters"][0]["source"] == "series"
+
+
 def test_series_source_context_is_exposed_to_episode_analysis(pipeline):
     series = pipeline.create_series("S")
     series.source_context = {"kind": "series_submission_context", "synopsis": "全剧摘要"}

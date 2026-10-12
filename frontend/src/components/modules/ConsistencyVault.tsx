@@ -144,7 +144,7 @@ export default function ConsistencyVault() {
         if (!currentProject) return;
         try {
             const updatedProject = await api.updateAssetDescription(currentProject.id, assetId, type, description);
-            updateProject(currentProject.id, updatedProject);
+            await applyAssetMutationProject(assetId, type, updatedProject);
         } catch (error) {
             console.error("Failed to update description:", error);
         }
@@ -154,7 +154,7 @@ export default function ConsistencyVault() {
         if (!currentProject) return;
         try {
             const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, attributes);
-            updateProject(currentProject.id, updatedProject);
+            await applyAssetMutationProject(assetId, type, updatedProject);
         } catch (error) {
             console.error("Failed to update asset attributes:", error);
             throw error;
@@ -164,7 +164,32 @@ export default function ConsistencyVault() {
     const handleRenameAsset = async (assetId: string, type: string, name: string) => {
         if (!currentProject) return;
         const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, { name });
-        updateProject(currentProject.id, updatedProject);
+        await applyAssetMutationProject(assetId, type, updatedProject);
+    };
+
+    const applyAssetMutationProject = async (assetId: string, type: string, response: any) => {
+        if (!currentProject) return;
+        const key = type === "character" ? "characters" : type === "scene" ? "scenes" : "props";
+        // A mutation response must retain the merged episode/series asset view.
+        // Recover from older or partial responses before updating local state;
+        // otherwise the selected asset disappears and its workbench unmounts.
+        const collections = ["characters", "scenes", "props"] as const;
+        const hasVisibleAssets = (project: any) => collections.every(collection => {
+            const returned = project?.[collection];
+            return Array.isArray(returned) && (currentProject[collection] ?? []).every(
+                (asset: { id: string }) => returned.some((item: { id?: string }) => item.id === asset.id));
+        });
+        const hasUpdatedAsset = (project: any) => project[key]?.some(
+            (asset: { id?: string }) => asset.id === assetId);
+        if (!hasVisibleAssets(response) || !hasUpdatedAsset(response)) {
+            const freshProject = await api.getProject(currentProject.id);
+            if (!hasUpdatedAsset(freshProject)) {
+                throw new Error("Updated asset is missing from the project response");
+            }
+            updateProject(currentProject.id, freshProject);
+            return;
+        }
+        updateProject(currentProject.id, response);
     };
 
     const handleClearGenerationState = async (assetId: string, type: string) => {

@@ -9,12 +9,16 @@ const mocks = vi.hoisted(() => ({
     bindEpisodePlanScene: vi.fn(),
     getAssetReferenceIndex: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
+    updateAssetAttributes: vi.fn(),
     error: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: vi.fn(), api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error } }));
-vi.mock("./CharacterWorkbench", () => ({ default: () => null }));
+vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename }: any) =>
+    <div role="dialog" aria-label="角色工作台">{asset.name}
+        <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
+    </div> }));
 vi.mock("../common/VariantSelector", () => ({ VariantSelector: () => null }));
 vi.mock("../common/VideoVariantSelector", () => ({ VideoVariantSelector: () => null }));
 vi.mock("../modals/UploadAssetModal", () => ({ default: () => null }));
@@ -40,6 +44,42 @@ beforeEach(() => {
     mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it("keeps a series character workbench open after renaming", async () => {
+    const character = { id: "hero", name: "旧名字", source: "series" };
+    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue({ ...project,
+        characters: [{ ...character, name: "新名字" }] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByText("旧名字"));
+    fireEvent.click(screen.getByRole("button", { name: "保存资产名" }));
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("新名字"));
+    expect(useProjectStore.getState().currentProject?.characters).toHaveLength(1);
+    expect(mocks.getProject).not.toHaveBeenCalled();
+});
+
+it("reloads a partial rename response before replacing the visible asset list", async () => {
+    const character = { id: "hero", name: "旧名字", source: "series" };
+    const other = { id: "support", name: "配角", source: "series" };
+    const project = { id: "episode-1", characters: [character, other], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue({ ...project, characters: [{ ...character, name: "新名字" }] });
+    mocks.getProject.mockResolvedValue({ ...project, characters: [{ ...character, name: "新名字" }, other] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByText("旧名字"));
+    fireEvent.click(screen.getByRole("button", { name: "保存资产名" }));
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("新名字"));
+    expect(mocks.getProject).toHaveBeenCalledWith("episode-1");
+    expect(useProjectStore.getState().currentProject?.characters).toHaveLength(2);
+    expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
 });
 
 it.each([
