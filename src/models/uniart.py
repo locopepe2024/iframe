@@ -61,10 +61,6 @@ def _image_reference_url(value: str) -> str:
         return value
     if value.startswith(("data:", "blob:")):
         raise ValueError("UniArt media references require HTTP(S) material URLs")
-    if os.getenv("UNIART_MEDIA_BASE_URL"):
-        from ..apps.studio_access import signed_provider_media_url
-        path = value if os.path.isfile(value) else os.path.join("output", value)
-        return signed_provider_media_url(path)
     from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:

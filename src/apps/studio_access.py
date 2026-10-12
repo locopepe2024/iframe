@@ -99,48 +99,6 @@ def _studio_media_signature(owner_key: str, relative_path: str, expires: int) ->
     return hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def signed_provider_media_url(path: str, ttl_seconds: int = 1800) -> str:
-    """Expose a managed local media file to an upstream provider briefly."""
-    base = os.getenv("UNIART_MEDIA_BASE_URL", "").strip().rstrip("/")
-    parsed = urlsplit(base)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
-        raise ValueError("UNIART_MEDIA_BASE_URL must be an HTTP(S) origin")
-    root = os.path.realpath("output/users")
-    candidate = os.path.realpath(path)
-    if not candidate.startswith(root + os.sep) or not os.path.isfile(candidate):
-        raise ValueError("Provider media must be an existing owner-scoped file")
-    relative = os.path.relpath(candidate, root).replace(os.sep, "/")
-    owner_key, separator, owner_path = relative.partition("/")
-    if (not separator or len(owner_key) != 24 or any(c not in "0123456789abcdef" for c in owner_key)
-            or not owner_path.startswith(("studio/", "playground/", "assets/"))
-            or os.path.splitext(owner_path)[1].lower() not in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm", ".mkv", ".mp3", ".wav", ".m4a"}):
-        raise ValueError("Provider media is outside the managed media directories")
-    expires = int(time.time()) + ttl_seconds
-    message = f"provider:{owner_key}:{owner_path}:{expires}".encode("utf-8")
-    signature = hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
-    return f"{base}/provider/media/{owner_key}/{quote(owner_path)}?expires={expires}&signature={signature}"
-
-
-def verify_provider_media(owner_key: str, relative_path: str, expires: int, signature: str) -> str:
-    if expires < int(time.time()) or not signature:
-        raise HTTPException(status_code=401, detail="Media URL expired or unsigned")
-    if len(owner_key) != 24 or any(c not in "0123456789abcdef" for c in owner_key):
-        raise HTTPException(status_code=404, detail="Media not found")
-    root = os.path.realpath(os.path.join("output", "users", owner_key))
-    candidate = os.path.realpath(os.path.join(root, relative_path))
-    if not candidate.startswith(root + os.sep) or not os.path.isfile(candidate):
-        raise HTTPException(status_code=404, detail="Media not found")
-    owner_path = os.path.relpath(candidate, root).replace(os.sep, "/")
-    if (not owner_path.startswith(("studio/", "playground/", "assets/"))
-            or os.path.splitext(owner_path)[1].lower() not in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm", ".mkv", ".mp3", ".wav", ".m4a"}):
-        raise HTTPException(status_code=404, detail="Media not found")
-    message = f"provider:{owner_key}:{owner_path}:{expires}".encode("utf-8")
-    expected = hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, signature):
-        raise HTTPException(status_code=401, detail="Invalid media signature")
-    return candidate
-
-
 def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int = 3600) -> str:
     owner_key = studio_owner_key(owner_profile_id)
     normalized = stored_path.replace("\\", "/").lstrip("/")
