@@ -121,6 +121,34 @@ def test_series_character_rename_save_returns_merged_project(pipeline, monkeypat
     assert payload["characters"][0]["source"] == "series"
 
 
+@pytest.mark.parametrize("asset_type,collection,make_asset", [
+    ("scene", "scenes", _make_scene),
+    ("prop", "props", lambda: Prop(id="prop-1", name="剑", description="长剑")),
+])
+def test_series_material_rename_returns_merged_project(pipeline, monkeypatch,
+                                                        asset_type, collection, make_asset):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ImageVariant
+
+    series = pipeline.create_series("S")
+    asset = make_asset()
+    asset.image_asset.variants.append(ImageVariant(id="variant-1", url="/asset.png"))
+    asset.image_asset.selected_id = "variant-1"
+    getattr(series, collection).append(asset)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_variant_metadata(episode.id, api.UpdateVariantMetadataRequest(
+        asset_id=asset.id, asset_type=asset_type, variant_id="variant-1", display_name="黄昏参考图",
+    ))
+    payload = json.loads(response.body)
+
+    assert payload[collection][0]["id"] == asset.id
+    assert payload[collection][0]["source"] == "series"
+    assert payload[collection][0]["image_asset"]["variants"][0]["display_name"] == "黄昏参考图"
+
+
 def test_series_source_context_is_exposed_to_episode_analysis(pipeline):
     series = pipeline.create_series("S")
     series.source_context = {"kind": "series_submission_context", "synopsis": "全剧摘要"}

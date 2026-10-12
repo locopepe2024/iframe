@@ -3721,11 +3721,11 @@ class UpdateVariantMetadataRequest(BaseModel):
     reference_distance: Optional[str] = None
     display_name: Optional[str] = None
 
-@app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/metadata")
 def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
     """Updates the angle/distance labels for one child reference image."""
     try:
-        updated_script = pipeline.update_asset_variant_metadata(
+        pipeline.update_asset_variant_metadata(
             script_id,
             request.asset_id,
             request.asset_type,
@@ -3734,7 +3734,7 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
             request.reference_distance,
             request.display_name,
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

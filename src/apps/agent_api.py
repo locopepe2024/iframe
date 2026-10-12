@@ -174,6 +174,43 @@ class CharacterDesignRequest(BaseModel):
     reference_assets: list[CharacterDesignReference] = Field(default_factory=list, max_length=9)
 
 
+class AssetImagePromptRequest(BaseModel):
+    model: str
+    asset_type: Literal["scene", "prop"]
+    asset_name: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=12000)
+    current_prompt: str = Field(default="", max_length=12000)
+    style: str = Field(default="", max_length=4000)
+    plan_context: list[str] = Field(default_factory=list, max_length=8)
+
+
+@router.post("/asset-image-prompt/refine")
+def refine_asset_image_prompt(body: AssetImagePromptRequest, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    system = (
+        "你是影视资产设计师。根据资产档案和现有提示词，输出一条具体、可直接用于生成单张"
+        "场景或道具参考图的中文提示词。保持资产身份和用户已给出的事实，不虚构剧情事实。"
+        "拍摄计划信息只能作为本次画面的上下文；若多条计划互相矛盾，不把它们拼成同一画面。"
+        "明确主体、形制、材质、空间或细节、构图及光影；未知细节可合理设计，但不得当作原作事实。"
+        "只返回 JSON 对象，字段为 prompt，值为非空字符串。"
+    )
+    answer = complete(ctx, body.model, [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)},
+    ])
+    decoder = json.JSONDecoder()
+    for offset, char in enumerate(answer):
+        if char != "{":
+            continue
+        try:
+            result, _ = decoder.raw_decode(answer[offset:])
+        except ValueError:
+            continue
+        if isinstance(result, dict) and isinstance(result.get("prompt"), str) and result["prompt"].strip():
+            return {"prompt": result["prompt"].strip()}
+    raise HTTPException(502, "模型未返回可用的资产图片提示词，请重试")
+
+
 def _parse_character_design_object(answer: str) -> dict:
     decoder = json.JSONDecoder()
     for offset, char in enumerate(answer):

@@ -16,6 +16,33 @@ def ctx(tmp_path, monkeypatch):
     return UserContext('user', 'profile', 'name', 'token')
 
 
+def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda _ctx, _model, messages: (
+        calls.append(messages) or '{"prompt":"黄昏粮铺门前，青石板反射暖光"}'
+    ))
+    body = agent.AssetImagePromptRequest(
+        model='qwen', asset_type='scene', asset_name='粮铺门前', description='青石板街道',
+        current_prompt='粮铺', plan_context=['第一集黄昏，粮铺门前'],
+    )
+
+    assert agent.refine_asset_image_prompt(body, ctx) == {'prompt': '黄昏粮铺门前，青石板反射暖光'}
+    assert '第一集黄昏，粮铺门前' in calls[0][1]['content']
+
+
+def test_asset_image_prompt_refine_rejects_empty_suggestion(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"prompt":"  "}')
+    body = agent.AssetImagePromptRequest(
+        model='qwen', asset_type='prop', asset_name='双手剑', description='长柄双手剑',
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        agent.refine_asset_image_prompt(body, ctx)
+    assert exc.value.status_code == 502
+
+
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
     assert len(packages) == len({p['id'] for p in packages}) == 8
