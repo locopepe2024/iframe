@@ -128,11 +128,34 @@ it("offers an existing scene asset for a plan scene with no asset ID", async () 
 
     render(<ConsistencyVault />);
     const picker = await screen.findByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" });
+    expect(screen.getByText("计划场景 · 粮铺门前")).toBeInTheDocument();
+    expect(screen.getByText("关联场景资产 · 待关联")).toBeInTheDocument();
     fireEvent.change(picker, { target: { value: "street" } });
 
     await waitFor(() => expect(mocks.bindEpisodePlanScene).toHaveBeenCalledWith(
         "episode-1", "plan-street", null, "street", 2));
     await waitFor(() => expect(screen.queryByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" })).not.toBeInTheDocument());
+    expect(screen.getByText("关联场景资产 · 长街 · 本集资产")).toBeInTheDocument();
+});
+
+it("shows a director person and its resolved character asset as separate identities", async () => {
+    const character = { id: "hero", name: "清溪镇百姓", source: "series" };
+    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({
+        context: { shooting_plan_revision: 1, scenes: [], shots: [], props: [], characters: [{
+            person_id: "person-1", person_label: "镇上居民", character_asset_ids: ["hero"],
+            scene_ids: ["scene-1"], shot_ids: ["shot-1"],
+        }] },
+        bindings: [{ asset_type: "character", asset_id: "hero", status: "suggested",
+            scene_ids: ["scene-1"], shot_ids: ["shot-1"] }],
+    });
+
+    render(<ConsistencyVault />);
+    await screen.findByText("计划人物 · 镇上居民");
+    expect(screen.getByText("关联角色资产 · 清溪镇百姓 · 系列共享")).toBeInTheDocument();
+    expect(screen.getByText(/按人物身份关联/)).toBeInTheDocument();
+    expect(screen.queryByText("使用导演映射")).not.toBeInTheDocument();
 });
 
 it("explains that re-extracted scene and prop IDs need explicit plan bindings", async () => {
@@ -187,7 +210,7 @@ it("preserves the plan display when deletion is rejected", async () => {
     await screen.findByRole("region", { name: "拍摄计划资产需求" });
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(window.alert).toHaveBeenCalled());
-    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("候选引用");
+    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("计划人物 · Hero");
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.syncEpisodeAssetsFromShootingPlan).not.toHaveBeenCalled();
 });

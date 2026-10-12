@@ -853,6 +853,11 @@ function ShootingPlanAssetRequirements({
     };
     const getAsset = (type: "character" | "scene" | "prop", id: string) =>
         assetsForType(type).find(asset => asset.id === id);
+    const sceneLabelsForAsset = (assetId: string) => Array.from(new Set(
+        (context?.scenes ?? []).filter(scene => scene.scene_asset_id === assetId ||
+            context?.shots.some(shot => shot.scene_id === scene.scene_id && shot.scene_asset_id === assetId))
+            .map(scene => scene.scene_ref || scene.location || scene.scene_id)
+    ));
     const planSourcesByAsset = (type: "scene" | "prop") => {
         const sources = new Map<string, Set<string>>();
         const add = (sourceId: string, assetId: string) => {
@@ -889,7 +894,7 @@ function ShootingPlanAssetRequirements({
                 {groups.map(group => (
                     <div key={group.type} className="min-w-0 rounded-md border border-glass-border bg-glass/40 p-3">
                         <div className="flex items-center justify-between text-xs font-medium text-text-secondary">
-                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? people.size : 0)}</span>
+                            <span>{group.label}</span><span>{group.items.length + (group.type === "character" ? people.size : group.type === "scene" ? unboundScenes.length : 0)}</span>
                         </div>
                         {group.items.length === 0 && (group.type !== "character" || people.size === 0)
                             && (group.type !== "scene" || unboundScenes.length === 0) ? (
@@ -898,13 +903,15 @@ function ShootingPlanAssetRequirements({
                             <div className={`mt-2 space-y-2 overflow-y-auto ${group.type === "character" ? "max-h-80" : "max-h-32"}`}>
                                 {group.items.map(binding => {
                                     const asset = getAsset(group.type, binding.asset_id);
+                                    const sceneLabels = group.type === "scene" ? sceneLabelsForAsset(binding.asset_id) : [];
                                     const sourceIds = group.type === "character" ? [] :
                                         Array.from(planSourcesByAsset(group.type).get(binding.asset_id) ?? []);
                                     return (
                                         <div key={`${group.type}:${binding.asset_id}`} className="rounded border border-glass-border/70 px-2 py-1.5">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-xs text-foreground">{asset ? `${asset.name} · ${scopeLabel(asset.source)}` : `计划需求（待关联资产） · ${binding.asset_id}`}</p>
+                                                    {sceneLabels.length > 0 && <p className="text-xs text-foreground">计划场景 · {sceneLabels.join("、")}</p>}
+                                                    <p className="text-xs text-foreground">{group.type === "scene" && sceneLabels.length > 0 ? "关联场景资产 · " : ""}{asset ? `${asset.name} · ${scopeLabel(asset.source)}` : `计划需求（待关联资产） · ${binding.asset_id}`}</p>
                                                     <p className="text-[0.6875rem] text-text-muted">{binding.scene_ids.length} 个场景 · {binding.shot_ids.length} 个镜头 · {asset ? statusLabel(binding.status) : "待关联资产"}</p>
                                                 </div>
                                                 {asset && project[group.type === "scene" ? "scenes" : group.type === "prop" ? "props" : "characters"]?.some((item: { id: string }) => item.id === asset.id) &&
@@ -922,7 +929,8 @@ function ShootingPlanAssetRequirements({
                                 })}
                                 {group.type === "scene" && unboundScenes.map(scene => (
                                     <div key={`unbound-scene:${scene.scene_id}`} className="rounded border border-glass-border/70 px-2 py-1.5">
-                                        <p className="text-xs text-foreground">{scene.scene_ref || scene.location || scene.scene_id}</p>
+                                        <p className="text-xs text-foreground">计划场景 · {scene.scene_ref || scene.location || scene.scene_id}</p>
+                                        <p className="text-[0.6875rem] text-text-secondary">关联场景资产 · 待关联</p>
                                         <p className="text-[0.6875rem] text-text-muted">
                                             {context?.shots.filter(shot => shot.scene_id === scene.scene_id && !shot.scene_asset_id).length ?? 0} 个镜头 · 场景资产待关联
                                         </p>
@@ -935,27 +943,31 @@ function ShootingPlanAssetRequirements({
                                         </select>
                                     </div>
                                 ))}
-                                {group.type === "character" && Array.from(people.entries()).map(([personId, requirement]) => (
-                                    <div key={`person:${personId}`} className="rounded border border-glass-border/70 px-2 py-1.5">
+                                {group.type === "character" && Array.from(people.entries()).map(([personId, requirement]) => {
+                                    const selectedId = project.episode_person_asset_bindings?.[personId] ??
+                                        (requirement.assetIds.length === 1 ? requirement.assetIds[0] : "");
+                                    const selectedAsset = selectedId ? getAsset("character", selectedId) : null;
+                                    return <div key={`person:${personId}`} className="rounded border border-glass-border/70 px-2 py-1.5">
                                         <div className="flex items-start justify-between gap-2">
-                                            <p className="truncate text-xs text-foreground">{requirement.label}</p>
-                                            {requirement.assetIds.length === 1 && project.characters.some((asset: { id: string }) => asset.id === requirement.assetIds[0]) && (
-                                                <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", requirement.assetIds[0])}>打开资产</button>
+                                            <p className="text-xs text-foreground">计划人物 · {requirement.label}</p>
+                                            {selectedAsset && project.characters.some((asset: { id: string }) => asset.id === selectedId) && (
+                                                <button type="button" className="shrink-0 text-[0.6875rem] text-primary hover:underline" onClick={() => onOpenAsset("character", selectedId)}>打开资产</button>
                                             )}
                                         </div>
-                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {requirement.assetIds.length ? (currentBindings.find(item => item.asset_type === "character" && requirement.assetIds.includes(item.asset_id))?.status === "accepted" ? "已采纳" : "候选引用") : "待关联角色资产"}</p>
+                                        <p className="text-[0.6875rem] text-text-secondary">关联角色资产 · {selectedAsset ? `${selectedAsset.name} · ${scopeLabel(selectedAsset.source)}` : "待关联"}</p>
+                                        <p className="text-[0.6875rem] text-text-muted">{requirement.sceneIds.length} 个场景 · {requirement.shotIds.length} 个镜头 · {requirement.lookCount} 条造型需求 · {selectedAsset ? (project.episode_person_asset_bindings?.[personId] ? "手动关联" : "按人物身份关联") : "待关联角色资产"}</p>
                                         <select aria-label={`为计划人物 ${requirement.label} 选择角色资产`}
-                                            value={project.episode_person_asset_bindings?.[personId] ?? (requirement.assetIds.length === 1 ? requirement.assetIds[0] : "")}
+                                            value={selectedId}
                                             disabled={bindingPersonId !== null}
                                             onChange={(event) => void onBindPersonAsset(personId, event.target.value || null)}
                                             className="mt-1.5 w-full rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
-                                            <option value="" disabled={Boolean(project.episode_person_asset_bindings?.[personId])}>{requirement.assetIds.length ? "使用导演映射" : "选择角色资产"}</option>
+                                            <option value="" disabled={Boolean(selectedId)}>选择角色资产</option>
                                             {assetsForType("character").map((asset) => (
                                                 <option key={asset.id} value={asset.id}>{asset.name} · {scopeLabel(asset.source)}</option>
                                             ))}
                                         </select>
-                                    </div>
-                                ))}
+                                    </div>;
+                                })}
                             </div>
                         )}
                     </div>
