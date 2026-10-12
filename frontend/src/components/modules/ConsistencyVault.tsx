@@ -157,6 +157,7 @@ export default function ConsistencyVault() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to update asset attributes:", error);
+            throw error;
         }
     };
 

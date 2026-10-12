@@ -3573,17 +3573,17 @@ def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 
 
 
-@app.post("/projects/{script_id}/assets/update_attributes", response_model=Script)
+@app.post("/projects/{script_id}/assets/update_attributes")
 def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
     try:
-        updated_script = pipeline.update_asset_attributes(
+        pipeline.update_asset_attributes(
             script_id,
             request.asset_id,
             request.asset_type,
             request.attributes
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except InvalidAssetName as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
@@ -3599,17 +3599,17 @@ class UpdateAssetDescriptionRequest(BaseModel):
     description: str
 
 
-@app.post("/projects/{script_id}/assets/update_description", response_model=Script)
+@app.post("/projects/{script_id}/assets/update_description")
 def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequest):
     """Updates an asset's description."""
     try:
-        updated_script = pipeline.update_asset_description(
+        pipeline.update_asset_description(
             script_id,
             request.asset_id,
             request.asset_type,
             request.description
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

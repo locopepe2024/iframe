@@ -4,6 +4,7 @@ Covers: Models, Pipeline CRUD, Episode association, asset resolution,
 PromptConfig three-level fallback, text splitting, and cross-series import.
 """
 
+import json
 import time
 import uuid
 import pytest
@@ -58,6 +59,46 @@ def _make_character(name="Hero", **kw) -> Character:
 def _make_scene(name="Forest", **kw) -> Scene:
     return Scene(id=kw.pop("id", str(uuid.uuid4())), name=name,
                  description=kw.pop("description", "A dark forest"), **kw)
+
+
+def test_series_character_design_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    design = {"identity": {"visual_notes": "Black hair"}, "confirmed": True}
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=character.id, asset_type="character", attributes={"character_design": design},
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["source"] == "series"
+    assert payload["characters"][0]["character_design"]["design_revisions"][0]["revision"] == 1
+
+
+def test_series_character_description_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_description(episode.id, api.UpdateAssetDescriptionRequest(
+        asset_id=character.id, asset_type="character", description="Updated profile",
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["description"] == "Updated profile"
 
 
 def test_series_source_context_is_exposed_to_episode_analysis(pipeline):
