@@ -95,6 +95,18 @@ function normalizeDesignQuestions(values: unknown): string[] {
         .filter((value, index, all) => all.indexOf(value) === index);
 }
 
+function actionableDesignQuestions(
+    values: unknown,
+    answers: Record<string, string> = {},
+    suggestions: Record<string, string> = {},
+): string[] {
+    return normalizeDesignQuestions(values).filter((question) =>
+        !!answers[question]?.trim()
+        || !!suggestions[question]?.trim()
+        || /冲突|矛盾|不一致|但|conflict|contradict|inconsistent/i.test(question),
+    );
+}
+
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
     const variants = Array.isArray(unit?.variants)
         ? unit.variants
@@ -298,7 +310,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
     const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
-    const [designUnresolved, setDesignUnresolved] = useState<string[]>(normalizeDesignQuestions(savedDesign.unresolved));
+    const [designUnresolved, setDesignUnresolved] = useState<string[]>(
+        actionableDesignQuestions(savedDesign.unresolved, savedDesign.field_answers, savedDesign.field_suggestions),
+    );
     const [designFieldAnswers, setDesignFieldAnswers] = useState<Record<string, string>>(savedDesign.field_answers || {});
     const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
     const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
@@ -521,7 +535,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setLookNotes(result.look.visual_notes);
             setDesignIdentityBasis(normalizeDesignBasis(result.identity.basis));
             setDesignLookBasis(normalizeDesignBasis(result.look.basis));
-            const questions = normalizeDesignQuestions(result.unresolved);
+            const questions = actionableDesignQuestions(result.unresolved, designFieldAnswers, result.field_suggestions);
             const retainedAnswers = Object.fromEntries(
                 Object.entries(designFieldAnswers).filter(([question]) => questions.includes(question)),
             );

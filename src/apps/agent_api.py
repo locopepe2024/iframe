@@ -198,6 +198,25 @@ def _character_design_visual_notes(section: dict) -> str:
     return "；".join(details)
 
 
+def _character_design_review_needs_revision(result: dict) -> bool:
+    legacy = result.get("unresolved") or []
+    if legacy:
+        return True
+    reviews = result.get("review_items") or []
+    if not isinstance(reviews, list):
+        return False  # The normal parser reports malformed output.
+    return any(
+        isinstance(item, str)
+        or isinstance(item, dict) and (
+            not isinstance(item.get("question"), str)
+            or not re.search(r"冲突|矛盾|不一致|但|conflict|contradict|inconsistent", item["question"], re.IGNORECASE)
+            or not isinstance(item.get("suggestion"), str)
+            or not item["suggestion"].strip()
+        )
+        for item in reviews
+    )
+
+
 @router.post("/character-design/draft")
 def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
     validate_model(ctx, body.model)
@@ -214,9 +233,9 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "profile 是项目角色档案，current_draft 是上一轮可编辑草稿，user_answers 是用户明确回答；不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
-              + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。不要因此把每个字段变成 review_item。"
+              + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
-              + "review_items 只用于明确事实冲突、年龄 / 身份 / 项目画风等重大设定歧义，或会实质改变角色的关键选择；每项只写一个原子问题并提供一条可直接采纳的 suggestion。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items。"
+              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
     user_data = body.model_dump(exclude={"model", "project_id", "reference_assets"})
@@ -256,6 +275,23 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user_content}])
     try:
         result = _parse_character_design_object(answer)
+        if _character_design_review_needs_revision(result):
+            correction = (
+                "上一版把未描述的外貌或造型列成待核对，未完成角色设计。"
+                "请根据已有输入给出一套具体、可编辑的 identity.visual_notes 和 look.visual_notes，"
+                "缺少依据的细节标为 creative_choice，不得声称是剧本事实。"
+                "只有输入中确实互相矛盾的关键设定才能进入 review_items，且必须有可直接采纳的 suggestion。"
+                "不要输出 unresolved；只返回修正后的 JSON。"
+            )
+            answer = complete(ctx, body.model, [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+                {"role": "assistant", "content": answer},
+                {"role": "user", "content": correction},
+            ])
+            result = _parse_character_design_object(answer)
+            if _character_design_review_needs_revision(result):
+                raise ValueError("Model returned review items without design suggestions")
         identity = result.get("identity") or {}
         look = result.get("look") or {}
         if not isinstance(identity, dict) or not isinstance(look, dict):
