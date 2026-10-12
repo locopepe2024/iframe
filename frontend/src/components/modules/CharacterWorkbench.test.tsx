@@ -337,9 +337,9 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     expect(editor.editor.getText()).toContain("黑色劲装");
 });
 
-it("lets the user answer unresolved design questions and carries answers into confirmed prompts", async () => {
+it("lets the user answer a design conflict and carries answers into confirmed prompts", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
-    const question = "少年外观与青年年龄阶段之间的具体年龄表现需确认";
+    const question = "剧本写十六岁，但确认设计为二十四岁，两者冲突";
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
     render(<CharacterWorkbench asset={{
         id: "character-1", name: "苏砚", description: "少年剑客",
@@ -364,6 +364,26 @@ it("lets the user answer unresolved design questions and carries answers into co
     await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
     const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
     expect(editor).toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
+});
+
+it("does not ask creators to fill old missing-detail checklists", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{
+        id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            identity: { visual_notes: "清瘦面容，黑发束起" },
+            look: { visual_notes: "素黑劲装" },
+            unresolved: [
+                "画面风格尚未指定",
+                "脸型和五官缺少依据",
+                "素黑劲装的领型、袖型和面料需确认",
+            ],
+            confirmed: false,
+        }, design_revisions: [] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    expect(screen.queryByText(/待核对 ·/)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("补充你的决定；如果暂时无法决定可留空")).not.toBeInTheDocument();
 });
 
 it("applies edited identity and look values to image prompts without saving a revision", async () => {
