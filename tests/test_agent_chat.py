@@ -215,7 +215,6 @@ def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, 
 def test_live_research_starts_durable_run_without_claiming_citations(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
-    monkeypatch.setenv('IFRAME_KNOWLEDGE_RESEARCH_OWNERS', setup.owner_profile_id)
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     from src.apps.knowledge import api
     run_id = str(__import__('uuid').uuid4())
@@ -240,7 +239,6 @@ def test_live_research_starts_durable_run_without_claiming_citations(setup, monk
 def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
-    monkeypatch.setenv('IFRAME_KNOWLEDGE_RESEARCH_OWNERS', setup.owner_profile_id)
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     from src.apps.knowledge import api
     monkeypatch.setattr(api, 'start_research', Mock(side_effect=AssertionError('Must clarify first')))
@@ -251,10 +249,9 @@ def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, mo
     assert 'research_run_id' not in result['assistant_message']
 
 
-def test_live_research_denied_before_planning_for_unlisted_owner(setup, monkeypatch):
-    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
+def test_live_research_denied_before_planning_without_provider(setup, monkeypatch):
+    monkeypatch.delenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', raising=False)
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
-    monkeypatch.setenv('IFRAME_KNOWLEDGE_RESEARCH_OWNERS', 'another-owner')
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     planner = Mock(side_effect=AssertionError('Planning must not run'))
     monkeypatch.setattr(agent, 'plan_research', planner)

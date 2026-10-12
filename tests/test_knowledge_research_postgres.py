@@ -116,7 +116,6 @@ def test_api_and_independent_worker_complete_fixture_capture(monkeypatch, tmp_pa
     monkeypatch.setenv("IFRAME_KNOWLEDGE_BLOB_ROOT", str(tmp_path))
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "gdelt")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "example.org")
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "fixture-owner-a")
     monkeypatch.setattr(discovery, "discover", lambda *args: [
         {"url": "https://example.org/fixture", "title": "Fixture article",
          "access_status": "public"},

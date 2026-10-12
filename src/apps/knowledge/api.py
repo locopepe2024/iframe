@@ -115,13 +115,9 @@ def _source_uri(uri: str) -> str:
 
 
 def research_enabled_for(owner: str) -> bool:
-    if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") not in {"gdelt", "fed_rss"}:
-        return False
-    if not os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip():
-        return False
-    allowed = {item.strip() for item in os.getenv("IFRAME_KNOWLEDGE_RESEARCH_OWNERS", "").split(",")
-               if item.strip()}
-    return owner in allowed
+    return (bool(owner)
+            and os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") in {"gdelt", "fed_rss"}
+            and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip()))
 
 
 def require_research_enabled(owner: str) -> None:
