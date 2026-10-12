@@ -51,3 +51,9 @@
 - `pytest -q tests/test_agent_skills.py tests/test_character_design_revision.py`
 - `cd frontend && npx vitest run --config vitest.ui.config.mts src/components/modules/CharacterWorkbench.test.tsx`
 - `cd frontend && npm run typecheck`
+
+## 2026-10-12 runtime correction
+
+Runtime observation: a draft for “少年剑客，素黑劲装” still showed five unanswered items for age appearance, image style, facial details, body proportions and costume. The model returned the old `unresolved` checklist, and the API accepted those strings without suggestions; the workbench rendered each as an empty answer box. This does not prove which model instruction caused the output.
+
+The API now asks the model to revise a checklist or a review item without a concrete suggestion. If the second response still returns a checklist, draft generation fails instead of creating empty review fields. `review_items` is reserved for an explicit conflict between supplied facts or confirmed settings; unspecified visual details belong in the creative proposal. The workbench suppresses unanswered, unsuggested legacy checklist items while preserving answered items and explicit conflicts. A user can regenerate the design to obtain the revised proposal; no existing confirmed design is rewritten.
