@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
+import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon, Sparkles } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference } from "@/lib/api";
+import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference, type ChatModel } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
@@ -1011,6 +1011,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
     const [imagePrompt, setImagePrompt] = useState(asset.image_prompt || asset.description || "");
+    const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
+    const [promptModel, setPromptModel] = useState("");
+    const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+    const [optimizedPrompt, setOptimizedPrompt] = useState("");
+    const [promptError, setPromptError] = useState("");
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
     const [assetIndex, setAssetIndex] = useState<any[]>([]);
@@ -1019,7 +1024,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             Array.isArray(items) ? items.map((item: any) => [
                 item?.id,
                 item?.updated_at,
-                item?.image_asset?.variants?.map((variant: any) => variant.id),
+                item?.image_asset?.variants?.map((variant: any) => [variant.id, variant.display_name]),
                 item?.reference_sheet?.image_variants?.map((variant: any) => variant.id),
                 item?.full_body_asset?.variants?.map((variant: any) => variant.id),
                 item?.three_view_asset?.variants?.map((variant: any) => variant.id),
@@ -1042,7 +1047,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     // Sync local state if asset changes
     useEffect(() => {
         setDescription(asset.description);
-        setImagePrompt(asset.image_prompt || asset.description || "");
         setPromptReferences([]);
         setMention(null);
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
@@ -1050,6 +1054,17 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
         }
     }, [asset]);
+
+    useEffect(() => {
+        let active = true;
+        void agentRequest<{ models: ChatModel[] }>("/models").then(({ models }) => {
+            if (!active) return;
+            const available = models.filter(model => model.agent_capability !== "h3_prompt_optimization");
+            setPromptModels(available);
+            setPromptModel(current => current || available[0]?.api_model_id || "");
+        }).catch(() => { if (active) setPromptModels([]); });
+        return () => { active = false; };
+    }, []);
 
     useEffect(() => {
         if (!currentProject?.id) {
@@ -1146,6 +1161,37 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
         }
     };
 
+    const handleRenameVariant = async (variantId: string, displayName: string) => {
+        if (!currentProject) return;
+        const updatedProject = await api.updateAssetVariantMetadata(
+            currentProject.id, asset.id, type, variantId, undefined, undefined, displayName,
+        );
+        updateProject(currentProject.id, updatedProject);
+    };
+
+    const handleOptimizePrompt = async () => {
+        if (!promptModel || optimizingPrompt) return;
+        setOptimizingPrompt(true);
+        setPromptError("");
+        setOptimizedPrompt("");
+        try {
+            const result = await agentRequest<{ prompt: string }>("/asset-image-prompt/refine", "POST", {
+                model: promptModel,
+                asset_type: type,
+                asset_name: asset.name,
+                description: asset.description,
+                current_prompt: imagePrompt,
+                style: applyStyle ? stylePrompt : "",
+                plan_context: planEntries.slice(0, 8).map((entry: AssetPlanEntry) => entry.prompt),
+            });
+            setOptimizedPrompt(result.prompt);
+        } catch (error) {
+            setPromptError(extractErrorDetail(error));
+        } finally {
+            setOptimizingPrompt(false);
+        }
+    };
+
     const handleGenerateClick = (batchSize: number) => {
         if (imageGenerationMode === "reference" && promptReferences.length === 0) {
             toast.warning(tv("referenceModeRequiresExplicit"));
@@ -1159,15 +1205,15 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-2 md:p-8">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-2xl w-full max-w-5xl h-[85vh] flex overflow-hidden shadow-lg"
+                className="bg-surface border border-glass-border rounded-lg w-full max-w-5xl h-[min(94dvh,900px)] flex flex-col overflow-hidden shadow-lg md:flex-row"
             >
                 {/* Left: Variant Selector */}
-                <div className="w-1/2 bg-surface relative border-r border-glass-border flex flex-col overflow-hidden">
+                <div className="h-[40%] min-h-0 w-full bg-surface relative border-b border-glass-border flex flex-col overflow-hidden md:h-auto md:w-1/2 md:border-b-0 md:border-r">
                     {/* Tab Switcher */}
                     <div className="flex border-b border-glass-border bg-surface">
                         <button
@@ -1192,6 +1238,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 currentImageUrl={asset.image_url}
                                 onSelect={handleSelectVariant}
                                 onDelete={handleDeleteVariant}
+                                onRename={handleRenameVariant}
                                 onGenerate={handleGenerateClick}
                                 isGenerating={isGenerating}
                                 aspectRatio="16:9"
@@ -1211,7 +1258,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                 </div>
 
                 {/* Right: Details */}
-                <div className="w-1/2 flex flex-col">
+                <div className="min-h-0 w-full flex-1 flex flex-col md:w-1/2">
                     {/* Header */}
                     <div className="p-6 border-b border-glass-border flex justify-between items-center bg-surface">
                         <AssetNameEditor name={asset.name} onRename={onRename} className="text-2xl font-bold" />
@@ -1274,6 +1321,27 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                         ))}
                                     </div>
                                 </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <select aria-label="提示词优化模型" value={promptModel}
+                                        onChange={event => setPromptModel(event.target.value)}
+                                        className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                        {promptModels.length === 0 && <option value="">暂无可用模型</option>}
+                                        {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
+                                    </select>
+                                    <button type="button" onClick={() => void handleOptimizePrompt()}
+                                        disabled={!promptModel || optimizingPrompt || !asset.description?.trim()}
+                                        className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
+                                        <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
+                                    </button>
+                                </div>
+                                {promptError && <p role="alert" className="text-xs text-status-failed-fg">{promptError}</p>}
+                                {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
+                                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
+                                    <div className="flex gap-3">
+                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
+                                        <button type="button" onClick={() => setOptimizedPrompt("")} className="text-xs text-text-muted hover:underline">忽略</button>
+                                    </div>
+                                </div>}
                                 <div className="relative rounded-lg border border-glass-border bg-input-bg p-3 focus-within:border-primary/50">
                                     <ReferencePromptEditor
                                         value={imagePrompt}

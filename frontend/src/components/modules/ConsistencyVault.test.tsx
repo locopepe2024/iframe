@@ -8,21 +8,25 @@ const mocks = vi.hoisted(() => ({
     syncEpisodeAssetsFromShootingPlan: vi.fn(), deleteSeriesAsset: vi.fn(),
     bindEpisodePlanScene: vi.fn(),
     getAssetReferenceIndex: vi.fn(),
+    authenticatedFetch: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
     updateAssetAttributes: vi.fn(),
+    updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
     error: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
-vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: vi.fn(), api: mocks, crudApi: mocks }));
+vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error } }));
 vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename }: any) =>
     <div role="dialog" aria-label="角色工作台">{asset.name}
         <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
     </div> }));
-vi.mock("../common/VariantSelector", () => ({ VariantSelector: () => null }));
+vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRename }: any) =>
+    <button type="button" onClick={() => void onRename(asset.variants[0].id, "黄昏参考图")}>命名素材</button> }));
 vi.mock("../common/VideoVariantSelector", () => ({ VideoVariantSelector: () => null }));
 vi.mock("../modals/UploadAssetModal", () => ({ default: () => null }));
-vi.mock("./playground/ReferencePromptEditor", () => ({ default: () => null }));
+vi.mock("./playground/ReferencePromptEditor", () => ({ default: ({ value, onChange }: any) =>
+    <textarea aria-label="图像提示词" value={value} onChange={event => onChange(event.target.value)} /> }));
 
 function state(assetType: string, assetId: string, bound = true) {
     return {
@@ -42,8 +46,44 @@ function state(assetType: string, assetId: string, bound = true) {
 beforeEach(() => {
     vi.resetAllMocks();
     mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    mocks.authenticatedFetch.mockResolvedValue({ ok: false });
+    mocks.agentRequest.mockImplementation((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it.each([
+    ["scene", "scenes", "粮铺门前"],
+    ["prop", "props", "双手剑"],
+] as const)("optimizes and names %s materials without leaving the workbench", async (type, key, name) => {
+    const asset = { id: `${type}-1`, name, description: `${name}的视觉档案`, source: "series",
+        image_asset: { selected_id: "variant-1", variants: [{ id: "variant-1", url: "/asset.png" }] } };
+    const project = { id: "episode-1", characters: [], scenes: [], props: [], [key]: [asset] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetVariantMetadata.mockResolvedValue({ ...project, [key]: [{ ...asset,
+        image_asset: { ...asset.image_asset, variants: [{ ...asset.image_asset.variants[0], display_name: "黄昏参考图" }] },
+    }] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(type === "scene" ? "Scenes" : "Props") }));
+    fireEvent.click(screen.getByText(name));
+    await screen.findByRole("button", { name: "优化提示词" });
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await screen.findByRole("button", { name: "采用建议" });
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(asset.description);
+    fireEvent.click(screen.getByRole("button", { name: "采用建议" }));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
+    expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
+        expect.objectContaining({ asset_type: type, asset_name: name, current_prompt: asset.description }));
+
+    fireEvent.click(screen.getByRole("button", { name: "命名素材" }));
+    await waitFor(() => expect(mocks.updateAssetVariantMetadata).toHaveBeenCalledWith(
+        "episode-1", asset.id, type, "variant-1", undefined, undefined, "黄昏参考图"));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
+    expect(useProjectStore.getState().currentProject?.[key][0].image_asset?.variants[0].display_name).toBe("黄昏参考图");
 });
 
 it("keeps a series character workbench open after renaming", async () => {
