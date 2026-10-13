@@ -181,7 +181,7 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
         except (requests.Timeout, requests.ConnectionError):
             time.sleep(10)
             continue
-        if resp.status_code in {408, 429} or resp.status_code >= 500:
+        if resp.status_code in {408, 429} or (endpoint != "videos" and resp.status_code >= 500):
             time.sleep(10)
             continue
         if resp.status_code >= 400:
