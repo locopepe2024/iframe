@@ -31,6 +31,15 @@ def _effective_base_url(config: Dict[str, Any]) -> str:
     ).rstrip("/")
 
 
+def _runtime_base_url(config: Dict[str, Any]) -> str:
+    public_base = _effective_base_url(config)
+    internal_base = os.getenv("UNIART_INTERNAL_BASE_URL", "").strip().rstrip("/")
+    configured_public = os.getenv("UNIART_BASE_URL", "").strip().rstrip("/")
+    if internal_base and configured_public and public_base == configured_public:
+        return internal_base
+    return public_base
+
+
 class UserConfigUpdate(BaseModel):
     UNIART_API_KEY: str | None = None
     UNIART_BASE_URL: str | None = None
@@ -218,13 +227,15 @@ class UserConfigStore:
                 raise HTTPException(status_code=503, detail="Stored UniArt credential cannot be decrypted") from exc
             return {
                 "api_key": key,
-                "base_url": _effective_base_url(config),
+                "base_url": _runtime_base_url(config),
+                "public_base_url": _effective_base_url(config),
             }
         key = self._shared_uniart_api_key()
         if key:
             return {
                 "api_key": key,
-                "base_url": _effective_base_url(config),
+                "base_url": _runtime_base_url(config),
+                "public_base_url": _effective_base_url(config),
             }
         raise HTTPException(status_code=409, detail="UniArt API key is not configured for this user")
 

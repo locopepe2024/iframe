@@ -8,6 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { shortReferenceLabel } from './referenceMedia';
 import type { Editor } from '@tiptap/core';
 import type { AssetLibraryReference } from '@/lib/api';
+import type { AssetPreviewRef } from '@/components/shared/AssetIndexPreview';
 
 const EMPTY_LABELS: string[] = [];
 
@@ -15,9 +16,12 @@ export type ReferenceCandidate = {
   label: string;
   reference?: AssetLibraryReference;
   previewUrl?: string;
+  previewRef?: AssetPreviewRef;
+  mediaUrl?: string;
   sourceLabel?: string;
   variantLabel?: string;
   isActive?: boolean;
+  description?: string;
 };
 
 export type ReferenceSuggestion = {

@@ -160,23 +160,23 @@ if (typeof window !== 'undefined') {
         RUNTIME_UNIART_MODEL_IDS = new Set(
             snapshotModels
                 .map((entry: { id?: unknown }) => String(entry?.id || ''))
-                .filter((id: string) => id.startsWith('uniart/')),
+                .filter((id: string) => id.startsWith('uniart/') || id.startsWith('nsfw/')),
         );
         for (const entry of snapshotModels) {
             const id = String(entry.id || '');
-            if (!id.startsWith('uniart/')) continue;
+            if (!id.startsWith('uniart/') && !id.startsWith('nsfw/')) continue;
             const caps = Array.isArray(entry.capabilities) ? entry.capabilities : [];
             const image = caps.includes('t2i');
             MODEL_CATALOG.models[id] = {
                 ...entry,
                 id,
-                provider: 'uniart',
-                display_name: entry.display_name || id.slice(7),
-                description: entry.description || `UniArt ${id.slice(7)}`,
+                provider: entry.provider || (id.startsWith('nsfw/') ? 'nsfw' : 'uniart'),
+                display_name: entry.display_name || id.split('/')[1],
+                description: entry.description || id,
                 family: entry.family || (image ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
                 capabilities: caps,
-                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: entry.ui?.order ?? 100, recommended: entry.recommended ?? false, badges: ['UniArt'] },
+                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: entry.ui?.order ?? 100, recommended: entry.recommended ?? false, badges: [id.startsWith('nsfw/') ? 'NSFW New One' : 'UniArt'] },
             };
         }
     } catch { /* ignore invalid local snapshot */ }
@@ -187,7 +187,7 @@ if (typeof window !== 'undefined') {
 export async function refreshUniArtModelCatalog(): Promise<number> {
     if (typeof window === 'undefined') return 0;
     try {
-        const response = await fetch('/config/uniart/models', { cache: 'no-store' });
+        const response = await fetch('/config/models', { cache: 'no-store' });
         if (!response.ok) return 0;
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];
@@ -195,7 +195,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         const liveIds = new Set<string>(
             models
                 .map((entry: { id?: unknown }) => String(entry?.id || ''))
-                .filter((id: string) => id.startsWith('uniart/')),
+                .filter((id: string) => id.startsWith('uniart/') || id.startsWith('nsfw/')),
         );
         // Drop runtime entries from an older snapshot before installing the
         // current list. Without this, a SKU removed upstream (for example an
@@ -207,14 +207,14 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         RUNTIME_UNIART_MODEL_IDS = liveIds;
         for (const entry of models) {
             const id = String(entry.id || '');
-            if (!id.startsWith('uniart/')) continue;
+            if (!id.startsWith('uniart/') && !id.startsWith('nsfw/')) continue;
             const capabilities = Array.isArray(entry.capabilities) ? entry.capabilities : [];
             const isImage = capabilities.includes('t2i');
             MODEL_CATALOG.models[id] = {
                 id,
                 display_name: entry.display_name || id.replace(/^uniart\//, ''),
-                provider: 'uniart',
-                description: entry.description || `UniArt ${id.replace(/^uniart\//, '')}`,
+                provider: entry.provider || (id.startsWith('nsfw/') ? 'nsfw' : 'uniart'),
+                description: entry.description || id,
                 family: entry.family || (isImage ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
                 capabilities,
@@ -228,7 +228,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
                         : ['project_settings', 'series_settings', 'video_sidebar', 'global_settings'],
                     order: models.length - models.indexOf(entry) + 100,
                     recommended: id === 'uniart/seedance-2.5-vip',
-                    badges: ['UniArt'],
+                    badges: [id.startsWith('nsfw/') ? 'NSFW New One' : 'UniArt'],
                 },
             };
         }
@@ -317,9 +317,10 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
         ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
         : null;
     return (
-        (!UNIART_RUNTIME_ACTIVE || model.provider !== 'uniart' || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
+        (!UNIART_RUNTIME_ACTIVE || (model.provider !== 'uniart' && model.provider !== 'nsfw') || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
         model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
-        (!enabled || model.provider !== 'uniart' || enabled.includes(model.id)) &&
+        (!enabled || (model.provider !== 'uniart' && model.provider !== 'nsfw') || enabled.includes(model.id) ||
+            (model.id === 'nsfw/seedream_5.0Pro_nsfw' && enabled.includes('uniart/seedream_5.0Pro_nsfw'))) &&
         model.status !== 'planned' &&
         model.status !== 'deprecated' &&
         model.status !== 'hidden' &&
@@ -500,7 +501,12 @@ export const PROJECT_I2V_MODELS = getVisibleModels('i2v', 'project_settings').ma
 export const SERIES_I2V_MODELS = getVisibleModels('i2v', 'series_settings').map(toI2VModel);
 export const GLOBAL_I2V_MODELS = getVisibleModels('i2v', 'global_settings').map(toI2VModel);
 export const GLOBAL_R2V_MODELS = getVisibleModels('r2v', 'global_settings').map(toI2VModel);
-export const VIDEO_I2V_MODELS = getVisibleModels('i2v', 'video_sidebar').map(toI2VModel);
+const NSFW_WAN_VIDEO_IDS = new Set(['nsfw/wan3.0', 'nsfw/wan3.0-Prime']);
+const storyboardVideoModels = (models: I2VModelConfig[]) => {
+    const wan = models.filter(model => NSFW_WAN_VIDEO_IDS.has(model.id));
+    return wan.length ? wan : models;
+};
+export const VIDEO_I2V_MODELS = storyboardVideoModels(getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
 
 export const T2I_MODELS = PROJECT_T2I_MODELS;
 export const I2I_MODELS = PROJECT_I2I_MODELS;
@@ -525,10 +531,10 @@ function rebuildDynamicModelLists(): void {
     refresh(SERIES_I2V_MODELS, getVisibleModels('i2v', 'series_settings').map(toI2VModel));
     refresh(GLOBAL_I2V_MODELS, getVisibleModels('i2v', 'global_settings').map(toI2VModel));
     refresh(GLOBAL_R2V_MODELS, getVisibleModels('r2v', 'global_settings').map(toI2VModel));
-    refresh(VIDEO_I2V_MODELS, getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
-    refresh(VIDEO_R2V_MODELS, SORTED_MODEL_ENTRIES
+    refresh(VIDEO_I2V_MODELS, storyboardVideoModels(getVisibleModels('i2v', 'video_sidebar').map(toI2VModel)));
+    refresh(VIDEO_R2V_MODELS, storyboardVideoModels(SORTED_MODEL_ENTRIES
         .filter(model => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
-        .map(toI2VModel));
+        .map(toI2VModel)));
 }
 
 export const DEFAULT_I2V_MODEL_ID = resolveModelId('i2v', undefined, 'video_sidebar');
@@ -562,13 +568,13 @@ for (const model of SORTED_MODEL_ENTRIES) {
     }
 }
 
-export const VIDEO_R2V_MODELS: I2VModelConfig[] = SORTED_MODEL_ENTRIES
+export const VIDEO_R2V_MODELS: I2VModelConfig[] = storyboardVideoModels(SORTED_MODEL_ENTRIES
     // R2V-capable UniArt SKUs (H3/Seedance) are intentionally grouped under
     // i2v in the catalog because the same SKU supports both modes. The video
     // sidebar must follow published capabilities, otherwise they disappear
     // from the storyboard Parameters/Takes picker.
     .filter((model) => model.capabilities.includes('r2v') && isVisibleModel(model, 'video_sidebar'))
-    .map(toI2VModel);
+    .map(toI2VModel));
 export const DEFAULT_R2V_MODEL_ID = VIDEO_R2V_MODELS[0]?.id ?? R2V_SELECTION_MODEL_ID;
 
 /**
@@ -586,6 +592,7 @@ export function getR2vRouteModelId(selectedI2vModelId: string): string {
  * instead of video references (Wan 2.5/2.6 legacy).
  */
 export function isR2vImageBased(modelId: string): boolean {
+    if (NSFW_WAN_VIDEO_IDS.has(modelId)) return true;
     const model = MODEL_CATALOG.models[modelId];
     const family = model?.family;
     if (family === 'wan' && modelId === 'wan2.6-r2v') return false;

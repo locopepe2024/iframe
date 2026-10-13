@@ -10,12 +10,18 @@ import { useToastStore } from '@/store/toastStore';
 import { agentRequest, api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
-vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn(), updateAssetAttributes: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
+vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: ({ alt }: { alt?: string }) => <span data-testid="asset-preview">{alt}</span> }));
 const character = { id: 'char', name: 'Test', description: 'Person' };
 const project: any = { id: 'project', title: 'Project', characters: [character], scenes: [], props: [] };
 function show() { render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="character" entityId="char" onClose={() => {}} /></NextIntlClientProvider>); }
+function showScene(scene: any) {
+ const sceneProject = { ...project, scenes: [scene] };
+ useProjectStore.setState({ currentProject: sceneProject, projects: [sceneProject] });
+ return render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="scene" entityId={scene.id} onClose={() => {}} /></NextIntlClientProvider>);
+}
 function promptEditor() {
  return screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor };
 }
@@ -127,6 +133,31 @@ it('does not load the legacy character Skill facet panel', () => {
  expect(screen.queryByText('Eyes and gaze')).not.toBeInTheDocument();
 });
 
+it('lets scene designers ask AI for an editable draft and save it without replacing the asset description', async () => {
+ const scene = { id: 'scene-1', name: '粮铺门前', description: '青溪镇街边粮铺' };
+ vi.mocked(agentRequest).mockResolvedValueOnce({
+  visual_notes: '青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照。', unresolved: [],
+ } as any);
+ vi.mocked(api.generateAsset).mockResolvedValue({ ...project, scenes: [scene] } as any);
+ vi.mocked(api.updateAssetAttributes).mockResolvedValue({ ...project, scenes: [{
+  ...scene, asset_design: { visual_notes: '用户调整后的粮铺外观', confirmed: true },
+ }] } as any);
+ showScene(scene);
+
+ fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '南北要道，暮秋黄昏，画面简洁' } });
+ fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
+ await waitFor(() => expect(agentRequest).toHaveBeenCalledWith('/asset-design/draft', 'POST', expect.objectContaining({
+  asset_type: 'scene', asset_name: '粮铺门前', user_requirements: '南北要道，暮秋黄昏，画面简洁',
+ })));
+ expect((screen.getByLabelText('视觉设计草稿') as HTMLTextAreaElement).value).toContain('青石板长街');
+
+ fireEvent.change(screen.getByLabelText('视觉设计草稿'), { target: { value: '用户调整后的粮铺外观' } });
+ fireEvent.click(screen.getByRole('button', { name: '确认设计' }));
+ await waitFor(() => expect(api.updateAssetAttributes).toHaveBeenCalledWith('project', 'scene-1', 'scene', {
+  asset_design: expect.objectContaining({ visual_notes: '用户调整后的粮铺外观', confirmed: true }),
+ }));
+});
+
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {
  const withLibrary = { ...project, scenes: [{ id: 'scene-1', name: 'Night train', description: 'Train' }], props: [{ id: 'prop-1', name: 'Pocket watch', description: 'Watch' }] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
@@ -143,7 +174,7 @@ it('shows the Cast generation-description @ menu and submits only selected stabl
  show();
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Toggle this Night train variant in the available reference pool' }));
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this Night train variant in the available reference pool' }));
  fireEvent.click(screen.getByRole('button', { name: 'Toggle this Pocket watch variant in the available reference pool' }));
 
  setPromptDocument('<p>@</p>');
@@ -249,7 +280,7 @@ it('labels a child reference by angle and framing without creating another asset
  await waitFor(() => expect(api.updateAssetVariantMetadata).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'front', undefined));
 });
 
-it('keeps provider prompts out of the default customer view', async () => {
+it('keeps project scene style out of an isolated asset prompt', async () => {
  const stylePrompt = 'premium Chinese e-commerce product advertisement, controlled highlights';
  const styledProject = {
   ...project,
@@ -270,10 +301,8 @@ it('keeps provider prompts out of the default customer view', async () => {
  expect(promptEditor).toHaveTextContent('构图：');
  expect(promptEditor).not.toHaveTextContent('Composition:');
  expect(screen.queryByText(stylePrompt)).toBeNull();
- expect(screen.getByTestId('cast-generation-summary')).toHaveTextContent('E-commerce Product Advertisement');
-
- fireEvent.click(screen.getByRole('button', { name: 'Advanced: view model prompts' }));
- expect(screen.getByText(stylePrompt)).toBeTruthy();
+ expect(screen.getByTestId('cast-generation-summary')).not.toHaveTextContent('E-commerce Product Advertisement');
+ expect(screen.queryByRole('button', { name: 'Advanced: view model prompts' })).toBeNull();
 });
 
 it('attaches a specific asset-library variant and submits only stable ids', async () => {
@@ -297,7 +326,7 @@ it('attaches a specific asset-library variant and submits only stable ids', asyn
 
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
  setPromptDocument('<p>@Tea room</p>');
  fireEvent.click(screen.getByRole('option', { name: /Tea room/ }));
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
@@ -321,17 +350,18 @@ it('does not submit a reference whose variant disappeared from the fresh index',
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
  vi.mocked(api.getAssetReferenceIndex)
   .mockResolvedValueOnce({ schema_version: 1, project_id: 'project', assets: [{ asset_type: 'scene', asset_id: libraryAsset.id, name: libraryAsset.name, source_scope: 'global', source_container_id: null, selected_variant_id: 'deleted-variant', variants: libraryAsset.image_asset.variants }] } as any)
+  .mockResolvedValueOnce({ schema_version: 1, project_id: 'project', assets: [{ asset_type: 'scene', asset_id: libraryAsset.id, name: libraryAsset.name, source_scope: 'global', source_container_id: null, selected_variant_id: 'deleted-variant', variants: libraryAsset.image_asset.variants }] } as any)
   .mockResolvedValueOnce({ schema_version: 1, project_id: 'project', assets: [] } as any);
  vi.mocked(api.getProject).mockResolvedValue(withLibrary as any);
  show();
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this Tea room variant in the available reference pool' }));
  setPromptDocument('<p>@Tea room</p>');
  fireEvent.click(screen.getByRole('option', { name: /Tea room/ }));
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
- await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
  expect(api.generateAsset).not.toHaveBeenCalled();
 });
 
@@ -356,7 +386,7 @@ it('removes an explicit reference image before the next text-to-image request', 
 
  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- fireEvent.click(screen.getByRole('button', { name: 'Toggle this Tea cup variant in the available reference pool' }));
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this Tea cup variant in the available reference pool' }));
  fireEvent.click(screen.getByRole('button', { name: 'Remove Tea cup from available references' }));
  fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
@@ -407,14 +437,13 @@ it('refreshes indexed variants when project assets change while the picker is op
    variants: [{ id: variantId, url: `${variantId}.png` }],
   }],
  });
- vi.mocked(api.getAssetReferenceIndex)
-  .mockResolvedValueOnce(indexFor('deleted-view') as any)
-  .mockResolvedValueOnce(indexFor('new-view') as any);
+ let currentView = 'deleted-view';
+ vi.mocked(api.getAssetReferenceIndex).mockImplementation(async () => indexFor(currentView) as any);
  show();
 
  await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(1));
  fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
- expect(screen.getByText('Test deleted-view')).toBeTruthy();
+ expect(await screen.findByText('Test deleted-view')).toBeTruthy();
 
  const updatedProject = {
   ...project,
@@ -423,9 +452,11 @@ it('refreshes indexed variants when project assets change while the picker is op
    reference_sheet: { selected_image_id: 'new-view', image_variants: [{ id: 'new-view', url: 'new-view.png' }] },
   }],
  };
+ const priorRequests = vi.mocked(api.getAssetReferenceIndex).mock.calls.length;
+ currentView = 'new-view';
  act(() => useProjectStore.setState({ currentProject: updatedProject, projects: [updatedProject] }));
 
- await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
+ await waitFor(() => expect(vi.mocked(api.getAssetReferenceIndex).mock.calls.length).toBeGreaterThan(priorRequests));
  const picker = screen.getByTestId('cast-library-reference-picker');
  await waitFor(() => expect(picker).toHaveTextContent('Test new-view'));
  expect(picker).not.toHaveTextContent('Test deleted-view');

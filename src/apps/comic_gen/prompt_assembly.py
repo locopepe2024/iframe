@@ -83,13 +83,12 @@ def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]
     scene = context.get("scene")
     shot = context.get("shot")
     if isinstance(scene, dict):
-        place_time = "，".join(
-            str(scene.get(key) or "").strip()
-            for key in ("location", "time_anchor")
-            if str(scene.get(key) or "").strip()
-        )
-        if place_time:
-            parts.append("场景连续性：" + place_time)
+        location = str(scene.get("location") or "").strip()
+        time_anchor = str(scene.get("time_anchor") or "").strip()
+        if location:
+            parts.append("场景地点：" + location)
+        if time_anchor:
+            parts.append("剧情时段：" + time_anchor)
         for key, label in (
             ("continuity_in", "入场连续性"),
             ("continuity_out", "出场连续性"),
@@ -134,6 +133,27 @@ def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]
         if lighting_parts:
             parts.append("光影：" + "；".join(lighting_parts))
     return parts
+
+
+def append_projected_shot_context(prompt: str, context: Optional[Dict[str, Any]]) -> str:
+    """Append only the current shot's confirmed visual projection.
+
+    The full Director execution payload remains analysis/lineage data. Image
+    generation receives the bounded scene, continuity and shot clauses that
+    are relevant to this frame, with simple normalization to avoid repeating
+    text already supplied by the user or storyboard editor.
+    """
+    base = (prompt or "").strip()
+    parts = [base] if base else []
+    normalized = re.sub(r"[\s，。；：、,.!?！？:;]+", "", base).casefold()
+    for clause in _director_shot_context_parts(context):
+        value = clause.split("：", 1)[-1]
+        compact = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
+        if not compact or compact in normalized:
+            continue
+        parts.append(clause)
+        normalized += compact
+    return "。".join(item.rstrip("。，.") for item in parts if item) + ("。" if parts else "")
 
 
 def inject_reference_tags(

@@ -88,7 +88,12 @@ def _image_reference_url(value: str) -> str:
 
 
 def _post(config: Dict[str, Any], path: str, body: Dict[str, Any]) -> Dict[str, Any]:
-    resp = requests.post(f"{_base_url(config)}{path}", headers=_headers(config), json=body, timeout=90)
+    # GlobalStore image edits can spend roughly 90 seconds in the provider
+    # while still returning a successful synchronous envelope. Keep this
+    # longer than the gateway's observed response window so a completed paid
+    # task is not reported as a client timeout.
+    timeout = 300 if path.endswith("/images/edits") else 120
+    resp = requests.post(f"{_base_url(config)}{path}", headers=_headers(config), json=body, timeout=timeout)
     try:
         resp.raise_for_status()
     except requests.HTTPError as exc:

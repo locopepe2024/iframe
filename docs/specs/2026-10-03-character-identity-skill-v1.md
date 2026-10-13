@@ -12,7 +12,12 @@ The character workbench resolves the correct person, era, and look for a scene, 
 
 The image editor owns optional templates and Skill suggestions for generating visual candidates. A suggestion becomes editable prompt text only after the user selects it. Generating a candidate does not update character identity, a confirmed look, Director interpretation, or the shooting plan. Adoption and the destination of the media are separate user actions.
 
-The `character-identity-design` Skill may provide identity and continuity review guidance. Its legacy `workbench_facets` remain supported for old character records and the canonical workbench; they are not the contract for the new template library. Skill instructions must not be submitted verbatim as provider prompt text.
+`character-identity-design` is an owner-installable Skill with two surfaces:
+
+1. `instructions`: guidance for an Agent or future prompt assistant;
+2. `workbench_facets`: legacy bilingual topic labels; they are not completed visual-design values.
+
+Current design decision (2026-10-12): the project character workbench invokes the Skill with the character profile, current style, confirmed project design and selected reference assets. It presents concrete identity/look text and only essential review questions. A user can apply the editable draft to the current image prompts without saving an asset or design revision. Confirmation separately saves the project character design revision. The independent Avatar entry is outside this workflow. Generic facets are not appended to provider prompts.
 
 ## Boundaries
 
@@ -23,10 +28,10 @@ The `character-identity-design` Skill may provide identity and continuity review
 
 ## Success criteria
 
-1. Both Cast and asset-library character entries render the same `CharacterWorkbench`.
-2. No second Cast character facet implementation loads Skills or modifies prompts.
-3. Existing facet IDs and character candidates remain readable without migration.
-4. Future image editor templates produce editable drafts and have explicit adoption semantics.
+- The catalog exposes the Skill with a content-addressed revision and structured facets.
+- An enabled Skill appears in the character workbench only; scenes and props do not show character facets.
+- A Skill result separates script evidence, creative choices and essential review questions; an unconfirmed candidate enters a current image prompt only through the explicit draft application action.
+- Existing generation and image-editor flows remain unchanged.
 
 ## Verification
 

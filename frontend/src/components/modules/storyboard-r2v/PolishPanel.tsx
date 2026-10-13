@@ -54,6 +54,7 @@ interface PolishPanelProps {
     prompt: string;
     tabMode: "t2i_i2v" | "direct_r2v";
     scriptId: string;
+    frameId?: string;
     slots?: { description: string }[];
     /** Image URLs to ground the polish (Issue 13). i2v: active first frame
      *  (T2I or storyboard render); r2v: reference image URLs. Empty/omit =
@@ -111,6 +112,7 @@ export default function PolishPanel({
     dialogue,
     tabMode,
     scriptId,
+    frameId = "",
     slots = [],
     imageUrls = [],
     targetRatio = "16:9",
@@ -147,8 +149,8 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId);
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");

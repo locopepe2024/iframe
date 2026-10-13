@@ -808,6 +808,7 @@ export default function ShotCard({
                             prompt={shot.prompt}
                             tabMode={shot.tabMode}
                             scriptId={currentProjectId ?? ""}
+                            frameId={shot.id}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
                             onApply={onUpdatePrompt}

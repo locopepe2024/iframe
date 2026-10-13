@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, Iterable, List, Mapping
 from urllib.request import Request, urlopen
 
@@ -32,7 +33,7 @@ def _family(model_id: str) -> str:
         return "seedance"
     if "minimax" in low or "h3" in low:
         return "minimax"
-    if low.startswith("wan-"):
+    if low.startswith(("wan-", "wan3.")):
         return "wan"
     if low.startswith("gpt-image"):
         return "gpt-image"
@@ -70,13 +71,35 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     if model_id.lower().startswith("minimax") and any(token in model_id.lower() for token in ("speed-hd", "speed_hd", "-turbo", "_turbo")):
         capabilities.append("audio")
     capabilities = _unique(capabilities)
+    # The local New API gateway exposes model IDs without capability metadata.
+    # These profiles match the installed GlobalStore task plugin contract.
+    local_profiles = {
+        "seedream_5.0Pro_nsfw": {
+            "capabilities": ["t2i", "i2i"],
+            "resolutions": ["1k", "2k"],
+            "reference_images": 10,
+        },
+        "wan3.0": {
+            "capabilities": ["t2v", "i2v", "r2v"],
+            "resolutions": ["480p", "720p", "1080p"],
+            "reference_images": 10,
+        },
+        "wan3.0-Prime": {
+            "capabilities": ["t2v", "i2v", "r2v"],
+            "resolutions": ["480p", "720p", "1080p"],
+            "reference_images": 10,
+        },
+    }
+    profile = local_profiles.get(model_id) if not capabilities else None
+    if profile:
+        capabilities = profile["capabilities"]
     # UniArt's /models endpoint also publishes chat SKUs. Keep them in the
     # selectable catalog even though they have no image/video controls.
     if not capabilities:
         capabilities = ["chat"]
 
     is_image = any(capability in {"t2i", "i2i"} for capability in capabilities)
-    resolutions = video.get("resolutions") or image.get("resolutions") or []
+    resolutions = video.get("resolutions") or image.get("resolutions") or (profile or {}).get("resolutions") or []
     resolutions = [str(value) for value in resolutions if value is not None]
     ratios = [str(value) for value in video.get("ratios", []) if value is not None]
     ratios_by_resolution = {
@@ -112,19 +135,24 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
             "step": 1,
             "default": int(video.get("default_duration") or durations[0]),
         }
+    elif profile and "t2v" in capabilities:
+        duration = {"type": "slider", "min": 2, "max": 30, "step": 1, "default": 4}
+        params["ratio"] = {"options": ["16:9", "9:16", "1:1", "4:3", "3:4"], "default": "16:9"}
 
+    is_nsfw_model = model_id in {"seedream_5.0Pro_nsfw", "wan3.0", "wan3.0-Prime"}
+    provider = "nsfw" if is_nsfw_model else "uniart"
     return {
-        "id": f"uniart/{model_id}",
+        "id": f"{provider}/{model_id}",
         "api_model_id": model_id,
         "display_name": _display_name(model_id),
-        "description": f"{_display_name(model_id)} via UniArt",
+        "description": f"{_display_name(model_id)} via {'nsfw New One' if is_nsfw_model else 'UniArt'}",
         "family": _family(model_id),
-        "provider": "uniart",
+        "provider": provider,
         "capabilities": capabilities,
         "duration": duration,
         "params": params,
         "inputs": {
-            "reference_images": {"max": int((image.get("max_input_images") if is_image else video.get("max_reference_images")) or 0)},
+            "reference_images": {"max": int((image.get("max_input_images") if is_image else video.get("max_reference_images")) or (profile or {}).get("reference_images") or 0)},
             "reference_videos": {"max": int(video.get("max_reference_videos") or 0)},
             "reference_audios": {"max": int(video.get("max_reference_audios") or 0)},
         },
@@ -158,4 +186,6 @@ def fetch_uniart_catalog(config: Mapping[str, Any], *, timeout: float = 15) -> L
     )
     with urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    return normalize_uniart_catalog(payload)
+    models = normalize_uniart_catalog(payload)
+    allowed = {value.strip() for value in os.getenv("UNIART_MODEL_ALLOWLIST", "").split(",") if value.strip()}
+    return [model for model in models if model["api_model_id"] in allowed] if allowed else models

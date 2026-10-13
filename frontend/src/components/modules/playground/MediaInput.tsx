@@ -111,7 +111,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   let config = MODE_CONFIG[mode === 't2v' ? 'i2v' : mode];
 
   const selectedModeModel = getModelsForMode(mode).find((model) => model.id === modelId);
-  const isRuntimeUniArt = modelId.startsWith('uniart/') && !!selectedModeModel;
+  const isRuntimeUniArt = (modelId.startsWith('uniart/') || modelId.startsWith('nsfw/')) && !!selectedModeModel;
   const publishedMaterialLimit = selectedModeModel
     ? selectedModeModel.maxReferenceImages + selectedModeModel.maxReferenceVideos + selectedModeModel.maxReferenceAudios
     : 0;

@@ -1,7 +1,7 @@
 /** The request owns this optional parameter. Runtime catalog entries may omit
  * audio capability metadata even when the UniArt route accepts the flag. */
 export function storyboardGeneratedAudio(modelId: string, enabled?: boolean): boolean {
-    void modelId;
+    if (modelId === 'nsfw/wan3.0' || modelId === 'nsfw/wan3.0-Prime') return false;
     return enabled === true;
 }
 

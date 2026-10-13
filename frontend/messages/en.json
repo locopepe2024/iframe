@@ -1214,7 +1214,7 @@
     "viewDefault": "View full default prompt",
     "loadingConfig": "Loading configuration...",
     "polishModelTitle": "Polish model",
-    "polishModelDesc": "Choose the LLM used for AI polish. The options support vision, so they can reference the first frame / reference images while polishing."
+    "polishModelDesc": "Models come from the current LLM gateway. If the saved model is unavailable, the selector switches to an available gateway model; image understanding depends on the selected model."
   },
   "pipeline": {
     "stepLabel": "Step {number}",
@@ -1743,6 +1743,8 @@
       "jobStatus": "Task status: {status}",
       "progress": "Completed {completed}/{total} source chunks",
       "generateFailed": "Shooting-plan generation failed",
+      "draftAlreadySaved": "Draft r{revision} is already saved on the server. You can confirm it now.",
+      "draftConflict": "The server draft changed. Your current edits remain here; refresh and review before saving.",
       "generated": "Unsaved plan draft generated from confirmed Director v{revision}. Review it before saving.",
       "generatedReplacing": "Unsaved plan draft generated from confirmed Director v{revision}. Saving it will replace server draft r{draft}; the confirmed plan stays unchanged.",
       "notReady": "The plan is not ready to generate: {reason}. Save and adopt the current Director interpretation first. If the interpretation changes, regenerate the shooting plan.",
@@ -1833,6 +1835,10 @@
         "timeAnchor": "Time",
         "placeContinuityId": "Physical place continuity ID",
         "timeContinuityId": "Story time continuity ID",
+        "continuityGroup": "Same place and story time as",
+        "noContinuityGroup": "No confirmed place/time link",
+        "newContinuityGroup": "Create continuity group",
+        "incompleteContinuityGroup": "This older draft has an incomplete link. Confirmation will clear it and keep a review note.",
         "continuityBaseline": "Lighting baseline for this place and time",
         "addContinuityBaseline": "Create lighting baseline",
         "removeContinuityBaseline": "Remove lighting baseline",
@@ -2369,6 +2375,7 @@
     "closeWorkbench": "Close character workbench",
     "materialTypes": "Character media types",
     "advancedSettings": "Advanced settings and design context",
+    "pendingDesignQuestions": "{count} design questions pending",
     "guidanceTabsLabel": "Character workbench settings",
     "workbenchConstraints": "Workbench constraints",
     "characterFacetSuggestions": "Design checklist",

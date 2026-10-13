@@ -14,7 +14,7 @@ from .character_prompts import (
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
-from ..studio_access import studio_owner_dir, studio_uniart_config
+from ..studio_access import studio_owner_dir, studio_uniart_config, studio_nsfw_new_one_config
 
 logger = get_logger(__name__)
 
@@ -70,7 +70,10 @@ class AssetGenerator:
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
-        if model_name and model_name.startswith("uniart/gpt-image-"):
+        from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel
+        if model_name in SEEDREAM_IDS:
+            return NSFWNewOneImageModel(studio_nsfw_new_one_config())
+        if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
             return UniArtImageModel(studio_uniart_config())
         if model_name and model_name.startswith("gpt-image"):

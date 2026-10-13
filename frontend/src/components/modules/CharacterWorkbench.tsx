@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles } from "lucide-react";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
 import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -11,6 +11,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import { toast } from "@/store/toastStore";
 import {
     buildCharacterImagePrompt,
@@ -31,17 +32,86 @@ import AssetNameEditor from "@/components/common/AssetNameEditor";
 type DesignDraft = {
     route?: string;
     age_stage?: string;
-    identity?: Record<string, unknown>;
-    look?: Record<string, unknown>;
+    identity?: Record<string, unknown> & { basis?: DesignBasis[] };
+    look?: Record<string, unknown> & { basis?: DesignBasis[] };
     unresolved?: string[];
+    field_answers?: Record<string, string>;
+    field_suggestions?: Record<string, string>;
+    field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
+    user_visual_requirements?: { identity?: string; look?: string };
+    reference_assets?: AssetLibraryReference[];
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
     skill_revision?: string;
     confirmed?: boolean;
 };
 
-function designPromptDescription(identity: unknown, look: unknown): string {
-    return [identity, look].filter((value): value is string => typeof value === "string" && !!value.trim()).join("。 ");
+type DesignBasis = "script_fact" | "user_specified" | "confirmed_design" | "verified_reference" | "creative_choice";
+
+function normalizeDesignBasis(value: unknown): DesignBasis[] {
+    const allowed: DesignBasis[] = ["script_fact", "user_specified", "confirmed_design", "verified_reference", "creative_choice"];
+    const values = Array.isArray(value) ? value : [value];
+    const normalized = values.filter((item): item is DesignBasis => typeof item === "string" && allowed.includes(item as DesignBasis));
+    return normalized.length ? Array.from(new Set(normalized)) : ["creative_choice"];
+}
+
+function designPromptDescription(identity: unknown, look: unknown, answers: unknown[] = []): string {
+    return [identity, look, ...answers]
+        .filter((value): value is string => typeof value === "string" && !!value.trim())
+        .join("。 ");
+}
+
+function preserveVisualRequirement(proposal: string, requirement: string): string {
+    const specified = requirement.trim();
+    return specified && !proposal.includes(specified) ? designPromptDescription(specified, proposal) : proposal;
+}
+
+function designScopeDescription(route?: string, ageStage?: string): string[] {
+    const routeLabels: Record<string, string> = {
+        "realistic-modern": "真人写实造型",
+        "historical-costume": "古装武侠造型",
+        "xianxia-fantasy": "仙侠幻想造型",
+        "anime-stylized": "动漫国漫造型",
+    };
+    const ageLabels: Record<string, string> = {
+        child: "儿童年龄表现",
+        teen: "少年少女年龄表现",
+        "young-adult": "青年年龄表现",
+        adult: "成年人年龄表现",
+        "older-adult": "老年年龄表现",
+    };
+    return [route ? routeLabels[route] || route : "", ageStage ? ageLabels[ageStage] || ageStage : ""];
+}
+
+function confirmedDesignDescription(design: DesignDraft | undefined): string {
+    // The question remains in the saved design draft for auditability; only
+    // the user's confirmed value belongs in an image prompt.
+    const answers = Object.values(design?.field_answers || {});
+    return designPromptDescription(
+        design?.identity?.visual_notes,
+        design?.look?.visual_notes,
+        [...answers, ...designScopeDescription(design?.route, design?.age_stage)],
+    );
+}
+
+function normalizeDesignQuestions(values: unknown): string[] {
+    if (!Array.isArray(values)) return [];
+    return values.flatMap((value) => typeof value === "string" ? value.split(/[；;\n]+/) : [])
+        .map((value) => value.trim().replace(/[。.!！?？]+$/, ""))
+        .filter(Boolean)
+        .filter((value, index, all) => all.indexOf(value) === index);
+}
+
+function actionableDesignQuestions(
+    values: unknown,
+    answers: Record<string, string> = {},
+    suggestions: Record<string, string> = {},
+): string[] {
+    return normalizeDesignQuestions(values).filter((question) =>
+        !!answers[question]?.trim()
+        || !!suggestions[question]?.trim()
+        || /冲突|矛盾|不一致|但|conflict|contradict|inconsistent/i.test(question),
+    );
 }
 
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
@@ -67,6 +137,162 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
     return variants[0]?.url;
 }
 
+function referenceKey(reference?: AssetLibraryReference): string {
+    return reference ? `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}` : "";
+}
+
+function referenceScopeLabel(scope?: AssetReferenceIndexEntry["source_scope"]): string {
+    switch (scope) {
+        case "episode": return "本集";
+        case "project": return "项目";
+        case "series": return "系列";
+        case "global": return "全局素材";
+        default: return "素材库";
+    }
+}
+
+function AssetReferencePicker({
+    candidates,
+    selected,
+    onChange,
+    title,
+    description,
+    onOpen,
+}: {
+    candidates: ReferenceCandidate[];
+    selected: AssetLibraryReference[];
+    onChange: (references: AssetLibraryReference[]) => void;
+    title: string;
+    description: string;
+    onOpen?: () => void;
+}) {
+    const [query, setQuery] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+    const generatedId = useId().replace(/:/g, "");
+    const searchId = `character-reference-search-${generatedId}`;
+    const optionId = (index: number) => `${searchId}-option-${index}`;
+    const selectedKeys = new Set(selected.map(referenceKey));
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = candidates.filter((candidate) => {
+        if (!normalizedQuery) return true;
+        return [candidate.label, candidate.sourceLabel, candidate.variantLabel]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(normalizedQuery));
+    }).slice(0, 20);
+
+    const toggle = (candidate: ReferenceCandidate) => {
+        if (!candidate.reference) return;
+        const key = referenceKey(candidate.reference);
+        onChange(selectedKeys.has(key)
+            ? selected.filter((item) => referenceKey(item) !== key)
+            : [...selected, candidate.reference]);
+    };
+
+    return (
+        <section className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
+            <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => {
+                    if (!isOpen) onOpen?.();
+                    setIsOpen(!isOpen);
+                }}
+                className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            >
+                <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
+                <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+            </button>
+            {isOpen && <>
+            <p className="mt-1 text-[11px] leading-4 text-text-muted">{description}</p>
+            <label className="sr-only" htmlFor={searchId}>搜索角色参考素材</label>
+            <div className="relative mt-2">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-3 text-text-muted" aria-hidden="true" />
+                <input
+                    id={searchId}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === "ArrowDown" && filtered.length > 0) {
+                            event.preventDefault();
+                            document.getElementById(optionId(0))?.focus();
+                        } else if (event.key === "Enter" && filtered.length > 0) {
+                            event.preventDefault();
+                            toggle(filtered[0]);
+                        }
+                    }}
+                    aria-label="搜索角色参考素材"
+                    placeholder="搜索名称、来源或变体"
+                    className="h-9 w-full rounded-md border border-glass-border bg-surface pl-8 pr-2 text-xs text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                />
+            </div>
+            {selected.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5" aria-label="已选择的角色参考图">
+                    {selected.map((reference) => {
+                        const candidate = candidates.find((item) => referenceKey(item.reference) === referenceKey(reference));
+                        return (
+                            <button
+                                type="button"
+                                key={referenceKey(reference)}
+                                onClick={() => onChange(selected.filter((item) => referenceKey(item) !== referenceKey(reference)))}
+                                className="inline-flex min-h-8 items-center gap-1 rounded-full border border-primary/50 bg-primary/10 px-2 text-[11px] text-primary hover:bg-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                aria-label={`移除参考图 ${candidate?.label || reference.variant_id}`}
+                            >
+                                <span className="max-w-[12rem] truncate">{candidate?.label || reference.variant_id}</span>
+                                <X size={12} aria-hidden="true" />
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            <div className="mt-2 max-h-44 space-y-1 overflow-y-auto" role="listbox" aria-label="角色参考素材结果" aria-multiselectable="true">
+                {filtered.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-text-muted">{candidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}</p>
+                ) : filtered.map((candidate, index) => {
+                    const key = referenceKey(candidate.reference);
+                    const isSelected = selectedKeys.has(key);
+                    return (
+                        <button
+                            type="button"
+                            id={optionId(index)}
+                            key={key}
+                            role="option"
+                            aria-selected={isSelected}
+                            onKeyDown={(event) => {
+                                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                                    event.preventDefault();
+                                    const nextIndex = event.key === "ArrowDown"
+                                        ? Math.min(index + 1, filtered.length - 1)
+                                        : Math.max(index - 1, 0);
+                                    document.getElementById(optionId(nextIndex))?.focus();
+                                } else if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    toggle(candidate);
+                                } else if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    document.getElementById(searchId)?.focus();
+                                }
+                            }}
+                            onClick={() => toggle(candidate)}
+                            className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected ? "bg-primary/10" : "hover:bg-hover-bg"}`}
+                        >
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
+                                {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} /> : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-xs text-foreground">{candidate.label}</span>
+                                <span className="block truncate text-[11px] text-text-muted">
+                                    {[candidate.sourceLabel || "素材库", candidate.variantLabel ? `变体：${candidate.variantLabel}` : ""].filter(Boolean).join(" · ")}
+                                </span>
+                            </span>
+                            {isSelected && <Check size={14} className="shrink-0 text-primary" aria-label="已选择" />}
+                        </button>
+                    );
+                })}
+            </div>
+            </>}
+        </section>
+    );
+}
 interface CharacterWorkbenchProps {
     asset: any;
     onClose: () => void;
@@ -93,8 +319,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
     const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
+    const [userVisualRequirements, setUserVisualRequirements] = useState({
+        identity: savedDesign.user_visual_requirements?.identity || "",
+        look: savedDesign.user_visual_requirements?.look || "",
+    });
+    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
+    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
-    const [designUnresolved, setDesignUnresolved] = useState<string[]>(Array.isArray(savedDesign.unresolved) ? savedDesign.unresolved : []);
+    const [designUnresolved, setDesignUnresolved] = useState<string[]>(
+        actionableDesignQuestions(savedDesign.unresolved, savedDesign.field_answers, savedDesign.field_suggestions),
+    );
+    const [designFieldAnswers, setDesignFieldAnswers] = useState<Record<string, string>>(savedDesign.field_answers || {});
+    const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
+    const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
+    const [designReferences, setDesignReferences] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
     const [designSkillRevision, setDesignSkillRevision] = useState(savedDesign.skill_revision || "");
     const [designModels, setDesignModels] = useState<ChatModel[]>([]);
     const [designModel, setDesignModel] = useState("");
@@ -106,6 +344,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
             Array.isArray(items) ? items.map((item: any) => [
@@ -122,6 +361,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
     const [promptReferences, setPromptReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
+        full_body: [],
+        three_view: [],
+        headshot: [],
+    });
+    const [promptPickerReferences, setPromptPickerReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
         full_body: [],
         three_view: [],
         headshot: [],
@@ -143,26 +387,35 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return () => { active = false; };
     }, []);
 
-    useEffect(() => {
+    const refreshAssetIndex = useCallback(() => {
         const projectId = currentProject?.id;
-        if (!projectId || typeof api.getAssetReferenceIndex !== "function") {
+        const requestId = ++assetIndexRequest.current;
+        if (!projectId) {
             setAssetIndex([]);
             return;
         }
-        let active = true;
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
-                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.some((variant) => variant.id)));
+                if (requestId !== assetIndexRequest.current) return;
+                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
+                setAssetIndex(entries);
+                const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
+                    `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
+                setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
+                    [panel, refs.filter((ref) => available.has(referenceKey(ref)))])) as typeof current);
             })
-            // Keep the last successful index on transient refresh failures. Clearing it
-            // makes @ references disappear and turns a recoverable network blip into a
-            // misleading "no available references" state.
-            .catch(() => undefined);
-        return () => { active = false; };
-    }, [currentProject?.id, assetIndexRevision]);
+            .catch(() => { if (requestId === assetIndexRequest.current) setAssetIndex([]); });
+    }, [currentProject?.id]);
+
+    useEffect(() => {
+        setAssetIndex([]);
+        refreshAssetIndex();
+        return () => { assetIndexRequest.current++; };
+    }, [refreshAssetIndex, assetIndexRevision]);
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
+        setPromptPickerReferences({ full_body: [], three_view: [], headshot: [] });
         setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
     }, [asset.id]);
 
@@ -181,9 +434,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 usedLabels.add(label);
                 candidates.push({
                     label,
-                    previewUrl: getAssetUrl(variant.url),
-                    sourceLabel: entry.source_name || entry.source_scope,
+                    previewRef: { source_scope: entry.source_scope, source_container_id: entry.source_container_id,
+                        asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+                    sourceLabel: [referenceScopeLabel(entry.source_scope), entry.source_name].filter(Boolean).join(" · "),
                     variantLabel,
+                    description: entry.description,
                     reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
                 });
             });
@@ -231,7 +486,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design;
-        const confirmedNotes = designPromptDescription(confirmedDesign?.identity?.visual_notes, confirmedDesign?.look?.visual_notes);
+        const confirmedNotes = confirmedDesignDescription(confirmedDesign);
         if (!confirmedNotes && existingPrompt) return existingPrompt;
         const promptDescription = confirmedNotes
             ? confirmedNotes
@@ -253,37 +508,88 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [threeViewPrompt, setThreeViewPrompt] = useState(getInitialPrompt("three_view", asset.three_view_prompt));
     const [headshotPrompt, setHeadshotPrompt] = useState(getInitialPrompt("headshot", asset.headshot_prompt));
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const [promptsNeedDesignApply, setPromptsNeedDesignApply] = useState(
+        Boolean(savedDesign.identity?.visual_notes || savedDesign.look?.visual_notes) && !savedDesign.confirmed,
+    );
 
     // New State for Style Control
     const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
 
+    const applyDesignToPrompts = (
+        identityNotes = designNotes,
+        currentLookNotes = lookNotes,
+        answers: Record<string, string> = designFieldAnswers,
+    ) => {
+        const description = designPromptDescription(
+            identityNotes,
+            currentLookNotes,
+            [...Object.values(answers), ...designScopeDescription(designRoute, designAgeStage)],
+        );
+        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, description, hasNonFullBodyUpload));
+        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setPromptsNeedDesignApply(false);
+    };
     const generateDesignDraft = async () => {
         if (!designModel || designing) return;
         setDesigning(true);
         setDesignError("");
         try {
             const result = await agentRequest<{
-                identity: { visual_notes: string };
-                look: { visual_notes: string };
+                identity: { visual_notes: string; basis?: string | string[] };
+                look: { visual_notes: string; basis?: string | string[] };
                 unresolved: string[];
+                field_suggestions?: Record<string, string>;
+                field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
                 skill_revision: string;
             }>("/character-design/draft", "POST", {
                 model: designModel,
+                project_id: currentProject?.id,
+                reference_assets: designReferences,
                 character_name: asset.name,
                 profile: asset.description,
+                current_draft: designSkillRevision ? designPromptDescription(designNotes, lookNotes) : "",
+                user_visual_requirements: userVisualRequirements,
+                user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
                 route: designRoute,
                 age_stage: designAgeStage,
                 style: stylePrompt,
-                confirmed_design: asset.character_design?.design_revisions?.at(-1)?.design?.identity?.visual_notes || "",
+                confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
             });
-            setDesignNotes(result.identity.visual_notes);
-            setLookNotes(result.look.visual_notes);
-            setDesignUnresolved(Array.isArray(result.unresolved) ? result.unresolved : []);
-            setDesignSource("creative-choice");
+            const nextIdentity = preserveVisualRequirement(result.identity.visual_notes, userVisualRequirements.identity);
+            const nextLook = preserveVisualRequirement(result.look.visual_notes, userVisualRequirements.look);
+            setDesignNotes(nextIdentity);
+            setLookNotes(nextLook);
+            setDesignIdentityBasis(userVisualRequirements.identity.trim()
+                ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
+                : normalizeDesignBasis(result.identity.basis));
+            setDesignLookBasis(userVisualRequirements.look.trim()
+                ? Array.from(new Set([...normalizeDesignBasis(result.look.basis), "user_specified" as const]))
+                : normalizeDesignBasis(result.look.basis));
+            const questions = actionableDesignQuestions(result.unresolved, designFieldAnswers, result.field_suggestions);
+            const retainedAnswers = Object.fromEntries(
+                Object.entries(designFieldAnswers).filter(([question]) => questions.includes(question)),
+            );
+            setDesignFieldSuggestions(Object.fromEntries(
+                Object.entries(result.field_suggestions || {}).filter(([question, suggestion]) => questions.includes(question) && !!suggestion.trim()),
+            ));
+            setDesignFieldSuggestionChoices(Object.fromEntries(
+                Object.entries(result.field_suggestion_choices || {}).filter(([question]) => questions.includes(question)),
+            ));
+            setDesignUnresolved(questions);
+            setDesignFieldAnswers((current) => Object.fromEntries(
+                Object.entries(current).filter(([question]) => questions.includes(question)),
+            ));
+            setDesignSource(
+                [...normalizeDesignBasis(result.identity.basis), ...normalizeDesignBasis(result.look.basis)].includes("creative_choice")
+                    ? "creative-choice"
+                    : "stated",
+            );
             setDesignSkillRevision(result.skill_revision);
             setDesignStatus("draft");
+            applyDesignToPrompts(nextIdentity, nextLook, retainedAnswers);
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "生成视觉草稿失败，请重试。");
         } finally {
@@ -297,12 +603,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
             return;
         }
+        const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
         const draft: DesignDraft = {
             route: designRoute,
             age_stage: designAgeStage || undefined,
-            identity: { visual_notes: designNotes || undefined },
-            look: { route: designRoute, visual_notes: lookNotes || undefined },
-            unresolved: designNotes ? designUnresolved : ["具体脸型、五官、肤色、体态和服装仍需依据或用户确认"],
+            identity: { visual_notes: designNotes || undefined, basis: designIdentityBasis },
+            look: { route: designRoute, visual_notes: lookNotes || undefined, basis: designLookBasis },
+            unresolved: designNotes ? unanswered : [],
+            field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+            user_visual_requirements: userVisualRequirements,
+            field_suggestions: Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            field_suggestion_choices: Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            reference_assets: designReferences,
             field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
             skill_id: "character-style-routes",
             skill_revision: designSkillRevision || undefined,
@@ -312,13 +624,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setDesignError("");
         try {
             await onUpdateAttributes({ character_design: draft });
+            setDesignUnresolved(draft.unresolved || []);
             setDesignStatus(confirmed ? "confirmed" : "draft");
             if (confirmed) {
                 setDesignRevision((revision) => revision + 1);
-                const description = designPromptDescription(designNotes, lookNotes);
-                setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, description, hasNonFullBodyUpload));
-                setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, description, hasFullBodyImage || hasAnyUpload));
-                setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, description, hasFullBodyImage || hasAnyUpload));
+                applyDesignToPrompts(designNotes, lookNotes, draft.field_answers || {});
             }
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
@@ -476,7 +786,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        const references = promptReferences[promptType];
+        const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
+            .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
         if (imageGenerationMode === "reference" && references.length === 0) {
             toast.warning("Add at least one explicit @ reference before generating.");
@@ -492,6 +803,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
         setPromptReferences((current) => ({ ...current, [type]: references }));
     };
+
+    const setPanelPickerReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
+        setPromptPickerReferences((current) => ({ ...current, [type]: references }));
+    };
+
 
     const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
         setPromptModes((current) => ({ ...current, [type]: mode }));
@@ -592,6 +908,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 <div className="lg:hidden border-b border-glass-border px-4 py-2">
                     <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={tc("dossier")} title={tc("dossier")} aria-expanded={showProfile} className="flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-foreground">
                         <PanelLeft size={18} />{tc("dossier")}
+                        {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
                     </button>
                 </div>
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -605,16 +922,16 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     {designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿"}
                                 </span>
                             </div>
-                            <p className="mt-1 text-xs leading-5 text-text-muted">先选择题材和年龄阶段，再确认具体外观。未确认内容不会进入图片提示词。</p>
+                            <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-route">题材 / 画风</label>
-                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); setDesignStatus("draft"); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                                 <option value="realistic-modern">真人现代</option>
                                 <option value="historical-costume">古装 / 武侠</option>
                                 <option value="xianxia-fantasy">修仙 / 仙侠</option>
                                 <option value="anime-stylized">动漫 / 国漫</option>
                             </select>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-age-stage">年龄阶段</label>
-                            <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                                 <option value="">未指定</option>
                                 <option value="child">儿童</option>
                                 <option value="teen">少年 / 少女</option>
@@ -622,6 +939,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <option value="adult">成年人</option>
                                 <option value="older-adult">老年</option>
                             </select>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
+                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
+                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <AssetReferencePicker
+                                candidates={referenceCandidates}
+                                selected={designReferences}
+                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
+                                title="选择角色参考图"
+                                description="可搜索本集、系列或全局素材；也可在下方图片 Prompt 输入 @ 选择。"
+                            />
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
                             <div className="mt-1 flex gap-2">
                                 <select id="character-design-model" value={designModel} onChange={(event) => setDesignModel(event.target.value)} disabled={!designModels.length || designing} className="h-10 min-w-0 flex-1 rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -630,12 +959,56 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 </select>
                                 <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
                             </div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setDesignSource("stated"); setDesignStatus("draft"); }} placeholder="例如：短发轮廓、眼睛颜色、肤质、肩宽、固定配饰……" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setDesignStatus("draft"); }} placeholder="例如：本集服装版型、面料、发饰与妆造……" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {designUnresolved.length > 0 && <div className="mt-2 text-xs leading-5 text-text-muted"><span className="font-medium">待核对：</span>{designUnresolved.join("；")}</div>}
+                            {designUnresolved.length > 0 && (
+                                <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h4 id="character-design-unresolved-title" className="text-xs font-medium text-foreground">待核对 · {designUnresolved.length}</h4>
+                                            <p className="mt-1 text-[11px] leading-4 text-text-muted">只有关键设定歧义才会列在这里。可以采用 Agent 建议，也可以改成自己的方案。</p>
+                                        </div>
+                                        <span className="text-[11px] text-amber-300">{designUnresolved.filter((item) => designFieldAnswers[item]?.trim()).length}/{designUnresolved.length} 已回答</span>
+                                    </div>
+                                    <div className="mt-2 space-y-2">
+                                        {designUnresolved.map((question, index) => {
+                                            const fieldId = `character-design-answer-${index}`;
+                                            const suggestion = designFieldSuggestions[question];
+                                            const answer = designFieldAnswers[question] || "";
+                                            return (
+                                                <label key={`${question}-${index}`} htmlFor={fieldId} className="block rounded-md border border-glass-border bg-surface/60 p-2">
+                                                    <span className="block text-xs leading-5 text-text-secondary">{question}</span>
+                                                    {suggestion && <div className="mt-1 rounded border border-primary/20 bg-primary/5 p-2">
+                                                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">Agent 建议</span>
+                                                        <p className="mt-0.5 text-xs leading-5 text-foreground">{suggestion}</p>
+                                                        <button
+                                                            type="button"
+                                                            disabled={answer === suggestion}
+                                                            onClick={() => {
+                                                                setDesignFieldAnswers((current) => ({ ...current, [question]: suggestion }));
+                                                                const choice = designFieldSuggestionChoices[question];
+                                                                if (choice?.age_stage) setDesignAgeStage(choice.age_stage);
+                                                                if (choice?.route) setDesignRoute(choice.route);
+                                                                setDesignStatus("draft");
+                                                                setPromptsNeedDesignApply(true);
+                                                            }}
+                                                            className="mt-1 inline-flex min-h-8 items-center gap-1 rounded px-2 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                                        >
+                                                            <Check size={13} aria-hidden="true" />{answer === suggestion ? "已采用" : "采用此建议"}
+                                                        </button>
+                                                    </div>}
+                                                    <textarea
+                                                        id={fieldId}
+                                                        value={answer}
+                                                        onChange={(event) => { setDesignFieldAnswers((current) => ({ ...current, [question]: event.target.value })); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                                        placeholder={suggestion ? "可直接修改建议，或留空稍后决定" : "补充你的决定；如果暂时无法决定可留空"}
+                                                        rows={2}
+                                                        className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            )}
                             {designError && <p role="alert" className="mt-2 text-xs text-red-400">{designError}</p>}
                             <div className="mt-3 flex gap-2">
                                 <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(false)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />保存草稿</button>
@@ -645,6 +1018,15 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </aside>
 
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
+                        {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
+                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
+                            </div>
+                            <button type="button" onClick={() => applyDesignToPrompts()} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <Sparkles size={14} aria-hidden="true" />应用到图片提示词
+                            </button>
+                        </div>}
                         <div role="tablist" aria-label={tc("materialTypes")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-glass-border px-3 sm:px-5">
                             {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
                                 if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -675,7 +1057,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.full_body}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("full_body", references)}
                         imageGenerationMode={promptModes.full_body}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("full_body", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick(masterGenerationType, batchSize)}
@@ -723,7 +1109,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.three_view}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
@@ -752,7 +1142,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.headshot}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
@@ -890,7 +1284,11 @@ export function WorkbenchPanel({
     prompt,
     setPrompt,
     referenceCandidates = [],
+    onRefreshReferences,
     onReferencesChange,
+    showReferencePicker = false,
+    pickerReferences = [],
+    onPickerReferencesChange,
     imageGenerationMode = "text",
     onImageGenerationModeChange,
     onGenerate,
@@ -929,8 +1327,11 @@ export function WorkbenchPanel({
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
     const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
-        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+        [candidate.label, candidate.description, candidate.sourceLabel, candidate.variantLabel]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
     );
 
     return (
@@ -1201,13 +1602,29 @@ export function WorkbenchPanel({
                         ))}
                     </div>
                 </div>
+                {showReferencePicker && <div className="px-4 pt-2">
+                    <AssetReferencePicker
+                        candidates={referenceCandidates}
+                        selected={pickerReferences}
+                        onChange={(references) => {
+                            onPickerReferencesChange?.(references);
+                            if (references.length > 0) onImageGenerationModeChange?.("reference");
+                        }}
+                        title="选择参考素材"
+                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
+                        onOpen={onRefreshReferences}
+                    />
+                </div>}
                 <div className="relative min-h-0 flex-1 overflow-visible p-4">
                     <ReferencePromptEditor
                         value={prompt}
                         candidates={referenceCandidates}
                         onChange={setPrompt}
                         onReferencesChange={onReferencesChange}
-                        onMentionChange={setMention}
+                        onMentionChange={(next) => {
+                            if (next && !mention) onRefreshReferences?.();
+                            setMention(next);
+                        }}
                         allowImplicitMentions={false}
                         pruneUnlistedReferences
                         editable={!isLocked}
@@ -1239,8 +1656,8 @@ export function WorkbenchPanel({
                                     className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                                 >
                                     <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
-                                        {candidate.previewUrl ? (
-                                            <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" />
+                                        {candidate.previewRef ? (
+                                            <AssetIndexPreview asset={candidate.previewRef} />
                                         ) : <ImageIcon size={15} className="text-text-muted" />}
                                     </span>
                                     <span className="min-w-0 flex-1 text-xs">

@@ -190,12 +190,12 @@ class PlaygroundService:
         failures = []
 
         for idx in range(gen.batch_size):
-            ext = "png"
+            ext = "jpg" if gen.model_id in {"nsfw/seedream_5.0Pro_nsfw", "uniart/seedream_5.0Pro_nsfw"} else "png"
             out_filename = f"{gen.mode.value}_{gen.id}_{idx}.{ext}"
             out_path = os.path.join(image_output_dir, out_filename)
 
             try:
-                if model_lower.startswith("uniart/") or model_lower.startswith("gpt-image"):
+                if model_lower.startswith(("uniart/", "nsfw/", "gpt-image")):
                     self._generate_image_mulerouter(gen, out_path, idx)
                 else:
                     self._generate_image_wanx(gen, out_path, idx)
@@ -247,13 +247,18 @@ class PlaygroundService:
     def _generate_image_mulerouter(self, gen: PlaygroundGeneration, out_path: str, _idx: int) -> None:
         """Delegate to :class:`MuleRouterImageModel` (GPT-Image-2)."""
         from ...models.mulerouter import MuleRouterImageModel
+        from ...models.nsfw_new_one import NSFWNewOneImageModel, SEEDREAM_IDS
         from ...models.uniart import UniArtImageModel
 
         runtime_config = self._load_provider_config()
-        use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
-            os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
-        )
-        model = UniArtImageModel(runtime_config) if use_uniart else MuleRouterImageModel({})
+        if gen.model_id in SEEDREAM_IDS:
+            model = NSFWNewOneImageModel(runtime_config)
+            use_uniart = True
+        else:
+            use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
+                os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
+            )
+            model = UniArtImageModel(runtime_config) if use_uniart else MuleRouterImageModel({})
 
         params = gen.parameters
         kwargs = {
@@ -297,7 +302,9 @@ class PlaygroundService:
                     continue
                 if resume_only and str(idx) not in gen.provider_tasks:
                     raise RuntimeError("Interrupted before upstream task ID was saved; automatic resubmission is disabled")
-                if model_lower.startswith("uniart/") or model_lower.startswith("seedance") or model_lower.startswith("minimax"):
+                if gen.model_id in self._nsfw_wan_ids():
+                    self._generate_video_nsfw(gen, out_path, batch_index=idx)
+                elif model_lower.startswith("uniart/") or model_lower.startswith("seedance") or model_lower.startswith("minimax"):
                     self._generate_video_mulerouter(gen, out_path, batch_index=idx)
                 elif model_lower.startswith("kling"):
                     self._generate_video_kling(gen, out_path)
@@ -325,6 +332,52 @@ class PlaygroundService:
             raise RuntimeError(f"All {len(failures)} batch items failed: {failures[0]}")
 
     # -- adapter delegates ------------------------------------------------
+
+    @staticmethod
+    def _nsfw_wan_ids():
+        from ...models.nsfw_new_one import WAN_IDS
+
+        return frozenset(model_id for model_id in WAN_IDS if model_id.startswith("nsfw/"))
+
+    def _generate_video_nsfw(self, gen: PlaygroundGeneration, out_path: str, *, batch_index: int = 0) -> None:
+        from ...models.nsfw_new_one import NSFWNewOneVideoModel
+
+        if gen.mode not in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V):
+            raise ValueError("Wan 3.0 supports text, image, and image-reference video modes only")
+        saved_task = gen.provider_tasks.get(str(batch_index))
+        model = NSFWNewOneVideoModel(self._load_provider_config())
+        if saved_task:
+            model.generate(gen.prompt, out_path, model=gen.model_id, resume_task_id=saved_task)
+            return
+
+        references = list(gen.input_media)
+        if gen.mode == PlaygroundMode.T2V and references:
+            raise ValueError("Text-to-video does not accept reference media")
+        if gen.mode == PlaygroundMode.I2V and len(references) != 1:
+            raise ValueError("Image-to-video requires exactly one image")
+        if gen.mode == PlaygroundMode.R2V and not references:
+            raise ValueError("Reference-to-video requires at least one image")
+        if any(media_kind(ref) != "image" for ref in references):
+            raise ValueError("Wan 3.0 accepts image references only")
+
+        params = gen.parameters
+        if params.get("duration") is None or not params.get("resolution"):
+            raise ValueError("Wan 3.0 duration and resolution are required")
+
+        def save_task(task_id: str) -> None:
+            gen.provider_tasks[str(batch_index)] = task_id
+            self.storage.update_generation(gen)
+
+        model.generate(
+            video_reference_prompt(gen.prompt, references, references, gen.media_names),
+            out_path,
+            model=gen.model_id,
+            duration=params["duration"],
+            resolution=params["resolution"],
+            aspect_ratio=params.get("aspect_ratio") or params.get("ratio") or "16:9",
+            ref_image_urls=references,
+            on_task_submitted=save_task,
+        )
 
     def _generate_video_wanx(self, gen: PlaygroundGeneration, out_path: str) -> None:
         """Delegate to :class:`WanxModel` (DashScope video generation -- wan2.x / happyhorse)."""
@@ -530,7 +583,7 @@ class PlaygroundService:
     @staticmethod
     def _uses_owner_scoped_provider(model_id: str) -> bool:
         model = model_id.lower()
-        if model.startswith(("uniart/", "seedance", "minimax", "gpt-image")):
+        if model.startswith(("uniart/", "nsfw/", "seedance", "minimax", "gpt-image")):
             return True
         return os.getenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false").lower() == "true"
 

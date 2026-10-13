@@ -1115,7 +1115,7 @@ export const api = {
         return res.data;
     },
 
-    updatePromptConfig: async (scriptId: string, config: { storyboard_polish?: string; video_polish?: string; r2v_polish?: string; entity_extraction?: string; style_analysis?: string; storyboard_extraction?: string }) => {
+    updatePromptConfig: async (scriptId: string, config: { storyboard_polish?: string; video_polish?: string; r2v_polish?: string; entity_extraction?: string; style_analysis?: string; storyboard_extraction?: string; polish_model?: string }) => {
         const res = await axios.put(`${API_URL}/projects/${scriptId}/prompt_config`, config);
         return res.data;
     },
@@ -1379,11 +1379,13 @@ export const api = {
         optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
+        frameId: string = "",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
             feedback: feedback,
             script_id: scriptId,
+            frame_id: frameId,
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
@@ -1413,12 +1415,14 @@ export const api = {
         optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
+        frameId: string = "",
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
             slots: slots,
             feedback: feedback,
             script_id: scriptId,
+            frame_id: frameId,
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
@@ -2423,7 +2427,7 @@ export interface UniArtCatalogModelResponse {
   display_name: string;
   description: string;
   family: string;
-  provider: 'uniart';
+  provider: 'uniart' | 'nsfw';
   capabilities: string[];
   duration?: {
     type: 'slider' | 'buttons' | 'fixed';
@@ -2440,7 +2444,7 @@ export interface UniArtCatalogModelResponse {
 
 export const playgroundApi = {
   getUniArtModels: () =>
-    axios.get<{ provider: string; models: UniArtCatalogModelResponse[]; fetched_at: number }>(API_URL + "/config/uniart/models", { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.data),
+    axios.get<{ provider: string; models: UniArtCatalogModelResponse[]; fetched_at: number }>(API_URL + "/config/models", { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.data),
 
   generate: (data: PlaygroundGenerateRequest) =>
     axios.post<PlaygroundGenerationResponse>(API_URL + "/playground/generate", data).then(r => r.data),

@@ -97,7 +97,7 @@ export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): numb
       // capabilities. Do not locally mark a SKU as recommended/default.
       recommended: false,
       order: models.length - index,
-      badges: ['UniArt'],
+      badges: [model.provider === 'nsfw' ? 'NSFW New One' : 'UniArt'],
     },
   } as CatalogModel]));
   catalogRevision += 1;
@@ -120,11 +120,12 @@ export function usePlaygroundCatalogRevision(): number {
 
 function getActiveModelEntries(): [string, CatalogModel][] {
   const runtimeEntries = Object.entries(runtimeModels);
-  const entries = runtimeEntries.length > 0 ? runtimeEntries : allModels.filter(([, model]) => model.provider === 'uniart');
+  const entries = runtimeEntries.length > 0 ? runtimeEntries : allModels.filter(([, model]) => ['uniart', 'nsfw'].includes(model.provider));
   if (typeof window === 'undefined') return entries;
   try {
     const enabled = JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null;
-    return enabled ? entries.filter(([id]) => enabled.includes(id)) : entries;
+    return enabled ? entries.filter(([id]) => enabled.includes(id) ||
+      (id === 'nsfw/seedream_5.0Pro_nsfw' && enabled.includes('uniart/seedream_5.0Pro_nsfw'))) : entries;
   } catch { return entries; }
 }
 

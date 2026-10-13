@@ -13,6 +13,7 @@ import { api, crudApi } from "@/lib/api";
 import { getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
 import { selectedVariantUrl } from "@/lib/characterImage";
 import { resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
+import { createRenderRequestId } from "@/lib/renderRequestId";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
@@ -338,7 +339,7 @@ export default function StoryboardComposer() {
                 finalPrompt = parts.join(" . ");
             }
 
-            const requestId = crypto.randomUUID();
+            const requestId = createRenderRequestId();
             let job;
             try {
                 job = await api.submitFrameRender(

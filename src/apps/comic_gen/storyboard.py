@@ -3,7 +3,7 @@ import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, image_variant_storage_key
 from ...models.image import WanxImageModel
-from ..studio_access import studio_uniart_config
+from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 
@@ -17,7 +17,10 @@ class StoryboardGenerator:
 
     def _get_model_for(self, model_name: str):
         """Use the same provider routing as asset generation."""
-        if model_name and model_name.startswith("uniart/gpt-image-"):
+        from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel
+        if model_name in SEEDREAM_IDS:
+            return NSFWNewOneImageModel(studio_nsfw_new_one_config())
+        if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
             return UniArtImageModel(studio_uniart_config())
         if model_name and model_name.startswith("gpt-image"):
@@ -235,31 +238,6 @@ class StoryboardGenerator:
             frame.updated_at = time.time()
             frame.status = GenerationStatus.COMPLETED
             
-            # Try uploading to OSS if configured - store Object Key (not full URL)
-            try:
-                from ...utils.oss_utils import OSSImageUploader
-                uploader = OSSImageUploader()
-                if uploader.is_configured:
-                    # Upload the selected variant
-                    if selected_variant:
-                        # Construct local path from relative path
-                        local_path = os.path.join("output", selected_variant.url)
-                        if os.path.exists(local_path):
-                            # Upload and get Object Key (not full URL)
-                            object_key = uploader.upload_file(
-                                local_path, 
-                                sub_path=f"storyboard"
-                            )
-                            if object_key:
-                                logger.info(f"Uploaded frame {frame.id} to OSS: {object_key}")
-                                # Store Object Key (will be converted to signed URL on API response)
-                                selected_variant.url = object_key
-                                frame.rendered_image_url = object_key
-                                frame.image_url = object_key
-            except Exception as e:
-                logger.error(f"Failed to upload frame {frame.id} to OSS: {e}")
-                # Continue even if OSS upload fails
-                
         except Exception as e:
             logger.error(f"Failed to generate frame {frame.id}: {e}")
             frame.status = GenerationStatus.FAILED

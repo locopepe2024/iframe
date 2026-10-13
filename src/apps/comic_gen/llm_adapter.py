@@ -110,6 +110,7 @@ class LLMAdapter:
         *,
         timeout_seconds: Optional[float] = None,
         max_retries: Optional[int] = None,
+        stream: bool = False,
     ) -> str:
         """
         Send a chat completion request and return the response content.
@@ -122,6 +123,8 @@ class LLMAdapter:
                 OpenAI client's default is used.
             max_retries: Optional per-request retry count. When omitted, the
                 OpenAI client's default is used.
+            stream: Assemble streamed text into one response. Useful for long
+                completions whose upstream does not promptly flush a final body.
 
         Returns:
             The assistant's response content as a string.
@@ -135,14 +138,14 @@ class LLMAdapter:
         if model:
             return self._chat_once(
                 client, model, messages, response_format,
-                timeout_seconds=timeout_seconds, max_retries=max_retries,
+                timeout_seconds=timeout_seconds, max_retries=max_retries, stream=stream,
             )
 
         # Provider 默认路径：DashScope 走 fallback chain，OpenAI 单次尝试。
         if self.provider == "openai":
             return self._chat_once(
                 client, self._get_default_model(), messages, response_format,
-                timeout_seconds=timeout_seconds, max_retries=max_retries,
+                timeout_seconds=timeout_seconds, max_retries=max_retries, stream=stream,
             )
 
         last_err: Optional[Exception] = None
@@ -150,7 +153,7 @@ class LLMAdapter:
             try:
                 return self._chat_once(
                     client, candidate, messages, response_format,
-                    timeout_seconds=timeout_seconds, max_retries=max_retries,
+                    timeout_seconds=timeout_seconds, max_retries=max_retries, stream=stream,
                 )
             except RuntimeError as e:
                 # 仅在 "模型不存在 / 不可用" 类错误时回退；其他错误（鉴权、限流、网络）
@@ -181,6 +184,7 @@ class LLMAdapter:
         *,
         timeout_seconds: Optional[float] = None,
         max_retries: Optional[int] = None,
+        stream: bool = False,
     ) -> str:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -188,6 +192,8 @@ class LLMAdapter:
         }
         if response_format:
             kwargs["response_format"] = response_format
+        if stream:
+            kwargs["stream"] = True
 
         try:
             request_client = client
@@ -201,7 +207,17 @@ class LLMAdapter:
             logger.info("LLM chat request started: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
             logger.info("LLM chat HTTP response received: model=%s", model)
-            content = response.choices[0].message.content
+            if stream:
+                parts = []
+                try:
+                    for chunk in response:
+                        if chunk.choices:
+                            parts.append(chunk.choices[0].delta.content or "")
+                finally:
+                    response.close()
+                content = "".join(parts)
+            else:
+                content = response.choices[0].message.content
             logger.info("LLM chat response body decoded: model=%s chars=%s", model, len(content or ""))
             return content
         except Exception as e:

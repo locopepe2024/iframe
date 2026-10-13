@@ -79,6 +79,13 @@ def studio_uniart_config() -> Dict[str, str]:
     return runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
 
 
+def studio_nsfw_new_one_config() -> Dict[str, str]:
+    # Existing owner credentials already authorize the local New One gateway.
+    # Keep credential storage intact while the nsfw node owns its address.
+    config = studio_uniart_config()
+    return {"api_key": config["api_key"]}
+
+
 def studio_owner_key(owner_profile_id: str) -> str:
     return hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()[:24]
 

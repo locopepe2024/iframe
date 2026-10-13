@@ -36,18 +36,18 @@ def test_h3_skill_keeps_ethnicity_skin_tone_and_skin_condition_independent():
 
 def test_character_identity_skill_designs_fields_before_prompt_compilation():
     package = next(p for p in skills.catalog() if p['id'] == 'character-identity-design')
-    assert package['version'] == '1.1.0'
+    assert package['version'] == '1.2.1'
     assert '角色档案' in package['instructions']
     assert '`identity`' in package['instructions']
     assert '`look`' in package['instructions']
     assert '`unresolved`' in package['instructions']
-    assert '用户确认后，由项目角色资产保存设计 revision' in package['instructions']
+    assert '只有用户确认后，设计才保存为项目角色资产的 design revision' in package['instructions']
     assert '不要把创意选择写成剧本事实' in package['instructions']
 
 
 def test_character_style_routes_keep_confirmation_and_anchor_rules():
     package = next(p for p in skills.catalog() if p['id'] == 'character-style-routes')
-    assert package['version'] == '1.0.0'
+    assert package['version'] == '1.1.1'
     assert 'stated' in package['instructions']
     assert 'inferred' in package['instructions']
     assert '用户选定的正面身份图' in package['instructions']
@@ -67,6 +67,23 @@ def test_character_design_draft_uses_curated_skills_without_saving(ctx, monkeypa
     assert 'Character identity design skill' in system
     assert 'Character style routes' in system
     assert result['look']['visual_notes'] == '黑色劲装'
+
+
+def test_character_design_draft_projects_user_answers_and_current_draft(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"青年初期，眉眼清冽"},"look":{"visual_notes":"宋代灰青短袍"},"unresolved":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='少年剑客，沉静', route='historical-costume',
+        current_draft='旧视觉草稿',
+        user_visual_requirements={'identity': '少年至青年初期，身姿挺拔', 'look': '宋代服装'},
+        user_answers={'鞋履未确定': '黑褐色布靴'},
+    )
+    agent.character_design_draft(body, ctx)
+    payload = complete.call_args.args[2][1]['content']
+    assert '旧视觉草稿' in payload
+    assert '少年至青年初期' in payload
+    assert '黑褐色布靴' in payload
 
 
 def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
@@ -96,6 +113,20 @@ def test_character_design_draft_rejects_incomplete_model_result(ctx, monkeypatch
     with pytest.raises(HTTPException) as exc:
         agent.character_design_draft(body, ctx)
     assert exc.value.status_code == 502
+
+
+def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='```json\n{"visual_notes":"青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照，空间开阔，保留人物动作区域","unresolved":[]}\n```')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.AssetDesignRequest(
+        model='qwen', asset_type='scene', asset_name='粮铺门前',
+        description='青溪镇街边粮铺', user_requirements='南北要道，黄昏，写实电影质感',
+    )
+    result = agent.asset_design_draft(body, ctx)
+    assert '青石板长街' in result['visual_notes']
+    assert result['unresolved'] == []
+    assert '南北要道' in complete.call_args.args[2][1]['content']
 
 
 def test_install_update_toggle_uninstall_owner_isolation(ctx, monkeypatch):

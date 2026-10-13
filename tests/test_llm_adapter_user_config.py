@@ -91,3 +91,44 @@ def test_chat_forwards_per_request_timeout_and_retry_options(monkeypatch):
         max_retries=0,
     ) == "ok"
     assert captured == {"timeout": 300, "max_retries": 0}
+
+
+def test_chat_assembles_streamed_json_and_closes_response(monkeypatch):
+    captured = {}
+
+    class Stream:
+        closed = False
+
+        def __iter__(self):
+            for content in ('{"setting":', None, '{"time":"day"}}'):
+                yield SimpleNamespace(choices=[SimpleNamespace(
+                    delta=SimpleNamespace(content=content)
+                )])
+
+        def close(self):
+            self.closed = True
+
+    response = Stream()
+
+    class Client:
+        def __init__(self, api_key, base_url):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return response
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=Client))
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.test/v1")
+
+    adapter = LLMAdapter()
+    assert adapter.chat(
+        [{"role": "user", "content": "director"}],
+        response_format={"type": "json_object"},
+        stream=True,
+    ) == '{"setting":{"time":"day"}}'
+    assert captured["stream"] is True
+    assert captured["response_format"] == {"type": "json_object"}
+    assert response.closed

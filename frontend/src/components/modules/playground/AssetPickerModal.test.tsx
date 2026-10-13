@@ -14,6 +14,7 @@ vi.mock('@/lib/api', () => ({
   api: { getAssetLibraryIndex: mocks.library },
 }));
 vi.mock('@/lib/utils', () => ({ getAssetUrl: (value: string) => value }));
+vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
 vi.mock('./referenceMedia', () => ({ referenceKey: (value: string) => value, referenceName: () => 'asset' }));
 vi.mock('./usePlaygroundStore', () => ({ usePlaygroundStore: { getState: () => ({ inputMedia: [], mediaNames: {} }) } }));
 

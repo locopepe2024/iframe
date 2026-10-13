@@ -11,6 +11,10 @@ export function getAssetUrl(path: string | null | undefined): string {
     if (path.startsWith("/studio/media/") || path.startsWith("/playground/media/") || path.startsWith("/playground/input-media/")) {
         return `${API_URL}${path}`;
     }
+    const ownedStudioPath = /^(?:output\/)?users\/([0-9a-f]{24})\/studio\/(.+)$/.exec(path);
+    if (ownedStudioPath) {
+        return `${API_URL}/studio/owned-media/${ownedStudioPath[1]}/${ownedStudioPath[2].split('/').map(encodeURIComponent).join('/')}`;
+    }
     if (path.startsWith("http") || path.startsWith("blob:")) {
         // Only pass through well-formed http(s)/blob URLs; anything else
         // (e.g. javascript: smuggled behind a weird prefix) is dropped.

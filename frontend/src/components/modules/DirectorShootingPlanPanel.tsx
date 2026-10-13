@@ -16,6 +16,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import axios from "axios";
 import { api } from "@/lib/api";
 import type {
     DirectorPlanBeat,
@@ -405,6 +406,22 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             } : previous);
             setNotice(t("draftSaved", { revision: result.draft_revision }));
         } catch (cause) {
+            if (axios.isAxiosError(cause) && cause.response?.status === 409) {
+                try {
+                    const latest = await api.getDirectorShootingPlan(projectId);
+                    if (planFingerprint(latest.draft) === planFingerprint(plan)) {
+                        setServerState(latest);
+                        setPlan(latest.draft);
+                        setSavedPlan(latest.draft);
+                        setNotice(t("draftAlreadySaved", { revision: latest.draft_revision }));
+                        return;
+                    }
+                    setError(t("draftConflict"));
+                    return;
+                } catch {
+                    // Keep the original conflict visible if the refresh fails.
+                }
+            }
             setError(extractErrorDetail(cause) || t("saveFailed"));
         } finally {
             setAction(null);
@@ -664,10 +681,55 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                         <div className="space-y-4 border-t border-border p-3">
                                             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                                 <Field label={t("fields.sceneRef")} value={scene.scene_ref} onChange={value => updateScene(sceneIndex, { scene_ref: value })} />
-                                                <Field label={t("fields.placeContinuityId")} value={scene.place_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { place_continuity_id: value.trim() || null })} />
-                                                <Field label={t("fields.timeContinuityId")} value={scene.time_continuity_id ?? ""} onChange={value => updateScene(sceneIndex, { time_continuity_id: value.trim() || null })} />
                                                 <Field label={t("fields.sceneDuration")} type="number" min={1} max={1800} value={scene.duration_seconds} onChange={value => updateScene(sceneIndex, { duration_seconds: value ? Number(value) : null })} />
                                             </div>
+                                            <div className="flex flex-wrap items-end gap-2">
+                                                <label className="min-w-48 flex-1 text-xs text-text-secondary">
+                                                    {t("fields.continuityGroup")}
+                                                    <select
+                                                        value={scene.place_continuity_id && scene.time_continuity_id
+                                                            ? scenes.find(candidate => candidate.place_continuity_id === scene.place_continuity_id
+                                                                && candidate.time_continuity_id === scene.time_continuity_id)?.scene_id ?? ""
+                                                            : ""}
+                                                        onChange={event => {
+                                                            const linked = scenes.find(candidate => candidate.scene_id === event.target.value);
+                                                            updateScene(sceneIndex, {
+                                                                place_continuity_id: linked?.place_continuity_id ?? null,
+                                                                time_continuity_id: linked?.time_continuity_id ?? null,
+                                                            });
+                                                        }}
+                                                        className="mt-1 min-h-10 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                                                    >
+                                                        <option value="">{t("fields.noContinuityGroup")}</option>
+                                                        {scenes.filter(candidate => candidate.place_continuity_id && candidate.time_continuity_id)
+                                                            .filter((candidate, index, grouped) => grouped.findIndex(item =>
+                                                                item.place_continuity_id === candidate.place_continuity_id
+                                                                && item.time_continuity_id === candidate.time_continuity_id) === index)
+                                                            .map(candidate => <option key={candidate.scene_id} value={candidate.scene_id}>
+                                                                {candidate.heading || candidate.scene_ref || candidate.scene_id}
+                                                            </option>)}
+                                                    </select>
+                                                </label>
+                                                <button type="button" onClick={() => updatePlan(current => {
+                                                    const placeId = newId("place");
+                                                    const timeId = newId("time");
+                                                    return {
+                                                        ...current,
+                                                        scenes: current.scenes.map((item, index) => index === sceneIndex
+                                                            ? { ...item, place_continuity_id: placeId, time_continuity_id: timeId }
+                                                            : item),
+                                                        lighting_baselines: [...(current.lighting_baselines ?? []), {
+                                                            place_continuity_id: placeId, time_continuity_id: timeId,
+                                                            story_time: scene.time_anchor, daylight_phase: "", weather: "", shadow_direction: "",
+                                                            lighting: emptyLighting(),
+                                                        }],
+                                                    };
+                                                })} disabled={locked} className="inline-flex min-h-10 items-center gap-1 rounded-md border border-border px-3 text-xs text-foreground hover:bg-surface disabled:opacity-50">
+                                                    <Plus size={14} aria-hidden="true" />{t("fields.newContinuityGroup")}
+                                                </button>
+                                            </div>
+                                            {Boolean(scene.place_continuity_id) !== Boolean(scene.time_continuity_id) &&
+                                                <p className="text-xs text-amber-300">{t("fields.incompleteContinuityGroup")}</p>}
                                             {scene.place_continuity_id && scene.time_continuity_id && (() => {
                                         const placeId = scene.place_continuity_id;
                                         const timeId = scene.time_continuity_id;

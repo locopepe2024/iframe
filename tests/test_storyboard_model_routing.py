@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -8,7 +9,8 @@ from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
 
 
-def test_storyboard_routes_uniart_image_models_to_uniart_adapter(monkeypatch, tmp_path):
+@pytest.mark.parametrize("model_name", ["uniart/gpt-image-2"])
+def test_storyboard_routes_uniart_image_models_to_uniart_adapter(monkeypatch, tmp_path, model_name):
     adapter = Mock()
     adapter.generate.side_effect = lambda _prompt, path, **_kwargs: path
     monkeypatch.setattr(
@@ -32,11 +34,11 @@ def test_storyboard_routes_uniart_image_models_to_uniart_adapter(monkeypatch, tm
         characters=[],
         scene=None,
         prompt="A person enters the street",
-        model_name="uniart/gpt-image-2",
+        model_name=model_name,
     )
 
     adapter.generate.assert_called_once()
-    assert adapter.generate.call_args.kwargs["model_name"] == "uniart/gpt-image-2"
+    assert adapter.generate.call_args.kwargs["model_name"] == model_name
     assert frame.status == GenerationStatus.COMPLETED
 
 
@@ -49,6 +51,37 @@ def test_storyboard_generation_failure_is_not_returned_as_success(tmp_path):
         generator.generate_frame(frame, [], None, model_name="wan2.7-image-pro")
 
     assert frame.status == GenerationStatus.FAILED
+
+
+def test_storyboard_render_keeps_local_file_even_when_oss_is_configured(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "src.utils.oss_utils.OSSImageUploader",
+        Mock(side_effect=AssertionError("storyboard must not upload to OSS")),
+    )
+    adapter = Mock()
+    adapter.generate.side_effect = lambda _prompt, path, **_kwargs: (
+        Path(path).write_bytes(b"image"), 0,
+    )
+    monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneImageModel", lambda _config: adapter)
+    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_nsfw_new_one_config", lambda: {"api_key": "test"})
+    generator = StoryboardGenerator({"output_dir": "output/storyboard"})
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+
+    generator.generate_frame(frame, [], None, prompt="A street", model_name="nsfw/seedream_5.0Pro_nsfw")
+
+    selected = frame.rendered_image_asset.variants[0]
+    assert selected.url.startswith("storyboard/")
+    assert (tmp_path / "output" / selected.url).read_bytes() == b"image"
+    assert frame.image_url == selected.url
+
+
+def test_legacy_seedream_selection_uses_nsfw_adapter(monkeypatch):
+    adapter = Mock()
+    monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneImageModel", lambda _config: adapter)
+    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_nsfw_new_one_config", lambda: {"api_key": "test"})
+
+    assert StoryboardGenerator()._get_model_for("uniart/seedream_5.0Pro_nsfw") is adapter
 
 
 def test_series_storyboard_render_uses_series_i2i_model(tmp_path):
