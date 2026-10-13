@@ -115,8 +115,13 @@ def _source_uri(uri: str) -> str:
 
 
 def research_enabled_for(owner: str) -> bool:
-    return (bool(owner)
-            and os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") in {"gdelt", "fed_rss"}
+    provider = os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER")
+    if provider == "cninfo":
+        owners = {item.strip() for item in
+                  os.getenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "").split(",") if item.strip()}
+        if owner not in owners:
+            return False
+    return (bool(owner) and provider in {"gdelt", "fed_rss", "cninfo"}
             and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip()))
 
 
@@ -234,7 +239,10 @@ def start_research(owner: str, session_id: str, query: str,
         else:
             try:
                 planned = intent or {}
-                candidates = discovery.discover(planned.get("search_query") or query.strip(),
+                discovery_query = (f"{planned.get('subject', '')} {query}" if
+                                   os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+                                   else planned.get("search_query") or query.strip())
+                candidates = discovery.discover(discovery_query,
                                                 planned.get("start_date"), planned.get("end_date"))
                 error_code = None if candidates else "no_results"
             except discovery.DiscoveryUnavailable as exc:
