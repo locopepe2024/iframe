@@ -1,0 +1,28 @@
+{
+  "timestamp_utc": "2026-10-13T04:57:29.831175+00:00",
+  "model": "kimi-k3-video",
+  "endpoint": "https://uniart.fun/v1/chat/completions",
+  "source_sha256": "2e4324bd6284878954323fbe9a6c86edd4c178c43cecc168385d44aad3dd2a3c",
+  "source_frames": 120,
+  "source_fps": 30,
+  "input_format": "video_url data:video/mp4;base64",
+  "prompt": "只分析本条4秒视频画面。输出JSON，包含：visible_frames（按0.0、0.7、1.3、2.2、2.7、3.3、3.8秒记录可见人物姿态、长枪方向、红缨位置、遮挡/模糊）；action_candidates（候选动作名称、证据时间段、置信限制）；cut_candidates（可能的硬切时间及前后视角证据）；unresolved（不能由视频证实的握点、枪尖路径和动作边界）。只能写可见证据；不要据武术常识补全，也不要把候选动作当作已确认标注。",
+  "status": "completed",
+  "http_status": 200,
+  "content_type": "application/json",
+  "content_encoding": "gzip",
+  "response_model": "kimi-k3",
+  "usage": {
+    "prompt_tokens": 2411,
+    "completion_tokens": 4869,
+    "total_tokens": 7280,
+    "prompt_tokens_details": {
+      "cached_tokens": 2304,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 3306
+    }
+  },
+  "content": "```json\n{\n  \"visible_frames\": [\n    {\n      \"time\": 0.0,\n      \"person_pose\": \"背对镜头站立，双臂上举，双手在头顶上方持枪；面部不可见\",\n      \"spear_direction\": \"枪身大致水平横于头顶上方\",\n      \"red_tassel_position\": \"画面左侧枪端\",\n      \"occlusion_blur\": \"枪身有运动模糊；右端可见浅色端头（性质不明）；天空灰白\"\n    },\n    {\n      \"time\": 0.7,\n      \"person_pose\": \"仍基本背对，躯干开始下沉/前倾，似在转体\",\n      \"spear_direction\": \"枪身降至头高附近，大致水平横扫\",\n      \"red_tassel_position\": \"红缨在画面左侧呈拖尾状\",\n      \"occlusion_blur\": \"枪身严重运动模糊成带状；手部细节不可辨\"\n    },\n    {\n      \"time\": 1.3,\n      \"person_pose\": \"背对镜头，躯干明显前倾\",\n      \"spear_direction\": \"枪身水平置于颈后/肩背高度\",\n      \"red_tassel_position\": \"右肩上方可见红色缨穗（模糊）\",\n      \"occlusion_blur\": \"天空转为湛蓝多云；画面顶部出现黑色横条；枪身中等模糊\"\n    },\n    {\n      \"time\": 2.2,\n      \"person_pose\": \"身体约四分之三侧向/面向镜头，双手在身前持枪\",\n      \"spear_direction\": \"枪身水平横于胸前至肩高\",\n      \"red_tassel_position\": \"画面左侧枪端\",\n      \"occlusion_blur\": \"轻度运动模糊；背景为木栏杆与绿色山坡；面部部分可见\"\n    },\n    {\n      \"time\": 2.7,\n      \"person_pose\": \"身体转向侧/背，双臂将枪举过头顶\",\n      \"spear_direction\": \"枪身由体前向头顶上方斜向抬起\",\n      \"red_tassel_position\": \"因模糊位置不确定，似在枪身远端拖曳\",\n      \"occlusion_blur\": \"中重度运动模糊；右侧可见木栏杆\"\n    },\n    {\n      \"time\": 3.3,\n      \"person_pose\": \"面向镜头，裙摆外摆（提示身体在转动），双臂前伸\",\n      \"spear_direction\": \"枪身水平向画面左侧伸出，约肩高\",\n      \"red_tassel_position\": \"画面最左端，拖出红色模糊轨迹\",\n      \"occlusion_blur\": \"红缨与枪尖区域严重模糊；躯干较清晰\"\n    },\n    {\n      \"time\": 3.8,\n      \"person_pose\": \"低姿势，似单膝跪/深蹲（是否触地不可确认），身体侧向\",\n      \"spear_direction\": \"枪身由右下向左上斜指\",\n      \"red_tassel_position\": \"枪身左上端\",\n      \"occlusion_blur\": \"全画面红/青色散（RGB分离）特效；低机位仰拍；中等模糊\"\n    }\n  ],\n  \"action_candidates\": [\n    {\n      \"name\": \"头顶上方绕枪（枪在头顶旋转）\",\n      \"evidence_window\": \"0.0–1.0秒\",\n      \"basis\": \"枪身在头顶呈连续模糊弧线，红缨在左右两侧交替出现\",\n      \"confidence_limits\": \"旋转方向、圈数、平面均不可确认；无法判断是否为完整绕环或仅摆荡\"\n    },\n    {\n      \"name\": \"身体转体（可能多于一周）\",\n      \"evidence_window\": \"0.0–4.0秒\",\n      \"basis\": \"人物朝向在背对（0.0、1.3秒）与面向镜头（2.2、3.3秒）之间多次变化，裙摆外摆\",\n      \"confidence_limits\": \"无法区分人物自转与镜头环绕运动；转体度数不可量化\"\n    },\n    {\n      \"name\": \"枪横于颈后/肩背的过渡姿态\",\n      \"evidence_window\": \"约1.0–1.5秒\",\n      \"basis\": \"1.3秒帧可见枪身水平贴于颈后肩背\",\n      \"confidence_limits\": \"无法确认这是命名动作还是旋转中的过渡瞬间\"\n    },\n    {\n      \"name\": \"身前水平扫枪/横抡\",\n      \"evidence_window\": \"约2.0–2.4秒与2.8–3.4秒\",\n      \"basis\": \"枪身水平于体前，红缨端拖出水平模糊轨迹\",\n      \"confidence_limits\": \"扫掠方向、起止点、是否发力不可确认；不排除是旋转中的瞬时姿态\"\n    },\n    {\n      \"name\": \"低姿势持枪斜指定势\",\n      \"evidence_window\": \"约3.6–4.0秒\",\n      \"basis\": \"末帧人物低姿、枪身斜向左上、红缨在高端\",\n      \"confidence_limits\": \"视频在4秒中断，定势是否完成、是否跪地均未知\"\n    }\n  ],\n  \"cut_candidates\": [\n    {\n      \"time\": \"约1.0–1.1秒\",\n      \"evidence\": \"此前天空灰白、无黑边；此后天空突变为高饱和蓝色，且画面顶部出现黑色横条\",\n      \"uncertainty\": \"也可能是曝光/调色跳变或特效边框，非确凿硬切\"\n    },\n    {\n      \"time\": \"约1.4–1.6秒\",\n      \"evidence\": \"出现红/青色散（RGB分离）与强烈放射状模糊；前后人物由前倾近景转为背对直立\",\n      \"uncertainty\": \"色散为常见转场特效，提示可能的剪切点，但无法排除连续拍摄加特效\"\n    },\n    {\n      \"time\": \"约3.5–3.65秒\",\n      \"evidence\": \"再次出现红/青色散；机位由中等高度突变为低机位仰拍低姿势\",\n      \"uncertainty\": \"视角与特效同时跳变，疑似硬切，但无确凿帧级证据\"\n    }\n  ],\n  \"unresolved\": [\n    \"握点：双手在枪身上的具体握位、是否存在滑把/换把，全程因运动模糊与手臂遮挡无法确认\",\n    \"枪尖路径：红缨端（枪尖端）的轨迹、绕环方向与所在平面无法从模糊拖尾中重建\",\n    \"动作边界：各候选动作的起止帧无法划定；视频于4秒处中断，末尾定势是否完成未知\",\n    \"人物自转与镜头环绕运动无法区分，背景视差仅提示机位可能在移动\",\n    \"0.7秒前后红缨在画面左右侧快速切换，无法判断源于枪的旋转、转体还是剪辑/镜像\",\n    \"枪尾端在部分帧可见浅色端头，其性质（枪鐏/装饰/另一缨）无法确认\",\n    \"黑色顶部横条与RGB色散的成因（剪辑转场、后期特效或拍摄因素）无法由画面单独证实\",\n    \"3.8秒低姿势中膝部是否触地被裙摆与角度遮挡，不可确认\"\n  ]\n}\n```"
+}
