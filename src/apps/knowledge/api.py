@@ -116,11 +116,6 @@ def _source_uri(uri: str) -> str:
 
 def research_enabled_for(owner: str) -> bool:
     provider = os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER")
-    if provider == "cninfo":
-        owners = {item.strip() for item in
-                  os.getenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "").split(",") if item.strip()}
-        if owner not in owners:
-            return False
     return (bool(owner) and provider in {"gdelt", "fed_rss", "cninfo"}
             and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip()))
 
