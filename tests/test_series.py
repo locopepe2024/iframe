@@ -4,6 +4,7 @@ Covers: Models, Pipeline CRUD, Episode association, asset resolution,
 PromptConfig three-level fallback, text splitting, and cross-series import.
 """
 
+import json
 import time
 import uuid
 import pytest
@@ -58,6 +59,94 @@ def _make_character(name="Hero", **kw) -> Character:
 def _make_scene(name="Forest", **kw) -> Scene:
     return Scene(id=kw.pop("id", str(uuid.uuid4())), name=name,
                  description=kw.pop("description", "A dark forest"), **kw)
+
+
+def test_series_character_design_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    design = {"identity": {"visual_notes": "Black hair"}, "confirmed": True}
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=character.id, asset_type="character", attributes={"character_design": design},
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["source"] == "series"
+    assert payload["characters"][0]["character_design"]["design_revisions"][0]["revision"] == 1
+
+
+def test_series_character_description_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_description(episode.id, api.UpdateAssetDescriptionRequest(
+        asset_id=character.id, asset_type="character", description="Updated profile",
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["description"] == "Updated profile"
+
+
+def test_series_character_rename_save_returns_merged_project(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=character.id, asset_type="character", attributes={"name": "清溪镇百姓"},
+    ))
+    payload = json.loads(response.body)
+
+    assert payload["characters"][0]["id"] == character.id
+    assert payload["characters"][0]["name"] == "清溪镇百姓"
+    assert payload["characters"][0]["source"] == "series"
+
+
+@pytest.mark.parametrize("asset_type,collection,make_asset", [
+    ("scene", "scenes", _make_scene),
+    ("prop", "props", lambda: Prop(id="prop-1", name="剑", description="长剑")),
+])
+def test_series_material_rename_returns_merged_project(pipeline, monkeypatch,
+                                                        asset_type, collection, make_asset):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ImageVariant
+
+    series = pipeline.create_series("S")
+    asset = make_asset()
+    asset.image_asset.variants.append(ImageVariant(id="variant-1", url="/asset.png"))
+    asset.image_asset.selected_id = "variant-1"
+    getattr(series, collection).append(asset)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    response = api.update_asset_variant_metadata(episode.id, api.UpdateVariantMetadataRequest(
+        asset_id=asset.id, asset_type=asset_type, variant_id="variant-1", display_name="黄昏参考图",
+    ))
+    payload = json.loads(response.body)
+
+    assert payload[collection][0]["id"] == asset.id
+    assert payload[collection][0]["source"] == "series"
+    assert payload[collection][0]["image_asset"]["variants"][0]["display_name"] == "黄昏参考图"
 
 
 def test_series_source_context_is_exposed_to_episode_analysis(pipeline):

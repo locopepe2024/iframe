@@ -1,4 +1,6 @@
+import json
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -12,6 +14,33 @@ from src.apps.identity import UserContext, require_user_context
 def ctx(tmp_path, monkeypatch):
     monkeypatch.setenv('LUMENX_AGENT_DB', str(tmp_path / 'agent.sqlite3'))
     return UserContext('user', 'profile', 'name', 'token')
+
+
+def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda _ctx, _model, messages: (
+        calls.append(messages) or '{"prompt":"黄昏粮铺门前，青石板反射暖光"}'
+    ))
+    body = agent.AssetImagePromptRequest(
+        model='qwen', asset_type='scene', asset_name='粮铺门前', description='青石板街道',
+        current_prompt='粮铺', plan_context=['第一集黄昏，粮铺门前'],
+    )
+
+    assert agent.refine_asset_image_prompt(body, ctx) == {'prompt': '黄昏粮铺门前，青石板反射暖光'}
+    assert '第一集黄昏，粮铺门前' in calls[0][1]['content']
+
+
+def test_asset_image_prompt_refine_rejects_empty_suggestion(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"prompt":"  "}')
+    body = agent.AssetImagePromptRequest(
+        model='qwen', asset_type='prop', asset_name='双手剑', description='长柄双手剑',
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        agent.refine_asset_image_prompt(body, ctx)
+    assert exc.value.status_code == 502
 
 
 def test_catalog_is_self_contained_and_attributed():
@@ -41,8 +70,9 @@ def test_character_identity_skill_designs_fields_before_prompt_compilation():
     assert '`identity`' in package['instructions']
     assert '`look`' in package['instructions']
     assert '`unresolved`' in package['instructions']
-    assert '只有用户确认后，设计才保存为项目角色资产的 design revision' in package['instructions']
+    assert '保存为项目角色资产的 design revision' in package['instructions']
     assert '不要把创意选择写成剧本事实' in package['instructions']
+    assert '领型、袖型、腰线、面料、鞋履、发式和固定配饰' in package['instructions']
 
 
 def test_character_style_routes_keep_confirmation_and_anchor_rules():
@@ -50,9 +80,10 @@ def test_character_style_routes_keep_confirmation_and_anchor_rules():
     assert package['version'] == '1.1.1'
     assert 'stated' in package['instructions']
     assert 'inferred' in package['instructions']
-    assert '用户选定的正面身份图' in package['instructions']
+    assert '正面全身的身份锚点' in package['instructions']
     assert 'design_revision' in package['instructions']
     assert '不能覆盖历史图片' in package['instructions']
+    assert '不是用户必须逐项填写的空白' in package['instructions']
 
 
 def test_character_design_draft_uses_curated_skills_without_saving(ctx, monkeypatch):
@@ -67,43 +98,6 @@ def test_character_design_draft_uses_curated_skills_without_saving(ctx, monkeypa
     assert 'Character identity design skill' in system
     assert 'Character style routes' in system
     assert result['look']['visual_notes'] == '黑色劲装'
-
-
-def test_character_design_draft_projects_user_answers_and_current_draft(ctx, monkeypatch):
-    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    complete = Mock(return_value='{"identity":{"visual_notes":"青年初期，眉眼清冽"},"look":{"visual_notes":"宋代灰青短袍"},"unresolved":[]}')
-    monkeypatch.setattr(agent, 'complete', complete)
-    body = agent.CharacterDesignRequest(
-        model='qwen', character_name='苏砚', profile='少年剑客，沉静', route='historical-costume',
-        current_draft='旧视觉草稿',
-        user_visual_requirements={'identity': '少年至青年初期，身姿挺拔', 'look': '宋代服装'},
-        user_answers={'鞋履未确定': '黑褐色布靴'},
-    )
-    agent.character_design_draft(body, ctx)
-    payload = complete.call_args.args[2][1]['content']
-    assert '旧视觉草稿' in payload
-    assert '少年至青年初期' in payload
-    assert '黑褐色布靴' in payload
-
-
-def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
-    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    monkeypatch.setattr(agent, 'complete', lambda *_: '''```json
-{"identity":{"hair":{"value":"黑发束起","basis":"剧本事实"},"face_shape":{"value":"清瘦脸型","basis":"创意设计选择"}},"look":{"costume":{"value":"素黑劲装","basis":"剧本事实"}},"unresolved":["肤色未指定"]}
-```''')
-    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
-    result = agent.character_design_draft(body, ctx)
-    assert result['identity']['visual_notes'] == '黑发束起；清瘦脸型'
-    assert result['look']['visual_notes'] == '素黑劲装'
-    assert result['unresolved'] == ['肤色未指定']
-
-
-def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch):
-    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"visual_notes":{"value":"黑发束起","basis":"创意设计选择"}},"look":{"visual_notes":""},"unresolved":[]}')
-    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
-    result = agent.character_design_draft(body, ctx)
-    assert result['identity']['visual_notes'] == '黑发束起'
 
 
 def test_character_design_draft_rejects_incomplete_model_result(ctx, monkeypatch):
@@ -127,6 +121,188 @@ def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, mon
     assert '青石板长街' in result['visual_notes']
     assert result['unresolved'] == []
     assert '南北要道' in complete.call_args.args[2][1]['content']
+
+
+def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '''```json
+{"identity":{"hair":{"value":"黑发束起","basis":"剧本事实"},"face_shape":{"value":"清瘦脸型","basis":"创意设计选择"}},"look":{"costume":{"value":"素黑劲装","basis":"剧本事实"}},"review_items":[]}
+```''')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '黑发束起；清瘦脸型'
+    assert result['look']['visual_notes'] == '素黑劲装'
+
+
+def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"visual_notes":{"value":"黑发束起","basis":"创意设计选择"}},"look":{"visual_notes":""},"review_items":[]}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '黑发束起'
+
+
+def test_character_design_draft_returns_actionable_review_suggestions(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"少年感面容，短黑发","basis":["creative_choice"]},"look":{"visual_notes":"窄袖黑色劲装，哑光布面，布靴","basis":["creative_choice"]},"review_items":[{"question":"剧本要求写实，但用户指定动漫风格，两者冲突","suggestion":"写实真人，低饱和国风摄影质感","suggested_route":"realistic-modern"}]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客，素黑劲装', route='historical-costume')
+
+    result = agent.character_design_draft(body, ctx)
+
+    question = '剧本要求写实，但用户指定动漫风格，两者冲突'
+    assert result['unresolved'] == [question]
+    assert result['field_suggestions'] == {question: '写实真人，低饱和国风摄影质感'}
+    assert result['field_suggestion_choices'] == {question: {'route': 'realistic-modern'}}
+    system = complete.call_args.args[2][0]['content']
+    assert '不是列出待办清单' in system
+    assert '不要把常规的造型细节放入 review_items' in system
+    assert '可直接加入图片 Prompt 的视觉值' in system
+    assert 'suggested_age_stage 或 suggested_route' in system
+
+
+def test_character_design_draft_repairs_missing_detail_checklist(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    old_questions = [
+        '“少年”外观与 young-adult 年龄阶段的具体年龄表现需确认',
+        '写实真人、国风动漫或其他画面风格尚未指定',
+        '脸型、五官比例、眼睛与眉形、鼻唇特征、肤色肤质、基础发型和发色缺少依据',
+        '身高感、肩宽、体型比例及可稳定识别的外貌锚点缺少依据',
+        '素黑劲装的时代背景、领型、袖型、腰线、层次、面料、鞋履和固定配饰需确认',
+    ]
+    first = json.dumps({
+        'identity': {'visual_notes': '少年剑客'},
+        'look': {'visual_notes': '素黑劲装'},
+        'unresolved': old_questions,
+    }, ensure_ascii=False)
+    repaired = json.dumps({
+        'identity': {'visual_notes': '十七八岁少年感，清瘦脸型，黑发高束，身形修长', 'basis': ['creative_choice']},
+        'look': {'visual_notes': '架空武侠黑色交领短襟，窄袖束腰，哑光棉麻，黑布靴', 'basis': ['creative_choice']},
+        'review_items': [],
+    }, ensure_ascii=False)
+    complete = Mock(side_effect=[first, repaired])
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客，素黑劲装', route='historical-costume')
+
+    result = agent.character_design_draft(body, ctx)
+
+    assert complete.call_count == 2
+    assert result['unresolved'] == []
+    assert '清瘦脸型' in result['identity']['visual_notes']
+    assert '窄袖束腰' in result['look']['visual_notes']
+    assert '请根据已有输入给出一套具体' in complete.call_args.args[2][-1]['content']
+
+
+def test_character_design_draft_rejects_repeated_empty_review(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    answer = '{"identity":{"visual_notes":"少年剑客"},"look":{"visual_notes":"素黑劲装"},"review_items":[{"question":"服装细节尚未指定","suggestion":"窄袖黑衣"}]}'
+    complete = Mock(return_value=answer)
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+
+    with pytest.raises(HTTPException) as exc:
+        agent.character_design_draft(body, ctx)
+
+    assert exc.value.status_code == 502
+    assert complete.call_count == 2
+
+
+def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"少年感面容"},"look":{"visual_notes":"黑色窄袖劲装"},"review_items":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='剧本写少年剑客',
+        current_draft='上一轮 AI 草稿：深棕眼', user_answers={'年龄表现': '十七八岁少年感'},
+        route='historical-costume',
+    )
+
+    agent.character_design_draft(body, ctx)
+
+    user_data = complete.call_args.args[2][1]['content']
+    assert '"profile": "剧本写少年剑客"' in user_data
+    assert '"current_draft": "上一轮 AI 草稿：深棕眼"' in user_data
+    assert '"user_answers": {"年龄表现": "十七八岁少年感"}' in user_data
+    assert 'current_draft 是上一轮可编辑草稿' in complete.call_args.args[2][0]['content']
+
+
+def test_character_design_draft_receives_user_visual_requirements_separately(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"日晒肤色，挺拔身形"},"look":{"visual_notes":"宋风窄袖短袍，软底布靴"},"review_items":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume',
+        current_draft='上一轮提案：白色长袍',
+        user_visual_requirements={
+            'identity': '日晒肤色，宽肩长腿',
+            'look': '宋代服装，长柄双手剑',
+        },
+    )
+
+    agent.character_design_draft(body, ctx)
+
+    user_data = complete.call_args.args[2][1]['content']
+    assert '"user_visual_requirements": {"identity": "日晒肤色，宽肩长腿", "look": "宋代服装，长柄双手剑"}' in user_data
+    assert '"current_draft": "上一轮提案：白色长袍"' in user_data
+    assert 'user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束' in complete.call_args.args[2][0]['content']
+
+
+def test_character_design_draft_sends_owner_resolved_images_as_visual_evidence(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"identity":{"visual_notes":"按参考图保留深棕眼和短发"},"look":{"visual_notes":"黑色劲装"},"unresolved":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+
+    from src.apps.comic_gen import api as studio_api
+    from src.models import uniart
+
+    calls = {}
+    class Pipeline:
+        def get_script(self, project_id, owner_profile_id):
+            calls['scope'] = (project_id, owner_profile_id)
+            return SimpleNamespace(id=project_id)
+
+        def _resolve_asset_library_reference(self, script, reference):
+            calls['reference'] = reference
+            return 'output/users/profile/reference.png', reference
+
+        def _find_asset_with_source(self, script, asset_id, asset_type):
+            return SimpleNamespace(name='苏砚参考图'), 'episode'
+
+    monkeypatch.setattr(studio_api, 'pipeline', Pipeline())
+    monkeypatch.setattr(uniart, '_image_reference_url', lambda path: f'https://media.example/{path.rsplit("/", 1)[-1]}')
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume',
+        project_id='project-1', reference_assets=[{
+            'asset_type': 'character', 'asset_id': 'reference-character', 'variant_id': 'variant-1',
+        }],
+    )
+
+    result = agent.character_design_draft(body, ctx)
+
+    assert result['identity']['visual_notes'] == '按参考图保留深棕眼和短发'
+    assert calls['scope'] == ('project-1', ctx.owner_profile_id)
+    assert calls['reference'] == {'asset_type': 'character', 'asset_id': 'reference-character', 'variant_id': 'variant-1'}
+    user_content = complete.call_args.args[2][1]['content']
+    assert isinstance(user_content, list)
+    assert '苏砚参考图' in user_content[1]['text']
+    assert user_content[2] == {'type': 'image_url', 'image_url': {'url': 'https://media.example/reference.png'}}
+    assert 'https://media.example/reference.png' not in user_content[0]['text']
+
+
+def test_character_design_reference_requires_current_project(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume',
+        reference_assets=[{'asset_type': 'character', 'asset_id': 'reference-character', 'variant_id': 'variant-1'}],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        agent.character_design_draft(body, ctx)
+
+    assert exc.value.status_code == 422
+    complete.assert_not_called()
 
 
 def test_install_update_toggle_uninstall_owner_isolation(ctx, monkeypatch):

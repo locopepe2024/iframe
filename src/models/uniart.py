@@ -61,10 +61,6 @@ def _image_reference_url(value: str) -> str:
         return value
     if value.startswith(("data:", "blob:")):
         raise ValueError("UniArt media references require HTTP(S) material URLs")
-    if os.getenv("UNIART_MEDIA_BASE_URL"):
-        from ..apps.studio_access import signed_provider_media_url
-        path = value if os.path.isfile(value) else os.path.join("output", value)
-        return signed_provider_media_url(path)
     from ..utils.oss_utils import OSSImageUploader, is_object_key
     uploader = OSSImageUploader()
     if not uploader.is_configured:
@@ -190,7 +186,7 @@ def _poll(config: Dict[str, Any], task_id: str, max_wait: int | None = None, end
         except (requests.Timeout, requests.ConnectionError):
             time.sleep(10)
             continue
-        if resp.status_code in {408, 429} or resp.status_code >= 500:
+        if resp.status_code in {408, 429} or (endpoint != "videos" and resp.status_code >= 500):
             time.sleep(10)
             continue
         if resp.status_code >= 400:

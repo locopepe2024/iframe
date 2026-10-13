@@ -1,0 +1,15 @@
+{
+  "source_uri": "https://data.sec.gov/submissions/CIK0000320193.json",
+  "title": "Apple Inc. 2025 Form 10-K filing metadata",
+  "source_type": "web",
+  "rights_status": "unknown",
+  "units": [
+    {
+      "kind": "text",
+      "locator": "filings.recent[aligned-index:80]{accessionNumber,form,reportDate,filingDate,primaryDocument}",
+      "body": "Apple Inc. CIK 0000320193 filed Form 10-K on 2025-10-31 for report period 2025-09-27; accession 0000320193-25-000079; primary document aapl-20250927.htm.",
+      "labels": ["sec", "filing"],
+      "annotation": "Derived from SEC submissions JSON; observed SHA-256 2821703cf04e1138923243a87cc5148673feb9d3792a5b6a7747d1e1a093bf7f on 2026-10-11. Metadata only, not annual-report contents."
+    }
+  ]
+}

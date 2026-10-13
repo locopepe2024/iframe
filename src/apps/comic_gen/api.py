@@ -127,6 +127,7 @@ from ..identity import (
 from ..studio_access import (
     current_studio_user,
     require_studio_user,
+    resolve_studio_reference,
     reset_studio_user,
     sign_studio_media_paths,
     set_studio_user,
@@ -3612,17 +3613,17 @@ def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 
 
 
-@app.post("/projects/{script_id}/assets/update_attributes", response_model=Script)
+@app.post("/projects/{script_id}/assets/update_attributes")
 def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
     try:
-        updated_script = pipeline.update_asset_attributes(
+        pipeline.update_asset_attributes(
             script_id,
             request.asset_id,
             request.asset_type,
             request.attributes
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except InvalidAssetName as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
@@ -3638,17 +3639,17 @@ class UpdateAssetDescriptionRequest(BaseModel):
     description: str
 
 
-@app.post("/projects/{script_id}/assets/update_description", response_model=Script)
+@app.post("/projects/{script_id}/assets/update_description")
 def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequest):
     """Updates an asset's description."""
     try:
-        updated_script = pipeline.update_asset_description(
+        pipeline.update_asset_description(
             script_id,
             request.asset_id,
             request.asset_type,
             request.description
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -3760,11 +3761,11 @@ class UpdateVariantMetadataRequest(BaseModel):
     reference_distance: Optional[str] = None
     display_name: Optional[str] = None
 
-@app.post("/projects/{script_id}/assets/variant/metadata", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/metadata")
 def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadataRequest):
     """Updates the angle/distance labels for one child reference image."""
     try:
-        updated_script = pipeline.update_asset_variant_metadata(
+        pipeline.update_asset_variant_metadata(
             script_id,
             request.asset_id,
             request.asset_type,
@@ -3773,7 +3774,7 @@ def update_asset_variant_metadata(script_id: str, request: UpdateVariantMetadata
             request.reference_distance,
             request.display_name,
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -6194,6 +6195,31 @@ def _effective_optimization_skills(request) -> Optional[List[str]]:
     return None
 
 
+def _polish_image_urls(image_urls: List[str]) -> List[str]:
+    """Turn signed Studio media URLs into owner-verified local image paths."""
+    from .llm import PolishError
+
+    resolved = []
+    for value in image_urls:
+        if urlparse(value).path.startswith("/studio/media/"):
+            user = current_studio_user()
+            if user is None:
+                raise PolishError(
+                    reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。",
+                    message_en="Reference image could not be read; reselect it before polishing.",
+                )
+            try:
+                resolved.append(resolve_studio_reference(value, user.owner_profile_id))
+            except ValueError as exc:
+                raise PolishError(
+                    reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。",
+                    message_en="Reference image could not be read; reselect it before polishing.",
+                ) from exc
+        else:
+            resolved.append(value)
+    return resolved
+
+
 @app.post("/video/polish_prompt")
 def polish_video_prompt(request: PolishVideoPromptRequest):
     """Polishes a video generation prompt using LLM. Returns bilingual prompts.
@@ -6234,7 +6260,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             request.feedback,
             custom_prompt,
             request.prev_cn,
-            image_urls=request.image_urls or None,
+            image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
@@ -6303,7 +6329,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             request.feedback,
             custom_prompt,
             request.prev_cn,
-            image_urls=request.image_urls or None,
+            image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)

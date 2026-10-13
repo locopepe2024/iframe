@@ -8,17 +8,25 @@ const mocks = vi.hoisted(() => ({
     syncEpisodeAssetsFromShootingPlan: vi.fn(), deleteSeriesAsset: vi.fn(),
     bindEpisodePlanScene: vi.fn(),
     getAssetReferenceIndex: vi.fn(),
+    authenticatedFetch: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
+    updateAssetAttributes: vi.fn(),
+    updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
     error: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
-vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: vi.fn(), api: mocks, crudApi: mocks }));
+vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error } }));
-vi.mock("./CharacterWorkbench", () => ({ default: () => null }));
-vi.mock("../common/VariantSelector", () => ({ VariantSelector: () => null }));
+vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename }: any) =>
+    <div role="dialog" aria-label="角色工作台">{asset.name}
+        <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
+    </div> }));
+vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRename }: any) =>
+    <button type="button" onClick={() => void onRename(asset.variants[0].id, "黄昏参考图")}>命名素材</button> }));
 vi.mock("../common/VideoVariantSelector", () => ({ VideoVariantSelector: () => null }));
 vi.mock("../modals/UploadAssetModal", () => ({ default: () => null }));
-vi.mock("./playground/ReferencePromptEditor", () => ({ default: () => null }));
+vi.mock("./playground/ReferencePromptEditor", () => ({ default: ({ value, onChange }: any) =>
+    <textarea aria-label="图像提示词" value={value} onChange={event => onChange(event.target.value)} /> }));
 
 function state(assetType: string, assetId: string, bound = true) {
     return {
@@ -38,8 +46,80 @@ function state(assetType: string, assetId: string, bound = true) {
 beforeEach(() => {
     vi.resetAllMocks();
     mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    mocks.authenticatedFetch.mockResolvedValue({ ok: false });
+    mocks.agentRequest.mockImplementation((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it.each([
+    ["scene", "scenes", "粮铺门前"],
+    ["prop", "props", "双手剑"],
+] as const)("optimizes and names %s materials without leaving the workbench", async (type, key, name) => {
+    const asset = { id: `${type}-1`, name, description: `${name}的视觉档案`, source: "series",
+        image_asset: { selected_id: "variant-1", variants: [{ id: "variant-1", url: "/asset.png" }] } };
+    const project = { id: "episode-1", characters: [], scenes: [], props: [], [key]: [asset] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetVariantMetadata.mockResolvedValue({ ...project, [key]: [{ ...asset,
+        image_asset: { ...asset.image_asset, variants: [{ ...asset.image_asset.variants[0], display_name: "黄昏参考图" }] },
+    }] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(type === "scene" ? "Scenes" : "Props") }));
+    fireEvent.click(screen.getByText(name));
+    await screen.findByRole("button", { name: "优化提示词" });
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await screen.findByRole("button", { name: "采用建议" });
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(asset.description);
+    fireEvent.click(screen.getByRole("button", { name: "采用建议" }));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
+    expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
+        expect.objectContaining({ asset_type: type, asset_name: name, current_prompt: asset.description }));
+
+    fireEvent.click(screen.getByRole("button", { name: "命名素材" }));
+    await waitFor(() => expect(mocks.updateAssetVariantMetadata).toHaveBeenCalledWith(
+        "episode-1", asset.id, type, "variant-1", undefined, undefined, "黄昏参考图"));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
+    expect(useProjectStore.getState().currentProject?.[key][0].image_asset?.variants[0].display_name).toBe("黄昏参考图");
+});
+
+it("keeps a series character workbench open after renaming", async () => {
+    const character = { id: "hero", name: "旧名字", source: "series" };
+    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue({ ...project,
+        characters: [{ ...character, name: "新名字" }] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByText("旧名字"));
+    fireEvent.click(screen.getByRole("button", { name: "保存资产名" }));
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("新名字"));
+    expect(useProjectStore.getState().currentProject?.characters).toHaveLength(1);
+    expect(mocks.getProject).not.toHaveBeenCalled();
+});
+
+it("reloads a partial rename response before replacing the visible asset list", async () => {
+    const character = { id: "hero", name: "旧名字", source: "series" };
+    const other = { id: "support", name: "配角", source: "series" };
+    const project = { id: "episode-1", characters: [character, other], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue({ ...project, characters: [{ ...character, name: "新名字" }] });
+    mocks.getProject.mockResolvedValue({ ...project, characters: [{ ...character, name: "新名字" }, other] });
+    render(<ConsistencyVault />);
+
+    fireEvent.click(screen.getByText("旧名字"));
+    fireEvent.click(screen.getByRole("button", { name: "保存资产名" }));
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("新名字"));
+    expect(mocks.getProject).toHaveBeenCalledWith("episode-1");
+    expect(useProjectStore.getState().currentProject?.characters).toHaveLength(2);
+    expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
 });
 
 it.each([
@@ -128,11 +208,34 @@ it("offers an existing scene asset for a plan scene with no asset ID", async () 
 
     render(<ConsistencyVault />);
     const picker = await screen.findByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" });
+    expect(screen.getByText("计划场景 · 粮铺门前")).toBeInTheDocument();
+    expect(screen.getByText("关联场景资产 · 待关联")).toBeInTheDocument();
     fireEvent.change(picker, { target: { value: "street" } });
 
     await waitFor(() => expect(mocks.bindEpisodePlanScene).toHaveBeenCalledWith(
         "episode-1", "plan-street", null, "street", 2));
     await waitFor(() => expect(screen.queryByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" })).not.toBeInTheDocument());
+    expect(screen.getByText("关联场景资产 · 长街 · 本集资产")).toBeInTheDocument();
+});
+
+it("shows a director person and its resolved character asset as separate identities", async () => {
+    const character = { id: "hero", name: "清溪镇百姓", source: "series" };
+    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({
+        context: { shooting_plan_revision: 1, scenes: [], shots: [], props: [], characters: [{
+            person_id: "person-1", person_label: "镇上居民", character_asset_ids: ["hero"],
+            scene_ids: ["scene-1"], shot_ids: ["shot-1"],
+        }] },
+        bindings: [{ asset_type: "character", asset_id: "hero", status: "suggested",
+            scene_ids: ["scene-1"], shot_ids: ["shot-1"] }],
+    });
+
+    render(<ConsistencyVault />);
+    await screen.findByText("计划人物 · 镇上居民");
+    expect(screen.getByText("关联角色资产 · 清溪镇百姓 · 系列共享")).toBeInTheDocument();
+    expect(screen.getByText(/按人物身份关联/)).toBeInTheDocument();
+    expect(screen.queryByText("使用导演映射")).not.toBeInTheDocument();
 });
 
 it("explains that re-extracted scene and prop IDs need explicit plan bindings", async () => {
@@ -187,7 +290,7 @@ it("preserves the plan display when deletion is rejected", async () => {
     await screen.findByRole("region", { name: "拍摄计划资产需求" });
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(window.alert).toHaveBeenCalled());
-    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("候选引用");
+    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("计划人物 · Hero");
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.syncEpisodeAssetsFromShootingPlan).not.toHaveBeenCalled();
 });

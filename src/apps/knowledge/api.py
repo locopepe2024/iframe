@@ -114,6 +114,22 @@ def _source_uri(uri: str) -> str:
     return value
 
 
+def research_enabled_for(owner: str) -> bool:
+    provider = os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER")
+    if provider == "cninfo":
+        owners = {item.strip() for item in
+                  os.getenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "").split(",") if item.strip()}
+        if owner not in owners:
+            return False
+    return (bool(owner) and provider in {"gdelt", "fed_rss", "cninfo"}
+            and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip()))
+
+
+def require_research_enabled(owner: str) -> None:
+    if not research_enabled_for(owner):
+        raise HTTPException(403, "联网研究尚未对当前用户开放")
+
+
 @router.get("/collections")
 def list_collections(ctx: UserContext = Depends(require_user_context)):
     try:
@@ -208,21 +224,25 @@ def search(body: SearchRequest, ctx: UserContext = Depends(require_user_context)
 
 def start_research(owner: str, session_id: str, query: str,
                    collection_id: str | None = None, intent: dict | None = None):
+    require_research_enabled(owner)
     if len(query.strip()) < 2:
         raise HTTPException(422, "Research query is too short")
     try:
         with store.transaction() as connection:
             target = collection_id or store.ensure_research_collection(connection, owner)
             run_id = store.create_research_run(connection, owner, session_id, query.strip(), target, intent)
-            allowed = (store.reserve_discovery(connection, owner)
-                       if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "gdelt" else True)
+            allowed = store.reserve_discovery(
+                connection, owner, os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER"))
         if not allowed:
             candidates = []
             error_code = "rate_budget"
         else:
             try:
                 planned = intent or {}
-                candidates = discovery.discover(planned.get("search_query") or query.strip(),
+                discovery_query = (f"{planned.get('subject', '')} {query}" if
+                                   os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+                                   else planned.get("search_query") or query.strip())
+                candidates = discovery.discover(discovery_query,
                                                 planned.get("start_date"), planned.get("end_date"))
                 error_code = None if candidates else "no_results"
             except discovery.DiscoveryUnavailable as exc:
@@ -245,8 +265,7 @@ def create_research(body: ResearchCreate, ctx: UserContext = Depends(require_use
 
 @router.get("/research-capability")
 def research_capability(ctx: UserContext = Depends(require_user_context)):
-    return {"enabled": os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "gdelt"
-            and bool(os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").strip())}
+    return {"enabled": research_enabled_for(ctx.owner_profile_id)}
 
 
 @router.get("/research/{run_id}")
@@ -263,6 +282,7 @@ def read_research(run_id: UUID, ctx: UserContext = Depends(require_user_context)
 @router.post("/research/{run_id}/sources")
 def select_research(run_id: UUID, body: ResearchSelection,
                     ctx: UserContext = Depends(require_user_context)):
+    require_research_enabled(ctx.owner_profile_id)
     try:
         with store.transaction() as connection:
             return store.select_research_sources(connection, ctx.owner_profile_id,

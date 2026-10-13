@@ -6,16 +6,17 @@ import sqlite3
 import time
 import uuid
 import logging
+import unicodedata
 from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit, unquote
+from typing import Literal
 import mimetypes
 import base64
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from typing import Literal
 
 from .identity import UserContext, require_user_context
 from .user_config import get_user_config_store
@@ -147,17 +148,30 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         raise HTTPException(502, "研究需求解析失败，请明确公司、时间范围后重试") from None
 
 
+class CharacterDesignReference(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str = Field(min_length=1, max_length=200)
+    variant_id: str = Field(min_length=1, max_length=200)
+
+
+class CharacterDesignVisualRequirements(BaseModel):
+    identity: str = Field(default="", max_length=4000)
+    look: str = Field(default="", max_length=4000)
+
+
 class CharacterDesignRequest(BaseModel):
     model: str
     character_name: str = Field(min_length=1, max_length=200)
     profile: str = Field(min_length=1, max_length=12000)
+    current_draft: str = Field(default="", max_length=8000)
+    user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
+    user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
     route: str
     age_stage: str = ""
     style: str = Field(default="", max_length=4000)
     confirmed_design: str = Field(default="", max_length=4000)
-    current_draft: str = Field(default="", max_length=4000)
-    user_visual_requirements: dict[str, str] = Field(default_factory=dict)
-    user_answers: dict[str, str] = Field(default_factory=dict)
+    project_id: str | None = Field(default=None, max_length=100)
+    reference_assets: list[CharacterDesignReference] = Field(default_factory=list, max_length=9)
 
 
 class AssetDesignRequest(BaseModel):
@@ -170,9 +184,45 @@ class AssetDesignRequest(BaseModel):
     confirmed_design: str = Field(default="", max_length=5000)
 
 
-def _parse_character_design_draft(answer: str) -> dict:
+class AssetImagePromptRequest(BaseModel):
+    model: str
+    asset_type: Literal["scene", "prop"]
+    asset_name: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=12000)
+    current_prompt: str = Field(default="", max_length=12000)
+    style: str = Field(default="", max_length=4000)
+    plan_context: list[str] = Field(default_factory=list, max_length=8)
+
+
+@router.post("/asset-image-prompt/refine")
+def refine_asset_image_prompt(body: AssetImagePromptRequest, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    system = (
+        "你是影视资产设计师。根据资产档案和现有提示词，输出一条具体、可直接用于生成单张"
+        "场景或道具参考图的中文提示词。保持资产身份和用户已给出的事实，不虚构剧情事实。"
+        "拍摄计划信息只能作为本次画面的上下文；若多条计划互相矛盾，不把它们拼成同一画面。"
+        "明确主体、形制、材质、空间或细节、构图及光影；未知细节可合理设计，但不得当作原作事实。"
+        "只返回 JSON 对象，字段为 prompt，值为非空字符串。"
+    )
+    answer = complete(ctx, body.model, [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)},
+    ])
     decoder = json.JSONDecoder()
-    result = None
+    for offset, char in enumerate(answer):
+        if char != "{":
+            continue
+        try:
+            result, _ = decoder.raw_decode(answer[offset:])
+        except ValueError:
+            continue
+        if isinstance(result, dict) and isinstance(result.get("prompt"), str) and result["prompt"].strip():
+            return {"prompt": result["prompt"].strip()}
+    raise HTTPException(502, "模型未返回可用的资产图片提示词，请重试")
+
+
+def _parse_character_design_object(answer: str) -> dict:
+    decoder = json.JSONDecoder()
     for offset, char in enumerate(answer):
         if char != "{":
             continue
@@ -181,37 +231,44 @@ def _parse_character_design_draft(answer: str) -> dict:
         except ValueError:
             continue
         if isinstance(candidate, dict) and "identity" in candidate and "look" in candidate:
-            result = candidate
-            break
-    if result is None:
-        raise ValueError("missing_design_object")
+            return candidate
+    raise ValueError("Missing character design object")
 
-    def visual_notes(section: object) -> str:
-        if not isinstance(section, dict):
-            raise ValueError("invalid_design_section")
-        direct = section.get("visual_notes")
-        if isinstance(direct, str) and direct.strip():
-            return direct.strip()
-        if isinstance(direct, dict) and isinstance(direct.get("value"), str) and direct["value"].strip():
-            return direct["value"].strip()
-        details = []
-        for key, value in section.items():
-            if key in {"visual_notes", "basis", "source", "status", "field_status", "route", "age_stage"}:
-                continue
-            if isinstance(value, dict):
-                value = next((value[name] for name in ("value", "text", "visual_notes") if isinstance(value.get(name), str)), None)
-            if isinstance(value, str) and value.strip():
-                details.append(value.strip())
-        return "；".join(details)
 
-    identity_notes = visual_notes(result["identity"])
-    look_notes = visual_notes(result["look"])
-    unresolved = result.get("unresolved") or []
-    if not identity_notes:
-        raise ValueError("missing_identity_visual_notes")
-    if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
-        raise ValueError("invalid_unresolved")
-    return {"identity": {"visual_notes": identity_notes}, "look": {"visual_notes": look_notes}, "unresolved": unresolved}
+def _character_design_visual_notes(section: dict) -> str:
+    direct = section.get("visual_notes")
+    if isinstance(direct, dict):
+        direct = direct.get("value")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    details = []
+    for key, value in section.items():
+        if key in {"visual_notes", "basis", "source", "status", "field_status", "route", "age_stage"}:
+            continue
+        if isinstance(value, dict):
+            value = next((value[name] for name in ("value", "text", "visual_notes") if isinstance(value.get(name), str)), None)
+        if isinstance(value, str) and value.strip():
+            details.append(value.strip())
+    return "；".join(details)
+
+
+def _character_design_review_needs_revision(result: dict) -> bool:
+    legacy = result.get("unresolved") or []
+    if legacy:
+        return True
+    reviews = result.get("review_items") or []
+    if not isinstance(reviews, list):
+        return False  # The normal parser reports malformed output.
+    return any(
+        isinstance(item, str)
+        or isinstance(item, dict) and (
+            not isinstance(item.get("question"), str)
+            or not re.search(r"冲突|矛盾|不一致|但|conflict|contradict|inconsistent", item["question"], re.IGNORECASE)
+            or not isinstance(item.get("suggestion"), str)
+            or not item["suggestion"].strip()
+        )
+        for item in reviews
+    )
 
 
 @router.post("/character-design/draft")
@@ -220,9 +277,8 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
     if body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
-    if set(body.user_visual_requirements) - {"identity", "look"} or any(
-        len(value) > 2000 for value in body.user_visual_requirements.values()
-    ) or len(body.user_answers) > 12 or any(
+    allowed_age_stages = {"child", "teen", "young-adult", "adult", "older-adult"}
+    if len(body.user_answers) > 12 or any(
         len(question) > 300 or len(answer) > 1000
         for question, answer in body.user_answers.items()
     ):
@@ -231,23 +287,158 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     identity_skill = packages["character-identity-design"]
     route_skill = packages["character-style-routes"]
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
-              + "\n\n最终输出契约优先于上文技能的逐字段输出描述。只返回一个 JSON 对象，严格使用以下结构："
-              + '{"identity":{"visual_notes":"具体、可观察的长期身份视觉特征"},'
-              + '"look":{"visual_notes":"具体、可观察的本集服饰妆造；无依据可为空字符串"},'
-              + '"unresolved":["仍需确认的设计项"]}。不要输出 Markdown、basis 字段或解释。'
-              + "每段具体视觉值要可观察。不得把角色性格、镜头动作或通用质量词写入视觉值。"
-              + "所有模型补充的具体外貌只能标为创意设计选择，不能称为剧本事实。")
-    system += ("\n用户视觉要求和已回答项优先；当前草稿仅供修订，已确认设计用于保持身份连续。"
-               "不得把未确认草稿或模型提议写成剧本事实。")
-    user = json.dumps(body.model_dump(exclude={"model"}, exclude_defaults=True), ensure_ascii=False)
-    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+              + "\n\n用户主动点击了生成角色设计草稿；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
+              + "只返回 JSON 对象：identity.visual_notes、identity.basis、look.visual_notes、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
+              + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
+              + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
+              + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
+              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是上一轮可编辑草稿，优先级低于用户视觉约束；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
+              + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
+              + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
+              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
+              + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
+              + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
+    user_data = body.model_dump(exclude={"model", "project_id", "reference_assets"})
+    user_data["reference_assets"] = [reference.model_dump() for reference in body.reference_assets]
+    user_content: str | list[dict] = json.dumps(user_data, ensure_ascii=False)
+    if body.reference_assets:
+        if not body.project_id:
+            raise HTTPException(422, "选择角色参考图时需要当前项目")
+        from .comic_gen.api import pipeline as studio_pipeline
+        from .comic_gen.pipeline import InvalidAssetReference
+        from ..models.uniart import _image_reference_url
+
+        script = studio_pipeline.get_script(body.project_id, ctx.owner_profile_id)
+        if not script:
+            raise HTTPException(404, "项目不存在或当前用户无权访问")
+        parts: list[dict] = [{"type": "text", "text": user_content}]
+        for index, reference in enumerate(body.reference_assets):
+            try:
+                media_path, _stable_reference = studio_pipeline._resolve_asset_library_reference(
+                    script,
+                    reference.model_dump(),
+                )
+                media_url = _image_reference_url(media_path)
+            except InvalidAssetReference as exc:
+                raise HTTPException(422, "所选参考图已失效或不属于当前项目可用素材，请重新选择") from exc
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(422, "无法将所选参考图提供给设计模型，请检查图片存储配置") from exc
+            asset, _source = studio_pipeline._find_asset_with_source(
+                script,
+                reference.asset_id,
+                reference.asset_type,
+            )
+            label = getattr(asset, "name", None) or f"{reference.asset_type}素材"
+            parts.append({"type": "text", "text": f"角色参考图 @{index + 1}：{label}（只读视觉证据）"})
+            parts.append({"type": "image_url", "image_url": {"url": media_url}})
+        user_content = parts
+    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user_content}])
     try:
-        draft = _parse_character_design_draft(answer)
-    except (ValueError, TypeError) as error:
-        logger.warning("Character design draft parse rejected model=%s reason=%s answer_length=%d", body.model, error, len(answer))
+        result = _parse_character_design_object(answer)
+        if _character_design_review_needs_revision(result):
+            correction = (
+                "上一版把未描述的外貌或造型列成待核对，未完成角色设计。"
+                "请根据已有输入给出一套具体、可编辑的 identity.visual_notes 和 look.visual_notes，"
+                "缺少依据的细节标为 creative_choice，不得声称是剧本事实。"
+                "只有输入中确实互相矛盾的关键设定才能进入 review_items，且必须有可直接采纳的 suggestion。"
+                "不要输出 unresolved；只返回修正后的 JSON。"
+            )
+            answer = complete(ctx, body.model, [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+                {"role": "assistant", "content": answer},
+                {"role": "user", "content": correction},
+            ])
+            result = _parse_character_design_object(answer)
+            if _character_design_review_needs_revision(result):
+                raise ValueError("Model returned review items without design suggestions")
+        identity = result.get("identity") or {}
+        look = result.get("look") or {}
+        if not isinstance(identity, dict) or not isinstance(look, dict):
+            raise ValueError("Invalid design sections")
+        identity_notes = _character_design_visual_notes(identity)
+        look_notes = _character_design_visual_notes(look)
+        if not identity_notes:
+            raise ValueError("Missing concrete identity design")
+        review_items = result.get("review_items") or []
+        if not isinstance(review_items, list):
+            raise ValueError("Invalid review items")
+        unresolved: list[str] = []
+        suggestions: dict[str, str] = {}
+        suggestion_choices: dict[str, dict[str, str]] = {}
+        for item in review_items:
+            if isinstance(item, str):
+                question = item.strip()
+                suggestion = ""
+                suggested_age_stage = None
+                suggested_route = None
+            elif isinstance(item, dict):
+                question = item.get("question")
+                suggestion = item.get("suggestion", "")
+                if not isinstance(question, str) or not isinstance(suggestion, str):
+                    raise ValueError("Invalid review item")
+                suggested_age_stage = item.get("suggested_age_stage")
+                suggested_route = item.get("suggested_route")
+                if suggested_age_stage is not None and suggested_age_stage not in allowed_age_stages:
+                    raise ValueError("Invalid suggested age stage")
+                if suggested_route is not None and suggested_route not in allowed_routes:
+                    raise ValueError("Invalid suggested route")
+                question = question.strip()
+                suggestion = suggestion.strip()
+            else:
+                raise ValueError("Invalid review item")
+            if question:
+                unresolved.append(question)
+                if suggestion:
+                    suggestions[question] = suggestion
+                choice = {}
+                if suggested_age_stage:
+                    choice["age_stage"] = suggested_age_stage
+                if suggested_route:
+                    choice["route"] = suggested_route
+                if choice:
+                    suggestion_choices[question] = choice
+        # Read old structured responses during rollout; the new prompt uses review_items.
+        legacy_unresolved = result.get("unresolved") or []
+        if not isinstance(legacy_unresolved, list):
+            raise ValueError("Invalid unresolved list")
+        for item in legacy_unresolved:
+            if isinstance(item, str) and item.strip():
+                unresolved.append(item.strip())
+            elif isinstance(item, dict):
+                question = item.get("question")
+                suggestion = item.get("suggestion", "")
+                if not isinstance(question, str) or not isinstance(suggestion, str):
+                    raise ValueError("Invalid unresolved item")
+                suggested_age_stage = item.get("suggested_age_stage")
+                suggested_route = item.get("suggested_route")
+                if suggested_age_stage is not None and suggested_age_stage not in allowed_age_stages:
+                    raise ValueError("Invalid suggested age stage")
+                if suggested_route is not None and suggested_route not in allowed_routes:
+                    raise ValueError("Invalid suggested route")
+                question = question.strip()
+                if question:
+                    unresolved.append(question)
+                    if suggestion.strip():
+                        suggestions[question] = suggestion.strip()
+                    choice = {}
+                    if suggested_age_stage:
+                        choice["age_stage"] = suggested_age_stage
+                    if suggested_route:
+                        choice["route"] = suggested_route
+                    if choice:
+                        suggestion_choices[question] = choice
+            else:
+                raise ValueError("Invalid unresolved item")
+        unresolved = list(dict.fromkeys(unresolved))
+    except (ValueError, TypeError):
         raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
     return {
-        **draft,
+        "identity": {"visual_notes": identity_notes.strip(), "basis": identity.get("basis", ["creative_choice"])},
+        "look": {"visual_notes": look_notes.strip(), "basis": look.get("basis", ["creative_choice"])},
+        "unresolved": unresolved,
+        "field_suggestions": suggestions,
+        "field_suggestion_choices": suggestion_choices,
         "skill_revision": route_skill["revision"],
         "identity_skill_revision": identity_skill["revision"],
     }
@@ -289,6 +480,8 @@ def asset_design_draft(body: AssetDesignRequest, ctx: UserContext = Depends(requ
     except (ValueError, TypeError):
         raise HTTPException(502, "场景/道具设计模型未返回可编辑草稿，请重试") from None
     return {"visual_notes": result["visual_notes"].strip(), "unresolved": unresolved[:12]}
+
+
 class MemoryCreate(BaseModel):
     content: str = Field(min_length=1, max_length=300)
     category: str = Field(default="preference", min_length=1, max_length=40)
@@ -321,7 +514,6 @@ CHAT_MODEL_LABELS = {
     "deepseek-v4.1-flash-peak": "DeepSeek V4.1 Flash Peak",
     "glm-5.3-flash": "GLM 5.3 Flash",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
-    "deepseek-v4-flash": "DeepSeek V4 Flash",
     "minimax-h3-ir": "MiniMax H3 IR（提示词优化）",
 }
 
@@ -412,13 +604,24 @@ def memories(ctx: UserContext = Depends(require_user_context)):
         rows = db.execute("SELECT * FROM agent_memories WHERE owner=? ORDER BY updated_at DESC", (ctx.owner_profile_id,)).fetchall()
     return {"memories": [dict(row) for row in rows]}
 
+
+def _memory_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"\s+", "", normalized).rstrip("。！？.!?；;，,")
+
+
+def _duplicate_memory(rows, content: str, quote: str = "", exclude_id: str = "") -> bool:
+    keys = {_memory_key(value) for value in (content, quote) if value.strip()}
+    return any(row["id"] != exclude_id and keys.intersection(
+        {_memory_key(row["content"]), _memory_key(row["source_quote"])}) for row in rows)
+
 @router.post("/memories/extract")
 def extract_memories(ctx: UserContext = Depends(require_user_context)):
     candidates = []
     patterns = (("preference", r"(?:我喜欢|我爱|我最喜欢)([^。！？\n]{1,80})"), ("profile", r"(?:我叫|我的名字是)([^。！？\n]{1,40})"), ("date", r"(?:我的生日是|生日是)([^。！？\n]{1,40})"))
     with database() as db:
         rows = db.execute("SELECT id,payload FROM sessions WHERE owner=? ORDER BY CAST(json_extract(payload, '$.updated_at') AS REAL) DESC LIMIT 20", (ctx.owner_profile_id,)).fetchall()
-        saved = {(row["source_message_id"], row["source_quote"]) for row in db.execute("SELECT source_message_id,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()}
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
     for row in rows:
         session = json.loads(row["payload"])
         for message in reversed(session.get("messages", [])[-30:]):
@@ -428,7 +631,7 @@ def extract_memories(ctx: UserContext = Depends(require_user_context)):
                 match = re.search(pattern, text)
                 if match:
                     quote = match.group(0).strip()
-                    if (message["id"], quote) not in saved and not any(item["source_message_id"] == message["id"] and item["source_quote"] == quote for item in candidates):
+                    if not _duplicate_memory(saved, quote) and not any(_memory_key(item["content"]) == _memory_key(quote) for item in candidates):
                         candidates.append({"content": quote, "category": category, "source_session_id": session["id"], "source_message_id": message["id"], "source_quote": quote})
             if len(candidates) >= 3: return {"candidates": candidates}
     return {"candidates": candidates}
@@ -439,14 +642,16 @@ def create_memory(body: MemoryCreate, ctx: UserContext = Depends(require_user_co
         raise HTTPException(422, "记忆分类无效")
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        count = db.execute("SELECT COUNT(*) FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchone()[0]
-        if count >= 100: raise HTTPException(409, "记忆已达到 100 条上限，请先删除旧记忆")
         row = db.execute("SELECT payload FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, body.source_session_id)).fetchone()
         if row is None: raise HTTPException(404, "来源会话不存在")
         session = json.loads(row[0]); source = next((m for m in session.get("messages", []) if m.get("id") == body.source_message_id), None)
         if not source or source.get("role") != "user" or body.source_quote not in source.get("content", ""): raise HTTPException(422, "记忆来源无法验证")
         existing = db.execute("SELECT id FROM agent_memories WHERE owner=? AND source_session_id=? AND source_message_id=? AND source_quote=?", (ctx.owner_profile_id, body.source_session_id, body.source_message_id, body.source_quote)).fetchone()
         if existing: raise HTTPException(409, "这条来源已经保存为记忆")
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
+        if _duplicate_memory(saved, body.content, body.source_quote):
+            raise HTTPException(409, "这条记忆已经保存")
+        if len(saved) >= 100: raise HTTPException(409, "记忆已达到 100 条上限，请先删除旧记忆")
         now = time.time(); item = {"id": str(uuid.uuid4()), "owner": ctx.owner_profile_id, "content": body.content.strip(), "category": body.category, "source_session_id": body.source_session_id, "source_message_id": body.source_message_id, "source_quote": body.source_quote, "created_at": now, "updated_at": now}
         db.execute("INSERT INTO agent_memories VALUES (?,?,?,?,?,?,?,?,?)", tuple(item.values()))
     return {"memory": item}
@@ -454,6 +659,10 @@ def create_memory(body: MemoryCreate, ctx: UserContext = Depends(require_user_co
 @router.patch("/memories/{memory_id}")
 def patch_memory(memory_id: str, body: MemoryPatch, ctx: UserContext = Depends(require_user_context)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        saved = db.execute("SELECT id,content,source_quote FROM agent_memories WHERE owner=?", (ctx.owner_profile_id,)).fetchall()
+        if _duplicate_memory(saved, body.content, exclude_id=memory_id):
+            raise HTTPException(409, "这条记忆已经保存")
         result = db.execute("UPDATE agent_memories SET content=?,updated_at=? WHERE id=? AND owner=?", (body.content.strip(), time.time(), memory_id, ctx.owner_profile_id))
         if result.rowcount != 1: raise HTTPException(404, "记忆不存在")
     return {"ok": True}
@@ -771,7 +980,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         if body.live_research:
             if body.input_media:
                 raise HTTPException(422, "联网研究暂不支持附件，请单独提交素材")
-            from .knowledge.api import start_research
+            from .knowledge.api import require_research_enabled, start_research
+            require_research_enabled(owner)
             intent = plan_research(ctx, session["model"], body.content, session["messages"])
             if intent.needs_clarification:
                 run = None

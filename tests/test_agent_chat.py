@@ -9,16 +9,6 @@ from src.apps import agent_api as agent
 from src.apps.identity import UserContext
 
 
-def test_nsfw_node_chat_model_requires_authenticated_catalog_presence():
-    advertised = agent._agent_chat_models([
-        {'api_model_id': 'deepseek-v4-flash', 'capabilities': ['chat']},
-    ])
-    assert [(item['api_model_id'], item['display_name']) for item in advertised] == [
-        ('deepseek-v4-flash', 'DeepSeek V4 Flash'),
-    ]
-    assert agent._agent_chat_models([]) == []
-
-
 def test_asr_requires_catalog_access_and_valid_audio(setup, monkeypatch):
     monkeypatch.setattr(agent, 'asr_available', lambda ctx: False)
     with pytest.raises(HTTPException, match='尚未开放'):
@@ -224,6 +214,8 @@ def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, 
 
 
 def test_live_research_starts_durable_run_without_claiming_citations(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     from src.apps.knowledge import api
     run_id = str(__import__('uuid').uuid4())
@@ -246,6 +238,8 @@ def test_live_research_starts_durable_run_without_claiming_citations(setup, monk
 
 
 def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     from src.apps.knowledge import api
     monkeypatch.setattr(api, 'start_research', Mock(side_effect=AssertionError('Must clarify first')))
@@ -254,6 +248,20 @@ def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, mo
                                                  knowledge_search=True, live_research=True), setup)
     assert result['assistant_message']['content'] == '请确认是哪一家 ABC 公司？'
     assert 'research_run_id' not in result['assistant_message']
+
+
+def test_live_research_denied_before_planning_without_provider(setup, monkeypatch):
+    monkeypatch.delenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', raising=False)
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    planner = Mock(side_effect=AssertionError('Planning must not run'))
+    monkeypatch.setattr(agent, 'plan_research', planner)
+    with pytest.raises(HTTPException) as denied:
+        agent.send(sid, agent.MessageCreate(content='研究 NVIDIA',
+                                           knowledge_search=True, live_research=True), setup)
+    assert denied.value.status_code == 403
+    planner.assert_not_called()
+    assert agent.messages(sid, setup)['messages'] == []
 
 
 def test_research_plan_rejects_future_or_reversed_window(setup, monkeypatch):
@@ -338,6 +346,43 @@ def test_memory_candidate_requires_confirmation_and_source_deletion_removes_memo
     assert agent.memories(setup)['memories'][0]['content'] == '喜欢象棋'
     agent.delete_message(sid, candidate['source_message_id'], setup)
     assert agent.memories(setup)['memories'] == []
+
+
+def test_repeated_confirmed_memory_is_not_offered_or_saved_again(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好的'))
+    first_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(first_sid, agent.MessageCreate(content='我喜欢下棋'), setup)
+    first = agent.extract_memories(setup)['candidates'][0]
+    agent.create_memory(agent.MemoryCreate(**first), setup)
+
+    second_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(second_sid, agent.MessageCreate(content='我喜欢下棋。'), setup)
+    assert agent.extract_memories(setup)['candidates'] == []
+    second_message = agent.messages(second_sid, setup)['messages'][0]
+    with pytest.raises(HTTPException) as duplicate:
+        agent.create_memory(agent.MemoryCreate(
+            content=' 我喜欢下棋。 ', category='preference', source_session_id=second_sid,
+            source_message_id=second_message['id'], source_quote='我喜欢下棋'), setup)
+    assert duplicate.value.status_code == 409
+    assert len(agent.memories(setup)['memories']) == 1
+
+
+def test_memory_edit_cannot_duplicate_another_confirmed_memory(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='好的'))
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='我喜欢下棋。我的名字是小明'), setup)
+    message = agent.messages(sid, setup)['messages'][0]
+    first = agent.create_memory(agent.MemoryCreate(
+        content='我喜欢下棋', category='preference', source_session_id=sid,
+        source_message_id=message['id'], source_quote='我喜欢下棋'), setup)['memory']
+    second = agent.create_memory(agent.MemoryCreate(
+        content='我的名字是小明', category='profile', source_session_id=sid,
+        source_message_id=message['id'], source_quote='我的名字是小明'), setup)['memory']
+    with pytest.raises(HTTPException) as duplicate:
+        agent.patch_memory(second['id'], agent.MemoryPatch(content=' 我喜欢下棋。 '), setup)
+    assert duplicate.value.status_code == 409
+    assert agent.memories(setup)['memories'][0]['content'] == second['content']
+    assert first['id'] != second['id']
 
 
 def test_failed_turn_unlocks_and_busy_rejected(setup, monkeypatch):

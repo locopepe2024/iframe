@@ -145,7 +145,6 @@ class UserConfigStore:
         personal_uniart_configured = bool(secret_payload.get("UNIART_API_KEY"))
         return {
             **config,
-            "UNIART_BASE_URL": _effective_base_url(config),
             "secrets_configured": {
                 field: bool(secret_payload.get(field)) for field in SECRET_FIELDS
             },

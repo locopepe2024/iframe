@@ -1,6 +1,7 @@
 """Independent knowledge capture worker; run as a separate process."""
 
 import logging
+import signal
 import time
 
 from . import blob_store, capture, store
@@ -41,7 +42,15 @@ def run_once() -> bool:
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    while True:
+    stopping = False
+
+    def stop(signum, frame):
+        nonlocal stopping
+        stopping = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    while not stopping:
         if not run_once():
             time.sleep(2)
 
