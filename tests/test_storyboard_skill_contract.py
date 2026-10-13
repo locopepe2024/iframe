@@ -341,6 +341,49 @@ def test_unreadable_reference_does_not_silently_become_text_only():
     processor.llm.chat.assert_not_called()
 
 
+def test_signed_studio_reference_reaches_polish_as_owner_verified_local_image(monkeypatch, tmp_path):
+    from src.apps.comic_gen.llm import ScriptProcessor
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import set_studio_user, reset_studio_user, studio_media_url, studio_owner_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only")
+    owner = "polish-owner"
+    image = tmp_path / studio_owner_dir(owner) / "reference.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"test-image")
+    signed = studio_media_url(owner, image.relative_to(tmp_path / "output").as_posix())
+    token = set_studio_user(UserContext("user", owner, "User", "token"))
+    try:
+        processor = ScriptProcessor.__new__(ScriptProcessor)
+        processor.llm = Mock(is_configured=True)
+        processor.llm.chat.return_value = '{"prompt_cn":"中文镜头", "prompt_en":"English shot"}'
+        processor.polish_video_prompt("original", image_urls=api._polish_image_urls([signed]))
+        content = processor.llm.chat.call_args.kwargs["messages"][1]["content"]
+        assert content[0]["image_url"]["url"].startswith("data:image/png;base64,")
+    finally:
+        reset_studio_user(token)
+
+
+def test_polish_rejects_foreign_studio_media_reference(monkeypatch, tmp_path):
+    from src.apps.comic_gen.llm import PolishError
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import set_studio_user, reset_studio_user, studio_media_url, studio_owner_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only")
+    image = tmp_path / studio_owner_dir("other-owner") / "reference.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"test-image")
+    signed = studio_media_url("other-owner", image.relative_to(tmp_path / "output").as_posix())
+    token = set_studio_user(UserContext("user", "current-owner", "User", "token"))
+    try:
+        with pytest.raises(PolishError, match="Reference image could not be read"):
+            api._polish_image_urls([signed])
+    finally:
+        reset_studio_user(token)
+
+
 def test_h3_submission_maps_editor_tokens_to_submitted_picture_order():
     from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
     prompt = '[character2:产品] replaced by [character1:主播], @2'
