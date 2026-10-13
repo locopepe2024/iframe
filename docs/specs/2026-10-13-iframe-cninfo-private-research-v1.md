@@ -25,3 +25,9 @@ Date: 2026-10-13. Scope: owner-private research of the SZSE issuer 美盈森 / 0
 ## Limitations
 
 CNINFO's published access/retention terms and any commercial licensing conditions are not yet confirmed. The owner's private-use authorization determines this smoke scope only; it does not establish rights for broader deployment. PDF text extraction does not guarantee correct table interpretation, OCR or semantic citation support. Interface stability remains unproven by a single query.
+
+## Production owner API import observation
+
+On 2026-10-13, before enabling the provider, one reviewed [March 19 announcement](https://static.cninfo.com.cn/finalpage/2026-03-19/1225016378.PDF) was imported through the existing loopback owner API using the `/opt/.iframe` key's derived owner identity. The API stored a private `finance` collection `8caefd4a-2062-46d1-b169-d2bc7f2c0c76`, source `91687709-ebb3-4cdb-9739-2e2ca2d0f39d`, and revision `e229d734-ff52-45a9-9370-03ad78f77520`. All three page-located text units were read back with matching body hashes; owner search returned three hits. A repeat import returned `created=false`. The PDF bytes were not submitted to the API: the stored raw object is the owner API's JSON import payload, with the PDF kept as `source_uri`.
+
+This verifies a one-time private text import and readback only. It does not validate the new discovery provider, worker PDF capture, answer generation, cross-owner access or production allowlist. The collection persists; the current API has no deletion endpoint. Production source/backend/static remained `349ab1214b68deb7d7296292bb76af6ff97f4ee9` at the start of this work.
