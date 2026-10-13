@@ -18,8 +18,78 @@ class DiscoveryUnavailable(Exception):
 FED_RSS_URL = "https://www.federalreserve.gov/feeds/press_all.xml"
 FED_HOST = "www.federalreserve.gov"
 FED_PATH = "/newsevents/pressreleases/"
+CNINFO_QUERY_URL = "https://www.cninfo.com.cn/new/hisAnnouncement/query"
+CNINFO_PDF_HOST = "static.cninfo.com.cn"
+CNINFO_PDF_PATH = re.compile(r"finalpage/(\d{4}-\d{2}-\d{2})/(\d+)\.PDF")
+CNINFO_TIMEZONE = timezone(timedelta(hours=8))
 QUERY_STOPWORDS = {"and", "board", "federal", "for", "from", "news", "release",
                    "reserve", "the", "with"}
+
+
+def discover_cninfo(query: str, start_date: str | None,
+                    end_date: str | None) -> list[dict]:
+    if not any(name in query.casefold() for name in ("美盈森", "002303", "mys group")):
+        raise DiscoveryUnavailable("unsupported_subject")
+    try:
+        end = date.fromisoformat(end_date) if end_date else date.today()
+        start = date.fromisoformat(start_date) if start_date else end - timedelta(days=30)
+    except ValueError as exc:
+        raise DiscoveryUnavailable("invalid_date_window") from exc
+    if start > end or end > date.today() or (end - start).days > 366:
+        raise DiscoveryUnavailable("invalid_date_window")
+    try:
+        response = requests.post(CNINFO_QUERY_URL, data={
+            "pageNum": "1", "pageSize": "10", "column": "szse",
+            "tabName": "fulltext", "stock": "002303,9900008616", "plate": "sz",
+            "seDate": f"{start.isoformat()}~{end.isoformat()}",
+        }, timeout=12, stream=True, allow_redirects=False)
+        try:
+            if response.status_code == 429:
+                raise DiscoveryUnavailable("rate_limited")
+            if response.status_code != 200:
+                raise DiscoveryUnavailable("provider_failed")
+            chunks = []
+            size = 0
+            for chunk in response.iter_content(65536):
+                size += len(chunk)
+                if size > 256_000:
+                    raise DiscoveryUnavailable("oversized_provider_response")
+                chunks.append(chunk)
+            payload = json.loads(b"".join(chunks))
+        finally:
+            response.close()
+    except DiscoveryUnavailable:
+        raise
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        raise DiscoveryUnavailable("provider_failed") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("announcements"), (list, type(None))):
+        raise DiscoveryUnavailable("invalid_provider_response")
+    allowed_hosts = {host.strip().lower() for host in
+                     os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").split(",") if host.strip()}
+    seen_at = datetime.now(timezone.utc).isoformat()
+    results = []
+    for item in (payload.get("announcements") or [])[:10]:
+        if not isinstance(item, dict) or item.get("secCode") != "002303" or item.get("orgId") != "9900008616":
+            continue
+        path = item.get("adjunctUrl")
+        title = item.get("announcementTitle")
+        if not isinstance(path, str) or not CNINFO_PDF_PATH.fullmatch(path) or not isinstance(title, str):
+            continue
+        try:
+            published = datetime.fromtimestamp(item["announcementTime"] / 1000, CNINFO_TIMEZONE)
+            path_date = date.fromisoformat(CNINFO_PDF_PATH.fullmatch(path).group(1))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+        if not start <= published.date() <= end or abs((published.date() - path_date).days) > 1:
+            continue
+        results.append({"url": f"https://{CNINFO_PDF_HOST}/{path}", "title": title[:300],
+                        "publisher": "CNINFO / 美盈森 (002303)", "seen_at": seen_at,
+                        "published_at": published.isoformat(),
+                        "access_status": "public" if CNINFO_PDF_HOST in allowed_hosts else "not_allowlisted",
+                        "provider": "cninfo"})
+        if len(results) == 5:
+            break
+    return results
 
 
 def discover_fed_rss(query: str, start_date: str | None,
@@ -93,6 +163,8 @@ def discover_fed_rss(query: str, start_date: str | None,
 
 def discover(query: str, start_date: str | None = None,
              end_date: str | None = None) -> list[dict]:
+    if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo":
+        return discover_cninfo(query, start_date, end_date)
     if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "fed_rss":
         return discover_fed_rss(query, start_date, end_date)
     if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") != "gdelt":

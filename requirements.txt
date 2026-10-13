@@ -18,6 +18,7 @@ python-dotenv>=1.0.0
 pg8000>=1.31.0
 cos-python-sdk-v5>=1.9.30
 requests>=2.31.0
+pypdf>=5.9.0,<7.0.0
 pyyaml>=6.0
 PyJWT>=2.8.0
 pycryptodome>=3.20.0

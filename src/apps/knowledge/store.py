@@ -204,7 +204,8 @@ def select_research_sources(connection, owner: str, run_id: str, urls: list[str]
 
 def reserve_discovery(connection, owner: str, provider: str = "gdelt") -> bool:
     provider_budget = {"gdelt": (200, "5 seconds"),
-                       "fed_rss": (20, "60 seconds")}.get(provider)
+                       "fed_rss": (20, "60 seconds"),
+                       "cninfo": (20, "60 seconds")}.get(provider)
     if provider_budget is None:
         raise ValueError("Unsupported discovery provider")
     provider_key = "provider:" + provider

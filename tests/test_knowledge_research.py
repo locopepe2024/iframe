@@ -97,6 +97,73 @@ def test_fed_rss_uses_own_budget_and_source_policy(monkeypatch):
                if len(call.args) == 2 and len(call.args[1]) > 1)
 
 
+def test_cninfo_discovers_exact_issuer_and_march_announcement(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    payload = {"announcements": [
+        {"secCode": "002303", "orgId": "9900008616", "announcementTitle": "仲裁裁决公告",
+         "announcementTime": 1773849600000, "adjunctUrl": "finalpage/2026-03-19/1225016378.PDF"},
+        {"secCode": "002304", "orgId": "9900008616", "announcementTitle": "other issuer",
+         "announcementTime": 1773849600000, "adjunctUrl": "finalpage/2026-03-19/1225016379.PDF"},
+        {"secCode": "002303", "orgId": "9900008616", "announcementTitle": "unsafe path",
+         "announcementTime": 1773849600000, "adjunctUrl": "../private/1225016378.PDF"},
+    ]}
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [json.dumps(payload).encode()]
+    post = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "post", post)
+    results = discovery.discover("美盈森集团股份有限公司", "2026-03-01", "2026-03-31")
+    assert [item["url"] for item in results] == [
+        "https://static.cninfo.com.cn/finalpage/2026-03-19/1225016378.PDF"]
+    assert results[0]["access_status"] == "public"
+    assert results[0]["published_at"] == "2026-03-19T00:00:00+08:00"
+    assert post.call_args.kwargs["data"]["stock"] == "002303,9900008616"
+    assert post.call_args.kwargs["allow_redirects"] is False
+    with pytest.raises(discovery.DiscoveryUnavailable, match="unsupported_subject"):
+        discovery.discover("其他公司", "2026-03-01", "2026-03-31")
+    assert post.call_count == 1
+
+
+def test_cninfo_rejects_invalid_window_and_rate_limit(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    with pytest.raises(discovery.DiscoveryUnavailable, match="invalid_date_window"):
+        discovery.discover("002303", "2026-04-01", "2026-03-01")
+    response = Mock(status_code=429)
+    monkeypatch.setattr(discovery.requests, "post", Mock(return_value=response))
+    with pytest.raises(discovery.DiscoveryUnavailable, match="rate_limited"):
+        discovery.discover("002303", "2026-03-01", "2026-03-31")
+
+
+def test_cninfo_requires_exact_owner_allowlist(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    assert api.research_enabled_for("owner-a") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "owner-a")
+    assert api.research_enabled_for("owner-a") is True
+    assert api.research_enabled_for("owner-b") is False
+
+
+def test_cninfo_pdf_capture_has_page_locator_and_rejects_bad_path(monkeypatch):
+    url = "https://static.cninfo.com.cn/finalpage/2026-03-19/1225016378.PDF"
+    fetched = []
+    monkeypatch.setattr(capture, "fetch", lambda *args: fetched.append(args) or (b"%PDF-fixture", "application/pdf"))
+    page = Mock()
+    page.extract_text.return_value = "公告正文  事实"
+    reader = Mock(is_encrypted=False, pages=[page])
+    monkeypatch.setattr(capture, "PdfReader", lambda *args, **kwargs: reader)
+    raw, units = capture.capture_article(url)
+    assert raw == b"%PDF-fixture"
+    assert units[0]["locator"] == "page:1:part:1"
+    assert units[0]["body"] == "公告正文 事实"
+    assert fetched[0][1] == {"application/pdf"}
+    with pytest.raises(capture.CaptureRejected, match="unsupported_source_path"):
+        capture.capture_article("https://static.cninfo.com.cn/private/secret.PDF")
+    assert len(fetched) == 1
+    page.extract_text.return_value = ""
+    with pytest.raises(capture.CaptureRejected, match="no_article_text"):
+        capture.capture_article(url)
+
+
 def test_research_availability_requires_provider_and_capture_hosts(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "fed_rss")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "www.federalreserve.gov")

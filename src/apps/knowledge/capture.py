@@ -1,15 +1,22 @@
-"""Allowlisted HTML capture with bounded text and media extraction."""
+"""Allowlisted HTML and official-announcement PDF capture."""
 
 import ipaddress
 import http.client
+import io
 import os
+import re
 import socket
 import ssl
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
+from pypdf import PdfReader
+
 class CaptureRejected(Exception):
     pass
+
+
+CNINFO_PDF_PATH = re.compile(r"/finalpage/\d{4}-\d{2}-\d{2}/\d+\.PDF")
 
 
 def validate_url(url: str) -> str:
@@ -117,6 +124,36 @@ class ArticleParser(HTMLParser):
 
 
 def capture_article(url: str) -> tuple[bytes, list[dict]]:
+    parsed = urlsplit(url)
+    if parsed.hostname == "static.cninfo.com.cn":
+        if parsed.query or parsed.fragment or not CNINFO_PDF_PATH.fullmatch(parsed.path):
+            raise CaptureRejected("unsupported_source_path")
+        raw, _ = fetch(url, {"application/pdf"}, 4 * 1024 * 1024)
+        if not raw.startswith(b"%PDF-"):
+            raise CaptureRejected("invalid_pdf")
+        try:
+            reader = PdfReader(io.BytesIO(raw), strict=True)
+            if reader.is_encrypted or len(reader.pages) > 30:
+                raise CaptureRejected("unsupported_pdf")
+            units = []
+            for page_number, page in enumerate(reader.pages, 1):
+                content = " ".join((page.extract_text() or "").split())
+                for offset in range(0, len(content), 1200):
+                    chunk = content[offset:offset + 1200]
+                    if chunk:
+                        units.append({"kind": "text", "locator": f"page:{page_number}:part:{offset // 1200 + 1}",
+                                      "body": chunk, "labels": [], "annotation": None})
+                    if len(units) >= 100:
+                        break
+                if len(units) >= 100:
+                    break
+        except CaptureRejected:
+            raise
+        except Exception as exc:
+            raise CaptureRejected("invalid_pdf") from exc
+        if not units:
+            raise CaptureRejected("no_article_text")
+        return raw, units
     raw, _ = fetch(url, {"text/html"}, 2 * 1024 * 1024)
     parser = ArticleParser()
     parser.feed(raw.decode("utf-8", errors="replace"))
