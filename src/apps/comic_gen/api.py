@@ -127,6 +127,7 @@ from ..identity import (
 from ..studio_access import (
     current_studio_user,
     require_studio_user,
+    resolve_studio_reference,
     reset_studio_user,
     sign_studio_media_paths,
     set_studio_user,
@@ -6095,6 +6096,31 @@ def _effective_optimization_skills(request) -> Optional[List[str]]:
     return None
 
 
+def _polish_image_urls(image_urls: List[str]) -> List[str]:
+    """Turn signed Studio media URLs into owner-verified local image paths."""
+    from .llm import PolishError
+
+    resolved = []
+    for value in image_urls:
+        if urlparse(value).path.startswith("/studio/media/"):
+            user = current_studio_user()
+            if user is None:
+                raise PolishError(
+                    reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。",
+                    message_en="Reference image could not be read; reselect it before polishing.",
+                )
+            try:
+                resolved.append(resolve_studio_reference(value, user.owner_profile_id))
+            except ValueError as exc:
+                raise PolishError(
+                    reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。",
+                    message_en="Reference image could not be read; reselect it before polishing.",
+                ) from exc
+        else:
+            resolved.append(value)
+    return resolved
+
+
 @app.post("/video/polish_prompt")
 def polish_video_prompt(request: PolishVideoPromptRequest):
     """Polishes a video generation prompt using LLM. Returns bilingual prompts.
@@ -6135,7 +6161,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             request.feedback,
             custom_prompt,
             request.prev_cn,
-            image_urls=request.image_urls or None,
+            image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
@@ -6203,7 +6229,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             request.feedback,
             custom_prompt,
             request.prev_cn,
-            image_urls=request.image_urls or None,
+            image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
