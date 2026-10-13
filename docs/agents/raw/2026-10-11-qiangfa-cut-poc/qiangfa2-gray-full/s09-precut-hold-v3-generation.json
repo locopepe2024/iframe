@@ -1,0 +1,21 @@
+{
+  "timestamp_utc": "2026-10-12T23:48:55.948691+00:00",
+  "status": "completed",
+  "task_id": "task_qLkjQL0DskI50pVDIgqyPeT0JUV44gAh",
+  "segment": "s09",
+  "variant": "precut-hold-v3",
+  "source_sha256": "4db0b4023a2e2633eac245336cc2fffe06cb25e7cacdff8f4aec57a36bb2cec7",
+  "target_sha256": "ba4e1a558ac1dfa21378e1e067dfe8a0cf701fa46eb8f49a4b0c8e6183e708f5",
+  "motion_sha256": "3432559a74ca78fa37426722fecbfcdb5453f8e75541d31a330e762061afed47",
+  "prompt_sha256": "ea657f2a7a584c5e34be9b51ba4b425622573df0b02610558ca72e8389ec28fd",
+  "model": "minimax-h3-vip",
+  "mode": "reference2video",
+  "duration": 4,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": false,
+  "seed": 20261011,
+  "http_status": 202,
+  "output_path": "s09-precut-hold-v3-replacement.mp4",
+  "output_sha256": "6eb8c43906d6509086b7410e6707ed216eb1d80edf240dada274c09ec87058c5"
+}
