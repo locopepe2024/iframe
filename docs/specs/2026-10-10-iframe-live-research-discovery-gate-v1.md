@@ -1,6 +1,12 @@
 # iFrame Live Research Discovery Gate v1
 
-Date: 2026-10-10. Status: proposed; no live discovery provider is selected or deployed.
+Date: 2026-10-10. Status: historical design gate; implementation and deployment have since progressed. The observations and proposed contract below describe the 2026-10-10 baseline, not the current production state.
+
+## Status update (2026-10-13)
+
+- PR #80 implemented candidate discovery, user selection, owner-scoped worker capture and unit citations. The production API and worker have since been deployed; `fed_rss` is the configured discovery provider and `www.federalreserve.gov` is the exact capture host. This establishes the implemented path, not general financial-source coverage or citation accuracy.
+- PR #99 proposes a separate `cninfo` provider and PDF page units for private analysis of 美盈森 (002303). It is still under review and is neither merged nor deployed. The production CNINFO host and owner gate remain disabled.
+- The original acceptance criteria below remain a design target. In particular, the observed Federal Reserve smoke did not establish that a cited unit semantically supports every claim; official financial facts, wider source rights and full production CNINFO discovery-to-answer validation remain open.
 
 ## Observed
 
@@ -61,4 +67,4 @@ Example for a first NVIDIA briefing demo:
 
 ## Review Boundary
 
-This document is a development gate, not deployment authorization. The next implementation PR must include provider documentation, fixture-based behavior tests, the live smoke result and a migration/rollback plan. An iFrame administrator reviews, merges and deploys it.
+This document is a development gate, not deployment authorization. Each subsequent source implementation must include provider documentation, fixture-based behavior tests, a live smoke result and a migration/rollback plan. An iFrame administrator reviews, merges and deploys it.

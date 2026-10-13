@@ -29,7 +29,7 @@ The deployed owner API passes a bounded online smoke test. This does not establi
 
 ## Gates and slices
 
-The current Agent library-search path does not perform live news discovery. Before slice 2 is enabled for a recent-company briefing, apply the [live research discovery gate](2026-10-10-iframe-live-research-discovery-gate-v1.md): validate a provider, capture selected source originals and media, then require source revisions and locators for factual claims. An anonymous GDELT probe returned 429 and a Google News RSS probe timed out on 2026-10-10; neither is an approved shared-deployment provider on that evidence.
+The 2026-10-10 Agent library-search path did not perform live news discovery. The [live research discovery gate](2026-10-10-iframe-live-research-discovery-gate-v1.md) records the original acceptance criteria and its 2026-10-13 implementation status. An anonymous GDELT probe returned 429 and a Google News RSS probe timed out on 2026-10-10; neither was selected on that evidence.
 
 | Slice | Work and affected paths | Acceptance and verification |
 |---|---|---|
