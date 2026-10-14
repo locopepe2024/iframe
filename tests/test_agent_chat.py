@@ -325,6 +325,25 @@ def test_this_year_operations_uses_calendar_year_to_date(setup, monkeypatch):
     assert (intent.start_date, intent.end_date) == ('2026-01-01', '2026-10-14')
 
 
+def test_undated_company_overview_uses_year_to_date_and_finance_skill(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    completion = Mock(return_value='{"search_query":"002183","subject":"怡亚通","start_date":"2026-09-14","end_date":"2026-10-14","dimensions":["运营"],"needs_clarification":false,"clarification":""}')
+    monkeypatch.setattr(agent, 'complete', completion)
+    intent = agent.plan_research(setup, 'qwen', '分析一下怡亚通', [])
+    assert (intent.start_date, intent.end_date) == ('2026-01-01', '2026-10-14')
+    assert 'Company Financial Research' in completion.call_args.args[2][0]['content']
+
+
+def test_video_trend_planning_does_not_load_finance_skill(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    completion = Mock(return_value='{"search_query":"video models","subject":"视频模型","start_date":"2026-09-14","end_date":"2026-10-14","dimensions":[],"needs_clarification":false,"clarification":""}')
+    monkeypatch.setattr(agent, 'complete', completion)
+    agent.plan_research(setup, 'qwen', '分析视频 AI 模型趋势', [])
+    assert 'Company Financial Research' not in completion.call_args.args[2][0]['content']
+
+
 def test_last_year_video_trend_uses_full_year_window(setup, monkeypatch):
     from src.apps.knowledge import discovery
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
@@ -441,6 +460,31 @@ def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch)
     assert first['content'].startswith('查询完毕。')
     assert first['knowledge_citations'][0]['revision_id'] == 'revision-a'
     assert completion.call_count == 2
+
+
+def test_company_research_answer_loads_finance_skill(setup, monkeypatch):
+    from contextlib import contextmanager
+    from src.apps.knowledge import store
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    run_id = __import__('uuid').uuid4()
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    @contextmanager
+    def transaction():
+        yield object()
+    monkeypatch.setattr(store, 'transaction', transaction)
+    monkeypatch.setattr(store, 'research_evidence', lambda connection, owner, rid: (
+        {'session_id': sid, 'query': '分析一下怡亚通', 'intent': {}, 'collection_id': 'collection-a', 'jobs': []},
+        [{'unit_id': 'unit-a', 'revision_id': 'revision-a', 'source_id': 'source-a',
+          'kind': 'text', 'locator': 'page:1', 'excerpt': '营业收入',
+          'source_uri': 'https://static.cninfo.com.cn/finalpage/2026-08-28/1.PDF',
+          'title': '半年度报告摘要', 'captured_at': '2026-10-14T00:00:00Z'}]))
+    completion = Mock(return_value='收入见报告 [unit-a]')
+    monkeypatch.setattr(agent, 'complete', completion)
+    agent.answer_research(sid, run_id, setup)
+    guidance = completion.call_args.args[2][0]['content']
+    assert 'Company Financial Research' in guidance
+    assert 'ask at most one concise next question' in guidance
+    assert 'Do not default to questions about holdings' in guidance
 
 
 def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):

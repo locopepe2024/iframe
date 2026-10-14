@@ -246,7 +246,8 @@ def start_research(owner: str, session_id: str, query: str,
                     discovery_query = " ".join(codes) if codes else planned.get("subject") or query.strip()
                     candidates = discovery.discover(discovery_query,
                                                     planned.get("start_date"), planned.get("end_date"),
-                                                    planned.get("subject") if codes else None)
+                                                    planned.get("subject") if codes else None,
+                                                    prioritize_reports=discovery.company_overview_request(query))
                     error_code = None if candidates else "no_results"
                 else:
                     candidates = discovery.discover(planned.get("search_query") or query.strip(),

@@ -14,6 +14,7 @@ from typing import Literal
 import mimetypes
 import base64
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from openai import APIConnectionError, APIStatusError, APITimeoutError
@@ -120,6 +121,26 @@ class ResearchPlanValidationError(HTTPException):
     pass
 
 
+FINANCE_RESEARCH_SKILL = (Path(__file__).resolve().parents[2] /
+                          "config/research_skills/company-finance/SKILL.md")
+
+
+def company_finance_request(content: str) -> bool:
+    from .knowledge.discovery import video_trend_request
+    return (os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+            and not video_trend_request(content))
+
+
+def undated_company_overview(content: str) -> bool:
+    from .knowledge.discovery import company_overview_request
+    return (company_finance_request(content) and company_overview_request(content)
+            and not bool(re.search(r"\d{4}\s*年|\d{4}-\d{2}-\d{2}|最近|近\s*\d+|过去|截至|截止|今年|至今|到今天", content)))
+
+
+def company_finance_guidance() -> str:
+    return FINANCE_RESEARCH_SKILL.read_text(encoding="utf-8")
+
+
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
     from .knowledge.discovery import current_cninfo_date
     today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
@@ -138,6 +159,8 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         "上市公司身份有歧义时设置 needs_clarification=true；不得自行选定证券。"
         "不要把新闻发现结果当作财务事实。今天是 " + today.isoformat() + "。"
     )
+    if company_finance_request(content):
+        system += "\n\n" + company_finance_guidance()
     context = [{"role": "user" if item["role"] == "user" else "assistant",
                 "content": item["content"]} for item in previous_messages[-6:]]
     result = complete(ctx, model, [{"role": "system", "content": system}, *context,
@@ -170,6 +193,11 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
             intent.end_date = end.isoformat()
         elif "最近一年" in content:
             start = today - timedelta(days=365)
+            end = today
+            intent.start_date = start.isoformat()
+            intent.end_date = end.isoformat()
+        elif undated_company_overview(content):
+            start = date(today.year, 1, 1)
             end = today
             intent.start_date = start.isoformat()
             intent.end_date = end.isoformat()
@@ -1301,6 +1329,8 @@ def answer_research(sid: str, run_id: uuid.UUID,
                   "缺少财务数字、股价或监管原文时明确列出缺口，不得补写。"
                   "用户要求年度运营或行业趋势时，必须说明已采集来源和时间覆盖范围，"
                   "不能仅凭少量公告或单一机构资料推断全年经营表现或全行业趋势。")
+        if company_finance_request(run["query"]):
+            system += "\n\n" + company_finance_guidance()
         prompt = {"query": run["query"], "intent": run.get("intent", {}), "sources": evidence,
                   "capture_failures": [job for job in run["jobs"] if job["state"] == "failed"]}
         answer = complete(ctx, session["model"], [{"role": "system", "content": system},

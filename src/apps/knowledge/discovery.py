@@ -23,6 +23,7 @@ CNINFO_SECURITY_URL = "https://www.cninfo.com.cn/new/information/topSearch/query
 CNINFO_PDF_HOST = "static.cninfo.com.cn"
 CNINFO_PDF_PATH = re.compile(r"finalpage/(\d{4}-\d{2}-\d{2})/(\d+)\.PDF")
 CNINFO_TIMEZONE = timezone(timedelta(hours=8))
+PERIODIC_SUMMARY_TITLE = re.compile(r"(?:19|20)\d{2}年(?:半年度|年度|第[一二三四1-4]季度)报告摘要")
 DEEPMIND_SITEMAP_URL = "https://deepmind.google/sitemap.xml"
 VIDEO_TREND_PATH = re.compile(r"/(?:models/veo(?:/|$)|models/model-cards/veo-[^/]+/|blog/(?:generating-audio-for-video|genie-3-a-new-frontier-for-world-models)/)")
 QUERY_STOPWORDS = {"and", "board", "federal", "for", "from", "news", "release",
@@ -36,6 +37,12 @@ def current_cninfo_date() -> date:
 def video_trend_request(query: str) -> bool:
     return (bool(re.search(r"视频|video", query, re.IGNORECASE))
             and bool(re.search(r"模型|生成|AI|发展趋势|趋势|model|generation|trend", query, re.IGNORECASE)))
+
+
+def company_overview_request(query: str) -> bool:
+    return (not video_trend_request(query)
+            and bool(re.search(r"分析一下|运营|经营|业绩|财务|基本面|盈利|公司整体", query))
+            and not bool(re.search(r"公告|资讯|新闻|减持|诉讼|股权转让|最新动态", query)))
 
 
 def discover_video_trends(query: str, start_date: str | None,
@@ -143,7 +150,8 @@ def _bounded_chunks(response, limit: int):
 
 
 def discover_cninfo(query: str, start_date: str | None,
-                    end_date: str | None, name_hint: str | None = None) -> list[dict]:
+                    end_date: str | None, name_hint: str | None = None,
+                    prioritize_reports: bool = False) -> list[dict]:
     try:
         end = date.fromisoformat(end_date) if end_date else current_cninfo_date()
         start = date.fromisoformat(start_date) if start_date else end - timedelta(days=30)
@@ -160,7 +168,7 @@ def discover_cninfo(query: str, start_date: str | None,
         raise DiscoveryUnavailable("subject_not_found")
     try:
         response = requests.post(CNINFO_QUERY_URL, data={
-            "pageNum": "1", "pageSize": "10", "column": column,
+            "pageNum": "1", "pageSize": "30" if prioritize_reports else "10", "column": column,
             "tabName": "fulltext", "stock": f"{code},{org_id}", "plate": plate,
             "seDate": f"{start.isoformat()}~{end.isoformat()}",
         }, timeout=12, stream=True, allow_redirects=False)
@@ -189,7 +197,7 @@ def discover_cninfo(query: str, start_date: str | None,
                      os.getenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "").split(",") if host.strip()}
     seen_at = datetime.now(timezone.utc).isoformat()
     results = []
-    for item in (payload.get("announcements") or [])[:10]:
+    for item in (payload.get("announcements") or [])[:30 if prioritize_reports else 10]:
         if not isinstance(item, dict) or item.get("secCode") != code or item.get("orgId") != org_id:
             continue
         path = item.get("adjunctUrl")
@@ -208,9 +216,14 @@ def discover_cninfo(query: str, start_date: str | None,
                         "published_at": published.isoformat(),
                         "access_status": "public" if CNINFO_PDF_HOST in allowed_hosts else "not_allowlisted",
                         "provider": "cninfo"})
-        if len(results) == 5:
+        if not prioritize_reports and len(results) == 5:
             break
-    return results
+    if prioritize_reports:
+        summaries = [item for item in results if PERIODIC_SUMMARY_TITLE.search(item["title"])]
+        if summaries:
+            latest = max(summaries, key=lambda item: item["published_at"])
+            return [latest, *(item for item in results if item["url"] != latest["url"])][:5]
+    return results[:5]
 
 
 def discover_fed_rss(query: str, start_date: str | None,
@@ -283,9 +296,10 @@ def discover_fed_rss(query: str, start_date: str | None,
 
 
 def discover(query: str, start_date: str | None = None,
-             end_date: str | None = None, name_hint: str | None = None) -> list[dict]:
+             end_date: str | None = None, name_hint: str | None = None,
+             prioritize_reports: bool = False) -> list[dict]:
     if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo":
-        return discover_cninfo(query, start_date, end_date, name_hint)
+        return discover_cninfo(query, start_date, end_date, name_hint, prioritize_reports)
     if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "fed_rss":
         return discover_fed_rss(query, start_date, end_date)
     if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") != "gdelt":
