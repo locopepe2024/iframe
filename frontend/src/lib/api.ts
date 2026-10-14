@@ -1540,10 +1540,18 @@ export const api = {
         return res.data;
     },
 
+    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<string> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-preview`, {
+            frame_id: frameId,
+            prompt,
+        });
+        return res.data.prompt;
+    },
+
     submitFrameRender: async (
         scriptId: string, frameId: string, compositionData: any,
         prompt: string, batchSize: number, negativePrompt: string | undefined,
-        requestId: string,
+        requestId: string, promptIsComplete: boolean = false,
     ): Promise<{ job_id: string; status: string; error?: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-jobs`, {
             frame_id: frameId,
@@ -1552,6 +1560,7 @@ export const api = {
             negative_prompt: negativePrompt,
             batch_size: batchSize,
             request_id: requestId,
+            prompt_is_complete: promptIsComplete,
         }, { timeout: 15000 });
         return res.data;
     },
