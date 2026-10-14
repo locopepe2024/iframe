@@ -299,13 +299,82 @@ def test_live_research_denied_before_planning_without_provider(setup, monkeypatc
                                            knowledge_search=True, live_research=True), setup)
     assert denied.value.status_code == 403
     planner.assert_not_called()
-    assert agent.messages(sid, setup)['messages'] == []
+    assert [message['role'] for message in agent.messages(sid, setup)['messages']] == ['user', 'assistant']
+    assert agent.messages(sid, setup)['messages'][-1]['research_failure_stage'] == 'availability'
 
 
 def test_research_plan_rejects_future_or_reversed_window(setup, monkeypatch):
     monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"NVIDIA","subject":"NVIDIA","start_date":"2027-03-31","end_date":"2027-03-01","dimensions":[],"needs_clarification":false,"clarification":""}'))
-    with pytest.raises(HTTPException, match='研究需求解析失败'):
+    with pytest.raises(HTTPException, match='模型已返回，但未给出有效日期范围'):
         agent.plan_research(setup, 'qwen', '英伟达未来', [])
+
+
+def test_research_plan_clarifies_a_window_longer_than_one_year(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"002303","subject":"美盈森","start_date":"2020-01-01","end_date":"2026-10-01","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '研究美盈森 2020 年至 2026 年公告', [])
+    assert intent.needs_clarification is True
+    assert '最多查询一年' in intent.clarification
+
+
+def test_unbounded_company_history_is_saved_without_model_or_discovery(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    completion = Mock(side_effect=AssertionError('Unbounded history must be clarified before model planning'))
+    monkeypatch.setattr(agent, 'complete', completion)
+    result = agent.send(sid, agent.MessageCreate(
+        content='美盈森集团股份有限公司（深交所，股票代码 002303）公司整体历史信息',
+        knowledge_search=True, live_research=True), setup)
+    assert '最多查询一年' in result['assistant_message']['content']
+    assert 'research_run_id' not in result['assistant_message']
+    assert [item['role'] for item in agent.messages(sid, setup)['messages']] == ['user', 'assistant']
+    completion.assert_not_called()
+
+
+def test_invalid_research_plan_is_saved_with_model_returned_stage(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    completion = Mock(return_value='not a research plan')
+    monkeypatch.setattr(agent, 'complete', completion)
+    result = agent.send(sid, agent.MessageCreate(
+        content='研究美盈森 2026 年 3 月公告', knowledge_search=True, live_research=True), setup)
+    assistant = result['assistant_message']
+    assert assistant['research_failure_stage'] == 'plan_validation'
+    assert '模型已返回' in assistant['content']
+    assert 'research_run_id' not in assistant
+    assert [item['content'] for item in agent.messages(sid, setup)['messages']] == [
+        '研究美盈森 2026 年 3 月公告', assistant['content']]
+    completion.assert_called_once()
+
+
+def test_research_model_transport_failure_is_saved_separately(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    completion = Mock(side_effect=HTTPException(502, '模型服务暂不可用'))
+    monkeypatch.setattr(agent, 'complete', completion)
+    result = agent.send(sid, agent.MessageCreate(
+        content='研究美盈森 2026 年 3 月公告', knowledge_search=True, live_research=True), setup)
+    assert result['assistant_message']['research_failure_stage'] == 'model_request'
+    assert '模型服务暂不可用' in result['assistant_message']['content']
+    assert len(agent.messages(sid, setup)['messages']) == 2
+    completion.assert_called_once()
+
+
+def test_research_upstream_error_does_not_echo_response_body(setup, monkeypatch, caplog):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    response = httpx.Response(401, request=httpx.Request('POST', 'https://example.com/chat'))
+    monkeypatch.setattr(agent, 'complete', Mock(side_effect=APIStatusError(
+        'private-provider-response', response=response, body=None)))
+    result = agent.send(sid, agent.MessageCreate(
+        content='研究美盈森 2026 年 3 月公告', knowledge_search=True, live_research=True), setup)
+    assert result['assistant_message']['research_failure_stage'] == 'model_request'
+    assert 'HTTP 401' in result['assistant_message']['content']
+    assert 'private-provider-response' not in result['assistant_message']['content']
+    assert 'private-provider-response' not in caplog.text
 
 
 def test_current_research_uses_cninfo_local_today(setup, monkeypatch):
