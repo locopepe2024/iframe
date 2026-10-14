@@ -17,7 +17,7 @@ export function legacyAssetsToReferenceIndex(
       name: item.name,
       description: item.description,
       starred: item.starred,
-      source_scope: "episode",
+      source_scope: item.source === "series" || item.source === "global" ? item.source : "episode",
       selected_variant_id: selected,
       variants,
     };

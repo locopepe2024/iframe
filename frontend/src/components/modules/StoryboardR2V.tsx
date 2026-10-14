@@ -10,6 +10,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { storyboardAssetIndex } from "@/lib/storyboardAssetIndex";
+import { legacyAssetsToReferenceIndex } from "@/lib/assetReferenceIndex";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -63,11 +64,15 @@ export default function StoryboardR2V() {
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
     const [assetIndexState, setAssetIndexState] = useState<{ projectId: string; assets: AssetReferenceIndexEntry[] } | null>(null);
-    const assetIndex = useMemo(() =>
-        assetIndexState && currentProject && assetIndexState.projectId === currentProject.id
-            ? storyboardAssetIndex(assetIndexState.assets, currentProject as any)
-            : undefined,
-    [assetIndexState, currentProject]);
+    const assetIndex = useMemo(() => {
+        if (!currentProject) return undefined;
+        const entries = assetIndexState?.projectId === currentProject.id
+            ? assetIndexState.assets
+            : legacyAssetsToReferenceIndex(
+                currentProject.characters ?? [], currentProject.scenes ?? [], currentProject.props ?? [],
+            );
+        return storyboardAssetIndex(entries, currentProject as any);
+    }, [assetIndexState, currentProject]);
     const displayedStyle = currentProject
         ? resolveStoryboardStyle(currentProject, currentSeries)
         : { positivePrompt: "", negativePrompt: "" };

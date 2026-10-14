@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { storyboardAssetIndex } from "@/lib/storyboardAssetIndex";
+import { legacyAssetsToReferenceIndex } from "@/lib/assetReferenceIndex";
 
 const entry = (id: string, name: string, scope: "episode" | "series" | "global") => ({
     asset_type: "prop", asset_id: id, name, source_scope: scope, variants: [],
@@ -34,4 +35,14 @@ it("keeps shared assets already used by a frame or confirmed episode binding", (
         episode_asset_bindings: [{ asset_id: "stale", status: "stale" }],
     });
     expect(result.map((asset) => asset.asset_id)).toEqual(["referenced", "person", "plan-scene"]);
+});
+
+it("does not relabel series assets as episode assets while the index loads", () => {
+    const fallback = legacyAssetsToReferenceIndex([], [], [
+        { id: "local", name: "本集道具", source: "episode" },
+        { id: "bag", name: "女士背包", source: "series" },
+        { id: "pants", name: "瑜伽裤", source: "series" },
+    ]);
+    expect(storyboardAssetIndex(fallback, { frames: [] }).map((asset) => asset.name))
+        .toEqual(["本集道具"]);
 });
