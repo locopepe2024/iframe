@@ -135,7 +135,10 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
                                    {"role": "user", "content": content}])
     try:
         match = re.search(r"\{[\s\S]*\}", result)
-        intent = ResearchIntent.model_validate_json(match.group(0) if match else result)
+        payload = json.loads(match.group(0) if match else result)
+        if isinstance(payload, dict) and payload.get("clarification") is None:
+            payload["clarification"] = ""
+        intent = ResearchIntent.model_validate(payload)
         if intent.needs_clarification:
             if not intent.clarification.strip():
                 raise ValueError("Missing clarification")

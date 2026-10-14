@@ -318,6 +318,17 @@ def test_current_research_uses_cninfo_local_today(setup, monkeypatch):
     assert '今天是 2026-10-14' in agent.complete.call_args.args[2][0]['content']
 
 
+def test_research_plan_accepts_null_optional_clarification(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"Meiyingsen official announcements","subject":"美盈森","start_date":"2026-03-01","end_date":"2026-10-14","dimensions":["官方公告"],"needs_clarification":false,"clarification":null}'))
+    intent = agent.plan_research(setup, 'qwen', '查询美盈森从2026年3月1日至今的官方公告资讯', [])
+    assert intent.subject == '美盈森'
+    assert intent.clarification == ''
+    assert intent.end_date == '2026-10-14'
+
+
 def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch):
     from contextlib import contextmanager
     from src.apps.knowledge import store
