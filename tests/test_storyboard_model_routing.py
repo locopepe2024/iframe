@@ -191,7 +191,9 @@ def test_render_preview_rejects_changed_shot_before_generating():
     pipeline.storyboard_generator = Mock()
     pipeline._save_data = Mock()
     pipeline.resolve_episode_assets = Mock(return_value={"characters": [character], "scenes": []})
-    token = pipeline.storyboard_render_context_token(script.id, frame.id)
+    token = pipeline.storyboard_render_preview_token(
+        pipeline.storyboard_render_context_token(script.id, frame.id), "已预览正文",
+    )
     frame.director_shot_context["shot"]["composition"] = "夕阳下的街面"
 
     with pytest.raises(ValueError, match="preview is outdated"):
@@ -201,6 +203,36 @@ def test_render_preview_rejects_changed_shot_before_generating():
         )
     pipeline.storyboard_generator.generate_frame.assert_not_called()
     pipeline._save_data.assert_not_called()
+
+
+def test_render_preview_rejects_changed_prompt_before_generating():
+    now = time.time()
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    created_at=now, updated_at=now)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_generator = Mock()
+    pipeline._save_data = Mock()
+    pipeline.resolve_episode_assets = Mock(return_value={"characters": [], "scenes": []})
+    preview = pipeline.preview_storyboard_render_prompt(script.id, frame.id, "原始镜头")
+    token = pipeline.storyboard_render_preview_token(
+        pipeline.storyboard_render_context_token(script.id, frame.id), preview,
+    )
+
+    with pytest.raises(ValueError, match="preview is outdated"):
+        pipeline.generate_storyboard_render(
+            script.id, frame.id, None, preview + " 新增光影", prompt_is_complete=True,
+            context_token=token,
+        )
+    pipeline.storyboard_generator.generate_frame.assert_not_called()
+    pipeline._save_data.assert_not_called()
+
+    pipeline.generate_storyboard_render(
+        script.id, frame.id, None, preview, prompt_is_complete=True, context_token=token,
+    )
+    assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["prompt"] == preview
 
 
 def test_render_preview_token_tracks_character_asset_and_style():

@@ -612,6 +612,62 @@ def test_unreasoned_shot_lighting_inherits_place_time_baseline_without_conflict_
     assert context.shots[1].lighting_override_reason == ""
 
 
+def test_visual_projection_scopes_light_by_place_and_story_time():
+    pipeline, _ = make_pipeline()
+    plan = make_plan(pipeline)
+    base_scene = plan.scenes[0]
+    base_scene.place_continuity_id = "street"
+    base_scene.time_continuity_id = "dusk"
+    base_scene.beats[0].shots[0].lighting = DirectorPlanLighting()
+
+    def next_scene(scene_id, shot_id, order, place_id, time_id):
+        scene = base_scene.model_copy(deep=True)
+        scene.scene_id = scene_id
+        scene.order = order
+        scene.place_continuity_id = place_id
+        scene.time_continuity_id = time_id
+        scene.beats[0].beat_id = f"beat-{scene_id}"
+        scene.beats[0].shots[0].shot_id = shot_id
+        return scene
+
+    shade = next_scene("tree-shade", "shot-shade", 1, "street", "dusk")
+    shade.location = "长街梧桐树下"
+    shade.beats[0].shots[0].lighting = DirectorPlanLighting(key_source="树冠遮挡人物头顶直射光")
+    shade.beats[0].shots[0].lighting_override_selected = True
+    shade.beats[0].shots[0].lighting_override_reason = "树荫局部遮挡，街面仍有夕阳"
+    other_street = next_scene("other-street", "shot-other", 2, "other-street", "dusk")
+    other_street.location = "邻街"
+    later = next_scene("street-night", "shot-night", 3, "street", "night")
+    later.location = "长街"
+    plan.scenes.extend([shade, other_street, later])
+    plan.lighting_baselines = [
+        DirectorPlanLightingBaseline(
+            place_continuity_id=place, time_continuity_id=story_time,
+            story_time=story_time, shadow_direction=shadow,
+            lighting=DirectorPlanLighting(key_source=light, color_tone=tone),
+        )
+        for place, story_time, shadow, light, tone in [
+            ("street", "dusk", "向东", "西侧低位夕阳", "暖金"),
+            ("other-street", "dusk", "向东", "邻街西侧夕阳", "暖金"),
+            ("street", "night", "无日影", "街边灯笼", "暖黄"),
+        ]
+    ]
+
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+    projected = pipeline.project_episode_visual_context("film")
+    shots = {shot.shot_id: shot for shot in projected.shots}
+
+    assert shots["shot-entry"].lighting["key_source"] == "西侧低位夕阳"
+    assert shots["shot-shade"].lighting["key_source"] == "树冠遮挡人物头顶直射光"
+    assert shots["shot-shade"].lighting["shadow_direction"] == "向东"
+    assert shots["shot-shade"].lighting_override_reason == "树荫局部遮挡，街面仍有夕阳"
+    assert shots["shot-other"].time_continuity_id == "dusk"
+    assert shots["shot-other"].lighting["key_source"] == "邻街西侧夕阳"
+    assert shots["shot-night"].place_continuity_id == "street"
+    assert shots["shot-night"].lighting["key_source"] == "街边灯笼"
+
+
 def test_generated_continuity_ids_create_reviewable_baseline_without_name_matching():
     pipeline, _ = make_pipeline()
     first = raw_scene(place_continuity_id="place-street", time_continuity_id="time-dusk")
