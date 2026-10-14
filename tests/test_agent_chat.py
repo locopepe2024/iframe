@@ -316,6 +316,24 @@ def test_research_plan_clarifies_a_window_longer_than_one_year(setup, monkeypatc
     assert '最多查询一年' in intent.clarification
 
 
+def test_this_year_operations_uses_calendar_year_to_date(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"002183","subject":"怡亚通","start_date":"2026-09-14","end_date":"2026-10-14","dimensions":["运营"],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '分析深圳市怡亚通供应链股份有限公司 002183 今年的运营', [])
+    assert (intent.start_date, intent.end_date) == ('2026-01-01', '2026-10-14')
+
+
+def test_last_year_video_trend_uses_full_year_window(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"video generation models","subject":"视频生成模型","start_date":"2026-09-14","end_date":"2026-10-14","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '分析视频 AI 模型最近一年的发展趋势', [])
+    assert (intent.start_date, intent.end_date) == ('2025-10-14', '2026-10-14')
+
+
 def test_unbounded_company_history_is_saved_without_model_or_discovery(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
