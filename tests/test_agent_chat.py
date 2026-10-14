@@ -336,6 +336,40 @@ def test_undated_company_overview_uses_year_to_date_and_finance_skill(setup, mon
     assert 'Company Financial Research' in completion.call_args.args[2][0]['content']
 
 
+@pytest.mark.parametrize('dates', ['', ',"start_date":null,"end_date":null'])
+def test_company_identity_without_date_uses_default_window(setup, monkeypatch, dates):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value=(
+        '{"search_query":"600938","subject":"中国海洋石油有限公司",'
+        '"dimensions":[],"needs_clarification":false,"clarification":""' + dates + '}')))
+    intent = agent.plan_research(setup, 'qwen', '在上海上市的中国海洋石油有限公司（600938.SH）', [])
+    assert (intent.start_date, intent.end_date) == ('2026-09-14', '2026-10-14')
+
+
+def test_explicit_month_without_model_dates_does_not_use_default_window(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value=(
+        '{"search_query":"600938","subject":"中国海洋石油有限公司",'
+        '"start_date":null,"end_date":null,"dimensions":[],"needs_clarification":false,"clarification":""}')))
+    with pytest.raises(HTTPException, match='未给出有效日期范围'):
+        agent.plan_research(setup, 'qwen', '查询中国海洋石油有限公司（600938.SH）2026年3月的公告', [])
+
+
+def test_invalid_research_structure_logs_fields_without_model_content(setup, monkeypatch, caplog):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value=(
+        '{"search_query":"600938","subject":null,"start_date":"2026-09-14",'
+        '"end_date":"2026-10-14","dimensions":[],"needs_clarification":false,'
+        '"clarification":"private-model-text"}')))
+    with pytest.raises(HTTPException, match='研究计划未通过校验'):
+        agent.plan_research(setup, 'qwen', '在上海上市的中国海洋石油有限公司（600938.SH）', [])
+    assert 'fields=[\'subject\']' in caplog.text
+    assert 'private-model-text' not in caplog.text
+
+
 def test_video_trend_planning_does_not_load_finance_skill(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
     completion = Mock(return_value='{"search_query":"video models","subject":"视频模型","start_date":"2026-09-14","end_date":"2026-10-14","dimensions":[],"needs_clarification":false,"clarification":""}')

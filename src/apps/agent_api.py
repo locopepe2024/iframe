@@ -18,7 +18,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from openai import APIConnectionError, APIStatusError, APITimeoutError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from .identity import UserContext, require_user_context
 from .user_config import get_user_config_store
@@ -171,6 +171,26 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         payload = json.loads(match.group(0) if match else result)
         if isinstance(payload, dict) and payload.get("clarification") is None:
             payload["clarification"] = ""
+        if isinstance(payload, dict) and not payload.get("needs_clarification"):
+            if "今年" in content:
+                default_start = date(today.year, 1, 1)
+            elif "最近一年" in content:
+                default_start = today - timedelta(days=365)
+            elif (not re.search(r"\d{4}\s*年|\d{4}-\d{1,2}-\d{1,2}|"
+                               r"(?:最近|过去|近)\s*\d+\s*(?:天|日|周|月|年)|"
+                               r"上半年|下半年|季度|去年|上月|本月", content)
+                  and (undated_company_overview(content)
+                       or not payload.get("start_date") or not payload.get("end_date"))):
+                default_start = (date(today.year, 1, 1) if undated_company_overview(content)
+                                 else today - timedelta(days=30))
+            else:
+                default_start = None
+            if default_start is not None:
+                payload["start_date"] = default_start.isoformat()
+                payload["end_date"] = today.isoformat()
+            elif not payload.get("start_date") or not payload.get("end_date"):
+                reason = "invalid_date"
+                raise ValueError("Missing explicit research date window")
         intent = ResearchIntent.model_validate(payload)
         if intent.needs_clarification:
             reason = "missing_clarification"
@@ -207,6 +227,13 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
             intent.needs_clarification = True
             intent.clarification = "当前来源单次最多查询一年，无法一次覆盖全部历史。请指定一个不超过一年的起止日期。"
         return intent
+    except ValidationError as exc:
+        fields = sorted({".".join(str(part) for part in error["loc"])
+                         for error in exc.errors(include_input=False)})
+        logger.warning("Research model plan rejected: model=%s reason=invalid_structure fields=%s",
+                       model, fields)
+        raise ResearchPlanValidationError(
+            502, "研究模型已返回，但研究计划未通过校验；请核对研究对象后重试") from None
     except (ValueError, TypeError):
         logger.warning("Research model plan rejected: model=%s reason=%s", model, reason)
         detail = ("研究模型已返回，但未给出有效日期范围；请指定不超过一年的起止日期"
