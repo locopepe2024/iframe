@@ -106,6 +106,12 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         } catch (error) {
             console.error("Failed to generate frame:", error);
             if ((error as any)?.response?.status === 409) {
+                try {
+                    const updatedProject = await api.getProject(currentProject.id);
+                    updateProject(currentProject.id, updatedProject);
+                } catch (refreshError) {
+                    console.error("Could not refresh stale storyboard:", refreshError);
+                }
                 alert("镜头或资产已变化，请重新预览后生成。");
                 return;
             }

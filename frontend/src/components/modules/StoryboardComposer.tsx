@@ -391,6 +391,12 @@ export default function StoryboardComposer() {
         } catch (error) {
             console.error("Render failed:", error);
             if ((error as any)?.response?.status === 409) {
+                try {
+                    const updatedProject = await api.getProject(currentProject.id);
+                    updateProject(currentProject.id, updatedProject);
+                } catch (refreshError) {
+                    console.error("Could not refresh stale storyboard:", refreshError);
+                }
                 alert("镜头或资产已变化，请重新打开生成输入预览后提交。");
                 return;
             }
