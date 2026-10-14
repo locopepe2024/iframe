@@ -338,8 +338,8 @@ export default function StoryboardComposer() {
                 finalPrompt = parts.join(" . ");
             }
 
-            const prompt = await api.previewFrameRender(currentProject.id, frame.id, finalPrompt);
-            setPendingRender({ frameId: frame.id, compositionData, prompt,
+            const preview = await api.previewFrameRender(currentProject.id, frame.id, finalPrompt);
+            setPendingRender({ frameId: frame.id, compositionData, ...preview,
                 negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null, batchSize });
         } catch (error) {
             alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
@@ -359,13 +359,14 @@ export default function StoryboardComposer() {
             try {
                 job = await api.submitFrameRender(
                     currentProject.id, prepared.frameId, prepared.compositionData, prepared.prompt,
-                    prepared.batchSize, prepared.negativePrompt, requestId, true,
+                    prepared.batchSize, prepared.negativePrompt, requestId, true, prepared.contextToken,
                 );
             } catch (error) {
                 // A lost submission response does not mean the paid work stopped.
+                if ((error as any)?.response) throw error;
                 job = await api.submitFrameRender(
                     currentProject.id, prepared.frameId, prepared.compositionData, prepared.prompt,
-                    prepared.batchSize, prepared.negativePrompt, requestId, true,
+                    prepared.batchSize, prepared.negativePrompt, requestId, true, prepared.contextToken,
                 );
             }
             let pollFailures = 0;
@@ -389,6 +390,10 @@ export default function StoryboardComposer() {
 
         } catch (error) {
             console.error("Render failed:", error);
+            if ((error as any)?.response?.status === 409) {
+                alert("镜头或资产已变化，请重新打开生成输入预览后提交。");
+                return;
+            }
             try {
                 const updatedProject = await api.getProject(currentProject.id);
                 useProjectStore.getState().updateProject(currentProject.id, updatedProject);

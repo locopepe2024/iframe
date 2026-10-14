@@ -81,8 +81,8 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
             const effectivePrompt = frame.image_prompt_en?.trim() === prompt.trim()
                 ? prompt
                 : [resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride), prompt].filter(Boolean).join(" . ");
-            const previewPrompt = await api.previewFrameRender(currentProject.id, frame.id, effectivePrompt);
-            setPendingRender({ prompt: previewPrompt, batchSize, referenceCount: null,
+            const preview = await api.previewFrameRender(currentProject.id, frame.id, effectivePrompt);
+            setPendingRender({ ...preview, batchSize, referenceCount: null,
                 negativePrompt: resolveNegativePrompt(globalNegativePrompt, "", negativePromptOverride) });
         } catch (error) {
             console.error("Failed to generate frame:", error);
@@ -100,11 +100,15 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         try {
             const updatedProject = await api.renderFrame(
                 currentProject.id, frame.id, null, prepared.prompt, prepared.batchSize,
-                prepared.negativePrompt, true,
+                prepared.negativePrompt, true, prepared.contextToken,
             );
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to generate frame:", error);
+            if ((error as any)?.response?.status === 409) {
+                alert("镜头或资产已变化，请重新预览后生成。");
+                return;
+            }
             alert(ts("generateFailed"));
         } finally {
             setIsGenerating(false);

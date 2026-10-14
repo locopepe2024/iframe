@@ -7,6 +7,7 @@ export type FrameRenderPreview = {
     negativePrompt: string;
     referenceCount: number | null;
     batchSize: number;
+    contextToken: string;
 };
 
 export default function RenderPromptPreviewDialog({
