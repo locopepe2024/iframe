@@ -189,7 +189,7 @@ function ResearchTask({ runId, answered }: { runId: string; answered: boolean })
       <button type="button" disabled={!selected.length} onClick={() => { void collect(); }} className="mt-3 min-h-9 rounded border border-glass-border px-3 text-xs text-foreground disabled:opacity-50">采集所选来源</button>
     </>}
     {!!run.jobs.length && <p className="mt-2">{run.jobs.filter(job => job.state === 'ready').length}/{run.jobs.length} 个来源已入库{run.jobs.some(job => job.state === 'failed') && '，部分失败'}</p>}
-    {run.status === 'failed' && <p className="mt-2">{run.error_code || run.jobs.find(job => job.error_code)?.error_code || '采集失败'}</p>}
+    {run.status === 'failed' && <p className="mt-2">{({ no_results: '未发现匹配的来源', rate_limited: '来源服务请求受限', unsupported_subject: '当前来源暂不支持该研究对象', provider_failed: '来源服务暂不可用' } as Record<string, string>)[run.error_code || ''] || run.error_code || run.jobs.find(job => job.error_code)?.error_code || '采集失败'}</p>}
     {error && <p role="alert" className="mt-2 text-status-failed-fg">{error}</p>}
     {error && (run.status === 'ready' || run.status === 'partial') && <button type="button" onClick={() => { answering.current = false; void answer(); }} className="mt-2 min-h-9 rounded border border-glass-border px-3 text-xs text-foreground">重试生成简报</button>}
   </div>;

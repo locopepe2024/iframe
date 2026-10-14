@@ -218,7 +218,8 @@ def search(body: SearchRequest, ctx: UserContext = Depends(require_user_context)
 
 
 def start_research(owner: str, session_id: str, query: str,
-                   collection_id: str | None = None, intent: dict | None = None):
+                   collection_id: str | None = None, intent: dict | None = None,
+                   auto_select_cninfo: bool = False):
     require_research_enabled(owner)
     if len(query.strip()) < 2:
         raise HTTPException(422, "Research query is too short")
@@ -245,7 +246,14 @@ def start_research(owner: str, session_id: str, query: str,
                 error_code = str(exc)
         with store.transaction() as connection:
             store.finish_discovery(connection, owner, run_id, candidates, error_code)
-            return store.get_research_run(connection, owner, run_id)
+            run = store.get_research_run(connection, owner, run_id)
+            if (auto_select_cninfo and os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+                    and run["status"] == "awaiting_selection"):
+                urls = list(dict.fromkeys(item["url"] for item in run["candidates"]
+                           if item.get("provider") == "cninfo" and item.get("access_status") == "public"))[:5]
+                if urls:
+                    return store.select_research_sources(connection, owner, run_id, urls)
+            return run
     except store.KnowledgeAccessDenied as exc:
         raise HTTPException(404, str(exc)) from exc
     except (OSError, ValueError, PostgresError, RuntimeError) as exc:

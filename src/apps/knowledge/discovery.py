@@ -26,16 +26,20 @@ QUERY_STOPWORDS = {"and", "board", "federal", "for", "from", "news", "release",
                    "reserve", "the", "with"}
 
 
+def current_cninfo_date() -> date:
+    return datetime.now(CNINFO_TIMEZONE).date()
+
+
 def discover_cninfo(query: str, start_date: str | None,
                     end_date: str | None) -> list[dict]:
     if not any(name in query.casefold() for name in ("美盈森", "002303", "mys group")):
         raise DiscoveryUnavailable("unsupported_subject")
     try:
-        end = date.fromisoformat(end_date) if end_date else date.today()
+        end = date.fromisoformat(end_date) if end_date else current_cninfo_date()
         start = date.fromisoformat(start_date) if start_date else end - timedelta(days=30)
     except ValueError as exc:
         raise DiscoveryUnavailable("invalid_date_window") from exc
-    if start > end or end > date.today() or (end - start).days > 366:
+    if start > end or end > current_cninfo_date() or (end - start).days > 366:
         raise DiscoveryUnavailable("invalid_date_window")
     try:
         response = requests.post(CNINFO_QUERY_URL, data={

@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 import json
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from unittest.mock import Mock
 import socket
 import subprocess
@@ -132,6 +132,54 @@ def test_cninfo_rejects_invalid_window_and_rate_limit(monkeypatch):
     monkeypatch.setattr(discovery.requests, "post", Mock(return_value=response))
     with pytest.raises(discovery.DiscoveryUnavailable, match="rate_limited"):
         discovery.discover("002303", "2026-03-01", "2026-03-31")
+
+
+def test_cninfo_today_uses_china_date_at_utc_boundary(monkeypatch):
+    real_datetime = datetime
+    class BoundaryClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 10, 13, 16, 30, tzinfo=timezone.utc).astimezone(tz)
+    monkeypatch.setattr(discovery, "datetime", BoundaryClock)
+    assert discovery.current_cninfo_date() == date(2026, 10, 14)
+    monkeypatch.setattr(discovery, "current_cninfo_date",
+                        lambda: date(2026, 10, 14))
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [b'{"announcements":[]}']
+    post = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "post", post)
+    assert discovery.discover_cninfo("002303", "2026-10-13", "2026-10-14") == []
+    assert post.call_args.kwargs["data"]["seDate"] == "2026-10-13~2026-10-14"
+    with pytest.raises(discovery.DiscoveryUnavailable, match="invalid_date_window"):
+        discovery.discover_cninfo("002303", "2026-10-13", "2026-10-15")
+
+
+def test_current_cninfo_run_auto_queues_only_public_candidates(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    calls = []
+
+    @contextmanager
+    def transaction():
+        yield object()
+
+    monkeypatch.setattr(store, "transaction", transaction)
+    monkeypatch.setattr(store, "ensure_research_collection", lambda conn, owner: "collection-a")
+    monkeypatch.setattr(store, "create_research_run", lambda *args: "run-a")
+    monkeypatch.setattr(store, "reserve_discovery", lambda *args: True)
+    monkeypatch.setattr(store, "finish_discovery", lambda *args: None)
+    monkeypatch.setattr(store, "get_research_run", lambda *args: {
+        "id": "run-a", "status": "awaiting_selection", "candidates": [
+            {"url": "https://static.cninfo.com.cn/a.PDF", "access_status": "public", "provider": "cninfo"},
+            {"url": "https://blocked.example/b.PDF", "access_status": "not_allowlisted"}],
+        "jobs": []})
+    monkeypatch.setattr(store, "select_research_sources", lambda conn, owner, rid, urls:
+                        calls.append((owner, rid, urls)) or {"id": rid, "status": "capturing", "candidates": [], "jobs": []})
+    monkeypatch.setattr(discovery, "discover", lambda *args: [{"url": "https://static.cninfo.com.cn/a.PDF", "access_status": "public"}])
+    run = api.start_research("owner-a", "session-a", "美盈森截止目前公告", auto_select_cninfo=True)
+    assert run["status"] == "capturing"
+    assert calls == [("owner-a", "run-a", ["https://static.cninfo.com.cn/a.PDF"])]
 
 
 def test_cninfo_available_to_authenticated_owners(monkeypatch):

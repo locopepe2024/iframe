@@ -82,3 +82,12 @@ it('requests one cited answer after a durable run is ready', async () => {
   await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/playground-session-a/research/run-b/answer', 'POST'));
   expect(vi.mocked(agentRequest)).toHaveBeenCalledTimes(1);
 });
+
+it('explains a no-results research run without claiming completion', async () => {
+  vi.mocked(agentRequest).mockClear();
+  usePlaygroundStore.setState({ history: [], activeSessionId: 'session-a' });
+  vi.mocked(knowledgeRequest).mockResolvedValue({ id: 'run-empty', status: 'failed', error_code: 'no_results', candidates: [], jobs: [] });
+  render(<SessionTimeline messages={[{ id: 'm', role: 'assistant', content: '正在查询', research_run_id: 'run-empty' }]} />);
+  await screen.findByText('未发现匹配的来源');
+  expect(vi.mocked(agentRequest)).not.toHaveBeenCalled();
+});

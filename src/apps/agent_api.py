@@ -13,7 +13,7 @@ from urllib.parse import urlsplit, unquote
 from typing import Literal
 import mimetypes
 import base64
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -116,13 +116,16 @@ class ResearchIntent(BaseModel):
 
 
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
-    today = date.today()
+    from .knowledge.discovery import current_cninfo_date
+    today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+             else datetime.now(timezone.utc).date())
     system = (
         "将用户的公开资料研究请求解析为 JSON 对象，不执行检索。字段必须是 "
         "search_query（适合英文新闻索引的主体或事件关键词，不含时间词）、subject、"
         "start_date、end_date（YYYY-MM-DD）、dimensions（最多8项）、"
         "needs_clarification（布尔值）、clarification（需要时只问一个关键问题）。"
-        "用户给出时间范围时严格照用；若仅说近期，默认截至今天的最近30个日历日。"
+        "用户给出时间范围时严格照用；若说截至目前、截止目前、至今或到今天，结束日期必须是今天；"
+        "没有起始日期时默认截至今天的最近30个日历日。"
         "上市公司身份有歧义时设置 needs_clarification=true；不得自行选定证券。"
         "不要把新闻发现结果当作财务事实。今天是 " + today.isoformat() + "。"
     )
@@ -132,7 +135,10 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
                                    {"role": "user", "content": content}])
     try:
         match = re.search(r"\{[\s\S]*\}", result)
-        intent = ResearchIntent.model_validate_json(match.group(0) if match else result)
+        payload = json.loads(match.group(0) if match else result)
+        if isinstance(payload, dict) and payload.get("clarification") is None:
+            payload["clarification"] = ""
+        intent = ResearchIntent.model_validate(payload)
         if intent.needs_clarification:
             if not intent.clarification.strip():
                 raise ValueError("Missing clarification")
@@ -141,11 +147,19 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
             raise ValueError("Missing research subject")
         start = date.fromisoformat(intent.start_date)
         end = date.fromisoformat(intent.end_date)
+        if current_information_request(content):
+            end = today
+            intent.end_date = end.isoformat()
         if end < start or (end - start).days > 366 or end > today:
             raise ValueError("Invalid research date window")
         return intent
     except (ValueError, TypeError):
         raise HTTPException(502, "研究需求解析失败，请明确公司、时间范围后重试") from None
+
+
+def current_information_request(content: str) -> bool:
+    return (bool(re.search(r"截至目前|截止目前|截至今天|截止今天|至今|到今天", content))
+            and bool(re.search(r"资讯|新闻|公告|研究|分析|近况|动态", content)))
 
 
 class CharacterDesignReference(BaseModel):
@@ -988,11 +1002,21 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                 answer = intent.clarification
                 existing = []
             else:
-                existing = search_knowledge(owner, intent.subject)
+                current_request = current_information_request(body.content)
+                existing = [] if current_request else search_knowledge(owner, intent.subject)
+                research_options = {"auto_select_cninfo": True} if current_request else {}
                 run = start_research(owner, sid, body.content[:200].strip(),
-                                     intent=intent.model_dump())
+                                     intent=intent.model_dump(), **research_options)
                 if run["status"] == "failed":
-                    answer = f"实时来源发现暂不可用（{run['error_code']}）。已有知识库仍可单独检索。"
+                    if run["error_code"] == "no_results":
+                        answer = (f"已检索 {intent.start_date} 至 {intent.end_date} 的来源，"
+                                  "暂未发现可采集的新资料。当前没有足够的新证据生成截至目前的分析。")
+                    else:
+                        answer = (f"实时来源发现暂不可用（{run['error_code']}）。"
+                                  f"本次未获得截至 {intent.end_date} 的新证据。")
+                elif run["status"] == "capturing":
+                    answer = (f"请稍等，正在查询和分析 {intent.subject} 截至 {intent.end_date} 的资料。"
+                              "已将发现的官方来源交给采集任务；完成后会在本会话显示带引用的结果。")
                 else:
                     available = sum(item["access_status"] == "public" for item in run["candidates"])
                     answer = (f"已有库匹配 {len(existing)} 条；研究范围：{intent.start_date} 至 {intent.end_date}，"
@@ -1201,6 +1225,7 @@ def answer_research(sid: str, run_id: uuid.UUID,
         referenced_ids = set(re.findall(r"\[([A-Za-z0-9-]{2,80})\]", answer))
         if not referenced_ids or not referenced_ids.issubset(valid_ids):
             raise HTTPException(502, "研究回答未提供可核对的来源引用，请重试")
+        answer = "查询完毕。\n\n" + answer
         cited = [item for item in evidence if item["unit_id"] in referenced_ids]
         citations = [dict(unit_id=item["unit_id"], revision_id=item["revision_id"],
                           source_id=item["source_id"], collection_id=run["collection_id"],
