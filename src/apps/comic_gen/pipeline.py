@@ -5848,6 +5848,48 @@ class ComicGenPipeline(StudioOwnerMixin):
         characters = self.resolve_episode_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
+    def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
+        """Fingerprint inputs that can change a prepared storyboard render."""
+        import hashlib
+
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        resolved = self.resolve_episode_assets(script)
+        characters = {item.id: item for item in resolved["characters"]}
+        scenes = {item.id: item for item in resolved["scenes"]}
+        props = {item.id: item for item in resolved.get("props", [])}
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        state = {
+            "source_revision": script.source_revision,
+            "director_profile_revision": frame.director_profile_revision,
+            "shot_id": frame.shot_id,
+            "shot_context": frame.director_shot_context,
+            "action_description": frame.action_description,
+            "dialogue": frame.dialogue,
+            "character_ids": frame.character_ids,
+            "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
+                           for item_id in frame.character_ids],
+            "scene": scenes[frame.scene_id].model_dump(mode="json") if frame.scene_id in scenes else None,
+            "prop_ids": frame.prop_ids,
+            "props": [props[item_id].model_dump(mode="json") if item_id in props else None
+                      for item_id in frame.prop_ids],
+            "image_prompt_en": frame.image_prompt_en,
+            "style_prompt_override": frame.style_prompt_override,
+            "lighting_override": frame.lighting_override,
+            "negative_prompt_override": frame.negative_prompt_override,
+            "art_direction": script.art_direction.model_dump(mode="json") if script.art_direction else None,
+            "legacy_style": [script.style_preset, script.style_prompt],
+            "series_art_direction": series.art_direction.model_dump(mode="json") if series and series.art_direction else None,
+            "model_settings": script.model_settings.model_dump(mode="json"),
+            "series_model_settings": series.model_settings.model_dump(mode="json") if series else None,
+        }
+        payload = json.dumps(state, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def generate_storyboard_render(
         self,
         script_id: str,
@@ -5858,6 +5900,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         negative_prompt: Optional[str] = None,
         *,
         prompt_is_complete: bool = False,
+        context_token: Optional[str] = None,
     ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
@@ -5869,6 +5912,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Frame {frame_id} not found")
         if prompt_is_complete and not prompt.strip():
             raise ValueError("Complete storyboard prompt cannot be empty")
+        if context_token and context_token != self.storyboard_render_context_token(script_id, frame_id):
+            raise ValueError("Storyboard render preview is outdated; preview the current frame again")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:

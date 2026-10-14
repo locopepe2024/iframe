@@ -178,6 +178,49 @@ def test_complete_prompt_reaches_image_adapter_without_character_suffix(tmp_path
     assert adapter.generate.call_args.args[0] == prompt
 
 
+def test_render_preview_rejects_changed_shot_before_generating():
+    now = time.time()
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1", character_ids=["char-1"],
+                            director_shot_context={"shot": {"composition": "树荫"}})
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    created_at=now, updated_at=now)
+    character = Character(id="char-1", name="苏砚", description="素黑劲装")
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.storyboard_generator = Mock()
+    pipeline._save_data = Mock()
+    pipeline.resolve_episode_assets = Mock(return_value={"characters": [character], "scenes": []})
+    token = pipeline.storyboard_render_context_token(script.id, frame.id)
+    frame.director_shot_context["shot"]["composition"] = "夕阳下的街面"
+
+    with pytest.raises(ValueError, match="preview is outdated"):
+        pipeline.generate_storyboard_render(
+            script.id, frame.id, None, "已预览正文", prompt_is_complete=True,
+            context_token=token,
+        )
+    pipeline.storyboard_generator.generate_frame.assert_not_called()
+    pipeline._save_data.assert_not_called()
+
+
+def test_render_preview_token_tracks_character_asset_and_style():
+    now = time.time()
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1", character_ids=["char-1"])
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    created_at=now, updated_at=now)
+    character = Character(id="char-1", name="苏砚", description="素黑劲装")
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_episode_assets = Mock(return_value={"characters": [character], "scenes": []})
+    original = pipeline.storyboard_render_context_token(script.id, frame.id)
+    character.description = "灰色长袍"
+    changed_character = pipeline.storyboard_render_context_token(script.id, frame.id)
+    frame.lighting_override = "暮色"
+    changed_style = pipeline.storyboard_render_context_token(script.id, frame.id)
+    assert len({original, changed_character, changed_style}) == 3
+
+
 def test_complete_first_frame_prompt_requires_text():
     now = time.time()
     frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
