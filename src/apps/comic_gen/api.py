@@ -4506,6 +4506,7 @@ class RenderFrameRequest(BaseModel):
     negative_prompt: Optional[str] = None
     batch_size: int = 1
     prompt_is_complete: bool = False
+    context_token: Optional[str] = None
 
 
 class RenderFrameJobRequest(RenderFrameRequest):
@@ -4524,7 +4525,10 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
     try:
-        return {"prompt": pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt)}
+        return {
+            "prompt": pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt),
+            "context_token": pipeline.storyboard_render_context_token(script_id, request.frame_id),
+        }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -4542,6 +4546,13 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         raise HTTPException(status_code=404, detail="Frame not found")
     if not request.request_id or len(request.request_id) > 128:
         raise HTTPException(status_code=422, detail="Invalid request id")
+    if request.context_token:
+        try:
+            current_token = pipeline.storyboard_render_context_token(script_id, request.frame_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if request.context_token != current_token:
+            raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
     fingerprint = hashlib.sha256(json.dumps({
         "request_id": request.request_id,
         "frame_id": request.frame_id,
@@ -4550,6 +4561,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         "negative_prompt": request.negative_prompt,
         "batch_size": request.batch_size,
         "prompt_is_complete": request.prompt_is_complete,
+        "context_token": request.context_token,
     }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def work():
@@ -4558,6 +4570,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
             prompt_is_complete=request.prompt_is_complete,
+            context_token=request.context_token,
         )
         return {"frame_id": request.frame_id}
 
@@ -4588,9 +4601,12 @@ def render_frame(script_id: str, request: RenderFrameRequest):
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
             prompt_is_complete=request.prompt_is_complete,
+            context_token=request.context_token,
         )
         return signed_response(updated_script)
     except ValueError as e:
+        if "preview is outdated" in str(e):
+            raise HTTPException(status_code=409, detail=str(e)) from e
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.exception("Error rendering frame %s", request.frame_id)

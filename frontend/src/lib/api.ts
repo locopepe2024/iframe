@@ -1528,6 +1528,7 @@ export const api = {
         batchSize: number = 1,
         negativePrompt?: string,
         promptIsComplete: boolean = false,
+        contextToken?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render`, {
             frame_id: frameId,
@@ -1536,22 +1537,23 @@ export const api = {
             negative_prompt: negativePrompt,
             batch_size: batchSize,
             prompt_is_complete: promptIsComplete,
+            context_token: contextToken,
         });
         return res.data;
     },
 
-    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<string> => {
+    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-preview`, {
             frame_id: frameId,
             prompt,
         });
-        return res.data.prompt;
+        return { prompt: res.data.prompt, contextToken: res.data.context_token };
     },
 
     submitFrameRender: async (
         scriptId: string, frameId: string, compositionData: any,
         prompt: string, batchSize: number, negativePrompt: string | undefined,
-        requestId: string, promptIsComplete: boolean = false,
+        requestId: string, promptIsComplete: boolean = false, contextToken?: string,
     ): Promise<{ job_id: string; status: string; error?: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-jobs`, {
             frame_id: frameId,
@@ -1561,6 +1563,7 @@ export const api = {
             batch_size: batchSize,
             request_id: requestId,
             prompt_is_complete: promptIsComplete,
+            context_token: contextToken,
         }, { timeout: 15000 });
         return res.data;
     },
