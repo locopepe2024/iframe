@@ -63,6 +63,17 @@ it('reports a missing session instead of silently ignoring retry', () => {
   expect(usePlaygroundStore.getState().queue).toEqual([]);
 });
 
+it('keeps a submitted research question and its saved failure visible', () => {
+  usePlaygroundStore.setState({ history: [], activeSessionId: 'session-a' });
+  render(<SessionTimeline messages={[
+    { id: 'user-a', role: 'user', content: '美盈森公司整体历史信息', created_at: 1 },
+    { id: 'failure-a', role: 'assistant', content: '当前来源最多查询一年', research_failure_stage: 'plan_validation', created_at: 2 },
+  ]} />);
+  expect(screen.getByText('美盈森公司整体历史信息')).toBeInTheDocument();
+  expect(screen.getByText('当前来源最多查询一年')).toBeInTheDocument();
+  expect(screen.getByText('Agent · 研究未完成')).toBeInTheDocument();
+});
+
 it('shows discovery leads and submits only selected sources', async () => {
   usePlaygroundStore.setState({ history: [], activeSessionId: 'session-a' });
   vi.mocked(knowledgeRequest).mockResolvedValue({ id: 'run-a', status: 'awaiting_selection',

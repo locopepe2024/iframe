@@ -209,7 +209,7 @@ function ChatCard({ message, onDelete, answered }: { message: ChatMessage; onDel
     <div className="absolute left-[11px] top-0 h-full w-px bg-border-subtle" />
     <div className="absolute left-0 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-glass-border bg-surface text-text-muted"><Sparkles size={12} /></div>
     <section className="rounded-[18px] border border-glass-border bg-glass px-4 py-3">
-      <div className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] text-text-muted"><span>{message.role === 'user' ? '你 · Agent' : 'Agent'}</span><span title={message.model}>{message.model && (message.model.length > 10 ? message.model.slice(0, 10) + '...' : message.model)}</span></div>
+      <div className="mb-2 flex items-center gap-2 font-mono text-[0.625rem] text-text-muted"><span>{message.role === 'user' ? '你 · Agent' : message.research_failure_stage ? 'Agent · 研究未完成' : 'Agent'}</span><span title={message.model}>{message.model && (message.model.length > 10 ? message.model.slice(0, 10) + '...' : message.model)}</span></div>
       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"><PromptWithReferences prompt={message.content} mediaNames={message.asset_names || []} mediaPaths={message.input_media || []} mediaMap={Object.fromEntries((message.input_media || []).map((path, i) => [path, message.asset_names?.[i] || path]))} /></p>
       {!!message.knowledge_citations?.length && <div className="mt-3 border-t border-border-subtle pt-3 text-xs text-text-secondary">
         <div className="mb-2 font-medium text-foreground">检索来源</div>
