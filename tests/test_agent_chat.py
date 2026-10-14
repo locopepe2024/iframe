@@ -339,6 +339,7 @@ def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch)
     first = agent.answer_research(sid, run_id, setup)['assistant_message']
     second = agent.answer_research(sid, run_id, setup)['assistant_message']
     assert first == second
+    assert first['content'].startswith('查询完毕。')
     assert first['knowledge_citations'][0]['revision_id'] == 'revision-a'
     assert completion.call_count == 2
 

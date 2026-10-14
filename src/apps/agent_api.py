@@ -1221,6 +1221,7 @@ def answer_research(sid: str, run_id: uuid.UUID,
         referenced_ids = set(re.findall(r"\[([A-Za-z0-9-]{2,80})\]", answer))
         if not referenced_ids or not referenced_ids.issubset(valid_ids):
             raise HTTPException(502, "研究回答未提供可核对的来源引用，请重试")
+        answer = "查询完毕。\n\n" + answer
         cited = [item for item in evidence if item["unit_id"] in referenced_ids]
         citations = [dict(unit_id=item["unit_id"], revision_id=item["revision_id"],
                           source_id=item["source_id"], collection_id=run["collection_id"],
