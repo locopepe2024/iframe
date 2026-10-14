@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
+import { storyboardAssetIndex } from "@/lib/storyboardAssetIndex";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -61,7 +62,12 @@ export default function StoryboardR2V() {
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
-    const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[] | undefined>();
+    const [assetIndexState, setAssetIndexState] = useState<{ projectId: string; assets: AssetReferenceIndexEntry[] } | null>(null);
+    const assetIndex = useMemo(() =>
+        assetIndexState && currentProject && assetIndexState.projectId === currentProject.id
+            ? storyboardAssetIndex(assetIndexState.assets, currentProject as any)
+            : undefined,
+    [assetIndexState, currentProject]);
     const displayedStyle = currentProject
         ? resolveStoryboardStyle(currentProject, currentSeries)
         : { positivePrompt: "", negativePrompt: "" };
@@ -75,7 +81,7 @@ export default function StoryboardR2V() {
         if (!projectId || typeof api.getAssetReferenceIndex !== "function") return;
         let active = true;
         void api.getAssetReferenceIndex(projectId)
-            .then((index) => { if (active) setAssetIndex(index.assets); })
+            .then((index) => { if (active) setAssetIndexState({ projectId, assets: index.assets }); })
             .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
         return () => { active = false; };
     }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
@@ -853,6 +859,21 @@ export default function StoryboardR2V() {
     }, [videoConfig.r2vModel]);
 
     const referenceAssets = useMemo<ReferenceAsset[]>(() => {
+        if (assetIndex) {
+            return assetIndex.map((item) => ({
+                id: item.asset_id,
+                name: item.name,
+                kind: item.asset_type,
+                variants: item.variants.map((variant) => ({
+                    id: variant.id,
+                    url: variant.url,
+                    display_name: variant.display_name,
+                    reference_view_role: variant.reference_view_role ?? undefined,
+                    reference_distance: variant.reference_distance ?? undefined,
+                })),
+                selectedId: item.selected_variant_id,
+            }));
+        }
         const normalize = (item: any, kind: ReferenceAsset["kind"], unit: any): ReferenceAsset => ({
             id: item.id,
             name: item.name,
@@ -875,7 +896,7 @@ export default function StoryboardR2V() {
             ...scenes.map((item: any) => normalize(item, "scene", item.image_asset)),
             ...props.map((item: any) => normalize(item, "prop", item.image_asset)),
         ];
-    }, [characters, scenes, props]);
+    }, [assetIndex, characters, scenes, props]);
 
     const resolveShotReferences = useCallback((shot: Pick<ShotNode, "prompt" | "referenceVariantIds">) =>
         resolveReferenceSubmission(shot.prompt, referenceAssets, shot.referenceVariantIds),
@@ -898,24 +919,11 @@ export default function StoryboardR2V() {
             const name = match[1];
             let hasImage = false;
             // Check character
-            const char = characters.find((c: any) => c.name === name);
-            if (char) {
-                hasImage = !!(char.reference_sheet?.image_variants?.length || char.full_body_asset?.variants?.length);
-            }
-            // Check scene
-            if (!hasImage) {
-                const scene = scenes.find((s: any) => s.name === name);
-                hasImage = !!(scene?.image_asset?.variants?.length);
-            }
-            // Check prop
-            if (!hasImage) {
-                const prop = props.find((p: any) => p.name === name);
-                hasImage = !!(prop?.image_asset?.variants?.length);
-            }
+            hasImage = !!referenceAssets.find((asset) => asset.name === name)?.variants.length;
             if (!hasImage) unresolved.push(name);
         }
         return unresolved;
-    }, [characters, scenes, props]);
+    }, [referenceAssets]);
 
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
     const generateT2I = useCallback(async (index: number) => {
