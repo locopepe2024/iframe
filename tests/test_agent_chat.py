@@ -237,6 +237,44 @@ def test_live_research_starts_durable_run_without_claiming_citations(setup, monk
     completion.assert_not_called()
 
 
+def test_current_cninfo_request_queues_capture_and_waits_for_cited_answer(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    from src.apps.knowledge import api
+    run_id = str(__import__('uuid').uuid4())
+    monkeypatch.setattr(agent, 'plan_research', lambda *args: agent.ResearchIntent(
+        search_query='002303', subject='美盈森', start_date='2026-10-01',
+        end_date='2026-10-14', dimensions=['公告']))
+    monkeypatch.setattr(agent, 'search_knowledge', Mock(side_effect=AssertionError('Old hits do not prove current coverage')))
+    started = Mock(return_value={'id': run_id, 'status': 'capturing', 'candidates': [], 'jobs': []})
+    monkeypatch.setattr(api, 'start_research', started)
+    result = agent.send(sid, agent.MessageCreate(content='查询美盈森截至目前的公告资讯并分析',
+                                                 knowledge_search=True, live_research=True), setup)
+    assistant = result['assistant_message']
+    assert assistant['research_run_id'] == run_id
+    assert '正在查询和分析' in assistant['content']
+    assert 'knowledge_citations' not in assistant
+    assert agent.messages(sid, setup)['messages'][-1] == assistant
+    assert started.call_args.kwargs['auto_select_cninfo'] is True
+
+
+def test_current_research_no_results_does_not_claim_fresh_evidence(setup, monkeypatch):
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'static.cninfo.com.cn')
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    from src.apps.knowledge import api
+    monkeypatch.setattr(agent, 'plan_research', lambda *args: agent.ResearchIntent(
+        search_query='002303', subject='美盈森', start_date='2026-10-01', end_date='2026-10-14'))
+    monkeypatch.setattr(api, 'start_research', lambda *args, **kwargs: {
+        'id': str(__import__('uuid').uuid4()), 'status': 'failed',
+        'error_code': 'no_results', 'candidates': [], 'jobs': []})
+    assistant = agent.send(sid, agent.MessageCreate(
+        content='查询美盈森截至目前的公告资讯并分析', knowledge_search=True, live_research=True), setup)['assistant_message']
+    assert '暂未发现可采集的新资料' in assistant['content']
+    assert 'knowledge_citations' not in assistant
+
+
 def test_research_plan_asks_for_ambiguous_company_without_starting_run(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
@@ -268,6 +306,15 @@ def test_research_plan_rejects_future_or_reversed_window(setup, monkeypatch):
     monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"NVIDIA","subject":"NVIDIA","start_date":"2027-03-31","end_date":"2027-03-01","dimensions":[],"needs_clarification":false,"clarification":""}'))
     with pytest.raises(HTTPException, match='研究需求解析失败'):
         agent.plan_research(setup, 'qwen', '英伟达未来', [])
+
+
+def test_current_research_uses_cninfo_local_today(setup, monkeypatch):
+    from src.apps.knowledge import discovery
+    monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"002303","subject":"美盈森","start_date":"2026-10-01","end_date":"2026-10-13","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '美盈森截至目前的公告', [])
+    assert intent.end_date == '2026-10-14'
+    assert '今天是 2026-10-14' in agent.complete.call_args.args[2][0]['content']
 
 
 def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch):
