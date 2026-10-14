@@ -80,6 +80,23 @@ it('routes an explicit current news request to live research when available', as
     hook.unmount();
 });
 
+it('routes year-to-date company operations to live research when available', async () => {
+    vi.mocked(knowledgeRequest).mockResolvedValue({ enabled: true });
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({ prompt: '分析深圳市怡亚通供应链股份有限公司 002183 今年的运营' });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.liveResearchAvailable).toBe(true));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    await waitFor(() => expect(vi.mocked(agentRequest)).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        knowledge_search: true, live_research: true,
+    })));
+    await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
+});
+
 it('clears knowledge search when switching to H3 prompt optimization', async () => {
     mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }), [
         ...models, { id: 'h3', api_model_id: 'minimax-h3-ir', display_name: 'MiniMax H3 IR' },

@@ -8,7 +8,7 @@ import sys
 import uuid
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from src.apps.identity import UserContext, require_user_context
@@ -100,6 +100,7 @@ def test_fed_rss_uses_own_budget_and_source_policy(monkeypatch):
 def test_cninfo_discovers_exact_issuer_and_march_announcement(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    monkeypatch.setattr(discovery, "cninfo_issuer", lambda query, hint=None: ("002303", "9900008616", "美盈森") if "美盈森" in query else (_ for _ in ()).throw(discovery.DiscoveryUnavailable("subject_not_found")))
     payload = {"announcements": [
         {"secCode": "002303", "orgId": "9900008616", "announcementTitle": "仲裁裁决公告",
          "announcementTime": 1773849600000, "adjunctUrl": "finalpage/2026-03-19/1225016378.PDF"},
@@ -119,13 +120,132 @@ def test_cninfo_discovers_exact_issuer_and_march_announcement(monkeypatch):
     assert results[0]["published_at"] == "2026-03-19T00:00:00+08:00"
     assert post.call_args.kwargs["data"]["stock"] == "002303,9900008616"
     assert post.call_args.kwargs["allow_redirects"] is False
-    with pytest.raises(discovery.DiscoveryUnavailable, match="unsupported_subject"):
+    with pytest.raises(discovery.DiscoveryUnavailable, match="subject_not_found"):
         discovery.discover("其他公司", "2026-03-01", "2026-03-31")
     assert post.call_count == 1
 
 
+def test_cninfo_discovers_yiyatong_with_exact_issuer_identity(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    issuer_response = Mock(status_code=200)
+    issuer_response.iter_content.return_value = [json.dumps([
+        {"code": "002183", "orgId": "9900003828", "zwjc": "怡亚通", "category": "A股", "delisted": "false"},
+        {"code": "148506", "orgId": "9900003828", "zwjc": "23怡亚03", "category": "公司债", "delisted": "false"},
+    ]).encode()]
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [json.dumps({"announcements": [
+        {"secCode": "002183", "orgId": "9900003828", "announcementTitle": "2026年公告",
+         "announcementTime": 1791907200000, "adjunctUrl": "finalpage/2026-10-14/1225604113.PDF"},
+        {"secCode": "002183", "orgId": "wrong-org", "announcementTitle": "wrong",
+         "announcementTime": 1791907200000, "adjunctUrl": "finalpage/2026-10-14/1225604114.PDF"},
+    ]}).encode()]
+    post = Mock(side_effect=[issuer_response, response])
+    monkeypatch.setattr(discovery.requests, "post", post)
+    results = discovery.discover_cninfo("深圳市怡亚通供应链股份有限公司 002183", "2026-10-01", "2026-10-14")
+    assert [item["url"] for item in results] == ["https://static.cninfo.com.cn/finalpage/2026-10-14/1225604113.PDF"]
+    assert post.call_args_list[0].args[0] == discovery.CNINFO_SECURITY_URL
+    assert post.call_args_list[0].kwargs["data"] == {"keyWord": "002183"}
+    assert post.call_args_list[1].kwargs["data"]["stock"] == "002183,9900003828"
+    assert "怡亚通" in results[0]["publisher"]
+
+
+def test_cninfo_subject_resolution_reports_ambiguity_without_guessing(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [json.dumps([
+        {"code": "000001", "orgId": "org0001", "zwjc": "甲公司", "category": "A股", "delisted": "false"},
+        {"code": "000002", "orgId": "org0002", "zwjc": "乙公司", "category": "A股", "delisted": "false"},
+    ]).encode()]
+    monkeypatch.setattr(discovery.requests, "post", Mock(return_value=response))
+    with pytest.raises(discovery.DiscoveryUnavailable, match="ambiguous_subject"):
+        discovery.cninfo_issuer("供应链公司")
+
+
+def test_cninfo_resolves_company_name_without_code(monkeypatch):
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [json.dumps([
+        {"code": "002183", "orgId": "9900003828", "zwjc": "怡亚通", "category": "A股", "delisted": "false"},
+        {"code": "148506", "orgId": "9900003828", "zwjc": "23怡亚03", "category": "公司债", "delisted": "false"},
+    ]).encode()]
+    post = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "post", post)
+    assert discovery.cninfo_issuer("深圳市怡亚通供应链股份有限公司") == ("002183", "9900003828", "怡亚通")
+    assert post.call_args.kwargs["data"] == {"keyWord": "深圳市怡亚通供应链股份有限公司"}
+
+
+def test_cninfo_rejects_conflicting_code_and_company_name(monkeypatch):
+    def response_for(code, name):
+        response = Mock(status_code=200)
+        response.iter_content.return_value = [json.dumps([
+            {"code": code, "orgId": "9900003828", "zwjc": name,
+             "category": "A股", "delisted": "false"},
+        ]).encode()]
+        return response
+
+    post = Mock(side_effect=[response_for("002183", "怡亚通"),
+                             response_for("002303", "美盈森")])
+    monkeypatch.setattr(discovery.requests, "post", post)
+    with pytest.raises(discovery.DiscoveryUnavailable, match="ambiguous_subject"):
+        discovery.cninfo_issuer("002183", "美盈森集团股份有限公司")
+    assert [call.kwargs["data"]["keyWord"] for call in post.call_args_list] == [
+        "002183", "美盈森集团股份有限公司"]
+
+
+def test_cninfo_uses_shanghai_announcement_column(monkeypatch):
+    monkeypatch.setattr(discovery, "cninfo_issuer", lambda query, hint=None: ("600000", "org600000", "浦发银行"))
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [b'{"announcements":[]}']
+    post = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "post", post)
+    assert discovery.discover_cninfo("600000", "2026-10-01", "2026-10-14") == []
+    assert post.call_args.kwargs["data"]["column"] == "sse"
+    assert post.call_args.kwargs["data"]["plate"] == "sh"
+
+
+def test_video_trend_discovery_uses_only_official_bounded_paths(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "deepmind.google")
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [b"""<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url><loc>https://deepmind.google/models/veo/</loc><lastmod>2026-06-04</lastmod></url>
+      <url><loc>https://deepmind.google/blog/generating-audio-for-video/</loc></url>
+      <url><loc>https://evil.example/models/veo/</loc></url>
+      <url><loc>https://deepmind.google/private/account/</loc></url>
+    </urlset>"""]
+    get = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "get", get)
+    results = discovery.discover_video_trends("视频 AI 模型最近一年的发展趋势", "2025-10-14", "2026-10-14")
+    assert [item["url"] for item in results] == [
+        "https://deepmind.google/models/veo/",
+        "https://deepmind.google/blog/generating-audio-for-video/"]
+    assert all(item["published_at"] is None and item["access_status"] == "public" for item in results)
+    assert get.call_args.kwargs["allow_redirects"] is False
+
+
+def test_video_trend_request_routes_away_from_cninfo(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    calls = []
+
+    @contextmanager
+    def transaction():
+        yield object()
+
+    monkeypatch.setattr(store, "transaction", transaction)
+    monkeypatch.setattr(store, "ensure_research_collection", lambda *args: "collection-a")
+    monkeypatch.setattr(store, "create_research_run", lambda *args: "run-a")
+    monkeypatch.setattr(store, "reserve_discovery", lambda conn, owner, provider: calls.append(provider) or True)
+    monkeypatch.setattr(store, "finish_discovery", lambda *args: None)
+    monkeypatch.setattr(store, "get_research_run", lambda *args: {"id": "run-a", "status": "awaiting_selection", "candidates": [], "jobs": []})
+    monkeypatch.setattr(discovery, "discover_video_trends", lambda *args: [{"url": "https://deepmind.google/models/veo/", "provider": "video_trends"}])
+    monkeypatch.setattr(discovery, "discover_cninfo", Mock(side_effect=AssertionError("Wrong source")))
+    api.start_research("owner", "session", "分析视频 AI 模型最近一年的发展趋势",
+                       intent={"subject": "视频生成模型", "start_date": "2025-10-14", "end_date": "2026-10-14"})
+    assert calls == ["video_trends"]
+
+
 def test_cninfo_rejects_invalid_window_and_rate_limit(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setattr(discovery, "cninfo_issuer", lambda query, hint=None: ("002303", "9900008616", "美盈森"))
     with pytest.raises(discovery.DiscoveryUnavailable, match="invalid_date_window"):
         discovery.discover("002303", "2026-04-01", "2026-03-01")
     response = Mock(status_code=429)
@@ -135,6 +255,7 @@ def test_cninfo_rejects_invalid_window_and_rate_limit(monkeypatch):
 
 
 def test_cninfo_today_uses_china_date_at_utc_boundary(monkeypatch):
+    monkeypatch.setattr(discovery, "cninfo_issuer", lambda query, hint=None: ("002303", "9900008616", "美盈森"))
     real_datetime = datetime
     class BoundaryClock(datetime):
         @classmethod

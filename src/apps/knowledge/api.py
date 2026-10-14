@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 import os
+import re
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -223,24 +224,34 @@ def start_research(owner: str, session_id: str, query: str,
     require_research_enabled(owner)
     if len(query.strip()) < 2:
         raise HTTPException(422, "Research query is too short")
+    provider = os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER")
     try:
         with store.transaction() as connection:
             target = collection_id or store.ensure_research_collection(connection, owner)
             run_id = store.create_research_run(connection, owner, session_id, query.strip(), target, intent)
-            allowed = store.reserve_discovery(
-                connection, owner, os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER"))
+            routed_provider = "video_trends" if discovery.video_trend_request(query) else provider
+            allowed = store.reserve_discovery(connection, owner, routed_provider)
         if not allowed:
             candidates = []
             error_code = "rate_budget"
         else:
             try:
                 planned = intent or {}
-                discovery_query = (f"{planned.get('subject', '')} {query}" if
-                                   os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
-                                   else planned.get("search_query") or query.strip())
-                candidates = discovery.discover(discovery_query,
-                                                planned.get("start_date"), planned.get("end_date"))
-                error_code = None if candidates else "no_results"
+                if routed_provider == "video_trends":
+                    candidates = discovery.discover_video_trends(query,
+                        planned.get("start_date"), planned.get("end_date"))
+                    error_code = None if candidates else "no_results"
+                elif provider == "cninfo":
+                    codes = re.findall(r"(?<!\d)\d{6}(?!\d)", query)
+                    discovery_query = " ".join(codes) if codes else planned.get("subject") or query.strip()
+                    candidates = discovery.discover(discovery_query,
+                                                    planned.get("start_date"), planned.get("end_date"),
+                                                    planned.get("subject") if codes else None)
+                    error_code = None if candidates else "no_results"
+                else:
+                    candidates = discovery.discover(planned.get("search_query") or query.strip(),
+                                                    planned.get("start_date"), planned.get("end_date"))
+                    error_code = None if candidates else "no_results"
             except discovery.DiscoveryUnavailable as exc:
                 candidates = []
                 error_code = str(exc)
