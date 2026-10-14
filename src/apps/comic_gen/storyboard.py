@@ -65,6 +65,7 @@ class StoryboardGenerator:
         size: str = None,
         model_name: str = None,
         negative_prompt: str = None,
+        preserve_prompt: bool = False,
     ) -> StoryboardFrame:
         """Generates a storyboard frame image."""
         frame.status = GenerationStatus.PROCESSING
@@ -180,7 +181,7 @@ class StoryboardGenerator:
             prompt += "."
         else:
             # If prompt is provided by user/LLM, ensure character descriptions are still present for I2I consistency
-            if char_text and char_text not in prompt:
+            if not preserve_prompt and char_text and char_text not in prompt:
                 prompt = f"{prompt} Characters: {char_text}."
         
         # Store the optimized prompt

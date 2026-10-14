@@ -186,6 +186,7 @@ class AssetGenerator:
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
+        preserve_prompt: bool = False,
     ) -> Character:
         """
         Generates character assets based on generation_type.
@@ -224,9 +225,9 @@ class AssetGenerator:
                 if reference_image_urls:
                     reference_args["ref_image_paths"] = [self._reference_path(item) for item in reference_image_urls]
                 effective_prompt = prompt if prompt else build_reference_sheet_prompt(character.name, character.description)
-                if positive_prompt and positive_prompt not in effective_prompt:
+                if not preserve_prompt and positive_prompt and positive_prompt not in effective_prompt:
                     effective_prompt = append_style_suffix(effective_prompt, positive_prompt)
-                if reference:
+                if reference and not preserve_prompt:
                     effective_prompt = bind_character_reference_prompt(effective_prompt)
 
                 effective_size = size or "1024*1024"
@@ -311,7 +312,7 @@ class AssetGenerator:
                 character.full_body_prompt = base_prompt
                 
                 # Generate the image with style suffix appended
-                generation_prompt = append_style_suffix(base_prompt, style_suffix)
+                generation_prompt = base_prompt if preserve_prompt and prompt else append_style_suffix(base_prompt, style_suffix)
                 
                 # An explicit library/upload reference is authoritative for
                 # every character generation mode.  The older reverse
@@ -394,7 +395,7 @@ class AssetGenerator:
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)
-                            effective_generation_prompt = bind_character_reference_prompt(generation_prompt)
+                            effective_generation_prompt = generation_prompt if preserve_prompt and prompt else bind_character_reference_prompt(generation_prompt)
                             logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
                         
                         self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, ref_image_paths=extra_ref_image_paths, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size, image_generation_mode=image_generation_mode)
@@ -564,10 +565,10 @@ class AssetGenerator:
                 character.three_view_prompt = base_prompt
                 
                 # Generate with style suffix appended
-                generation_prompt = append_style_suffix(base_prompt, style_suffix)
+                generation_prompt = base_prompt if preserve_prompt and prompt else append_style_suffix(base_prompt, style_suffix)
                 effective_generation_prompt = (
                     bind_character_reference_prompt(generation_prompt)
-                    if fullbody_path
+                    if fullbody_path and not preserve_prompt
                     else generation_prompt
                 )
                 
@@ -653,10 +654,10 @@ class AssetGenerator:
                 character.headshot_prompt = base_prompt
                 
                 # Generate with style suffix appended
-                generation_prompt = append_style_suffix(base_prompt, style_suffix)
+                generation_prompt = base_prompt if preserve_prompt and prompt else append_style_suffix(base_prompt, style_suffix)
                 effective_generation_prompt = (
                     bind_character_reference_prompt(generation_prompt)
-                    if fullbody_path
+                    if fullbody_path and not preserve_prompt
                     else generation_prompt
                 )
 
@@ -756,6 +757,7 @@ class AssetGenerator:
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
+        preserve_prompt: bool = False,
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
@@ -775,7 +777,7 @@ class AssetGenerator:
         subject_prompt = (prompt or "").strip()
         if not subject_prompt:
             subject_prompt = f"Scene Concept Art: {scene.name}. {scene.description}."
-        prompt = f"{subject_prompt} High quality, detailed. {positive_prompt}"
+        prompt = subject_prompt if preserve_prompt and subject_prompt else f"{subject_prompt} High quality, detailed. {positive_prompt}"
         
         try:
             for _ in range(batch_size):
@@ -855,6 +857,7 @@ class AssetGenerator:
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
+        preserve_prompt: bool = False,
     ) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
@@ -870,7 +873,7 @@ class AssetGenerator:
         subject_prompt = (prompt or "").strip()
         if not subject_prompt:
             subject_prompt = f"Prop Design: {prop.name}. {prop.description}."
-        prompt = f"{subject_prompt} Isolated on white background, high quality, detailed. {positive_prompt}"
+        prompt = subject_prompt if preserve_prompt and subject_prompt else f"{subject_prompt} Isolated on white background, high quality, detailed. {positive_prompt}"
         
         try:
             for _ in range(batch_size):

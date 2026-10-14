@@ -52,6 +52,7 @@ interface PolishPanelProps {
     dialogue?: { speaker: string; line: string } | null;
     videoModel?: string;
     prompt: string;
+    optimizationDraft?: string;
     tabMode: "t2i_i2v" | "direct_r2v";
     scriptId: string;
     frameId?: string;
@@ -106,6 +107,7 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
 
 export default function PolishPanel({
     prompt,
+    optimizationDraft,
     videoModel = "",
     generateAudio,
     targetDuration,
@@ -138,7 +140,7 @@ export default function PolishPanel({
         // 迭代时：draft=上一版 EN，prev_cn=上一版 CN，让后端双语锚点。
         // 首次：draft=用户原文，prev_cn 留空。
         const isIteration = !!feedbackText;
-        const draft = isIteration ? (polished?.en ?? prompt) : prompt;
+        const draft = isIteration ? (polished?.en ?? prompt) : (optimizationDraft || prompt);
         const prevCn = isIteration ? (polished?.cn ?? "") : "";
         if (!draft.trim()) return;
 
@@ -174,7 +176,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
+    }, [tabMode, prompt, optimizationDraft, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);

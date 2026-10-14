@@ -63,6 +63,72 @@ def test_prop_explicit_prompt_is_sent_and_recorded(tmp_path):
     assert prop.image_asset.variants[0].prompt_used == sent_prompt
 
 
+@pytest.mark.parametrize("asset_type", ["scene", "prop"])
+def test_accepted_asset_polish_is_sent_without_generated_suffix(tmp_path, asset_type):
+    model = FakeImageModel()
+    generator = AssetGenerator({"output_dir": str(tmp_path / "assets")})
+    generator._get_model_for = lambda _model_name: model
+    asset = Scene(id="scene-1", name="长街", description="黄昏") if asset_type == "scene" else Prop(
+        id="prop-1", name="长剑", description="双手剑"
+    )
+    prompt = "完整优化提示词：清晰主体、黄昏光影。"
+
+    getattr(generator, f"generate_{asset_type}")(
+        asset, prompt=prompt, positive_prompt="全局风格", preserve_prompt=True,
+    )
+
+    assert model.calls[0][0] == prompt
+    assert asset.image_asset.variants[0].prompt_used == prompt
+
+
+def test_frame_polish_receives_default_contract_and_current_shot_context():
+    from types import SimpleNamespace
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1", director_shot_context={
+        "scene": {"location": "长街", "time_anchor": "黄昏"},
+        "shot": {"visual_intent": "苏砚出场"},
+    })
+    script = Script(id="project-1", title="test", original_text="", frames=[frame], created_at=0, updated_at=0)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.get_effective_prompt = lambda *_args: ""
+    pipeline.director_prompt_context = lambda _script: "已确认的导演摘要"
+    pipeline.effective_art_direction = lambda _script: SimpleNamespace(style_config={"positive_prompt": "写实风格"})
+    pipeline.script_processor = MagicMock()
+    pipeline.script_processor.polish_storyboard_prompt.return_value = {
+        "prompt_cn": "中文结果", "prompt_en": "English result",
+    }
+    pipeline._save_data = MagicMock()
+
+    pipeline.refine_frame_prompt(script.id, frame.id, "苏砚出场", [])
+
+    draft, _assets, _feedback, instructions = pipeline.script_processor.polish_storyboard_prompt.call_args.args
+    assert "苏砚出场" in draft and "长街" in draft and "黄昏" in draft
+    assert "写实风格" in instructions and "已确认的导演摘要" in instructions
+    assert "{DRAFT}" in instructions and "{ASSETS}" in instructions
+
+
+def test_storyboard_generator_preserves_accepted_polish_prompt(tmp_path):
+    from src.apps.comic_gen.models import Character, StoryboardFrame
+    from src.apps.comic_gen.storyboard import StoryboardGenerator
+
+    model = FakeImageModel()
+    generator = StoryboardGenerator({"output_dir": str(tmp_path / "storyboard")})
+    generator._get_model_for = lambda _model_name: model
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    character = Character(id="char-1", name="苏砚", description="素黑劲装")
+    frame.character_ids = [character.id]
+    polished = "完整结构化提示词：苏砚站在粮铺门前。"
+
+    generator.generate_frame(frame, [character], None, prompt=polished, preserve_prompt=True)
+
+    assert model.calls[0][0] == polished
+    assert frame.image_prompt == polished
+
+
 def test_pipeline_forwards_scene_prompt_to_generator():
     # Keep this test focused on the pipeline boundary: the prompt supplied by
     # the request must reach the scene generator rather than being dropped.

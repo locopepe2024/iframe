@@ -320,15 +320,14 @@ export default function StoryboardComposer() {
             );
 
             // Construct final prompt:
-            // If image_prompt exists (polished or manually edited), it already contains action/dialogue,
-            // so only prepend the style. Otherwise, build from action_description and dialogue.
+            // An accepted polish result already contains the resolved style and shot context.
             let finalPrompt = "";
 
             if (frame.image_prompt && frame.image_prompt.trim()) {
-                // User has a custom/polished prompt - only add style prefix
-                finalPrompt = frameStylePrompt
-                    ? `${frameStylePrompt} . ${frame.image_prompt}`
-                    : frame.image_prompt;
+                const isAcceptedPolish = frame.image_prompt_en?.trim() === frame.image_prompt.trim();
+                finalPrompt = isAcceptedPolish || !frameStylePrompt
+                    ? frame.image_prompt
+                    : `${frameStylePrompt} . ${frame.image_prompt}`;
             } else {
                 // No custom prompt - build from action_description and dialogue
                 const parts = [

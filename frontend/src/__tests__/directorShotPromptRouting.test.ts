@@ -54,3 +54,11 @@ it("routes confirmed shooting-plan direction into the final R2V prompt", () => {
     expect(result.match(/缓慢跟随/g)).toHaveLength(1);
     expect(result.match(/远处人声与兵器碰撞声/g)).toHaveLength(1);
 });
+
+it("reloads an accepted optimized prompt instead of the older visual description", () => {
+    const shot = frameToShotNode({
+        id: "frame-2", visual_description: "旧描述", action_description: "已优化的完整提示词",
+        workbench_prompt_is_optimized: true,
+    }, []);
+    expect(buildGenerationPrompt(shot, false, "wan2.7-i2v")).toBe("已优化的完整提示词");
+});

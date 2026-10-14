@@ -756,6 +756,7 @@ export const api = {
             workbench_generate_count?: number;
             video_model?: string;
             workbench_generate_audio?: boolean;
+            workbench_prompt_is_optimized?: boolean;
             workbench_reference_variant_ids?: Record<string, string[]>;
             workbench_pose_reference_variant_ids?: Record<string, string[]>;
             workbench_director_snapshot_media_id?: string | null;
@@ -893,7 +894,7 @@ export const api = {
     assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
         `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text") => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -909,6 +910,7 @@ export const api = {
             ...(reference ? { reference } : {}),
             ...(references?.length ? { references } : {}),
             image_generation_mode: imageGenerationMode,
+            preserve_prompt: preservePrompt,
         });
         return res.data;
     },

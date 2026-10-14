@@ -76,10 +76,9 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                     useProjectStore.getState().setCurrentSeries(series);
                     return series;
                 });
-            const effectivePrompt = [
-                resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride),
-                prompt,
-            ].filter(Boolean).join(" . ");
+            const effectivePrompt = frame.image_prompt_en?.trim() === prompt.trim()
+                ? prompt
+                : [resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride), prompt].filter(Boolean).join(" . ");
             const updatedProject = await api.renderFrame(
                 currentProject.id,
                 frame.id,

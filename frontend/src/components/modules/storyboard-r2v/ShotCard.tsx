@@ -29,7 +29,7 @@ import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
-import { buildAssembledPrompt } from "./buildAssembledPrompt";
+import { buildAssembledPrompt, buildGenerationPrompt } from "./buildAssembledPrompt";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
@@ -40,6 +40,7 @@ import type { AssetReferenceIndexEntry } from "@/lib/api";
 export interface ShotNode {
     id: string;
     prompt: string;
+    promptIsOptimized?: boolean;
     tabMode: "t2i_i2v" | "direct_r2v";
     /** Optional per-shot video model override. */
     videoModel?: string;
@@ -161,7 +162,7 @@ interface ShotCardProps {
     scenes: any[];
     props: any[];
     assetIndex?: AssetReferenceIndexEntry[];
-    onUpdatePrompt: (prompt: string) => void;
+    onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
     globalStylePrompt?: string;
     onGenerateT2I: () => void;
@@ -806,12 +807,13 @@ export default function ShotCard({
                             dialogue={shot.dialogueStructured}
                             videoModel={videoModel}
                             prompt={shot.prompt}
+                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt)}
                             tabMode={shot.tabMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
-                            onApply={onUpdatePrompt}
+                            onApply={(text) => onUpdatePrompt(text, true)}
                         />
 
                         {/* Structured field tags — interactive Popover editors */}
