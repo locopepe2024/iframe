@@ -3,7 +3,7 @@
 ## Scope and assumptions
 
 - An explicit request for news, announcements, or analysis through "截至目前"/"截止目前"/"至今"/"到今天" uses the authenticated live-research capability when available. Explicitly disabled providers remain disabled.
-- The planner interprets the user's start date and uses the cninfo local date (UTC+8) for "today". Without a start date, the existing 30-day default applies.
+- The planner interprets the user's start date and uses the cninfo local date (UTC+8) for "today" when cninfo is configured; other providers use UTC. Without a start date, the existing 30-day default applies.
 - A text search hit does not establish complete coverage through today. Current requests always check the configured discovery provider. Discovery candidates are leads, never citations.
 - Automatic capture is limited to the configured cninfo provider, its existing exact issuer adapter, publicly accessible candidates, and the existing five-source limit. Other providers retain manual selection.
 - The independent knowledge worker captures and imports owner-scoped source units. The existing answer endpoint creates one cited assistant message when a run becomes ready; the conversation polls for that message. Failures remain visible in the task.

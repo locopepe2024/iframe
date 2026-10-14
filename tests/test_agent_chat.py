@@ -310,6 +310,7 @@ def test_research_plan_rejects_future_or_reversed_window(setup, monkeypatch):
 
 def test_current_research_uses_cninfo_local_today(setup, monkeypatch):
     from src.apps.knowledge import discovery
+    monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'cninfo')
     monkeypatch.setattr(discovery, 'current_cninfo_date', lambda: __import__('datetime').date(2026, 10, 14))
     monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"002303","subject":"美盈森","start_date":"2026-10-01","end_date":"2026-10-13","dimensions":[],"needs_clarification":false,"clarification":""}'))
     intent = agent.plan_research(setup, 'qwen', '美盈森截至目前的公告', [])

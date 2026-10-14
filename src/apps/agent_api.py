@@ -13,7 +13,7 @@ from urllib.parse import urlsplit, unquote
 from typing import Literal
 import mimetypes
 import base64
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -117,7 +117,8 @@ class ResearchIntent(BaseModel):
 
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
     from .knowledge.discovery import current_cninfo_date
-    today = current_cninfo_date()
+    today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
+             else datetime.now(timezone.utc).date())
     system = (
         "将用户的公开资料研究请求解析为 JSON 对象，不执行检索。字段必须是 "
         "search_query（适合英文新闻索引的主体或事件关键词，不含时间词）、subject、"
