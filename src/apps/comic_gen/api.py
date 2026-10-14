@@ -328,6 +328,7 @@ def signed_response(data):
     # Keep immutable history snapshots behind their dedicated revision APIs;
     # embedding them in every project response multiplies long-script payloads.
     if isinstance(data, Script):
+        pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
