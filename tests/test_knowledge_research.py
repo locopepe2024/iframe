@@ -149,6 +149,31 @@ def test_cninfo_discovers_yiyatong_with_exact_issuer_identity(monkeypatch):
     assert "怡亚通" in results[0]["publisher"]
 
 
+def test_cninfo_overview_prioritizes_latest_periodic_summary(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    monkeypatch.setattr(discovery, "cninfo_issuer", lambda query, hint=None: ("002183", "9900003828", "怡亚通"))
+    def entry(day, number, title):
+        return {"secCode": "002183", "orgId": "9900003828", "announcementTitle": title,
+                "announcementTime": int(datetime.fromisoformat(day).replace(tzinfo=timezone(timedelta(hours=8))).timestamp() * 1000),
+                "adjunctUrl": f"finalpage/{day}/{number}.PDF"}
+    response = Mock(status_code=200)
+    response.iter_content.return_value = [json.dumps({"announcements": [
+        entry("2026-10-14", "1", "股东减持公告"),
+        entry("2026-10-13", "2", "担保公告"),
+        entry("2026-10-12", "3", "董事会公告"),
+        entry("2026-10-11", "4", "股权转让公告"),
+        entry("2026-10-10", "5", "质押公告"),
+        entry("2026-08-28", "6", "2026年半年度报告"),
+        entry("2026-08-28", "7", "2026年半年度报告摘要"),
+    ]}).encode()]
+    post = Mock(return_value=response)
+    monkeypatch.setattr(discovery.requests, "post", post)
+    results = discovery.discover_cninfo("002183", "2026-01-01", "2026-10-14", prioritize_reports=True)
+    assert results[0]["title"] == "2026年半年度报告摘要"
+    assert len(results) == 5
+    assert post.call_args.kwargs["data"]["pageSize"] == "30"
+
+
 def test_cninfo_subject_resolution_reports_ambiguity_without_guessing(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
     response = Mock(status_code=200)
@@ -297,10 +322,32 @@ def test_current_cninfo_run_auto_queues_only_public_candidates(monkeypatch):
         "jobs": []})
     monkeypatch.setattr(store, "select_research_sources", lambda conn, owner, rid, urls:
                         calls.append((owner, rid, urls)) or {"id": rid, "status": "capturing", "candidates": [], "jobs": []})
-    monkeypatch.setattr(discovery, "discover", lambda *args: [{"url": "https://static.cninfo.com.cn/a.PDF", "access_status": "public"}])
+    monkeypatch.setattr(discovery, "discover", lambda *args, **kwargs: [{"url": "https://static.cninfo.com.cn/a.PDF", "access_status": "public"}])
     run = api.start_research("owner-a", "session-a", "美盈森截止目前公告", auto_select_cninfo=True)
     assert run["status"] == "capturing"
     assert calls == [("owner-a", "run-a", ["https://static.cninfo.com.cn/a.PDF"])]
+
+
+def test_cninfo_overview_requests_report_priority_but_news_request_does_not(monkeypatch):
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
+    @contextmanager
+    def transaction():
+        yield object()
+    monkeypatch.setattr(store, "transaction", transaction)
+    monkeypatch.setattr(store, "ensure_research_collection", lambda *args: "collection-a")
+    monkeypatch.setattr(store, "create_research_run", lambda *args: "run-a")
+    monkeypatch.setattr(store, "reserve_discovery", lambda *args: True)
+    monkeypatch.setattr(store, "finish_discovery", lambda *args: None)
+    monkeypatch.setattr(store, "get_research_run", lambda *args: {
+        "id": "run-a", "status": "awaiting_selection", "candidates": [], "jobs": []})
+    discover = Mock(return_value=[])
+    monkeypatch.setattr(discovery, "discover", discover)
+    intent = {"subject": "怡亚通", "start_date": "2026-01-01", "end_date": "2026-10-14"}
+    api.start_research("owner", "session", "分析一下怡亚通 002183", intent=intent)
+    assert discover.call_args.kwargs["prioritize_reports"] is True
+    api.start_research("owner", "session", "查询怡亚通 002183 最新公告", intent=intent)
+    assert discover.call_args.kwargs["prioritize_reports"] is False
 
 
 def test_cninfo_available_to_authenticated_owners(monkeypatch):
