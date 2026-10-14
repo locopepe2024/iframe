@@ -4525,9 +4525,14 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
     try:
+        before = pipeline.storyboard_render_context_token(script_id, request.frame_id)
+        prompt = pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt)
+        after = pipeline.storyboard_render_context_token(script_id, request.frame_id)
+        if before != after:
+            raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
         return {
-            "prompt": pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt),
-            "context_token": pipeline.storyboard_render_context_token(script_id, request.frame_id),
+            "prompt": prompt,
+            "context_token": pipeline.storyboard_render_preview_token(after, prompt),
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -4551,7 +4556,8 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
             current_token = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        if request.context_token != current_token:
+        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt)
+        if not request.prompt_is_complete or request.context_token != expected:
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
     fingerprint = hashlib.sha256(json.dumps({
         "request_id": request.request_id,

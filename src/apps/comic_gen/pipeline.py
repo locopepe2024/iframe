@@ -5890,6 +5890,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         payload = json.dumps(state, ensure_ascii=False, sort_keys=True, default=str)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def storyboard_render_preview_token(context_token: str, prompt: str) -> str:
+        """Bind the complete preview text to its source context."""
+        import hashlib
+
+        payload = json.dumps([context_token, prompt], ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def generate_storyboard_render(
         self,
         script_id: str,
@@ -5912,8 +5920,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Frame {frame_id} not found")
         if prompt_is_complete and not prompt.strip():
             raise ValueError("Complete storyboard prompt cannot be empty")
-        if context_token and context_token != self.storyboard_render_context_token(script_id, frame_id):
-            raise ValueError("Storyboard render preview is outdated; preview the current frame again")
+        if context_token:
+            current_context = self.storyboard_render_context_token(script_id, frame_id)
+            expected = self.storyboard_render_preview_token(current_context, prompt)
+            if not prompt_is_complete or context_token != expected:
+                raise ValueError("Storyboard render preview is outdated; preview the current frame again")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
