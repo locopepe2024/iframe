@@ -18,6 +18,7 @@
 - A generic 002183 operating request plans a year-to-date window and includes the official half-year report summary candidate when present on the bounded page.
 - The finance guidance appears in company research planning and answering, but not video trend research or ordinary chat.
 - Financial claims require period, unit, comparison basis and citation; unsupported causal explanations and investment recommendations are labeled or omitted.
+- The answer closes with at most one evidence-grounded next question when it helps the user continue the original research goal; it does not default to soliciting holdings or buy/sell preferences.
 - Focused backend tests and existing research regression tests pass. Production capture and answer remain a separate post-deployment validation.
 
 ## Affected paths and commands

@@ -481,7 +481,10 @@ def test_company_research_answer_loads_finance_skill(setup, monkeypatch):
     completion = Mock(return_value='收入见报告 [unit-a]')
     monkeypatch.setattr(agent, 'complete', completion)
     agent.answer_research(sid, run_id, setup)
-    assert 'Company Financial Research' in completion.call_args.args[2][0]['content']
+    guidance = completion.call_args.args[2][0]['content']
+    assert 'Company Financial Research' in guidance
+    assert 'ask at most one concise next question' in guidance
+    assert 'Do not default to questions about holdings' in guidance
 
 
 def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setup, monkeypatch):
