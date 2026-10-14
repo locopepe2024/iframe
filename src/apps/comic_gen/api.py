@@ -4512,6 +4512,23 @@ class RenderFrameJobRequest(RenderFrameRequest):
     request_id: str
 
 
+class RenderFramePreviewRequest(BaseModel):
+    frame_id: str
+    prompt: str
+
+
+@app.post("/projects/{script_id}/storyboard/render-preview")
+def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return {"prompt": pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/projects/{script_id}/storyboard/render-jobs", status_code=202)
 def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
                            user: UserContext = Depends(require_studio_user)):

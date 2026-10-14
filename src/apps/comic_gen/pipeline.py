@@ -61,7 +61,7 @@ from .llm import ScriptProcessor
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
-from .prompt_assembly import append_projected_shot_context
+from .prompt_assembly import append_projected_shot_context, append_storyboard_character_descriptions
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -5831,6 +5831,22 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         self._save_data()
         return script
+
+    def preview_storyboard_render_prompt(self, script_id: str, frame_id: str, prompt: str) -> str:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        if not prompt.strip():
+            raise ValueError("Storyboard prompt cannot be empty")
+        polished = (frame.image_prompt_en or "").strip()
+        if polished and polished == prompt.strip():
+            return prompt
+        projected = append_projected_shot_context(prompt, frame.director_shot_context)
+        characters = self.resolve_episode_assets(script)["characters"]
+        return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
     def generate_storyboard_render(
         self,

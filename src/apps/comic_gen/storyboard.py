@@ -2,6 +2,7 @@ import os
 import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, image_variant_storage_key
+from .prompt_assembly import append_storyboard_character_descriptions
 from ...models.image import WanxImageModel
 from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config
 from ...utils import get_logger
@@ -181,8 +182,8 @@ class StoryboardGenerator:
             prompt += "."
         else:
             # If prompt is provided by user/LLM, ensure character descriptions are still present for I2I consistency
-            if not preserve_prompt and char_text and char_text not in prompt:
-                prompt = f"{prompt} Characters: {char_text}."
+            if not preserve_prompt:
+                prompt = append_storyboard_character_descriptions(prompt, frame.character_ids, characters)
         
         # Store the optimized prompt
         frame.image_prompt = prompt
