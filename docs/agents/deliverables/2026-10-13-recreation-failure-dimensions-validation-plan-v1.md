@@ -53,6 +53,8 @@
 
 每项验收记录使用链：`源帧/PTS → 标注与遮挡 → 提示词约束 → 任务及产物哈希 → 输出帧/事件 → 正常速结论`。身份遮挡时记“不可评”；枪在画外时评再入画连续性，不能用固定像素长度推定物理长度。
 
+可选 3D 动作恢复分支的动态相机、GVHMR、骨架重定向与 GLB 分层验收，见[复刻动作恢复 Spec Summary](../../specs/2026-10-14-recreation-motion-recovery-spec-summary-v1.md)。该分支尚未证明能改善 s09，不改变本计划的源帧取证优先级。
+
 ## 依据
 
 - [源片与动作库核对](2026-10-11-qiangfa2-action-library-audit-v1.md)、[s09 源帧证据](../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/s09-action-evidence-v1.md)。
