@@ -4505,6 +4505,7 @@ class RenderFrameRequest(BaseModel):
     prompt: str
     negative_prompt: Optional[str] = None
     batch_size: int = 1
+    prompt_is_complete: bool = False
 
 
 class RenderFrameJobRequest(RenderFrameRequest):
@@ -4531,6 +4532,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         "prompt": request.prompt,
         "negative_prompt": request.negative_prompt,
         "batch_size": request.batch_size,
+        "prompt_is_complete": request.prompt_is_complete,
     }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def work():
@@ -4538,6 +4540,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         pipeline.generate_storyboard_render(
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
+            prompt_is_complete=request.prompt_is_complete,
         )
         return {"frame_id": request.frame_id}
 
@@ -4567,6 +4570,7 @@ def render_frame(script_id: str, request: RenderFrameRequest):
         updated_script = pipeline.generate_storyboard_render(
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
+            prompt_is_complete=request.prompt_is_complete,
         )
         return signed_response(updated_script)
     except ValueError as e:

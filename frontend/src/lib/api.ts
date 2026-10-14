@@ -1527,13 +1527,15 @@ export const api = {
         prompt: string,
         batchSize: number = 1,
         negativePrompt?: string,
+        promptIsComplete: boolean = false,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render`, {
             frame_id: frameId,
             composition_data: compositionData,
             prompt: prompt,
             negative_prompt: negativePrompt,
-            batch_size: batchSize
+            batch_size: batchSize,
+            prompt_is_complete: promptIsComplete,
         });
         return res.data;
     },

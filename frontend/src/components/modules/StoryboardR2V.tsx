@@ -948,6 +948,7 @@ export default function StoryboardR2V() {
                     "",
                     shot.negativePromptOverride,
                 ),
+                true,
             );
 
             if (result?.task_id || result?.id) {

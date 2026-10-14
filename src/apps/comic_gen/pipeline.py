@@ -5840,6 +5840,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         prompt: str,
         batch_size: int = 1,
         negative_prompt: Optional[str] = None,
+        *,
+        prompt_is_complete: bool = False,
     ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
@@ -5849,6 +5851,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+        if prompt_is_complete and not prompt.strip():
+            raise ValueError("Complete storyboard prompt cannot be empty")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
@@ -5896,11 +5900,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Use the first path as ref_image_path for legacy generator support if needed
             ref_image_path = ref_image_paths[0] if ref_image_paths else None
             
-            # Use the prompt as-is from frontend (already contains style)
-            # Render only the current frame's confirmed shot projection. The
-            # complete Director JSON stays in lineage/analysis context.
+            # Complete prompts own their final wording. Legacy drafts still
+            # receive the current shot projection until preview is migrated.
             polished = (frame.image_prompt_en or "").strip()
-            preserve_prompt = bool(polished and polished == prompt.strip())
+            preserve_prompt = prompt_is_complete or bool(polished and polished == prompt.strip())
             final_prompt = prompt if preserve_prompt else append_projected_shot_context(prompt, frame.director_shot_context)
             
             # Update frame with final prompt
