@@ -20,6 +20,20 @@ it("adds exact H3 dialogue when generated audio is enabled", () => {
     );
 });
 
+it("submits an accepted optimized prompt unchanged for H3 and other video models", () => {
+    const optimized = {
+        ...shot,
+        prompt: "integrated_multimodal_description: one continuous action\noverall_soundscape: street noise",
+        promptIsOptimized: true,
+        directorShotContext: { scene: { location: "粮铺门前" } },
+        shotSize: "远景",
+    };
+    expect(buildGenerationPrompt(optimized, true, "uniart/minimax-h3-vip", "cinematic style"))
+        .toBe(optimized.prompt);
+    expect(buildGenerationPrompt(optimized, true, "wan2.7-i2v", "cinematic style"))
+        .toBe(optimized.prompt);
+});
+
 it("does not add dialogue when generated audio is disabled", () => {
     expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip")).not.toContain("随机立减");
 });

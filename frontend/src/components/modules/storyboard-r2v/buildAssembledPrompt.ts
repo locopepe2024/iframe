@@ -149,6 +149,8 @@ export function buildGenerationPrompt(
     modelId: string,
     globalStylePrompt = "",
 ): string {
+    if (shot.promptIsOptimized) return shot.prompt.trim();
+    // An accepted optimizer result is already a complete provider prompt.
     let prompt = buildAssembledPrompt(shot, true, globalStylePrompt);
     const line = shot.dialogueStructured?.line?.trim();
     if (!generateAudio || !line) return prompt;

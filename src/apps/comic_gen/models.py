@@ -788,6 +788,7 @@ class StoryboardFrame(BaseModel):
         None,
         description="Per-shot generated-audio choice; None inherits the current project/UI default",
     )
+    workbench_prompt_is_optimized: bool = False
     workbench_reference_variant_ids: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",

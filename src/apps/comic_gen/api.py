@@ -467,6 +467,7 @@ class GenerateAssetRequest(BaseModel):
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
     apply_style: bool = True
+    preserve_prompt: bool = False
     negative_prompt: Optional[str] = None
     batch_size: int = 1
     model_name: Optional[str] = None
@@ -3314,6 +3315,7 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
+    workbench_prompt_is_optimized: Optional[bool] = None
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_director_snapshot_media_id: Optional[str] = None
@@ -3336,6 +3338,7 @@ def update_frame_workbench(
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
+            workbench_prompt_is_optimized=request.workbench_prompt_is_optimized,
             workbench_reference_variant_ids=request.workbench_reference_variant_ids,
             workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
             workbench_director_snapshot_media_id=request.workbench_director_snapshot_media_id,
@@ -3449,6 +3452,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.reference,
             request.references,
             request.image_generation_mode,
+            request.preserve_prompt,
         )
         
         # Add background processing
@@ -4501,10 +4505,28 @@ class RenderFrameRequest(BaseModel):
     prompt: str
     negative_prompt: Optional[str] = None
     batch_size: int = 1
+    prompt_is_complete: bool = False
 
 
 class RenderFrameJobRequest(RenderFrameRequest):
     request_id: str
+
+
+class RenderFramePreviewRequest(BaseModel):
+    frame_id: str
+    prompt: str
+
+
+@app.post("/projects/{script_id}/storyboard/render-preview")
+def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return {"prompt": pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/projects/{script_id}/storyboard/render-jobs", status_code=202)
@@ -4527,6 +4549,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         "prompt": request.prompt,
         "negative_prompt": request.negative_prompt,
         "batch_size": request.batch_size,
+        "prompt_is_complete": request.prompt_is_complete,
     }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def work():
@@ -4534,6 +4557,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
         pipeline.generate_storyboard_render(
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
+            prompt_is_complete=request.prompt_is_complete,
         )
         return {"frame_id": request.frame_id}
 
@@ -4563,6 +4587,7 @@ def render_frame(script_id: str, request: RenderFrameRequest):
         updated_script = pipeline.generate_storyboard_render(
             script_id, request.frame_id, request.composition_data,
             request.prompt, request.batch_size, request.negative_prompt,
+            prompt_is_complete=request.prompt_is_complete,
         )
         return signed_response(updated_script)
     except ValueError as e:

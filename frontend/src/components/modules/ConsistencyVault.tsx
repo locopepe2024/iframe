@@ -202,7 +202,7 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text") => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
         if (!currentProject) return;
 
         // Add task with specific generation type and batch size
@@ -232,6 +232,7 @@ export default function ConsistencyVault() {
                 undefined,
                 references,
                 imageGenerationMode,
+                preservePrompt,
             );
 
             const taskId = response._task_id;
@@ -773,7 +774,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -1015,6 +1016,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [promptModel, setPromptModel] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
+    const [acceptedOptimizedPrompt, setAcceptedOptimizedPrompt] = useState("");
     const [promptError, setPromptError] = useState("");
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
@@ -1201,7 +1203,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             toast.warning(tv("referenceModeSelectExplicitly"));
             return;
         }
-        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize, promptReferences, imageGenerationMode);
+        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize, promptReferences, imageGenerationMode, Boolean(acceptedOptimizedPrompt && imagePrompt === acceptedOptimizedPrompt));
     };
 
     return (
@@ -1338,7 +1340,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">
-                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
+                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setAcceptedOptimizedPrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
                                         <button type="button" onClick={() => setOptimizedPrompt("")} className="text-xs text-text-muted hover:underline">忽略</button>
                                     </div>
                                 </div>}

@@ -764,13 +764,14 @@ export default function StoryboardR2V() {
     }, [shots, currentProject, updateProject]);
 
     // Update shot prompt — local immediate + debounced backend write
-    const updatePrompt = useCallback((index: number, prompt: string) => {
+    const updatePrompt = useCallback((index: number, prompt: string, optimized?: boolean) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             persistPrompt(s.id, prompt);
-            return { ...s, prompt };
+            if (optimized !== undefined) persistWorkbench(s.id, { workbench_prompt_is_optimized: optimized });
+            return { ...s, prompt, promptIsOptimized: optimized ?? s.promptIsOptimized };
         }));
-    }, [persistPrompt]);
+    }, [persistPrompt, persistWorkbench]);
 
     // Set shot tab mode + persist so the user's last-active tab
     // survives refresh.
@@ -947,6 +948,7 @@ export default function StoryboardR2V() {
                     "",
                     shot.negativePromptOverride,
                 ),
+                true,
             );
 
             if (result?.task_id || result?.id) {
@@ -2167,7 +2169,7 @@ export default function StoryboardR2V() {
                             scenes={scenes}
                             props={props}
                             assetIndex={assetIndex}
-                            onUpdatePrompt={(prompt) => updatePrompt(index, prompt)}
+                            onUpdatePrompt={(prompt, optimized) => updatePrompt(index, prompt, optimized)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}

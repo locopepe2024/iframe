@@ -61,7 +61,7 @@ from .llm import ScriptProcessor
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
-from .prompt_assembly import append_projected_shot_context
+from .prompt_assembly import append_projected_shot_context, append_storyboard_character_descriptions
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -424,6 +424,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         workbench_generate_count: Optional[int] = None,
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
+        workbench_prompt_is_optimized: Optional[bool] = None,
         workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
         workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
         workbench_director_snapshot_media_id: Optional[str] = None,
@@ -484,6 +485,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame.video_model = video_model.strip() or None
             if workbench_generate_audio is not None:
                 frame.workbench_generate_audio = bool(workbench_generate_audio)
+            if workbench_prompt_is_optimized is not None:
+                frame.workbench_prompt_is_optimized = bool(workbench_prompt_is_optimized)
             if workbench_reference_variant_ids is not None:
                 cleaned_selections: Dict[str, List[str]] = {}
                 for asset_id, variant_ids in workbench_reference_variant_ids.items():
@@ -988,7 +991,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.model_settings.t2i_model
         return requested_model or script.model_settings.t2i_model
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None, preserve_prompt: bool = False) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
@@ -1121,6 +1124,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
+                    preserve_prompt=preserve_prompt,
                 )
             elif asset_type == "scene":
                 self.asset_generator.generate_scene(
@@ -1136,6 +1140,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
+                    preserve_prompt=preserve_prompt,
                 )
             elif asset_type == "prop":
                 self.asset_generator.generate_prop(
@@ -1151,6 +1156,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_image_urls=resolved_references,
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
+                    preserve_prompt=preserve_prompt,
                 )
                 
             target_asset.status = GenerationStatus.COMPLETED
@@ -1179,7 +1185,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       negative_prompt: str = None, batch_size: int = 1,
                                       model_name: str = None, aspect_ratio: str = None,
                                       reference: Any = None, references: Any = None,
-                                      image_generation_mode: str = "text") -> Tuple[Script, str]:
+                                      image_generation_mode: str = "text", preserve_prompt: bool = False) -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
@@ -1250,6 +1256,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "reference": normalized_reference,
                     "references": normalized_references,
                     "image_generation_mode": image_generation_mode,
+                    "preserve_prompt": preserve_prompt,
                     "style_prompt": style_prompt,
                     "generation_type": generation_type,
                     "prompt": prompt,
@@ -1309,6 +1316,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("references"),
                     params.get("image_generation_mode", "text"),
                     _generation_task_id=task_id,
+                    preserve_prompt=params.get("preserve_prompt", False),
                 )
             task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
             task["status"] = "completed"
@@ -5428,15 +5436,26 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Read custom prompt config with 3-level fallback (Episode → Series → default)
         series = self.series_store.get(script.series_id) if script.series_id else None
         custom_prompt = self.get_effective_prompt("storyboard_polish", script, series)
-        # If it's the system default, pass empty so the LLM method uses its built-in default
+        # Keep the output contract when adding frame-specific instructions.
         from .llm import DEFAULT_STORYBOARD_POLISH_PROMPT
-        if custom_prompt == DEFAULT_STORYBOARD_POLISH_PROMPT:
-            custom_prompt = ""
+        if not custom_prompt or custom_prompt == DEFAULT_STORYBOARD_POLISH_PROMPT:
+            custom_prompt = DEFAULT_STORYBOARD_POLISH_PROMPT
+        frame = next((item for item in script.frames if item.id == frame_id), None)
         director_context = self.director_prompt_context(script)
         if director_context:
             custom_prompt = "\n\n".join(filter(None, [
                 custom_prompt, "CONFIRMED DIRECTOR PROFILE:\n" + director_context,
             ]))
+        if frame:
+            art_direction = self.effective_art_direction(script)
+            style_config = (art_direction.style_config or {}) if art_direction else {}
+            style = frame.style_prompt_override or style_config.get("positive_prompt", "")
+            lighting = frame.lighting_override or ""
+            if style or lighting:
+                custom_prompt = "\n\n".join(filter(None, [
+                    custom_prompt, "VISUAL STYLE AND LIGHTING (integrate into the rewritten prompt):\n" + "\n".join(filter(None, [style, lighting])),
+                ]))
+            raw_prompt = append_projected_shot_context(raw_prompt, frame.director_shot_context)
 
         # Call LLM to refine prompt
         result = self.script_processor.polish_storyboard_prompt(raw_prompt, assets, feedback, custom_prompt)
@@ -5813,6 +5832,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
+    def preview_storyboard_render_prompt(self, script_id: str, frame_id: str, prompt: str) -> str:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        if not prompt.strip():
+            raise ValueError("Storyboard prompt cannot be empty")
+        polished = (frame.image_prompt_en or "").strip()
+        if polished and polished == prompt.strip():
+            return prompt
+        projected = append_projected_shot_context(prompt, frame.director_shot_context)
+        characters = self.resolve_episode_assets(script)["characters"]
+        return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
+
     def generate_storyboard_render(
         self,
         script_id: str,
@@ -5821,6 +5856,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         prompt: str,
         batch_size: int = 1,
         negative_prompt: Optional[str] = None,
+        *,
+        prompt_is_complete: bool = False,
     ) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
@@ -5830,6 +5867,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+        if prompt_is_complete and not prompt.strip():
+            raise ValueError("Complete storyboard prompt cannot be empty")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
@@ -5877,10 +5916,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Use the first path as ref_image_path for legacy generator support if needed
             ref_image_path = ref_image_paths[0] if ref_image_paths else None
             
-            # Use the prompt as-is from frontend (already contains style)
-            # Render only the current frame's confirmed shot projection. The
-            # complete Director JSON stays in lineage/analysis context.
-            final_prompt = append_projected_shot_context(prompt, frame.director_shot_context)
+            # Complete prompts own their final wording. Legacy drafts still
+            # receive the current shot projection until preview is migrated.
+            polished = (frame.image_prompt_en or "").strip()
+            preserve_prompt = prompt_is_complete or bool(polished and polished == prompt.strip())
+            final_prompt = prompt if preserve_prompt else append_projected_shot_context(prompt, frame.director_shot_context)
             
             # Update frame with final prompt
             frame.image_prompt = final_prompt
@@ -5915,7 +5955,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 negative_prompt=negative_prompt,
                 batch_size=batch_size,
                 size=effective_size,
-                model_name=i2i_model
+                model_name=i2i_model,
+                preserve_prompt=preserve_prompt,
             )
             self._register_storyboard_frame_media(frame, script.owner_profile_id)
             

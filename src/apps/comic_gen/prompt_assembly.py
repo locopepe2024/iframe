@@ -156,6 +156,19 @@ def append_projected_shot_context(prompt: str, context: Optional[Dict[str, Any]]
     return "。".join(item.rstrip("。，.") for item in parts if item) + ("。" if parts else "")
 
 
+def append_storyboard_character_descriptions(
+    prompt: str, character_ids: List[str], characters: List[Character]
+) -> str:
+    descriptions = [
+        f"{char.name} ({char.description})"
+        for char_id in character_ids
+        for char in characters
+        if char.id == char_id
+    ]
+    char_text = ", ".join(descriptions)
+    return f"{prompt} Characters: {char_text}." if char_text and char_text not in prompt else prompt
+
+
 def inject_reference_tags(
     text: str,
     frame: "StoryboardFrame",

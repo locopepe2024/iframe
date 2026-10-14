@@ -200,7 +200,9 @@ export function frameToShotNode(
 
     return migrateShotNode({
         id: frame.id,
-        prompt: frame.visual_description || frame.action_description || "",
+        prompt: (frame.workbench_prompt_is_optimized ? frame.action_description : frame.visual_description)
+            || frame.action_description || "",
+        promptIsOptimized: frame.workbench_prompt_is_optimized === true,
         tabMode: (frame.workbench_tab_mode as "t2i_i2v" | "direct_r2v" | undefined) ?? defaultTabMode,
         videoModel: typeof frame.video_model === "string" ? frame.video_model : undefined,
         generateAudio: typeof frame.workbench_generate_audio === "boolean"

@@ -48,3 +48,11 @@ it("shows the provider diagnostic returned by the backend", async () => {
         expect(screen.getByText("模型调用失败：UniArt API Key 无效，请更新个人配置。")).toBeInTheDocument();
     });
 });
+
+it("sends assembled constraints before optimization", async () => {
+    vi.mocked(api.polishVideoPrompt).mockResolvedValue({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
+    render(<PolishPanel prompt="原始镜头" optimizationDraft="原始镜头；黄昏光影；远景" tabMode="t2i_i2v" scriptId="project-1" onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("polish"));
+    await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalled());
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][0]).toBe("原始镜头；黄昏光影；远景");
+});

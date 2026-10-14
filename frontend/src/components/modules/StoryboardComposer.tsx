@@ -18,6 +18,7 @@ import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 
 export default function StoryboardComposer() {
@@ -43,6 +44,7 @@ export default function StoryboardComposer() {
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
+    const [pendingRender, setPendingRender] = useState<(FrameRenderPreview & { frameId: string; compositionData: any }) | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadTargetFrameId, setUploadTargetFrameId] = useState<string | null>(null);
@@ -235,8 +237,6 @@ export default function StoryboardComposer() {
         e?.stopPropagation();
         if (!currentProject) return;
 
-        addRenderingFrame(frame.id);
-        const initialVariantCount = frame.rendered_image_asset?.variants?.length || 0;
         try {
             // Construct composition data with references
             const compositionData: any = {
@@ -320,15 +320,14 @@ export default function StoryboardComposer() {
             );
 
             // Construct final prompt:
-            // If image_prompt exists (polished or manually edited), it already contains action/dialogue,
-            // so only prepend the style. Otherwise, build from action_description and dialogue.
+            // An accepted polish result already contains the resolved style and shot context.
             let finalPrompt = "";
 
             if (frame.image_prompt && frame.image_prompt.trim()) {
-                // User has a custom/polished prompt - only add style prefix
-                finalPrompt = frameStylePrompt
-                    ? `${frameStylePrompt} . ${frame.image_prompt}`
-                    : frame.image_prompt;
+                const isAcceptedPolish = frame.image_prompt_en?.trim() === frame.image_prompt.trim();
+                finalPrompt = isAcceptedPolish || !frameStylePrompt
+                    ? frame.image_prompt
+                    : `${frameStylePrompt} . ${frame.image_prompt}`;
             } else {
                 // No custom prompt - build from action_description and dialogue
                 const parts = [
@@ -339,18 +338,34 @@ export default function StoryboardComposer() {
                 finalPrompt = parts.join(" . ");
             }
 
+            const prompt = await api.previewFrameRender(currentProject.id, frame.id, finalPrompt);
+            setPendingRender({ frameId: frame.id, compositionData, prompt,
+                negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null, batchSize });
+        } catch (error) {
+            alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
+        }
+    };
+
+    const submitPreparedRender = async () => {
+        if (!currentProject || !pendingRender) return;
+        const prepared = pendingRender;
+        setPendingRender(null);
+        addRenderingFrame(prepared.frameId);
+        const frame = currentProject.frames?.find((item: any) => item.id === prepared.frameId);
+        const initialVariantCount = frame?.rendered_image_asset?.variants?.length || 0;
+        try {
             const requestId = createRenderRequestId();
             let job;
             try {
                 job = await api.submitFrameRender(
-                    currentProject.id, frame.id, compositionData, finalPrompt,
-                    batchSize, frameNegativePrompt, requestId,
+                    currentProject.id, prepared.frameId, prepared.compositionData, prepared.prompt,
+                    prepared.batchSize, prepared.negativePrompt, requestId, true,
                 );
             } catch (error) {
                 // A lost submission response does not mean the paid work stopped.
                 job = await api.submitFrameRender(
-                    currentProject.id, frame.id, compositionData, finalPrompt,
-                    batchSize, frameNegativePrompt, requestId,
+                    currentProject.id, prepared.frameId, prepared.compositionData, prepared.prompt,
+                    prepared.batchSize, prepared.negativePrompt, requestId, true,
                 );
             }
             let pollFailures = 0;
@@ -377,19 +392,21 @@ export default function StoryboardComposer() {
             try {
                 const updatedProject = await api.getProject(currentProject.id);
                 useProjectStore.getState().updateProject(currentProject.id, updatedProject);
-                const latest = updatedProject.frames?.find((item: any) => item.id === frame.id);
+                const latest = updatedProject.frames?.find((item: any) => item.id === prepared.frameId);
                 if ((latest?.rendered_image_asset?.variants?.length || 0) > initialVariantCount) return;
             } catch (refreshError) {
                 console.error("Could not refresh rendered frame:", refreshError);
             }
             alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
         } finally {
-            removeRenderingFrame(frame.id);
+            removeRenderingFrame(prepared.frameId);
         }
     };
 
     return (
         <div className="flex flex-col h-full text-foreground overflow-hidden">
+            {pendingRender && <RenderPromptPreviewDialog preview={pendingRender}
+                onClose={() => setPendingRender(null)} onConfirm={() => { void submitPreparedRender(); }} />}
             <StepHeader
                 stepNumber={4}
                 totalSteps={6}

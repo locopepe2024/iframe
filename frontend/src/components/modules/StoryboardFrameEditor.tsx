@@ -9,6 +9,7 @@ import { resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { VariantSelector } from "../common/VariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
+import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 
 interface StoryboardFrameEditorProps {
     frame: any;
@@ -34,6 +35,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     const [lightingOverride, setLightingOverride] = useState(frame.lighting_override || "");
     const [negativePromptOverride, setNegativePromptOverride] = useState(frame.negative_prompt_override || "");
     const [isGenerating, setIsGenerating] = useState(false);
+    const [pendingRender, setPendingRender] = useState<FrameRenderPreview | null>(null);
 
     // Sync prompt when frame changes
     useEffect(() => {
@@ -76,17 +78,29 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                     useProjectStore.getState().setCurrentSeries(series);
                     return series;
                 });
-            const effectivePrompt = [
-                resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride),
-                prompt,
-            ].filter(Boolean).join(" . ");
+            const effectivePrompt = frame.image_prompt_en?.trim() === prompt.trim()
+                ? prompt
+                : [resolveStylePrompt(globalStylePrompt, stylePromptOverride, lightingOverride), prompt].filter(Boolean).join(" . ");
+            const previewPrompt = await api.previewFrameRender(currentProject.id, frame.id, effectivePrompt);
+            setPendingRender({ prompt: previewPrompt, batchSize, referenceCount: null,
+                negativePrompt: resolveNegativePrompt(globalNegativePrompt, "", negativePromptOverride) });
+        } catch (error) {
+            console.error("Failed to generate frame:", error);
+            alert(ts("generateFailed"));
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const confirmGenerate = async () => {
+        if (!currentProject || !pendingRender) return;
+        const prepared = pendingRender;
+        setPendingRender(null);
+        setIsGenerating(true);
+        try {
             const updatedProject = await api.renderFrame(
-                currentProject.id,
-                frame.id,
-                null, // Use existing composition data
-                effectivePrompt,
-                batchSize,
-                resolveNegativePrompt(globalNegativePrompt, "", negativePromptOverride),
+                currentProject.id, frame.id, null, prepared.prompt, prepared.batchSize,
+                prepared.negativePrompt, true,
             );
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
@@ -134,6 +148,8 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
 
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
+            {pendingRender && <RenderPromptPreviewDialog preview={pendingRender}
+                onClose={() => setPendingRender(null)} onConfirm={() => { void confirmGenerate(); }} />}
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}

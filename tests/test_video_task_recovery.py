@@ -525,6 +525,15 @@ def test_update_frame_workbench_persists_explicit_audio_false(pipeline):
     assert updated.workbench_generate_audio is False
 
 
+def test_update_frame_workbench_persists_optimized_prompt_origin(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1")
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench("p1", "f1", workbench_prompt_is_optimized=True)
+    assert updated.workbench_prompt_is_optimized is True
+    assert StoryboardFrame.model_validate(updated.model_dump()).workbench_prompt_is_optimized is True
+
+
 def test_update_frame_workbench_sanitizes_reference_variant_ids(pipeline):
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}

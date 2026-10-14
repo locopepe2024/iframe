@@ -143,6 +143,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             newPrompt += ` . Dialogue: ${frame.dialogue}`;
         }
         setSegments([{ type: "text", value: newPrompt, id: "init" }]);
+        setOptimizedPromptApplied(false);
     };
     const [segments, setSegments] = useState<PromptSegment[]>([{ type: "text", value: "", id: "init" }]);
     const promptBuilderRef = useRef<PromptBuilderRef>(null);
@@ -155,13 +156,18 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [submitSuccess, setSubmitSuccess] = useState(false);
     const [showCameraDropdown, setShowCameraDropdown] = useState(false);
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
+    const [optimizedPromptApplied, setOptimizedPromptApplied] = useState(false);
+    const [optimizedMotion, setOptimizedMotion] = useState("");
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
     const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
 
     const handlePolish = async (feedback: string = "") => {
-        const draftPrompt = feedback ? (polishedPrompt?.en || prompt) : prompt;
+        const motionDesc = getMotionDescription();
+        const draftPrompt = feedback
+            ? [polishedPrompt?.en || prompt, optimizedMotion !== motionDesc ? `Current motion: ${motionDesc || "static camera and subject"}` : ""].filter(Boolean).join("\n")
+            : [prompt, motionDesc].filter(Boolean).join(", ");
         if (!draftPrompt) return;
         setIsPolishing(true);
         try {
@@ -181,6 +187,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             }
             if (res.prompt_cn && res.prompt_en) {
                 setPolishedPrompt({ cn: res.prompt_cn, en: res.prompt_en });
+                setOptimizedMotion(motionDesc);
                 setFeedbackText("");
             }
         } catch (error) {
@@ -196,7 +203,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     useEffect(() => {
         if (remixData) {
             if (remixData.image_url) setSelectedImages([remixData.image_url]);
-            if (remixData.prompt) setSegments([{ type: "text", value: remixData.prompt, id: "remix" }]);
+            if (remixData.prompt) {
+                setSegments([{ type: "text", value: remixData.prompt, id: "remix" }]);
+                setOptimizedPromptApplied(false);
+            }
             // negativePrompt handled by parent
 
             // Clear remix data after applying to avoid re-applying on every render
@@ -292,6 +302,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             newPrompt += ` Dialogue: ${frame.dialogue}`;
         }
         setSegments([{ type: "text", value: newPrompt, id: `frame-${frame.id}` }]);
+        setOptimizedPromptApplied(false);
     };
 
     // Insert character into prompt at cursor position
@@ -307,6 +318,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     };
 
     const handleSubmit = async () => {
+        if (optimizedPromptApplied && getMotionDescription() !== optimizedMotion) {
+            alert("运镜或主体动作已改变，请重新优化提示词后生成。");
+            return;
+        }
         // Validation based on mode
         if (generationMode === 'i2v') {
             if (selectedImages.length === 0 || !prompt || !currentProject) return;
@@ -324,7 +339,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         try {
             // Add motion description to prompt
             const motionDesc = getMotionDescription();
-            const finalPrompt = motionDesc ? `${prompt}, ${motionDesc}` : prompt;
+            const finalPrompt = optimizedPromptApplied ? prompt : motionDesc ? `${prompt}, ${motionDesc}` : prompt;
 
             // Optimistic update - add pending tasks to queue immediately
             const optimisticTasks: VideoTask[] = [];
@@ -1137,7 +1152,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     {tc("aiPolish")}
                                 </button>
                                 <button
-                                    onClick={() => setSegments([{ type: "text", value: "", id: "init" }])}
+                                    onClick={() => { setSegments([{ type: "text", value: "", id: "init" }]); setOptimizedPromptApplied(false); }}
                                     className="text-xs text-text-secondary hover:text-foreground flex items-center gap-1 px-2 py-1 rounded hover:bg-glass transition-colors"
                                     title="Clear Prompt"
                                 >
@@ -1244,6 +1259,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 <button
                                                     onClick={() => {
                                                         setSegments([{ type: "text", value: polishedPrompt.en, id: `polished-${Date.now()}` }]);
+                                                        setOptimizedPromptApplied(true);
                                                         setPolishedPrompt(null);
                                                     }}
                                                     className="text-[0.625rem] text-foreground bg-primary hover:bg-primary/90 px-2 py-0.5 rounded font-bold"
