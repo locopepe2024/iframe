@@ -16,6 +16,7 @@ import base64
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import BaseModel, Field
 
 from .identity import UserContext, require_user_context
@@ -115,6 +116,10 @@ class ResearchIntent(BaseModel):
     clarification: str = Field(default="", max_length=300)
 
 
+class ResearchPlanValidationError(HTTPException):
+    pass
+
+
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
     from .knowledge.discovery import current_cninfo_date
     today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
@@ -126,6 +131,8 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         "needs_clarification（布尔值）、clarification（需要时只问一个关键问题）。"
         "用户给出时间范围时严格照用；若说截至目前、截止目前、至今或到今天，结束日期必须是今天；"
         "没有起始日期时默认截至今天的最近30个日历日。"
+        "当前单次研究最多覆盖366天；对全部历史或更长跨度，应说明需要分期并请求一个不超过一年的范围，"
+        "不要把全历史作为可直接执行的选择。"
         "上市公司身份有歧义时设置 needs_clarification=true；不得自行选定证券。"
         "不要把新闻发现结果当作财务事实。今天是 " + today.isoformat() + "。"
     )
@@ -133,6 +140,7 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
                 "content": item["content"]} for item in previous_messages[-6:]]
     result = complete(ctx, model, [{"role": "system", "content": system}, *context,
                                    {"role": "user", "content": content}])
+    reason = "invalid_structure"
     try:
         match = re.search(r"\{[\s\S]*\}", result)
         payload = json.loads(match.group(0) if match else result)
@@ -140,21 +148,35 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
             payload["clarification"] = ""
         intent = ResearchIntent.model_validate(payload)
         if intent.needs_clarification:
+            reason = "missing_clarification"
             if not intent.clarification.strip():
                 raise ValueError("Missing clarification")
             return intent
+        reason = "missing_subject"
         if len(intent.search_query.strip()) < 2 or not intent.subject.strip():
             raise ValueError("Missing research subject")
+        reason = "invalid_date"
         start = date.fromisoformat(intent.start_date)
         end = date.fromisoformat(intent.end_date)
         if current_information_request(content):
             end = today
             intent.end_date = end.isoformat()
-        if end < start or (end - start).days > 366 or end > today:
+        if end < start or end > today:
             raise ValueError("Invalid research date window")
+        if (end - start).days > 366:
+            intent.needs_clarification = True
+            intent.clarification = "当前来源单次最多查询一年，无法一次覆盖全部历史。请指定一个不超过一年的起止日期。"
         return intent
     except (ValueError, TypeError):
-        raise HTTPException(502, "研究需求解析失败，请明确公司、时间范围后重试") from None
+        logger.warning("Research model plan rejected: model=%s reason=%s", model, reason)
+        detail = ("研究模型已返回，但未给出有效日期范围；请指定不超过一年的起止日期"
+                  if reason == "invalid_date" else "研究模型已返回，但研究计划未通过校验；请明确公司和日期范围后重试")
+        raise ResearchPlanValidationError(502, detail) from None
+
+
+def unbounded_company_history_request(content: str) -> bool:
+    return (bool(re.search(r"整体历史|全部历史|全历史|上市以来|公司历史信息", content))
+            and not bool(re.search(r"\d{4}\s*年|最近\s*\d+|截至|截止|至今|到今天", content)))
 
 
 def current_information_request(content: str) -> bool:
@@ -989,41 +1011,79 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         lease = time.time() + request_timeout + 60
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
     try:
-        validate_model(ctx, session["model"])
         user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, duration=body.duration, ratio=body.ratio, created_at=time.time(), model=session["model"])
         if body.live_research:
-            if body.input_media:
-                raise HTTPException(422, "联网研究暂不支持附件，请单独提交素材")
-            from .knowledge.api import require_research_enabled, start_research
-            require_research_enabled(owner)
-            intent = plan_research(ctx, session["model"], body.content, session["messages"])
-            if intent.needs_clarification:
-                run = None
-                answer = intent.clarification
-                existing = []
-            else:
-                current_request = current_information_request(body.content)
-                existing = [] if current_request else search_knowledge(owner, intent.subject)
-                research_options = {"auto_select_cninfo": True} if current_request else {}
-                run = start_research(owner, sid, body.content[:200].strip(),
-                                     intent=intent.model_dump(), **research_options)
-                if run["status"] == "failed":
-                    if run["error_code"] == "no_results":
-                        answer = (f"已检索 {intent.start_date} 至 {intent.end_date} 的来源，"
-                                  "暂未发现可采集的新资料。当前没有足够的新证据生成截至目前的分析。")
-                    else:
-                        answer = (f"实时来源发现暂不可用（{run['error_code']}）。"
-                                  f"本次未获得截至 {intent.end_date} 的新证据。")
-                elif run["status"] == "capturing":
-                    answer = (f"请稍等，正在查询和分析 {intent.subject} 截至 {intent.end_date} 的资料。"
-                              "已将发现的官方来源交给采集任务；完成后会在本会话显示带引用的结果。")
+            stage = "model_access"
+            failure_stage = None
+            failure_http_exc = None
+            try:
+                validate_model(ctx, session["model"])
+                if body.input_media:
+                    raise HTTPException(422, "联网研究暂不支持附件，请单独提交素材")
+                from .knowledge.api import require_research_enabled, start_research
+                stage = "availability"
+                require_research_enabled(owner)
+                if unbounded_company_history_request(body.content):
+                    run = None
+                    existing = []
+                    answer = "当前来源单次最多查询一年，无法一次覆盖公司全部历史。请指定一个不超过一年的起止日期。"
                 else:
-                    available = sum(item["access_status"] == "public" for item in run["candidates"])
-                    answer = (f"已有库匹配 {len(existing)} 条；研究范围：{intent.start_date} 至 {intent.end_date}，"
-                              f"主题：{intent.subject}。发现 {len(run['candidates'])} 条候选来源，"
-                              f"其中 {available} 条可采集。请选择来源；候选标题尚不是事实证据。")
+                    stage = "model_request"
+                    intent = plan_research(ctx, session["model"], body.content, session["messages"])
+                    if intent.needs_clarification:
+                        run = None
+                        answer = intent.clarification
+                        existing = []
+                    else:
+                        current_request = current_information_request(body.content)
+                        stage = "knowledge_search"
+                        existing = [] if current_request else search_knowledge(owner, intent.subject)
+                        research_options = {"auto_select_cninfo": True} if current_request else {}
+                        stage = "discovery"
+                        run = start_research(owner, sid, body.content[:200].strip(),
+                                             intent=intent.model_dump(), **research_options)
+                        if run["status"] == "failed":
+                            if run["error_code"] == "no_results":
+                                answer = (f"已检索 {intent.start_date} 至 {intent.end_date} 的来源，"
+                                          "暂未发现可采集的新资料。当前没有足够的新证据生成截至目前的分析。")
+                            else:
+                                answer = (f"实时来源发现暂不可用（{run['error_code']}）。"
+                                          f"本次未获得截至 {intent.end_date} 的新证据。")
+                        elif run["status"] == "capturing":
+                            answer = (f"请稍等，正在查询和分析 {intent.subject} 截至 {intent.end_date} 的资料。"
+                                      "已将发现的官方来源交给采集任务；完成后会在本会话显示带引用的结果。")
+                        else:
+                            available = sum(item["access_status"] == "public" for item in run["candidates"])
+                            answer = (f"已有库匹配 {len(existing)} 条；研究范围：{intent.start_date} 至 {intent.end_date}，"
+                                      f"主题：{intent.subject}。发现 {len(run['candidates'])} 条候选来源，"
+                                      f"其中 {available} 条可采集。请选择来源；候选标题尚不是事实证据。")
+            except HTTPException as exc:
+                run = None
+                existing = []
+                failure_stage = "plan_validation" if isinstance(exc, ResearchPlanValidationError) else stage
+                answer = str(exc.detail)
+                if stage == "availability" and exc.status_code == 403:
+                    failure_http_exc = exc
+                logger.warning("Research request failed: stage=%s status=%s", failure_stage, exc.status_code)
+            except (APIStatusError, APIConnectionError) as exc:
+                run = None
+                existing = []
+                failure_stage = stage
+                status = getattr(exc, "status_code", None)
+                answer = (f"研究模型请求失败（HTTP {status}），本次提问已保留。"
+                          if status is not None else "研究模型连接失败，本次提问已保留。")
+                logger.warning("Research model transport failed: stage=%s type=%s status=%s",
+                               stage, type(exc).__name__, status)
+            except Exception:
+                run = None
+                existing = []
+                failure_stage = stage
+                answer = "研究请求未完成，请稍后重试；已保留本次提问。"
+                logger.exception("Research request failed: stage=%s", stage)
             assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer,
                              created_at=time.time(), model=session["model"])
+            if failure_stage:
+                assistant["research_failure_stage"] = failure_stage
             if run:
                 assistant["research_run_id"] = run["id"]
             if existing:
@@ -1035,7 +1095,10 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                                     (json.dumps(session), owner, sid, lease))
                 if result.rowcount != 1:
                     raise HTTPException(409, "会话已更新，请重新加载")
+            if failure_http_exc:
+                raise failure_http_exc
             return dict(session=public(session), user_message=user, assistant_message=assistant)
+        validate_model(ctx, session["model"])
         if body.companion_skills:
             base_instruction = "你是温和、尊重的对话陪伴助手。认真倾听，以简短清晰的语言回应。用户当前的话优先于过往背景。你没有日历、闹钟、媒体播放或主动发送消息的能力；不得声称已执行这些操作。医疗、药物和投资问题不做个性化决策，建议咨询专业人士。"
         else:
@@ -1158,7 +1221,6 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     except HTTPException:
         raise
     except Exception as exc:
-        from openai import APIStatusError, APITimeoutError, APIConnectionError
         if isinstance(exc, (APIStatusError, APIConnectionError)):
             status = getattr(exc, "status_code", None)
             logger.warning("UniArt chat transport failed: model=%s type=%s status=%s", session["model"], type(exc).__name__, status)
