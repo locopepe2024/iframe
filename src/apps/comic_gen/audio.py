@@ -3,7 +3,7 @@ import time
 import hashlib
 from typing import Dict, Any, List, Optional
 from .models import StoryboardFrame, Character, GenerationStatus
-from ..studio_access import studio_owner_dir
+from ..studio_access import studio_media_dir
 from ...utils import get_logger
 from ...audio.tts import TTSProcessor
 
@@ -81,7 +81,7 @@ class AudioGenerator:
 
     def _output_dir_for(self, frame: StoryboardFrame) -> str:
         if frame.owner_profile_id:
-            return os.path.join(studio_owner_dir(frame.owner_profile_id), "audio")
+            return studio_media_dir(frame.owner_profile_id, "audio")
         return self.output_dir
         
         # Initialize TTS Processor

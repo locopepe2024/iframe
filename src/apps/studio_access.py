@@ -94,6 +94,20 @@ def studio_owner_dir(owner_profile_id: str) -> str:
     return os.path.join("output", "users", studio_owner_key(owner_profile_id), "studio")
 
 
+STUDIO_MEDIA_CATEGORIES = frozenset({
+    "assets", "audio", "storyboard", "uploads", "video", "video_inputs",
+})
+
+
+def studio_media_dir(owner_profile_id: str, category: str) -> str:
+    """Resolve an authenticated Studio material category under its owner."""
+    if not owner_profile_id:
+        raise ValueError("Studio media write requires an owner profile")
+    if category not in STUDIO_MEDIA_CATEGORIES:
+        raise ValueError(f"Unsupported Studio media category: {category}")
+    return os.path.join(studio_owner_dir(owner_profile_id), category)
+
+
 def _studio_media_secret() -> str:
     secret = os.getenv("LUMENX_MEDIA_SIGNING_KEY") or os.getenv("LUMENX_CONFIG_MASTER_KEY")
     if not secret:

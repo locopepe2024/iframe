@@ -77,6 +77,7 @@ from ..studio_access import (
     runtime_uniart_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
+    studio_media_dir,
     resolve_studio_reference,
 )
 from ..media_registry import register_media
@@ -269,7 +270,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _owner_output_dir(resource: Any, category: str) -> str:
         owner_profile_id = getattr(resource, "owner_profile_id", None)
         if owner_profile_id:
-            return os.path.join(studio_owner_dir(owner_profile_id), category)
+            return studio_media_dir(owner_profile_id, category)
         return os.path.join("output", category)
 
     _ORPHAN_RECOVERY_REASON = (
@@ -5811,7 +5812,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     image_url=source_image_url,
                     prompt=prompt,
                     duration=duration,
-                    audio_url=audio_url
+                    audio_url=audio_url,
+                    owner_profile_id=script.owner_profile_id,
                 )
 
                 if video_result and video_result.get("video_url"):

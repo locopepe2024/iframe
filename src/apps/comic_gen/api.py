@@ -132,6 +132,7 @@ from ..studio_access import (
     sign_studio_media_paths,
     set_studio_user,
     studio_owner_dir,
+    studio_media_dir,
     studio_owner_key,
     studio_uniart_config,
     verify_studio_media,
@@ -445,7 +446,7 @@ def get_owned_studio_media(
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
-    upload_dir = os.path.join(studio_owner_dir(user.owner_profile_id), "uploads")
+    upload_dir = studio_media_dir(user.owner_profile_id, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     absolute_path = os.path.join(upload_dir, filename)
     stored_path = os.path.relpath(absolute_path, "output")
