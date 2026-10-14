@@ -8,8 +8,8 @@ export type AgentMemory = { id: string; content: string; category: string; sourc
 export type MemoryCandidate = { content: string; category: string; source_session_id: string; source_message_id: string; source_quote: string };
 
 export function requestsCurrentInformation(content: string): boolean {
-  return /截至目前|截止目前|截至今天|截止今天|至今|到今天/.test(content)
-    && /资讯|新闻|公告|研究|分析|近况|动态/.test(content);
+  return /截至目前|截止目前|截至今天|截止今天|至今|到今天|今年|最近一年/.test(content)
+    && /资讯|新闻|公告|研究|分析|近况|动态|运营|经营/.test(content);
 }
 
 export function useAgentConversation(enabled: boolean, sessionId: string | null) {
