@@ -16,6 +16,17 @@ _DATA_URI = re.compile(r"data:[^\s\"'<>]+")
 _SENSITIVE_KEYS = {"api_key", "authorization", "access_token", "secret", "password", "data"}
 
 
+def _diagnostics_dir() -> Path:
+    return Path(os.getenv("LUMENX_OUTPUT_DIR", "output")) / "diagnostics"
+
+
+def llm_request_logging_enabled() -> bool:
+    setting = os.getenv("IFRAME_LLM_REQUEST_DEBUG")
+    if setting is not None:
+        return setting == "1"
+    return (_diagnostics_dir() / "llm-request-debug.enabled").is_file()
+
+
 def _safe_content(value: Any) -> Any:
     if isinstance(value, str):
         return _URL.sub("[url omitted]", _DATA_URI.sub("[data-uri omitted]", value))
@@ -31,10 +42,10 @@ def _safe_content(value: Any) -> Any:
 
 def record_llm_request(stage: str, model: str, messages: list[dict], **options: Any) -> None:
     """Record text and multimodal structure without media bytes or credentials."""
-    if os.getenv("IFRAME_LLM_REQUEST_DEBUG") != "1":
+    if not llm_request_logging_enabled():
         return
     try:
-        directory = Path(os.getenv("LUMENX_OUTPUT_DIR", "output")) / "diagnostics"
+        directory = _diagnostics_dir()
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         entries = []
         for message in messages:

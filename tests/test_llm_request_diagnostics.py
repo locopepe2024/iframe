@@ -17,6 +17,22 @@ def test_debug_logging_is_off_by_default(tmp_path, monkeypatch):
     assert not (tmp_path / "diagnostics").exists()
 
 
+def test_runtime_marker_toggles_capture_without_restart(tmp_path, monkeypatch):
+    monkeypatch.delenv("IFRAME_LLM_REQUEST_DEBUG", raising=False)
+    monkeypatch.setenv("LUMENX_OUTPUT_DIR", str(tmp_path))
+    from scripts.llm_request_debug import main
+
+    monkeypatch.setattr(sys, "argv", ["llm_request_debug.py", "enable"])
+    main()
+    record_llm_request("agent", "test-model", [{"role": "user", "content": "first"}])
+    assert (tmp_path / "diagnostics" / "llm-requests.jsonl").exists()
+
+    monkeypatch.setattr(sys, "argv", ["llm_request_debug.py", "disable"])
+    main()
+    record_llm_request("agent", "test-model", [{"role": "user", "content": "second"}])
+    assert len((tmp_path / "diagnostics" / "llm-requests.jsonl").read_text().splitlines()) == 1
+
+
 def test_debug_logging_keeps_text_and_redacts_media(tmp_path, monkeypatch):
     monkeypatch.setenv("IFRAME_LLM_REQUEST_DEBUG", "1")
     monkeypatch.setenv("LUMENX_OUTPUT_DIR", str(tmp_path))
