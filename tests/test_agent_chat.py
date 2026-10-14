@@ -86,7 +86,7 @@ def test_chat_timeout_and_busy_lease_cover_slow_upstream(setup, monkeypatch):
         def __init__(self, **kwargs):
             observed['timeout'] = kwargs['timeout']
             self.chat = Mock(completions=Mock(create=Mock(return_value=Mock(
-                model_dump=Mock(return_value={'choices': [{'message': {'content': 'ok'}}]}),
+                __iter__=Mock(return_value=iter([Mock(choices=[Mock(delta=Mock(content='ok'))])])),
             ))))
 
         def __enter__(self):
@@ -130,9 +130,10 @@ def test_multiturn_owner_and_model(setup, monkeypatch):
     agent.send(sid, agent.MessageCreate(content='加一只小狗'), ctx)
     history = call.call_args.args[2]
     assert len(history) == 4
-    assert '参考.png' in history[1]['content']
+    assert history[1]['content'] == '一个女孩'
     assert history[2]['content'] == '优化后的提示词'
     assert len(agent.messages(sid, ctx)['messages']) == 4
+    assert agent.messages(sid, ctx)['messages'][0]['asset_names'] == ['参考.png']
     other = UserContext('other', 'other-profile', 'other', 'other-token')
     for fn in [lambda: agent.messages(sid, other), lambda: agent.delete(sid, other), lambda: agent.patch(sid, agent.SessionPatch(title='x'), other)]:
         with pytest.raises(HTTPException) as exc:
@@ -415,7 +416,7 @@ def test_linked_conversation_and_image_context(setup, monkeypatch):
     assert complete.call_args.args[2][-1]['content'][2] == {
         'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}}
     agent.send(first['id'], agent.MessageCreate(content='它的颜色？'), ctx)
-    assert complete.call_args.args[2][1]['content'][2]['type'] == 'image_url'
+    assert complete.call_args.args[2][1]['content'] == '这是什么？'
     assert isinstance(complete.call_args.args[2][2]['content'], str)
     assert len(agent.playground_conversation('canvas', ctx)['messages']) == 4
 
@@ -606,7 +607,72 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     assert parts[6]['video_url'] == 'https://cdn.example/walk.mp4'
     assert '参考素材 @4：sound.wav' in parts[7]['text']
     agent.send(sid, agent.MessageCreate(content='Continue'), setup)
-    assert call.call_args.args[2][1]['content'] == parts
+    assert call.call_args.args[2][1]['content'] == 'Use @face.png with @walk.mp4'
+    agent.send(sid, agent.MessageCreate(content='Review @walk.mp4'), setup)
+    historical_parts = call.call_args.args[2][1]['content']
+    assert [part['type'] for part in historical_parts] == ['text', 'text', 'video_url']
+    assert historical_parts[2]['video_url'] == 'https://cdn.example/walk.mp4'
+
+
+def test_chat_replays_only_relevant_historical_materials_and_context(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
+    call = Mock(return_value='answer')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+
+    agent.send(sid, agent.MessageCreate(content='设计 @old.png', context='旧草稿',
+        input_media=['/tmp/old.png'], asset_names=['old.png']), setup)
+    agent.send(sid, agent.MessageCreate(content='改用 @new.png', context='新草稿',
+        input_media=['/tmp/new.png'], asset_names=['new.png']), setup)
+    agent.send(sid, agent.MessageCreate(content='继续'), setup)
+
+    history = call.call_args.args[2]
+    assert history[1]['content'] == '设计 @old.png'
+    assert history[3]['content'] == '改用 @new.png'
+    assert history[-1]['content'] == '继续'
+
+    agent.send(sid, agent.MessageCreate(content='检查 @old.png.backup'), setup)
+    assert call.call_args.args[2][1]['content'] == '设计 @old.png'
+
+    agent.send(sid, agent.MessageCreate(content='再看 @old.png'), setup)
+    history = call.call_args.args[2]
+    assert history[1]['content'][2]['image_url']['url'] == '/tmp/old.png'
+    assert '旧草稿' not in history[1]['content'][0]['text']
+    assert agent.messages(sid, setup)['messages'][0]['context'] == '旧草稿'
+
+
+def test_chat_does_not_duplicate_prompt_as_current_context(setup, monkeypatch):
+    call = Mock(return_value='answer')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='完整提示词', context='完整提示词'), setup)
+    assert call.call_args.args[2][-1]['content'] == '完整提示词'
+
+
+def test_chat_reattaches_only_latest_named_material_not_current_duplicate(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
+    call = Mock(return_value='answer')
+    monkeypatch.setattr(agent, 'complete', call)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+    agent.send(sid, agent.MessageCreate(content='第一版', input_media=['/tmp/first.png'],
+        asset_names=['same.png']), setup)
+    agent.send(sid, agent.MessageCreate(content='第二版', input_media=['/tmp/latest.png'],
+        asset_names=['same.png']), setup)
+
+    agent.send(sid, agent.MessageCreate(content='继续参考 @same.png'), setup)
+    history = call.call_args.args[2]
+    assert history[1]['content'] == '第一版'
+    assert history[3]['content'][2]['image_url']['url'] == '/tmp/latest.png'
+    assert sum(part['type'] == 'image_url' for message in history for part in
+        (message['content'] if isinstance(message['content'], list) else [])) == 1
+
+    agent.send(sid, agent.MessageCreate(content='继续参考 @same.png',
+        input_media=['/tmp/current.png'], asset_names=['same.png']), setup)
+    history = call.call_args.args[2]
+    assert history[3]['content'] == '第二版'
+    assert history[-1]['content'][2]['image_url']['url'] == '/tmp/current.png'
+    assert sum(part['type'] == 'image_url' for message in history for part in
+        (message['content'] if isinstance(message['content'], list) else [])) == 1
 
 
 def test_h3_agent_restores_original_filenames_in_optimized_prompt(setup, monkeypatch):
@@ -713,10 +779,16 @@ def test_chat_payload_budget_counts_utf8_bytes_not_escaped_chinese(setup, monkey
     monkeypatch.setattr(agent, 'get_user_config_store', lambda: Mock(get_runtime_uniart=Mock(return_value={'api_key': 'test', 'base_url': 'https://example.test/v1'})))
     import openai
     client = Mock()
-    client.chat.completions.create.return_value.model_dump.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+    client.chat.completions.create.return_value.__iter__ = Mock(return_value=iter([
+        Mock(choices=[Mock(delta=Mock(content='o'))]),
+        Mock(choices=[Mock(delta=Mock(content='k'))]),
+    ]))
     factory = Mock()
     factory.return_value.__enter__ = Mock(return_value=client)
     factory.return_value.__exit__ = Mock(return_value=False)
     monkeypatch.setattr(openai, 'OpenAI', factory)
     assert agent.complete(setup, 'qwen', [{'role': 'user', 'content': '文' * 200000}]) == 'ok'
-    client.chat.completions.create.assert_called_once()
+    client.chat.completions.create.assert_called_once_with(
+        model='qwen', messages=[{'role': 'user', 'content': '文' * 200000}], stream=True,
+    )
+    client.chat.completions.create.return_value.close.assert_called_once()

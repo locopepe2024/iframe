@@ -13,6 +13,9 @@ import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
 import { getR2vRouteModelId, isR2vImageBased, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
+
+const preferredVideoModel = (models: { id: string }[], fallback: string) =>
+    models.find(model => model.id === 'nsfw/wan3.0')?.id ?? models[0]?.id ?? fallback;
 import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import {
     buildGenerationPrompt,
@@ -106,7 +109,7 @@ export default function StoryboardR2V() {
         // silently shipping the wrong model into the I2V flow.
         const i2vCandidate = savedI2v || projectI2v;
         const i2vOk = VIDEO_I2V_MODELS.find(m => m.id === i2vCandidate);
-        const i2vModelId = i2vOk ? i2vCandidate : DEFAULT_I2V_MODEL_ID;
+        const i2vModelId = i2vOk ? i2vCandidate : preferredVideoModel(VIDEO_I2V_MODELS, DEFAULT_I2V_MODEL_ID);
         if (!i2vOk && ls && savedI2v) {
             ls.removeItem('storyboard-r2v-model');
             debugLog.warn(
@@ -128,7 +131,7 @@ export default function StoryboardR2V() {
         const r2vDerived = getR2vRouteModelId(i2vModelId);
         const r2vCandidate = savedR2v || projectR2v || r2vDerived || DEFAULT_R2V_MODEL_ID;
         const r2vOk = VIDEO_R2V_MODELS.find(m => m.id === r2vCandidate);
-        const r2vModelId = r2vOk ? r2vCandidate : (VIDEO_R2V_MODELS[0]?.id ?? DEFAULT_R2V_MODEL_ID);
+        const r2vModelId = r2vOk ? r2vCandidate : preferredVideoModel(VIDEO_R2V_MODELS, DEFAULT_R2V_MODEL_ID);
         if (!r2vOk && ls && savedR2v) {
             ls.removeItem('storyboard-r2v-r2v-model');
         }
@@ -146,6 +149,20 @@ export default function StoryboardR2V() {
                 ?? DEFAULT_VIDEO_CONFIG.ratio,
         };
     });
+
+    useEffect(() => {
+        const refreshSelection = () => {
+            setVideoConfig(current => ({
+                ...current,
+                model: VIDEO_I2V_MODELS.some(item => item.id === current.model)
+                    ? current.model : preferredVideoModel(VIDEO_I2V_MODELS, DEFAULT_I2V_MODEL_ID),
+                r2vModel: VIDEO_R2V_MODELS.some(item => item.id === current.r2vModel)
+                    ? current.r2vModel : preferredVideoModel(VIDEO_R2V_MODELS, DEFAULT_R2V_MODEL_ID),
+            }));
+        };
+        window.addEventListener('lumenx:uniart-catalog-refreshed', refreshSelection);
+        return () => window.removeEventListener('lumenx:uniart-catalog-refreshed', refreshSelection);
+    }, []);
 
     // Modal & drawer state (configModalOpen retired with the gear; the
     // old VideoConfigModal mount is gone, replaced by per-shot
@@ -1709,7 +1726,10 @@ export default function StoryboardR2V() {
     //    and uses across all shots in a project.
     const paramsStateForShot = useCallback((shot: ShotNode): ParamsState => {
         const isR2v = shot.tabMode === "direct_r2v";
-        const modelId = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
+        const models = isR2v ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS;
+        const selected = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
+        const modelId = models.some(model => model.id === selected)
+            ? selected : preferredVideoModel(models, isR2v ? DEFAULT_R2V_MODEL_ID : DEFAULT_I2V_MODEL_ID);
         return {
             model: modelId,
             duration: shot.duration ?? videoConfig.duration,

@@ -257,6 +257,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     assert "相邻及非相邻场景的地点" in prompt
     assert processor.llm.chat.call_args.kwargs["timeout_seconds"] == 1800
     assert processor.llm.chat.call_args.kwargs["max_retries"] == 1
+    assert processor.llm.chat.call_args.kwargs["stream"] is True
     assert result["setting"]["geography"] == "中国大学校园与北京"
 
 
@@ -1508,7 +1509,7 @@ def test_version_pinned_fact_ledger_context_filters_by_source_range_and_subject(
     assert stale_context["script_fact_ledger"]["facts"] == []
 
 
-def test_asset_generation_receives_and_records_confirmed_director_profile():
+def test_asset_generation_records_director_profile_without_injecting_it_into_image_prompt():
     from src.apps.comic_gen.models import ScriptFactLedgerEntry, SourceRange
 
     pipeline, script = make_pipeline()
@@ -1528,8 +1529,7 @@ def test_asset_generation_receives_and_records_confirmed_director_profile():
     pipeline.generate_asset("film", character.id, "character", generation_type="full_body")
 
     prompt = pipeline.asset_generator.generate_character.call_args.kwargs["positive_prompt"]
-    assert "Director profile revision: 2" in prompt
-    assert "中国大学校园与北京" in prompt
+    assert prompt == ""
     assert character.director_profile_revision == 2
     assert character.director_profile_hash == "profile-2"
     assert character.director_review_required is False

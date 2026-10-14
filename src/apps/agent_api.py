@@ -174,6 +174,16 @@ class CharacterDesignRequest(BaseModel):
     reference_assets: list[CharacterDesignReference] = Field(default_factory=list, max_length=9)
 
 
+class AssetDesignRequest(BaseModel):
+    model: str
+    asset_type: Literal["scene", "prop"]
+    asset_name: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=12000)
+    current_draft: str = Field(default="", max_length=5000)
+    user_requirements: str = Field(default="", max_length=3000)
+    confirmed_design: str = Field(default="", max_length=5000)
+
+
 class AssetImagePromptRequest(BaseModel):
     model: str
     asset_type: Literal["scene", "prop"]
@@ -268,6 +278,11 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     if body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
     allowed_age_stages = {"child", "teen", "young-adult", "adult", "older-adult"}
+    if len(body.user_answers) > 12 or any(
+        len(question) > 300 or len(answer) > 1000
+        for question, answer in body.user_answers.items()
+    ):
+        raise HTTPException(422, "角色视觉要求过长或字段无效")
     packages = {item["id"]: item for item in skill_catalog()}
     identity_skill = packages["character-identity-design"]
     route_skill = packages["character-style-routes"]
@@ -429,6 +444,44 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     }
 
 
+@router.post("/asset-design/draft")
+def asset_design_draft(body: AssetDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    """Create an editable scene/prop visual design without mutating the asset."""
+    validate_model(ctx, body.model)
+    subject = "场景环境" if body.asset_type == "scene" else "道具物件"
+    system = (
+        f"你是影视美术设计助手，负责设计{subject}。根据资产档案、用户要求和当前草稿，"
+        "生成可直接用于图片生成的、具体可观察的视觉设计。保持资产身份，不新增剧情事实。"
+        "优先采用用户要求；模型补充只能作为 creative_choice。避免空泛的电影感、杰作、高质量等词。"
+        "只返回一个 JSON，不要 Markdown："
+        '{"visual_notes":"可直接用于出图的主体视觉设计",'
+        '"unresolved":["仅列出会阻碍设计的关键歧义"]}'
+    )
+    user = json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)
+    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+    try:
+        decoder = json.JSONDecoder()
+        result = None
+        for offset, char in enumerate(answer):
+            if char != "{":
+                continue
+            try:
+                candidate, _ = decoder.raw_decode(answer[offset:])
+            except ValueError:
+                continue
+            if isinstance(candidate, dict) and isinstance(candidate.get("visual_notes"), str):
+                result = candidate
+                break
+        if not result or not result["visual_notes"].strip():
+            raise ValueError("missing_visual_notes")
+        unresolved = result.get("unresolved") or []
+        if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+            raise ValueError("invalid_unresolved")
+    except (ValueError, TypeError):
+        raise HTTPException(502, "场景/道具设计模型未返回可编辑草稿，请重试") from None
+    return {"visual_notes": result["visual_notes"].strip(), "unresolved": unresolved[:12]}
+
+
 class MemoryCreate(BaseModel):
     content: str = Field(min_length=1, max_length=300)
     category: str = Field(default="preference", min_length=1, max_length=40)
@@ -452,10 +505,13 @@ def catalog(ctx):
 
 
 CHAT_MODEL_LABELS = {
+    "Qwen3.8-27B-Uncensored-Q8_0": "Qwen 3.8 27B Uncensored Q8_0",
     "gpt-5.6-sol": "GPT 5.6 Sol",
     "gpt-5.6-luna": "GPT 5.6 Luna",
     "qwen3.8-flash": "Qwen 3.8 Flash",
     "glm-5.3": "GLM 5.3",
+    "kimi-k3": "Kimi K3",
+    "deepseek-v4.1-flash-peak": "DeepSeek V4.1 Flash Peak",
     "glm-5.3-flash": "GLM 5.3 Flash",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
     "minimax-h3-ir": "MiniMax H3 IR（提示词优化）",
@@ -830,33 +886,21 @@ def complete(ctx, model, history):
         timeout=chat_timeout_seconds(),
         max_retries=0,
     ) as client:
-        reply = client.chat.completions.create(model=model, messages=history)
-    answer = None
-    raw = getattr(reply, "model_dump", lambda: reply)()
-    if isinstance(raw, dict):
-        base = raw.get("base_resp") or {}
-        if isinstance(base, dict) and base.get("status_code") not in (None, 0, "0"):
-            code = str(base["status_code"])
-            safe_code = code if code.isdigit() and len(code) <= 10 else "unknown"
-            raise HTTPException(502, f"UniArt 模型返回业务错误（code {safe_code}），请检查该模型通道")
-        choices = raw.get("choices") or []
-        if choices:
-            first = choices[0] if isinstance(choices[0], dict) else {}
-            message = first.get("message") or first.get("delta") or {}
-            if isinstance(message, dict):
-                answer = message.get("content") or message.get("text")
-            answer = answer or first.get("text") or first.get("content")
-        answer = answer or raw.get("content") or raw.get("output")
+        stream = client.chat.completions.create(model=model, messages=history, stream=True)
+        parts = []
+        try:
+            for chunk in stream:
+                if chunk.choices:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        parts.append(content)
+        finally:
+            stream.close()
+    answer = "".join(parts)
     if not answer:
-        choices = getattr(reply, "choices", None) or []
-        if choices:
-            first = choices[0]
-            message = getattr(first, "message", None)
-            answer = getattr(message, "content", None) if message else None
-    if not answer:
-        logger.error("UniArt chat response has no text; keys=%s", sorted(raw.keys()) if isinstance(raw, dict) else type(reply).__name__)
+        logger.error("UniArt chat stream completed without text: model=%s", model)
         raise HTTPException(502, "UniArt 模型未返回有效回复（choices 为空），请检查模型通道")
-    return str(answer)
+    return answer
 
 
 def _context_ir_reference_content(ctx, reference):
@@ -996,22 +1040,58 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             if ref not in reference_cache:
                 reference_cache[ref] = reference_content(ctx, ref)
             return reference_cache[ref]
-        for message in session["messages"][-30:] + [user]:
+        def explicitly_named(name):
+            aliases = [name]
+            if len(name) > 5:
+                aliases.extend((name[:5] + "...", name[:5] + "…"))
+            suffix = r"(?=$|[\s，。！？、,!?;；:：\u3400-\u9fff]|\.(?![0-9A-Za-z_]))"
+            return any(re.search(r"@" + re.escape(alias) + suffix, body.content) for alias in aliases)
+
+        previous_messages = session["messages"][-30:]
+        current_names = {
+            name for name in body.asset_names[:len(body.input_media)] if name
+        }
+        selected_historical_refs = {}
+        for message in reversed(previous_messages):
+            if message["role"] != "user":
+                continue
+            selected = []
+            names = message.get("asset_names", [])
+            for index, ref in enumerate(message.get("input_media", [])):
+                name = names[index] if index < len(names) else ""
+                if name and name not in current_names and explicitly_named(name):
+                    selected.append((ref, name))
+                    current_names.add(name)
+            if selected:
+                selected_historical_refs[message["id"]] = selected
+        for message in previous_messages + [user]:
             content = message["content"]
-            if message["role"] == "user":
-                content += "\n只读创作上下文：" + json.dumps({"asset_names": message.get("asset_names", []), "draft": message.get("context", "")}, ensure_ascii=False)
-            if message["role"] == "user" and message.get("input_media"):
+            names = message.get("asset_names", [])
+            current_turn = message is user
+            if current_turn:
+                draft = message.get("context", "")
+                context = {}
+                if names:
+                    context["asset_names"] = names
+                if draft.strip() and draft.strip() != content.strip():
+                    context["draft"] = draft
+                if context:
+                    content += "\n只读创作上下文：" + json.dumps(context, ensure_ascii=False)
+            selected_refs = (
+                [(ref, names[index] if index < len(names) else "")
+                 for index, ref in enumerate(message.get("input_media", []))]
+                if current_turn else selected_historical_refs.get(message["id"], [])
+            ) if message["role"] == "user" else []
+            if selected_refs:
                 from ..models.reference_binding import bind_reference_names
-                refs = message["input_media"]
-                names = message.get("asset_names", [])
-                labels = [names[i] if i < len(names) else "" for i in range(len(refs))]
+                labels = [label for _, label in selected_refs]
                 try:
                     bound_content = bind_reference_names(content, labels)
                 except ValueError as exc:
                     raise HTTPException(422, "参考素材名称重复，请使用 @1、@2 等编号明确指定素材") from exc
                 content = [{"type": "text", "text": bound_content}]
-                for index, ref in enumerate(refs):
-                    content.append({"type": "text", "text": f"参考素材 @{index + 1}：{labels[index] or '未命名素材'}（紧随此说明的附件）"})
+                for index, (ref, label) in enumerate(selected_refs, 1):
+                    content.append({"type": "text", "text": f"参考素材 @{index}：{label or '未命名素材'}（紧随此说明的附件）"})
                     content.append(content_for(ref))
             history.append({"role": message["role"], "content": content})
         if session["model"] == "minimax-h3-ir":

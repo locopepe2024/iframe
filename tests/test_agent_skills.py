@@ -109,6 +109,20 @@ def test_character_design_draft_rejects_incomplete_model_result(ctx, monkeypatch
     assert exc.value.status_code == 502
 
 
+def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='```json\n{"visual_notes":"青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照，空间开阔，保留人物动作区域","unresolved":[]}\n```')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.AssetDesignRequest(
+        model='qwen', asset_type='scene', asset_name='粮铺门前',
+        description='青溪镇街边粮铺', user_requirements='南北要道，黄昏，写实电影质感',
+    )
+    result = agent.asset_design_draft(body, ctx)
+    assert '青石板长街' in result['visual_notes']
+    assert result['unresolved'] == []
+    assert '南北要道' in complete.call_args.args[2][1]['content']
+
+
 def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
     monkeypatch.setattr(agent, 'complete', lambda *_: '''```json

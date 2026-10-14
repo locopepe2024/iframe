@@ -132,9 +132,11 @@ from ..studio_access import (
     sign_studio_media_paths,
     set_studio_user,
     studio_owner_dir,
+    studio_owner_key,
     studio_uniart_config,
     verify_studio_media,
     verify_studio_media_preview,
+    verify_provider_media,
     verify_studio_resource_path,
 )
 from ..user_config import router as user_config_router
@@ -231,7 +233,9 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/asset-index"
         or path.startswith("/asset-index/")
         or path == "/upload"
+        or path == "/config/models"
         or path == "/config/uniart/models"
+        or path.startswith("/studio/owned-media/")
         or path.startswith("/tasks/")
         # Prompt polishing resolves the model credentials and optional
         # episode/series prompt context from the current Studio owner.  Keep
@@ -386,6 +390,12 @@ def private_no_store_signed_response(data):
     return response
 
 
+@app.get("/provider/media/{owner_key}/{relative_path:path}")
+def get_provider_media(owner_key: str, relative_path: str, expires: int = 0, signature: str = ""):
+    path = verify_provider_media(owner_key, relative_path, expires, signature)
+    return FileResponse(path, headers={"Cache-Control": "private, no-store"})
+
+
 @app.get("/studio/media/{owner_key}/{relative_path:path}")
 def get_studio_media(
     owner_key: str,
@@ -408,6 +418,29 @@ def get_studio_media(
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
     return FileResponse(path, headers=headers, media_type="image/webp" if preview else None)
+
+
+@app.get("/studio/owned-media/{owner_key}/{relative_path:path}")
+def get_owned_studio_media(
+    owner_key: str,
+    relative_path: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Serve legacy owner-local asset paths that lack a signed display URL."""
+    if owner_key != studio_owner_key(user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Media not found")
+    owner_root = os.path.realpath(studio_owner_dir(user.owner_profile_id))
+    path = os.path.realpath(os.path.join(owner_root, relative_path))
+    if not path.startswith(owner_root + os.sep) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Media not found")
+    if preview:
+        try:
+            path = create_media_thumbnail(path, owner_root, preview)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=415, detail="A supported still image is required for preview") from exc
+    return FileResponse(path, media_type="image/webp" if preview else None,
+                        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
@@ -2939,6 +2972,8 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
+    resolver = getattr(pipeline, "get_effective_polish_model", None)
+    selected_model = resolver(script) if callable(resolver) else ""
     return hashlib.sha256(json.dumps([
         text,
         entities,
@@ -2949,7 +2984,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
         lineage.model_dump() if lineage else None,
         visual_style,
         llm.provider,
-        llm._get_default_model(),
+        selected_model or llm._get_default_model(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
@@ -2966,6 +3001,7 @@ def start_storyboard_analysis(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
+    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
     job_fingerprint = "storyboard:" + fingerprint
     from .llm import split_director_source
     total_batches = len(split_director_source(
@@ -2986,6 +3022,7 @@ def start_storyboard_analysis(
                     index, source_ref, frames,
                 ),
                 expected_lineage=lineage,
+                model=selected_model,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3015,6 +3052,7 @@ def start_storyboard_analysis_refinement(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
+    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -3023,6 +3061,7 @@ def start_storyboard_analysis_refinement(
             "frames": pipeline.refine_storyboard_analysis(
                 script_id, request.text, request.draft, instructions,
                 lineage=lineage,
+                model=selected_model,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3816,6 +3855,7 @@ class UpdatePromptConfigRequest(BaseModel):
     entity_extraction: str = ""
     style_analysis: str = ""
     storyboard_extraction: str = ""
+    polish_model: Optional[str] = None
 
 
 @app.get("/projects/{script_id}/prompt_config")
@@ -3849,7 +3889,6 @@ def update_prompt_config(script_id: str, request: UpdatePromptConfigRequest):
         if not script:
             raise HTTPException(status_code=404, detail="Project not found")
         existing = getattr(script, "prompt_config", None)
-        preserved_polish_model = getattr(existing, "polish_model", "") if existing else ""
         script.prompt_config = PromptConfig(
             storyboard_polish=request.storyboard_polish,
             video_polish=request.video_polish,
@@ -3857,7 +3896,7 @@ def update_prompt_config(script_id: str, request: UpdatePromptConfigRequest):
             entity_extraction=request.entity_extraction,
             style_analysis=request.style_analysis,
             storyboard_extraction=request.storyboard_extraction,
-            polish_model=preserved_polish_model,
+            polish_model=request.polish_model if request.polish_model is not None else (existing.polish_model if existing else ""),
         )
         pipeline._save_data()
         return {"prompt_config": script.prompt_config.model_dump()}
@@ -5571,7 +5610,7 @@ def restore_director_shooting_plan_revision(
         raise HTTPException(status, message) from exc
 
 
-def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any]) -> str:
+def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any], model: Optional[str] = None) -> str:
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
@@ -5587,7 +5626,7 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any])
         selected_fields(entities["props"], ("id", "name", "description")),
         director_preset_identity("shooting-plan-handoff"),
         llm.provider,
-        llm._get_default_model(),
+        model or llm._get_default_model(),
     ]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
@@ -5610,7 +5649,15 @@ def start_director_shooting_plan(
     chunks = split_director_source(
         script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
     )
-    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage)
+    model = _get_polish_model_for_project(script_id).strip() or None
+    if model:
+        try:
+            published = fetch_uniart_catalog(studio_uniart_config())
+        except Exception as exc:
+            raise HTTPException(502, f"uniart_models_unavailable: {exc}") from exc
+        if not any(item["api_model_id"] == model and "chat" in item["capabilities"] for item in published):
+            raise HTTPException(422, "Selected LLM model is not published for this user")
+    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model)
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -5626,6 +5673,7 @@ def start_director_shooting_plan(
                     index, source_ref, result,
                 ),
                 expected_lineage=lineage,
+                model=model,
             ).model_dump(),
         },
         pass_job_id=True,
@@ -5829,11 +5877,61 @@ def _get_custom_prompt(script_id: str, field: str) -> str:
     return effective
 
 
-def _get_director_prompt_context(script_id: str) -> str:
-    if not script_id:
+def _get_director_prompt_context(script_id: str, frame_id: str = "") -> str:
+    if not script_id or not frame_id:
         return ""
     script = pipeline.get_script(script_id)
-    return pipeline.director_prompt_context(script) if script else ""
+    frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
+    context = frame.director_shot_context if frame else None
+    if not isinstance(context, dict):
+        return ""
+    scene = context.get("scene") if isinstance(context.get("scene"), dict) else {}
+    shot = context.get("shot") if isinstance(context.get("shot"), dict) else {}
+    selected = {
+        "scene": {key: str(scene[key])[:160] for key in (
+            "scene_ref", "time_anchor", "location", "place_continuity_id", "time_continuity_id",
+        ) if scene.get(key)},
+        "shot": {key: str(shot[key])[:240] for key in (
+            "visual_intent", "performance_action", "composition", "camera_movement", "lighting", "ambient_sound",
+        ) if shot.get(key)},
+    }
+    baseline = context.get("lighting_baseline")
+    if (isinstance(baseline, dict)
+            and scene.get("place_continuity_id")
+            and scene.get("time_continuity_id")
+            and baseline.get("place_continuity_id") == scene["place_continuity_id"]
+            and baseline.get("time_continuity_id") == scene["time_continuity_id"]):
+        light = baseline.get("lighting") if isinstance(baseline.get("lighting"), dict) else {}
+        selected["lighting_baseline"] = {
+            key: str(baseline[key])[:120]
+            for key in ("daylight_phase", "weather", "shadow_direction") if baseline.get(key)
+        }
+        selected["lighting_baseline"]["lighting"] = {
+            key: str(light[key])[:160]
+            for key in ("key_source", "color_tone", "contrast") if light.get(key)
+        }
+        if isinstance(context.get("shooting_plan_revision"), int):
+            selected["shooting_plan_revision"] = context["shooting_plan_revision"]
+    def encoded() -> str:
+        return json.dumps(selected, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    for group, key in (
+        ("shot", "ambient_sound"), ("shot", "camera_movement"),
+        ("shot", "composition"), ("shot", "performance_action"),
+        ("shot", "visual_intent"), ("scene", "location"),
+        ("scene", "scene_ref"), ("scene", "time_anchor"),
+        ("lighting_baseline", "weather"), ("lighting_baseline", "shadow_direction"),
+    ):
+        if len(encoded()) <= 1200:
+            break
+        selected.get(group, {}).pop(key, None)
+    for key in ("contrast", "color_tone"):
+        if len(encoded()) <= 1200:
+            break
+        selected.get("lighting_baseline", {}).get("lighting", {}).pop(key, None)
+    if len(encoded()) > 1200:
+        selected["shot"].pop("lighting", None)
+    return encoded()
 
 
 def _get_polish_model_for_project(script_id: str) -> str:
@@ -5865,6 +5963,7 @@ class PolishVideoPromptRequest(BaseModel):
     draft_prompt: str
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
+    frame_id: str = ""
     # 迭代时传入上一次的 CN 作为双语锚点，让模型同步修改双语；首次留空。
     prev_cn: str = ""
     # I2V 模式：首帧图 URL(s)。Vision-capable polish 模型会真正看见图像并
@@ -6143,7 +6242,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
         custom = _get_custom_prompt(request.script_id, "video_polish")
-        director = _get_director_prompt_context(request.script_id)
+        director = _get_director_prompt_context(request.script_id, request.frame_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
         selected_skills = _effective_optimization_skills(request)
@@ -6188,6 +6287,7 @@ class PolishR2VPromptRequest(BaseModel):
     slots: List[RefSlot]
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
+    frame_id: str = ""
     prev_cn: str = ""  # 双语锚点迭代用，首次留空
     # R2V 模式：用户挂载的 character1/2/3 参考图 URL(s)，让 vision 模型
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
@@ -6210,7 +6310,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
         custom = _get_custom_prompt(request.script_id, "r2v_polish")
-        director = _get_director_prompt_context(request.script_id)
+        director = _get_director_prompt_context(request.script_id, request.frame_id)
         if director:
             custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
         selected_skills = _effective_optimization_skills(request)
@@ -6358,20 +6458,21 @@ def get_env_config(identity: UserContext = Depends(require_user_context)):
 
 
 
+@app.get("/config/models")
 @app.get("/config/uniart/models")
 def get_uniart_models():
-    """Fetch the current UniArt OpenAI-compatible model list.
+    """Fetch the current owner-scoped gateway model list.
 
     The upstream response is normalized into the capability vocabulary used by
     iFrame selectors; credentials stay server-side.
     """
     runtime_config = studio_uniart_config()
-    base = runtime_config["base_url"].rstrip("/")
+    base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
     try:
         models = fetch_uniart_catalog(runtime_config)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    return {"provider": "uniart", "base_url": base, "models": models, "fetched_at": time.time()}
+    return {"provider": "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
 # ============================================

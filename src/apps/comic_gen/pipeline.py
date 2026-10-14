@@ -61,6 +61,7 @@ from .llm import ScriptProcessor
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
+from .prompt_assembly import append_projected_shot_context
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -1047,47 +1048,26 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         effective_size = ASPECT_RATIO_TO_SIZE.get(effective_aspect, default_size)
         
-        # Determine effective style: Art Direction > passed style > legacy style
+        # Asset workbench prompts own composition and subject identity. Global
+        # scene style and Director context are retained in lineage below, but
+        # cannot be appended to an isolated character/prop/scene image.
         effective_positive_prompt = ""
         effective_negative_prompt = negative_prompt or ""
         director_profile = None
         director_execution = None
 
-        # Resolve art_direction: episode own > series inherited
-        resolved_art_direction = self.effective_art_direction(script)
-
-        if apply_style:
-            if resolved_art_direction and resolved_art_direction.style_config:
-                effective_positive_prompt = resolved_art_direction.style_config.get('positive_prompt', '')
-                global_neg = resolved_art_direction.style_config.get('negative_prompt', '')
-                if global_neg:
-                    effective_negative_prompt = f"{effective_negative_prompt}, {global_neg}" if effective_negative_prompt else global_neg
-            elif style_prompt:
-                effective_positive_prompt = style_prompt
-            elif style_preset:
-                effective_positive_prompt = f"{style_preset} style"
-            elif script.style_preset:
-                effective_positive_prompt = f"{script.style_preset} style"
-                if script.style_prompt:
-                    effective_positive_prompt += f", {script.style_prompt}"
-
-            director_profile = self.effective_director_profile(script)
-            director_execution = self.director_execution_context(
-                script,
-                subject_ids=[asset_id],
-                director_profile=director_profile,
-            )
-            director_context = self.director_prompt_context(
-                script, subject_ids=[asset_id], director_profile=director_profile,
-                execution_context=director_execution,
-            )
-            if director_context:
-                effective_positive_prompt = ". ".join(filter(None, [effective_positive_prompt, director_context]))
+        director_profile = self.effective_director_profile(script)
+        director_execution = self.director_execution_context(
+            script,
+            subject_ids=[asset_id],
+            director_profile=director_profile,
+        )
         episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
-        if episode_context_prompt:
-            effective_positive_prompt = ". ".join(filter(None, [
-                effective_positive_prompt, episode_context_prompt,
-            ]))
+        if asset_type == "scene" and script.episode_visual_context and episode_context_prompt:
+            # A scene asset may inherit its confirmed episode location/time
+            # when it belongs to exactly one plan scene. Shared assets stay
+            # generic so one episode cannot overwrite another scene's look.
+            effective_positive_prompt = episode_context_prompt
         generation_lineage = self.generation_lineage(
             script, director_profile, director_execution,
         )
@@ -3343,6 +3323,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         load_batches=None,
         save_batch=None,
         expected_lineage: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
     ) -> DirectorShootingPlan:
         script = self.scripts.get(script_id)
         if not script:
@@ -3430,6 +3411,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     self.storyboard_visual_style(script),
                     previous_scene,
                     source_ref=chunk["source_ref"],
+                    **({"model": model} if model else {}),
                 )
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
@@ -3648,16 +3630,18 @@ class ComicGenPipeline(StudioOwnerMixin):
             unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
             generated_at=time.time(),
         )
-        return self._validate_director_shooting_plan(script, plan)
+        return self.normalize_director_shooting_plan_lighting(
+            self._validate_director_shooting_plan(script, plan)
+        )
 
     @staticmethod
     def normalize_director_shooting_plan_lighting(value: Any) -> DirectorShootingPlan:
         """Project unreasoned shots onto their reviewed place/time baseline.
 
-        Older AI-generated drafts may store a different natural-language
-        paraphrase on each shot. Within a reviewed place/time pair, only a
-        explicit user selection plus a non-empty reason makes shot lighting
-        independent; an AI-generated or legacy reason alone does not.
+        Older AI-generated drafts may store an orphan continuity ID or a
+        different natural-language paraphrase on each shot. A single ID cannot
+        identify a reviewed place/time pair. Within a reviewed pair, only an
+        explicit user selection and reason make shot lighting independent.
         """
         plan = value if isinstance(value, DirectorShootingPlan) else DirectorShootingPlan(**value)
         normalized = plan.model_copy(deep=True)
@@ -3666,6 +3650,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             for item in normalized.lighting_baselines
         }
         for scene in normalized.scenes:
+            if bool(scene.place_continuity_id) != bool(scene.time_continuity_id):
+                orphan = scene.place_continuity_id or scene.time_continuity_id
+                question = f"场景 {scene.scene_ref or scene.scene_id} 的单侧连续性关联 {orphan} 已取消，待核验地点与时段关系。"
+                if question not in scene.unresolved_questions and len(scene.unresolved_questions) < 20:
+                    scene.unresolved_questions.append(question)
+                scene.place_continuity_id = None
+                scene.time_continuity_id = None
             pair = (scene.place_continuity_id, scene.time_continuity_id)
             has_baseline = all(pair) and pair in baselines
             for beat in scene.beats:
@@ -3988,6 +3979,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             shooting_plan_revision=revision.revision,
             shooting_plan_hash=revision.content_hash,
             context_status="complete" if not plan.unresolved_questions else "partial",
+            lighting_baselines=[item.model_copy(deep=True) for item in plan.lighting_baselines],
             scenes=scenes, characters=list(characters.values()), props=list(props.values()), shots=shots,
         )
 
@@ -4412,7 +4404,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         # or prop states would produce contradictory instructions.
         if len(matches) > 1:
             return ""
-        return "本集拍摄计划视觉约束（仅用于本集资产变体，不改变全局底座）：" + json.dumps(matches, ensure_ascii=False, separators=(",", ":"))[:4000]
+        item = matches[0]
+        if asset_type == "scene":
+            fields = (
+                ("location", "地点"), ("time_anchor", "剧情时段"),
+                ("interior_exterior", "内外景"), ("season", "季节"),
+                ("time_of_day", "时段"), ("weather", "天气"),
+                ("atmosphere", "环境氛围"), ("continuity_in", "入场状态"),
+                ("continuity_out", "出场状态"),
+            )
+            clauses = [f"{label}：{item[key].strip()}" for key, label in fields
+                       if isinstance(item.get(key), str) and item[key].strip()]
+            if not clauses:
+                return ""
+            return "本集场景设计约束（只读投影）：" + "；".join(clauses)
+        return "本集拍摄计划视觉约束（仅用于本集资产变体，不改变全局底座）：" + json.dumps(item, ensure_ascii=False, separators=(",", ":"))[:4000]
 
     @staticmethod
     def _episode_shot_context_prompt(script: Script, frame: StoryboardFrame) -> str:
@@ -4770,9 +4776,11 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def preview_storyboard_analysis(self, script_id: str, text: str,
                                     load_batches=None, save_batch=None,
-                                    expected_lineage: Optional[ArtifactLineage] = None) -> List[Dict[str, Any]]:
+                                    expected_lineage: Optional[ArtifactLineage] = None,
+                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        selected_model = model if model is not None else self.get_effective_polish_model(script)
         source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
         director_profile = self.director_execution_context(
@@ -4794,6 +4802,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 text, entities_json, custom_extraction_prompt=prompt,
                 director_profile=director_profile, visual_style=visual_style,
                 source_range=source_range,
+                model=selected_model or None,
             )
         else:
             from .llm import split_director_source
@@ -4828,6 +4837,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         visual_style=visual_style,
                         previous_frames=frames[-3:],
                         source_range=chunk_source_range,
+                        model=selected_model or None,
                     )
                     if not batch_frames:
                         raise RuntimeError(f"分镜分析第 {index + 1}/{len(chunks)} 段没有返回镜头。")
@@ -4844,9 +4854,11 @@ class ComicGenPipeline(StudioOwnerMixin):
     def refine_storyboard_analysis(self, script_id: str, text: str,
                                     draft: List[Dict[str, Any]],
                                     instructions: List[str],
-                                    lineage: Optional[ArtifactLineage] = None) -> List[Dict[str, Any]]:
+                                    lineage: Optional[ArtifactLineage] = None,
+                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        selected_model = model if model is not None else self.get_effective_polish_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
         director_profile = self.director_execution_context(
@@ -4859,6 +4871,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
             source_range=self._source_range_for_text(script, text),
+            model=selected_model or None,
         )
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
@@ -4893,6 +4906,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             episode_context_payload.get("scenes", [])
             if isinstance(episode_context_payload, dict)
             and isinstance(episode_context_payload.get("scenes"), list)
+            else []
+        )
+        episode_context_baselines = (
+            episode_context_payload.get("lighting_baselines", [])
+            if isinstance(episode_context_payload, dict)
+            and isinstance(episode_context_payload.get("lighting_baselines"), list)
             else []
         )
 
@@ -4951,6 +4970,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
             source_range=source_range,
+            model=self.get_effective_polish_model(script) or None,
         )
 
         if not raw_frames:
@@ -5080,7 +5100,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     scene_id = selected_scene_asset_id
                 scene_context_keys = (
                     "scene_ref", "location", "time_anchor", "continuity_in",
-                    "continuity_out", "atmosphere",
+                    "continuity_out", "atmosphere", "place_continuity_id",
+                    "time_continuity_id", "interior_exterior",
                 )
                 shot_context_keys = (
                     "shot_id", "visual_intent", "director_effect", "performance_action",
@@ -5098,6 +5119,20 @@ class ComicGenPipeline(StudioOwnerMixin):
                         if context_shot_value(plan_shot, key) not in (None, "", [])
                     },
                 }
+                place_id = context_shot_value(plan_shot, "place_continuity_id") or (
+                    plan_scene.get("place_continuity_id") if plan_scene else None
+                )
+                time_id = context_shot_value(plan_shot, "time_continuity_id") or (
+                    plan_scene.get("time_continuity_id") if plan_scene else None
+                )
+                baseline = next((item for item in episode_context_baselines
+                    if isinstance(item, dict) and item.get("place_continuity_id") == place_id
+                    and item.get("time_continuity_id") == time_id), None) if place_id and time_id else None
+                if baseline:
+                    director_shot_context["lighting_baseline"] = baseline
+                if isinstance(episode_context_payload, dict):
+                    director_shot_context["shooting_plan_revision"] = episode_context_payload.get("shooting_plan_revision")
+                    director_shot_context["shooting_plan_hash"] = episode_context_payload.get("shooting_plan_hash")
 
             planned_dialogue = context_shot_value(plan_shot, "dialogue", []) if plan_shot else []
             planned_dialogue_lines = [
@@ -5843,7 +5878,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             ref_image_path = ref_image_paths[0] if ref_image_paths else None
             
             # Use the prompt as-is from frontend (already contains style)
-            final_prompt = prompt
+            # Render only the current frame's confirmed shot projection. The
+            # complete Director JSON stays in lineage/analysis context.
+            final_prompt = append_projected_shot_context(prompt, frame.director_shot_context)
             
             # Update frame with final prompt
             frame.image_prompt = final_prompt
@@ -5927,8 +5964,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         task_id = str(uuid.uuid4())
         
         # If R2V mode is selected, use the appropriate R2V model
+        from ...models.nsfw_new_one import WAN_IDS
+        is_nsfw_wan = model in WAN_IDS
         is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
-        if generation_mode == "r2v" and not is_uniart_video:
+        if generation_mode == "r2v" and not (is_uniart_video or is_nsfw_wan):
             # Skip auto-switch if user already selected an R2V model directly
             if not (model and model.endswith("-r2v")):
                 if model and model.startswith("happyhorse-"):
@@ -5960,6 +5999,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         # now match on the "-r2v" suffix so new R2V families inherit
         # the check automatically. Only wan2.6-r2v (legacy) takes
         # video refs; everything else takes image refs.
+        if is_nsfw_wan:
+            if generation_mode not in ("r2v", "i2v", "t2v"):
+                raise ValueError("Unsupported Wan 3.0 generation mode")
+            if reference_video_urls or audio_url or generate_audio:
+                raise ValueError("Wan 3.0 accepts image references only")
+            if generation_mode == "r2v" and not reference_image_urls:
+                raise ValueError("Wan 3.0 reference-to-video requires images")
+            if generation_mode == "i2v" and not image_url:
+                raise ValueError("Wan 3.0 image-to-video requires an input image")
+            if generation_mode == "t2v" and (image_url or reference_image_urls):
+                raise ValueError("Wan 3.0 text-to-video cannot accept images")
+            if len(reference_image_urls or []) + bool(image_url) > 10:
+                raise ValueError("Wan 3.0 accepts at most 10 reference images")
+            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
+            if image_url:
+                image_url = resolve_studio_reference(image_url, script.owner_profile_id)
         if is_uniart_video:
             references = (reference_image_urls or []) + (reference_video_urls or [])
             if generation_mode == "r2v" and not references and not audio_url:
@@ -7137,6 +7192,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
 
             # Persisted tasks and asset motion tasks also need ownership validation.
+            from ...models.nsfw_new_one import WAN_IDS
+            is_nsfw_wan = task.model in WAN_IDS
             is_uniart_task = (task.model or "").startswith(("uniart/minimax-h3-", "uniart/seedance-"))
             if is_uniart_task and not (task.provider_name == "uniart" and task.provider_task_id):
                 task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in task.reference_image_urls]
@@ -7148,7 +7205,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             # Download image to temp file
             img_path = None
-            if task.image_url and not (task.provider_name == "uniart" and task.provider_task_id):
+            if task.image_url and not (is_nsfw_wan or (task.provider_name == "uniart" and task.provider_task_id)):
                 img_path = self._download_temp_image(task.image_url)
             
             # Generate video
@@ -7183,7 +7240,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Route to the appropriate model based on task.model
             model_name = task.model or ""
             model_name_lower = model_name.lower()
-            backend = self._resolve_video_backend(model_name)
+            backend = "nsfw_new_one" if is_nsfw_wan else self._resolve_video_backend(model_name)
             use_vendor_kling = backend == "vendor" and (
                 model_name_lower.startswith("kling-") or model_name_lower.startswith("kling/kling-")
             )
@@ -7196,7 +7253,29 @@ class ComicGenPipeline(StudioOwnerMixin):
             use_uniart = backend == "uniart" and (model_name_lower.startswith("uniart/seedance-") or model_name_lower.startswith("uniart/minimax-h3-"))
             use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
-            if use_uniart:
+            if is_nsfw_wan:
+                from ...models.nsfw_new_one import NSFWNewOneVideoModel
+                if not script.owner_user_id or not script.owner_profile_id:
+                    raise RuntimeError("Video task has no authenticated owner")
+                adapter = NSFWNewOneVideoModel(runtime_uniart_for_owner(
+                    script.owner_user_id, script.owner_profile_id,
+                ))
+
+                def save_nsfw_task(provider_task_id):
+                    task.provider_name = "nsfw_new_one"
+                    task.provider_task_id = provider_task_id
+                    self._save_data()
+
+                video_path, _ = adapter.generate(
+                    prompt=task.prompt, output_path=output_path, model=task.model,
+                    img_url=task.image_url if task.generation_mode == "i2v" else None,
+                    ref_image_urls=task.reference_image_urls if task.generation_mode == "r2v" else [],
+                    duration=task.duration, resolution=task.resolution,
+                    aspect_ratio=task.ratio or "16:9",
+                    on_task_submitted=save_nsfw_task,
+                    resume_task_id=task.provider_task_id if task.provider_name == "nsfw_new_one" else None,
+                )
+            elif use_uniart:
                 from ...models.uniart import UniArtVideoModel
                 script_owner = self.get_script(script_id)
                 if not script_owner or not script_owner.owner_user_id or not script_owner.owner_profile_id:
@@ -9901,6 +9980,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             target.updated_at = time.time()
             self._save_series_data_unlocked()
             return target, imported_ids, skipped_ids
+
+    def get_effective_polish_model(self, episode: Script) -> str:
+        """Resolve the LLM model selected for an episode or its series."""
+        episode_model = getattr(episode.prompt_config, "polish_model", "").strip()
+        if episode_model:
+            return episode_model
+        series = self.get_series(episode.series_id) if episode.series_id else None
+        return getattr(series.prompt_config, "polish_model", "").strip() if series else ""
 
     def get_effective_prompt(self, prompt_type: str, episode: Script, series: Optional[Series] = None) -> str:
         """Three-level fallback: Episode -> Series -> system default."""

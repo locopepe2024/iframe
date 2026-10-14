@@ -3,6 +3,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, expect, it, vi } from "vitest";
+import { AxiosError } from "axios";
 import messages from "../../messages/en.json";
 import { api } from "@/lib/api";
 import type {
@@ -196,7 +197,32 @@ it("shows a readable AI plan and keeps generation separate from storyboard appli
     expect(screen.queryByRole("button", { name: /Create video task/ })).not.toBeInTheDocument();
 });
 
-it("saves reviewed place and time continuity with a lighting baseline", async () => {
+it("adopts an identical server draft after a stale revision save conflict", async () => {
+    vi.spyOn(api, "getDirectorShootingPlan")
+        .mockResolvedValueOnce(state(null, 1, 1))
+        .mockResolvedValueOnce(state(plan, 2, 1));
+    vi.spyOn(api, "generateDirectorShootingPlan").mockResolvedValue(plan);
+    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockRejectedValue(
+        new AxiosError("Conflict", "ERR_BAD_RESPONSE", undefined, undefined, { status: 409 } as never),
+    );
+    const confirm = vi.spyOn(api, "confirmDirectorShootingPlan").mockResolvedValue({
+        project_id: "film", current_revision: 2, current: {} as never, draft_revision: 2,
+    });
+
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Generate plan draft" }));
+    await screen.findByText("Cinema entrance");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 1, plan));
+    expect(await screen.findByText(/Draft r2 is already saved on the server/)).toBeInTheDocument();
+    const confirmButton = screen.getByRole("button", { name: "Confirm shooting plan" });
+    expect(confirmButton).toBeEnabled();
+    fireEvent.click(confirmButton);
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith("film", 1, 2, plan, "", ""));
+});
+
+it("creates paired continuity IDs without asking the user to type them", async () => {
     vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue(state(plan, 1, 0));
     const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({
         project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft,
@@ -209,23 +235,21 @@ it("saves reviewed place and time continuity with a lighting baseline", async ()
 
     expect(await screen.findByText("Cinema entrance")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Advanced scene continuity"));
-    fireEvent.change(screen.getByLabelText("Physical place continuity ID"), { target: { value: "place-cinema" } });
-    fireEvent.change(screen.getByLabelText("Story time continuity ID"), { target: { value: "time-day" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create lighting baseline" }));
+    expect(screen.queryByLabelText("Physical place continuity ID")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create continuity group" }));
     fireEvent.change(screen.getAllByLabelText("Key source and direction")[0], { target: { value: "Window from west" } });
     fireEvent.change(screen.getAllByLabelText("Warm/cool tone")[0], { target: { value: "Warm" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 1,
-        expect.objectContaining({
-            scenes: [expect.objectContaining({
-                place_continuity_id: "place-cinema", time_continuity_id: "time-day",
-            })],
-            lighting_baselines: [expect.objectContaining({
-                place_continuity_id: "place-cinema", time_continuity_id: "time-day",
-                lighting: expect.objectContaining({ key_source: "Window from west", color_tone: "Warm" }),
-            })],
-        })));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const draft = save.mock.calls[0][3];
+    expect(draft.scenes[0].place_continuity_id).toMatch(/^place-/);
+    expect(draft.scenes[0].time_continuity_id).toMatch(/^time-/);
+    expect(draft.lighting_baselines?.[0]).toEqual(expect.objectContaining({
+        place_continuity_id: draft.scenes[0].place_continuity_id,
+        time_continuity_id: draft.scenes[0].time_continuity_id,
+        lighting: expect.objectContaining({ key_source: "Window from west", color_tone: "Warm" }),
+    }));
 });
 
 it("requires a new plan from the current Director before confirmation", async () => {
@@ -441,7 +465,7 @@ it("treats generated lighting wording as inherited and asks once when an overrid
     const confirmPrompt = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
 
-    expect(await screen.findByText("Cinema entrance")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cinema entrance" })).toBeInTheDocument();
     expect(screen.queryByText(/shots differ from the place and time lighting baseline/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm shooting plan" })).toBeEnabled();
     fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));

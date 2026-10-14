@@ -1685,6 +1685,7 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             response_format={"type": "json_object"},
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+            stream=True,
         ) or "").strip()
         self._last_director_raw_response = str(content or "")[:DIRECTOR_RAW_RESPONSE_MAX_CHARS]
         if not content:
@@ -1792,6 +1793,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             response_format={"type": "json_object"},
             timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
             max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+            stream=True,
         ) or "").strip()
         if not content:
             raise RuntimeError("导演修订模型未返回内容，请重试。")
@@ -1925,6 +1927,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         style_config: Dict[str, Any],
         previous_scene: Optional[Dict[str, Any]] = None,
         source_ref: str = "",
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Propose complete scene/beat/shot plans for one bounded source chunk."""
         if not self.is_configured:
@@ -1970,6 +1973,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 response_format={"type": "json_object"},
                 timeout_seconds=DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
                 max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                stream=True,
+                **({"model": model} if model else {}),
             ) or "").strip()
             try:
                 result = json.loads(_strip_markdown_json(content))
@@ -2121,7 +2126,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                               director_profile: Optional[Dict[str, Any]] = None,
                               visual_style: Optional[Dict[str, Any]] = None,
                               previous_frames: Optional[List[Dict[str, Any]]] = None,
-                              source_range: Optional[Tuple[int, int]] = None) -> List[Dict[str, Any]]:
+                              source_range: Optional[Tuple[int, int]] = None,
+                              model: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
         Returns a list of frame dictionaries with visual atoms.
@@ -2200,6 +2206,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。"}
                 ],
+                model=model,
             ).strip()
             logger.debug(f"Storyboard Analysis Raw Response: {content[:500]}...")
 
@@ -2214,6 +2221,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。请务必输出合法的JSON格式。"}
                 ],
+                model=model,
                 response_format={'type': 'json_object'},
             ).strip()
             logger.debug(f"Storyboard Analysis Retry Response: {retry_content[:500]}...")
@@ -2267,6 +2275,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         director_profile: Optional[Dict[str, Any]] = None,
         visual_style: Optional[Dict[str, Any]] = None,
         source_range: Optional[Tuple[int, int]] = None,
+        model: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Revise a storyboard draft using the source and accumulated direction."""
         if not self.is_configured:
@@ -2318,6 +2327,7 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": "请返回修订后的完整分镜列表。"},
             ],
+            model=model,
             response_format={"type": "json_object"},
         ).strip()
         frames = self._parse_storyboard_json(content)

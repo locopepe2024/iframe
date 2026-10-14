@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useId } from "react";
+import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
@@ -11,6 +11,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import { toast } from "@/store/toastStore";
 import {
     buildCharacterImagePrompt,
@@ -156,12 +157,14 @@ function AssetReferencePicker({
     onChange,
     title,
     description,
+    onOpen,
 }: {
     candidates: ReferenceCandidate[];
     selected: AssetLibraryReference[];
     onChange: (references: AssetLibraryReference[]) => void;
     title: string;
     description: string;
+    onOpen?: () => void;
 }) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
@@ -190,7 +193,10 @@ function AssetReferencePicker({
             <button
                 type="button"
                 aria-expanded={isOpen}
-                onClick={() => setIsOpen((open) => !open)}
+                onClick={() => {
+                    if (!isOpen) onOpen?.();
+                    setIsOpen(!isOpen);
+                }}
                 className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
                 <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
@@ -270,7 +276,7 @@ function AssetReferencePicker({
                             className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected ? "bg-primary/10" : "hover:bg-hover-bg"}`}
                         >
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
-                                {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
+                                {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} /> : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
                             </span>
                             <span className="min-w-0 flex-1">
                                 <span className="block truncate text-xs text-foreground">{candidate.label}</span>
@@ -338,6 +344,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
             Array.isArray(items) ? items.map((item: any) => [
@@ -380,23 +387,31 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return () => { active = false; };
     }, []);
 
-    useEffect(() => {
+    const refreshAssetIndex = useCallback(() => {
         const projectId = currentProject?.id;
-        if (!projectId || typeof api.getAssetReferenceIndex !== "function") {
+        const requestId = ++assetIndexRequest.current;
+        if (!projectId) {
             setAssetIndex([]);
             return;
         }
-        let active = true;
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
-                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.some((variant) => variant.id)));
+                if (requestId !== assetIndexRequest.current) return;
+                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
+                setAssetIndex(entries);
+                const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
+                    `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
+                setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
+                    [panel, refs.filter((ref) => available.has(referenceKey(ref)))])) as typeof current);
             })
-            // Keep the last successful index on transient refresh failures. Clearing it
-            // makes @ references disappear and turns a recoverable network blip into a
-            // misleading "no available references" state.
-            .catch(() => undefined);
-        return () => { active = false; };
-    }, [currentProject?.id, assetIndexRevision]);
+            .catch(() => { if (requestId === assetIndexRequest.current) setAssetIndex([]); });
+    }, [currentProject?.id]);
+
+    useEffect(() => {
+        setAssetIndex([]);
+        refreshAssetIndex();
+        return () => { assetIndexRequest.current++; };
+    }, [refreshAssetIndex, assetIndexRevision]);
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
@@ -419,7 +434,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 usedLabels.add(label);
                 candidates.push({
                     label,
-                    previewUrl: getAssetUrl(variant.url),
+                    previewRef: { source_scope: entry.source_scope, source_container_id: entry.source_container_id,
+                        asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
                     sourceLabel: [referenceScopeLabel(entry.source_scope), entry.source_name].filter(Boolean).join(" · "),
                     variantLabel,
                     description: entry.description,
@@ -1041,6 +1057,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         showReferencePicker
                         pickerReferences={promptPickerReferences.full_body}
@@ -1092,6 +1109,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
                         pickerReferences={promptPickerReferences.three_view}
@@ -1124,6 +1142,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
                         referenceCandidates={referenceCandidates}
+                        onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
                         pickerReferences={promptPickerReferences.headshot}
@@ -1265,6 +1284,7 @@ export function WorkbenchPanel({
     prompt,
     setPrompt,
     referenceCandidates = [],
+    onRefreshReferences,
     onReferencesChange,
     showReferencePicker = false,
     pickerReferences = [],
@@ -1592,6 +1612,7 @@ export function WorkbenchPanel({
                         }}
                         title="选择参考素材"
                         description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
+                        onOpen={onRefreshReferences}
                     />
                 </div>}
                 <div className="relative min-h-0 flex-1 overflow-visible p-4">
@@ -1600,7 +1621,10 @@ export function WorkbenchPanel({
                         candidates={referenceCandidates}
                         onChange={setPrompt}
                         onReferencesChange={onReferencesChange}
-                        onMentionChange={setMention}
+                        onMentionChange={(next) => {
+                            if (next && !mention) onRefreshReferences?.();
+                            setMention(next);
+                        }}
                         allowImplicitMentions={false}
                         pruneUnlistedReferences
                         editable={!isLocked}
@@ -1632,8 +1656,8 @@ export function WorkbenchPanel({
                                     className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                                 >
                                     <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
-                                        {candidate.previewUrl ? (
-                                            <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" />
+                                        {candidate.previewRef ? (
+                                            <AssetIndexPreview asset={candidate.previewRef} />
                                         ) : <ImageIcon size={15} className="text-text-muted" />}
                                     </span>
                                     <span className="min-w-0 flex-1 text-xs">

@@ -51,6 +51,8 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
     pipeline = SimpleNamespace(
         scripts={"project": source},
         series_store={},
+        get_script=lambda project: source,
+        get_effective_polish_model=lambda script: "",
         script_processor=SimpleNamespace(
             llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
         ),
@@ -64,8 +66,8 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         storyboard_analysis_lineage=lambda project, text: lineage,
         validate_storyboard_lineage=lambda project, text, pinned: None,
         preview_storyboard_analysis=lambda project, text, **kwargs: first,
-        refine_storyboard_analysis=lambda project, text, draft, instructions, lineage=None: (
-            captured.update(text=text, draft=draft, instructions=instructions, lineage=lineage) or refined
+        refine_storyboard_analysis=lambda project, text, draft, instructions, lineage=None, model=None: (
+            captured.update(text=text, draft=draft, instructions=instructions, lineage=lineage, model=model) or refined
         ),
     )
     user = UserContext("user", "owner", "", "")
@@ -103,6 +105,7 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         "draft": first,
         "instructions": ["保留产品特写", "先增加眼神动作"],
         "lineage": lineage,
+        "model": "",
     }
     assert source.frames == []
 
@@ -319,10 +322,17 @@ def test_storyboard_apply_keeps_confirmed_shot_id_and_asset_context():
         director_profile_revision=1,
         shooting_plan_revision=1,
         shooting_plan_hash="plan-hash",
+        lighting_baselines=[{
+            "place_continuity_id": "place-room", "time_continuity_id": "time-evening",
+            "story_time": "同一段黄昏", "daylight_phase": "落日前", "weather": "晴",
+            "shadow_direction": "向东",
+            "lighting": {"key_source": "西侧夕阳", "color_tone": "暖金"},
+        }],
         scenes=[
             {
                 "scene_id": "plan-scene", "scene_ref": "房间", "source_chunk_refs": ["source:chars-0-6"],
                 "continuity_in": "主播推门进入直播间", "continuity_out": "主播抬眼看向镜头",
+                "place_continuity_id": "place-room", "time_continuity_id": "time-evening",
             },
             {"scene_id": "street-scene", "scene_ref": "街口", "source_chunk_refs": ["source:chars-0-6"]},
         ],
@@ -374,6 +384,12 @@ def test_storyboard_apply_keeps_confirmed_shot_id_and_asset_context():
     assert result.frames[0].director_shot_context is not None
     assert result.frames[0].director_shot_context["scene"]["scene_ref"] == "房间"
     assert result.frames[0].director_shot_context["scene"]["continuity_in"] == "主播推门进入直播间"
+    assert result.frames[0].director_shot_context["scene"]["place_continuity_id"] == "place-room"
+    assert result.frames[0].director_shot_context["scene"]["time_continuity_id"] == "time-evening"
+    assert result.frames[0].director_shot_context["lighting_baseline"]["daylight_phase"] == "落日前"
+    assert result.frames[0].director_shot_context["lighting_baseline"]["lighting"]["key_source"] == "西侧夕阳"
+    assert result.frames[0].director_shot_context["shooting_plan_revision"] == 1
+    assert result.frames[0].director_shot_context["shooting_plan_hash"] == "plan-hash"
     assert result.frames[0].director_shot_context["shot"]["shot_id"] == "shot-plan"
     assert result.frames[0].director_shot_context["shot"]["performance_action"] == "主播抬眼"
     assert result.frames[0].director_shot_context["shot"]["action_physics"] == "茶杯停在桌面"
@@ -469,6 +485,7 @@ def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history
             "selected_style_id": "film-noir",
             "style_config": {"positive_prompt": "黑白电影质感", "negative_prompt": "彩色"},
         },
+        model="deepseek-v4.1-flash-peak",
     )
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
@@ -481,6 +498,7 @@ def test_storyboard_refinement_prompt_contains_source_entities_draft_and_history
     assert "confirmed_episode_visual_context" in prompt
     assert "侧后方夕阳" in prompt and "灰色外套" in prompt
     assert result[0]["action_summary"] == "修订镜头"
+    assert processor.llm.chat.call_args.kwargs["model"] == "deepseek-v4.1-flash-peak"
 
 
 def test_storyboard_analysis_prompt_contains_project_visual_style():
@@ -499,6 +517,7 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
         {"characters": [], "scenes": [], "props": []},
         custom_extraction_prompt="Custom storyboard extraction rules",
         visual_style=visual_style,
+        model="deepseek-v4.1-flash-peak",
     )
 
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
@@ -507,6 +526,7 @@ def test_storyboard_analysis_prompt_contains_project_visual_style():
     assert "跨帧保持稳定" in prompt
     assert "空间方位" in prompt and "对白原文" in prompt
     assert result[0]["action_summary"] == "角色推门进入"
+    assert processor.llm.chat.call_args.kwargs["model"] == "deepseek-v4.1-flash-peak"
 
 
 def test_storyboard_parser_rejects_action_only_frames():
@@ -545,6 +565,33 @@ def test_long_storyboard_preview_resumes_ordered_source_batches():
     second = pipeline.preview_storyboard_analysis("project", source, load_batches=lambda: saved, save_batch=save)
     assert second == first
     pipeline.script_processor.analyze_to_storyboard.assert_not_called()
+
+
+def test_storyboard_preview_uses_episode_model_before_series_model():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from src.apps.comic_gen.models import PromptConfig, Series
+
+    script = Script(id="project", title="Story", original_text="source",
+                    prompt_config=PromptConfig(polish_model="deepseek-v4.1-flash-peak"),
+                    series_id="series", created_at=1, updated_at=1)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {"series": Series(
+        id="series", title="Story", created_at=1, updated_at=1,
+        prompt_config=PromptConfig(polish_model="kimi-k3"),
+    )}
+    pipeline.storyboard_analysis_context = lambda project: (
+        script, {"characters": [], "scenes": [], "props": []}, "prompt"
+    )
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.analyze_to_storyboard.return_value = [{"action_summary": "进入"}]
+
+    pipeline.preview_storyboard_analysis("project", "source")
+
+    assert pipeline.script_processor.analyze_to_storyboard.call_args.kwargs["model"] == "deepseek-v4.1-flash-peak"
+    script.prompt_config.polish_model = ""
+    pipeline.preview_storyboard_analysis("project", "source")
+    assert pipeline.script_processor.analyze_to_storyboard.call_args.kwargs["model"] == "kimi-k3"
 
 
 def test_long_storyboard_without_unique_source_match_uses_global_ledger_context():
@@ -777,6 +824,7 @@ def test_storyboard_analysis_context_passes_project_style_to_all_frames():
             "style_config": {"positive_prompt": "黑白电影质感", "negative_prompt": "彩色"},
         },
         source_range=(0, 6),
+        model=None,
     )
 
 
@@ -854,4 +902,26 @@ def test_storyboard_job_fingerprint_changes_when_project_style_changes(monkeypat
     visual_style["style_config"]["positive_prompt"] = "彩色复古胶片"
     second = api._storyboard_analysis_fingerprint("project", "source")
 
+    assert first != second
+
+
+def test_storyboard_job_fingerprint_changes_when_selected_model_changes(monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import PromptConfig
+
+    source = Script(id="project", title="Story", original_text="source",
+                    prompt_config=PromptConfig(polish_model="deepseek-v4.1-flash-peak"),
+                    created_at=1, updated_at=1)
+    pipeline = SimpleNamespace(
+        storyboard_analysis_context=lambda project: (source, {"characters": []}, "prompt"),
+        storyboard_visual_style=lambda script: {},
+        get_effective_polish_model=lambda script: script.prompt_config.polish_model,
+        script_processor=SimpleNamespace(llm=SimpleNamespace(
+            provider="openai", _get_default_model=lambda: "Qwen3.8-27B-Uncensored-Q8_0",
+        )),
+    )
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    first = api._storyboard_analysis_fingerprint("project", "source")
+    source.prompt_config.polish_model = "kimi-k3"
+    second = api._storyboard_analysis_fingerprint("project", "source")
     assert first != second

@@ -44,3 +44,22 @@ it('removes stale UniArt SKUs from an older local snapshot', async () => {
     expect(catalog.resolveModelId('t2i', 'uniart/gpt-image-2.5-flare', 'project_settings'))
         .toBe('uniart/gpt-image-2.5-flare-discount');
 });
+
+it('shows only the nsfw Wan models in storyboard video selectors when published', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value) });
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string) {} });
+    const catalog = await import('../lib/modelCatalog');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [
+        { id: 'nsfw/wan3.0', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0' },
+        { id: 'nsfw/wan3.0-Prime', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0 Prime' },
+        { id: 'uniart/seedance-2.5-vip', capabilities: ['i2v', 'r2v'], display_name: 'Seedance' },
+    ] }) }));
+    await catalog.refreshUniArtModelCatalog();
+    const expected = ['nsfw/wan3.0', 'nsfw/wan3.0-Prime'];
+    expect(catalog.VIDEO_I2V_MODELS.map(model => model.id).sort()).toEqual(expected);
+    expect(catalog.VIDEO_R2V_MODELS.map(model => model.id).sort()).toEqual(expected);
+    expect(catalog.isR2vImageBased('nsfw/wan3.0')).toBe(true);
+});

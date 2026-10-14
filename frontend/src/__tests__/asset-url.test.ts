@@ -19,4 +19,10 @@ describe('protected media previews', () => {
             'https://garage.uniart.fun/files/output/uploads/reference.png',
         );
     });
+
+    it('routes owner-local Studio assets through authenticated media', () => {
+        expect(getAssetUrl('users/0123456789abcdef01234567/studio/uploads/reference image.png')).toBe(
+            'https://garage.uniart.fun/studio/owned-media/0123456789abcdef01234567/uploads/reference%20image.png',
+        );
+    });
 });

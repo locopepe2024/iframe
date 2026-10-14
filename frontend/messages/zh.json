@@ -1214,7 +1214,7 @@
     "viewDefault": "查看完整默认提示词",
     "loadingConfig": "加载配置中...",
     "polishModelTitle": "Polish 模型",
-    "polishModelDesc": "选择 AI 润色调用的 LLM 模型。三个选项都支持视觉理解，能在润色时参考首帧/参考图。"
+    "polishModelDesc": "模型来自当前 LLM 网关。若系列保存的模型不可用，会自动切换到网关提供的模型；图片理解能力取决于所选模型。"
   },
   "pipeline": {
     "stepLabel": "步骤 {number}",
@@ -1744,6 +1744,8 @@
       "jobStatus": "任务状态：{status}",
       "progress": "已完成 {completed}/{total} 个原文输入片段",
       "generateFailed": "拍摄计划生成失败",
+      "draftAlreadySaved": "草稿已在服务器保存为 r{revision}，可继续确认。",
+      "draftConflict": "服务器草稿已更新，当前编辑仍保留在此。请刷新页面核对后再保存。",
       "generated": "已基于导演确认版 v{revision} 生成未保存的计划草稿。请复核后保存。",
       "generatedReplacing": "已基于导演确认版 v{revision} 生成未保存的计划草稿。保存后将替换服务器草稿 r{draft}；旧确认版不变。",
       "notReady": "暂时不能生成计划：{reason}。请先保存并采用当前 Director 理解；如果修改了导演理解，再重新生成拍摄计划。",
@@ -1834,6 +1836,10 @@
         "timeAnchor": "时间",
         "placeContinuityId": "物理地点连续性 ID",
         "timeContinuityId": "剧情时段连续性 ID",
+        "continuityGroup": "与哪个场景同地点、同剧情时段",
+        "noContinuityGroup": "未确认同地点、同时段关联",
+        "newContinuityGroup": "建立本场连续性组",
+        "incompleteContinuityGroup": "旧草稿的关联不完整；确认时会清除该关联，并保留待核验记录。",
         "continuityBaseline": "同一地点与时段的光影基线",
         "addContinuityBaseline": "建立光影基线",
         "removeContinuityBaseline": "删除光影基线",

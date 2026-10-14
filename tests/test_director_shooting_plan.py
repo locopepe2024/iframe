@@ -241,6 +241,23 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
 
     assert result["scenes"][0]["beats"][0]["shots"][0]["action_physics"] == ""
     assert processor.llm.chat.call_count == 1
+    assert processor.llm.chat.call_args.kwargs["stream"] is True
+
+
+def test_shooting_plan_passes_selected_polish_model_to_llm():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
+
+    processor.plan_director_shooting_chunk(
+        "场景 6 电影院 日 内\n两人牵手走向入口。",
+        {"characters": [], "props": []},
+        {"story_map": {"phases": []}},
+        {},
+        model="deepseek-v4.1-flash-peak",
+    )
+
+    assert processor.llm.chat.call_args.kwargs["model"] == "deepseek-v4.1-flash-peak"
 
 
 def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor():
@@ -586,6 +603,7 @@ def test_unreasoned_shot_lighting_inherits_place_time_baseline_without_conflict_
     assert restored.lighting_baselines[0].shadow_direction == "向东"
     assert restored.scenes[1].beats[0].shots[0].lighting.color_tone == ""
     context = pipeline.project_episode_visual_context("film")
+    assert context.lighting_baselines[0].daylight_phase == "落日前"
     assert {item.place_continuity_id for item in context.scenes} == {"place-street"}
     assert {item.time_continuity_id for item in context.shots} == {"time-dusk"}
     assert context.shots[0].lighting["key_source"] == "西侧夕阳"
@@ -613,6 +631,37 @@ def test_generated_continuity_ids_create_reviewable_baseline_without_name_matchi
     assert proposal.lighting_baselines[0].lighting.key_source == raw_shot()["lighting"]["key_source"]
     assert proposal.scenes[1].beats[0].shots[0].lighting.key_source == ""
     pipeline._validate_director_shooting_plan_for_confirmation(proposal)
+
+
+def test_orphan_continuity_id_is_recorded_and_does_not_block_confirmation():
+    pipeline, script = make_pipeline()
+    raw = raw_scene(time_continuity_id="time-day")
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = {
+        "scenes": [raw], "unresolved_questions": [],
+    }
+
+    proposal = pipeline.preview_director_shooting_plan("film")
+    assert proposal.scenes[0].place_continuity_id is None
+    assert proposal.scenes[0].time_continuity_id is None
+    assert "time-day" in " ".join(proposal.scenes[0].unresolved_questions)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, proposal)
+    pipeline.apply_director_shooting_plan("film", proposal, 0, 1)
+    assert script.director_shooting_plan_revisions[-1].plan.scenes[0].time_continuity_id is None
+
+
+def test_saved_legacy_orphan_continuity_id_can_be_confirmed():
+    pipeline, script = make_pipeline()
+    legacy = make_plan(pipeline)
+    legacy.scenes[0].time_continuity_id = "time-day"
+    script.director_shooting_plan_draft = legacy.model_copy(deep=True)
+    script.director_shooting_plan_draft_revision = 1
+
+    pipeline.apply_director_shooting_plan("film", legacy, 0, 1)
+
+    confirmed = script.director_shooting_plan_revisions[-1].plan.scenes[0]
+    assert confirmed.place_continuity_id is None
+    assert confirmed.time_continuity_id is None
+    assert "time-day" in " ".join(confirmed.unresolved_questions)
 
 
 def test_model_cannot_select_independent_lighting_but_user_override_survives():
@@ -1141,8 +1190,21 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
             pipeline.script_processor.llm = SimpleNamespace(
                 provider="test", _get_default_model=lambda: "test-model",
             )
+            saved_config = client.put("/projects/film/prompt_config", json={
+                "polish_model": "deepseek-v4.1-flash-peak",
+            })
+            assert saved_config.status_code == 200
+            assert saved_config.json()["prompt_config"]["polish_model"] == "deepseek-v4.1-flash-peak"
+            legacy_save = client.put("/projects/film/prompt_config", json={"storyboard_polish": "keep model"})
+            assert legacy_save.status_code == 200
+            assert legacy_save.json()["prompt_config"]["polish_model"] == "deepseek-v4.1-flash-peak"
+            monkeypatch.setattr(api, "studio_uniart_config", lambda: {"api_key": "test", "base_url": "http://gateway.test/v1"})
+            monkeypatch.setattr(api, "fetch_uniart_catalog", lambda _config: [{
+                "api_model_id": "deepseek-v4.1-flash-peak", "capabilities": ["chat"],
+            }])
             def preview_plan(project_id, **kwargs):
                 assert project_id == "film"
+                assert kwargs["model"] == "deepseek-v4.1-flash-peak"
                 assert kwargs["load_batches"]() == {}
                 assert kwargs["save_batch"](
                     0,

@@ -7,6 +7,7 @@ import { X, Check, Image, Film, Loader2, Search, ChevronLeft, ChevronRight } fro
 import { useTranslations } from 'next-intl';
 import { api, playgroundApi } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
+import { AssetIndexPreview, type AssetPreviewRef } from '@/components/shared/AssetIndexPreview';
 import { referenceKey, referenceName } from './referenceMedia';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
@@ -27,6 +28,7 @@ interface AssetItem {
   path: string;
   type: 'image' | 'video' | 'audio' | 'text';
   thumbnail?: string;
+  previewRef?: AssetPreviewRef;
   label: string;
   source: 'workspace' | 'playground' | 'session';
 }
@@ -131,6 +133,8 @@ export default function AssetPickerModal({
               type: 'image',
               label: entry.name,
               source: 'workspace',
+              previewRef: { source_scope: entry.source_scope, source_container_id: entry.source_container_id,
+                asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
             });
           }
         }
@@ -447,7 +451,7 @@ export default function AssetPickerModal({
                         `}
                       >
                         {/* Thumbnail */}
-                        {asset.type === 'audio' || asset.type === 'text' ? <span className="flex h-full items-center justify-center text-xs text-text-muted">{asset.type === 'audio' ? '音频' : '文本'}</span> : asset.type === 'video' && !asset.thumbnail ? (
+                        {asset.previewRef ? <AssetIndexPreview asset={asset.previewRef} alt={asset.label} /> : asset.type === 'audio' || asset.type === 'text' ? <span className="flex h-full items-center justify-center text-xs text-text-muted">{asset.type === 'audio' ? '音频' : '文本'}</span> : asset.type === 'video' && !asset.thumbnail ? (
                           <span className="flex h-full items-center justify-center"><Film className="h-7 w-7 text-text-muted" /></span>
                         ) : (
                           <img

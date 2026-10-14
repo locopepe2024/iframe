@@ -14,7 +14,7 @@ function imageControlOptions(modelId: string) {
   const params = getModelParams(modelId);
   const tierSize = params?.size?.options.some((size) => /^[124]k$/i.test(size));
   return {
-    ratios: tierSize && modelId.startsWith('uniart/') ? IMAGE_RATIOS : [],
+    ratios: tierSize && (modelId.startsWith('uniart/') || modelId.startsWith('nsfw/')) ? IMAGE_RATIOS : [],
     qualities: params?.quality?.options ?? (modelId.startsWith('uniart/gpt-image') ? IMAGE_QUALITIES : []),
   };
 }

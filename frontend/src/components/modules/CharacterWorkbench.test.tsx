@@ -37,6 +37,7 @@ vi.mock("../common/VariantSelector", () => ({
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
+vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
@@ -243,7 +244,7 @@ it("does not turn a manually typed @name into an implicit reference", () => {
 });
 
 it("loads the project reference index for the character workbench", async () => {
-    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({
         schema_version: 1,
         project_id: "project-1",
         assets: [{
@@ -284,6 +285,27 @@ it("loads the project reference index for the character workbench", async () => 
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
         "reference",
     ));
+});
+
+it("removes a deleted shared asset when the reference picker opens again", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    const oldIndex = { schema_version: 1, project_id: "project-1", assets: [{
+        asset_type: "character", asset_id: "deleted-asset", name: "Deleted actor",
+        source_scope: "global", variants: [{ id: "old-view", url: "/files/old.png" }],
+    }] };
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce(oldIndex).mockResolvedValueOnce(oldIndex)
+        .mockResolvedValue({ ...oldIndex, assets: [] });
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    const picker = screen.getAllByRole("button", { name: "选择参考素材" })[0];
+    fireEvent.click(picker);
+    expect(await screen.findByText("Deleted actor")).toBeInTheDocument();
+    fireEvent.click(picker);
+    fireEvent.click(picker);
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getAllByText("暂无可用参考素材").length).toBeGreaterThan(0));
+    expect(screen.queryByText("Deleted actor")).not.toBeInTheDocument();
 });
 
 it("does not expose generic facet suggestions as character design values", () => {
@@ -553,7 +575,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     };
     apiMocks.getAssetReferenceIndex
         .mockResolvedValueOnce(indexWithDeletedView)
-        .mockResolvedValueOnce(indexWithNewView);
+        .mockResolvedValue(indexWithNewView);
     const onGenerate = vi.fn();
     const workbench = (onClose: () => void) => (
         <CharacterWorkbench

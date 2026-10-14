@@ -1407,6 +1407,7 @@ class EpisodeVisualContext(BaseModel):
     shooting_plan_revision: int
     shooting_plan_hash: str
     context_status: Literal["complete", "partial"] = "complete"
+    lighting_baselines: List[DirectorPlanLightingBaseline] = Field(default_factory=list)
     scenes: List[EpisodeVisualSceneContext] = Field(default_factory=list)
     characters: List[EpisodeVisualCharacterContext] = Field(default_factory=list)
     props: List[EpisodeVisualPropContext] = Field(default_factory=list)
@@ -2302,7 +2303,29 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
                             if raw_status:
                                 state_item["evidence_status_raw"] = raw_status
                         projected_states.append(state_item)
-                    item["states"] = projected_states
+                    merged_states = []
+                    by_phase = {}
+                    for state in projected_states:
+                        if not isinstance(state, dict) or not state.get("phase_id"):
+                            merged_states.append(state)
+                            continue
+                        previous = by_phase.get(state["phase_id"])
+                        if previous is None:
+                            by_phase[state["phase_id"]] = state
+                            merged_states.append(state)
+                            continue
+                        if (previous.get("evidence_status", "interpretation") != state.get("evidence_status", "interpretation")
+                                or previous.get("evidence_status_raw") != state.get("evidence_status_raw")):
+                            merged_states.append(state)
+                            continue
+                        descriptions = [text for text in (previous.get("state"), state.get("state")) if text]
+                        if len(descriptions) == 2 and descriptions[0] != descriptions[1]:
+                            previous["state"] = " → ".join(descriptions)
+                        elif descriptions:
+                            previous["state"] = descriptions[0]
+                        for key in ("trigger_event_ids", "source_fact_ids"):
+                            previous[key] = list(dict.fromkeys((previous.get(key) or []) + (state.get(key) or [])))
+                    item["states"] = merged_states
                 normalized_arcs.append(item)
             story_map["relationship_arcs"] = normalized_arcs
         threads = story_map.get("story_threads") if isinstance(story_map.get("story_threads"), list) else []

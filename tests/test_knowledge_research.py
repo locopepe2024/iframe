@@ -134,13 +134,15 @@ def test_cninfo_rejects_invalid_window_and_rate_limit(monkeypatch):
         discovery.discover("002303", "2026-03-01", "2026-03-31")
 
 
-def test_cninfo_requires_exact_owner_allowlist(monkeypatch):
+def test_cninfo_available_to_authenticated_owners(monkeypatch):
     monkeypatch.setenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER", "cninfo")
     monkeypatch.setenv("IFRAME_KNOWLEDGE_CAPTURE_HOSTS", "static.cninfo.com.cn")
-    assert api.research_enabled_for("owner-a") is False
-    monkeypatch.setenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "owner-a")
+    monkeypatch.delenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", raising=False)
     assert api.research_enabled_for("owner-a") is True
-    assert api.research_enabled_for("owner-b") is False
+    assert api.research_enabled_for("owner-b") is True
+    assert api.research_enabled_for("") is False
+    monkeypatch.setenv("IFRAME_KNOWLEDGE_CNINFO_OWNERS", "owner-a")
+    assert api.research_enabled_for("owner-b") is True
 
 
 def test_cninfo_pdf_capture_has_page_locator_and_rejects_bad_path(monkeypatch):

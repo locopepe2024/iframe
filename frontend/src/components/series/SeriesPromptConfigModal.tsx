@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, FileText, RotateCcw, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import PolishModelSelect from '@/components/shared/PolishModelSelect';
 import { useTranslations } from "next-intl";
 
 interface SeriesPromptConfigModalProps {
@@ -144,16 +145,10 @@ export default function SeriesPromptConfigModal({ isOpen, onClose, seriesId, onS
                                             {t("polishModelDesc")}
                                         </p>
                                     </div>
-                                    <select
-                                        value={config.polish_model || "qwen3.7-plus"}
-                                        onChange={(e) => setConfig(prev => ({ ...prev, polish_model: e.target.value }))}
-                                        className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-text-secondary focus:outline-none focus:border-purple-500/50"
-                                    >
-                                        <option value="qwen3.7-plus">qwen3.7-plus · 通义千问 3.7 Plus（最新）</option>
-                                        <option value="qwen3.6-plus">qwen3.6-plus · 通义千问 3.6 Plus（视觉）</option>
-                                        <option value="qwen3.6-flash">qwen3.6-flash · 通义千问 3.6 Flash（更快）</option>
-                                        <option value="kimi-k2.6">kimi-k2.6 · Moonshot Kimi K2.6（视觉）</option>
-                                    </select>
+                                    <PolishModelSelect
+                                        value={config.polish_model}
+                                        onChange={(model) => setConfig(prev => ({ ...prev, polish_model: model }))}
+                                    />
                                     <div className="border-b border-border-subtle pt-1" />
                                 </div>
 
