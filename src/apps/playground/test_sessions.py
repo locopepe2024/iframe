@@ -108,14 +108,14 @@ def test_first_last_frame_requires_exactly_two_images():
         GenerateRequest(
             mode=PlaygroundMode.F2V,
             model_id="uniart/minimax-h3-vip",
-            prompt="transition",
+            prompt="@1 到 @2 transition",
             input_media=["first.png"],
         )
 
     request = GenerateRequest(
         mode=PlaygroundMode.F2V,
         model_id="uniart/minimax-h3-vip",
-        prompt="transition",
+        prompt="@1 到 @2 transition",
         input_media=["first.png", "last.png"],
     )
     assert request.input_media == ["first.png", "last.png"]

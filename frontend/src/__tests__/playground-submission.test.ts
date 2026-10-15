@@ -13,7 +13,7 @@ describe('playground image request mode boundary', () => {
 
   it('keeps text-to-image as generation and drops stale references', () => {
     const inputMedia = ['/old-reference.png'];
-    const submission = normalizePlaygroundSubmission('t2i', inputMedia);
+    const submission = normalizePlaygroundSubmission('t2i', inputMedia, '新图片');
 
     expect(submission).toEqual({ mode: 't2i', inputMedia: [] });
     expect(inputMedia).toEqual(['/old-reference.png']);
@@ -21,7 +21,7 @@ describe('playground image request mode boundary', () => {
 
   it('preserves references for explicit image editing and snapshots the list', () => {
     const inputMedia = ['/reference.png'];
-    const submission = normalizePlaygroundSubmission('i2i', inputMedia);
+    const submission = normalizePlaygroundSubmission('i2i', inputMedia, '@1 修改');
 
     expect(submission).toEqual({ mode: 'i2i', inputMedia: ['/reference.png'] });
     expect(submission.inputMedia).not.toBe(inputMedia);
@@ -55,3 +55,11 @@ describe('playground image request mode boundary', () => {
     });
   });
 });
+
+for (const mode of ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'] as const) {
+  it(`omits unmentioned selected media for ${mode}`, () => {
+    const candidates = ['/missing.png'];
+    expect(normalizePlaygroundSubmission(mode, candidates, '纯文字')).toEqual({ mode, inputMedia: [] });
+    expect(candidates).toEqual(['/missing.png']);
+  });
+}

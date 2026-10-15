@@ -93,6 +93,10 @@ class GenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_media(self):
+        # Selected candidates are not submitted references without explicit intent.
+        if "@" not in self.prompt:
+            self.input_media = []
+            self.media_names = {}
         if self.mode == PlaygroundMode.F2V and len(self.input_media or []) != 2:
             raise ValueError("f2v requires exactly two images: first frame and last frame")
         return self
