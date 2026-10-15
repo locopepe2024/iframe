@@ -155,3 +155,26 @@ Hashes below are abbreviated SHA-256 values to locate the audited content. These
 | `tests/test_uniart_image_controls.py` | 00bcd9ca85fe | c28cd245199e |
 | `tests/test_uniart_polling.py` | 44f6e98f1875 | 855c235e2065 |
 | `tests/test_video_task_recovery.py` | 7d22158370b2 | 042325e118ad |
+
+## Integration checkpoint — project asset scope
+
+Verified on main `ae16fa0e` plus PR #121 (`299aa357`) and PR #123 (`271d6f1e`) in an isolated worktree. The two branches merge without conflicts. No production files were changed.
+
+### Observed
+
+- PR #109 (`515a37ca`) conflicts with #121 in `StoryboardR2V.tsx`. Its `storyboardAssetIndex` admits global candidates when a saved prompt mentions the same type/name, and excludes unreferenced series candidates. These are different rules from #121's explicit project membership and owning-series inheritance.
+- #121 uses the project index for shot pickers and reference submission, filters unimported globals, and refreshes the authoritative index before video submission. #123 constrains storyboard analysis, refinement and image rendering to project assets and the owning series.
+- Combined verification: backend CI selection 1186 passed, 5 skipped, 2 deselected; source-local asset index tests 7 passed; frontend API test 1 passed and scope/drawer/reference UI tests 15 passed; frontend typecheck and its bootstrap production build passed.
+- Separately verified #126 + #127 on the same main baseline: backend 1201 passed, 5 skipped, 2 deselected; frontend 32 passed; typecheck and bootstrap build passed. This does not establish compatibility of every pending PR together.
+
+### Review recommendation
+
+1. Review/merge #121 then #123 for the project asset boundary.
+2. Do not merge #109 as written: it would restore an older scope policy. Retire it after administrator review of the replacement. No PR has been closed automatically.
+3. Review #124 then #125 for adopted prompt/style synchronization and bounded shot context. Their joint integration still needs verification.
+4. Review #126 then #127 for explicit material intent and saved Catalog identity.
+5. #110 is optional diagnostics, and #117/#122 are audit documentation; they do not themselves complete a runtime repair.
+
+### Remaining boundaries
+
+The tests validate code paths and mocked inputs, not production image contents or provider output. All main merges remain administrator actions. Before deployment, verify the full selected PR combination, reconcile the dirty production-compatible source per hunk, and preserve user data and rollback images. Local media-root/locator and explicit Local/COS/OSS work, in-flight task configuration snapshots, and revision-pinned releases remain separate work.
