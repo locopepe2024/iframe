@@ -23,6 +23,7 @@ from .models import (
     LightingData,
     Series,
     PromptConfig,
+    ModelSettings,
     ArtDirection,
     DirectorProfile,
     DirectorProfileRevision,
@@ -9319,6 +9320,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             series = self.get_series(series_id)
             if not series:
                 raise ValueError("Series not found")
+            # Validate before changing any fields; never retain caller-owned settings.
+            updates = dict(updates)
+            previous_settings = series.model_settings.model_dump()
+            changed_defaults = {}
+            if "model_settings" in updates:
+                candidate = updates["model_settings"]
+                if isinstance(candidate, ModelSettings):
+                    candidate = candidate.model_dump()
+                settings = ModelSettings.model_validate(candidate)
+                updates["model_settings"] = settings
+                changed_defaults = {
+                    key: value for key, value in settings.model_dump().items()
+                    if value != previous_settings[key]
+                }
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
@@ -9334,7 +9349,27 @@ class ComicGenPipeline(StudioOwnerMixin):
                     setattr(series, key, value)
             series.updated_at = time.time()
             self.series_store[series_id] = series
+            projects_changed = False
+            if changed_defaults:
+                for episode_id in set(series.episode_ids):
+                    episode = self.scripts.get(episode_id)
+                    if (episode is None or episode.series_id != series_id
+                            or episode.owner_profile_id != series.owner_profile_id):
+                        continue
+                    # Legacy compatibility: equality is not inheritance provenance.
+                    matching_defaults = {
+                        key: value for key, value in changed_defaults.items()
+                        if getattr(episode.model_settings, key) == previous_settings[key]
+                    }
+                    if matching_defaults:
+                        episode.model_settings = episode.model_settings.model_copy(
+                            update=matching_defaults, deep=True,
+                        )
+                        episode.updated_at = series.updated_at
+                        projects_changed = True
             self._save_series_data_unlocked()
+            if projects_changed:
+                self._save_data()
             return series
 
     def delete_series(self, series_id: str) -> None:
