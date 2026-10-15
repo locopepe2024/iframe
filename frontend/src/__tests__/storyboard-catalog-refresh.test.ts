@@ -2,6 +2,43 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
+it('sends the API-key identity when refreshing the model catalog', async () => {
+    const identity = 'a'.repeat(64);
+    const storage = new Map<string, string>([
+        ['lumenx-api-key-identity', identity],
+        ['lumenx-access-token', 'stale-login'],
+    ]);
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value) });
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) });
+    vi.stubGlobal('fetch', request);
+
+    const catalog = await import('../lib/modelCatalog');
+    await catalog.refreshUniArtModelCatalog();
+
+    expect(request).toHaveBeenCalledWith('/config/models', expect.objectContaining({
+        cache: 'no-store', headers: expect.any(Headers),
+    }));
+    const headers = request.mock.calls[0][1].headers as Headers;
+    expect(headers.get('X-iFrame-API-Key-Identity')).toBe(identity);
+    expect(headers.has('Authorization')).toBe(false);
+});
+
+it('uses the login token when no API-key identity exists and preserves the old catalog on failure', async () => {
+    const storage = new Map<string, string>([['lumenx-access-token', 'mobile-login']]);
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value) });
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+    const request = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    vi.stubGlobal('fetch', request);
+
+    const catalog = await import('../lib/modelCatalog');
+    expect(await catalog.refreshUniArtModelCatalog()).toBe(0);
+    expect((request.mock.calls[0][1].headers as Headers).get('Authorization')).toBe('Bearer mobile-login');
+    expect(storage.has('lumenx_uniart_model_snapshot')).toBe(false);
+});
+
 it('keeps reference-capable UniArt models available after live catalog refresh', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
