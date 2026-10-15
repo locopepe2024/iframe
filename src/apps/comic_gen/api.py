@@ -132,6 +132,7 @@ from ..studio_access import (
     sign_studio_media_paths,
     set_studio_user,
     studio_owner_dir,
+    studio_media_dir,
     studio_owner_key,
     studio_uniart_config,
     verify_studio_media,
@@ -330,6 +331,7 @@ def signed_response(data):
     # Keep immutable history snapshots behind their dedicated revision APIs;
     # embedding them in every project response multiplies long-script payloads.
     if isinstance(data, Script):
+        pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
@@ -461,7 +463,7 @@ def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: U
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
-    upload_dir = os.path.join(studio_owner_dir(user.owner_profile_id), "uploads")
+    upload_dir = studio_media_dir(user.owner_profile_id, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     absolute_path = os.path.join(upload_dir, filename)
     stored_path = os.path.relpath(absolute_path, "output")

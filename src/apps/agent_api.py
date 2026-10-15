@@ -982,6 +982,8 @@ def complete(ctx, model, history):
     payload_bytes = len(json.dumps({"model": model, "messages": history}, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     if payload_bytes > 900 * 1024:
         raise HTTPException(422, f"本次对话含历史和素材约 {payload_bytes / 1024:.0f} KB，超过当前网关请求预算 900 KB；不是素材数量上限。请减少音频或文本内容，或新建会话；内容未截断")
+    from ..utils.llm_request_diagnostics import record_llm_request
+    record_llm_request("agent", model, history, stream=True)
     from openai import OpenAI
     with OpenAI(
         api_key=config["api_key"],

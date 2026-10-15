@@ -204,6 +204,8 @@ class LLMAdapter:
                 options["max_retries"] = max_retries
             if options and hasattr(client, "with_options"):
                 request_client = client.with_options(**options)
+            from ...utils.llm_request_diagnostics import record_llm_request
+            record_llm_request("comic_gen", model, messages, response_format=response_format, stream=stream)
             logger.info("LLM chat request started: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
             logger.info("LLM chat HTTP response received: model=%s", model)

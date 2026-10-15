@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 import subprocess
@@ -77,6 +78,7 @@ from ..studio_access import (
     runtime_nsfw_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
+    studio_media_dir,
     resolve_studio_reference,
 )
 from ..media_registry import register_media
@@ -269,7 +271,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _owner_output_dir(resource: Any, category: str) -> str:
         owner_profile_id = getattr(resource, "owner_profile_id", None)
         if owner_profile_id:
-            return os.path.join(studio_owner_dir(owner_profile_id), category)
+            return studio_media_dir(owner_profile_id, category)
         return os.path.join("output", category)
 
     _ORPHAN_RECOVERY_REASON = (
@@ -1909,6 +1911,49 @@ class ComicGenPipeline(StudioOwnerMixin):
         image_asset = getattr(frame, "rendered_image_asset", None)
         variants = getattr(image_asset, "variants", []) if image_asset else []
         ComicGenPipeline._register_asset_variant_media(variants, owner_profile_id)
+
+    def migrate_legacy_storyboard_media(self, script: Script) -> None:
+        """Move legacy shared-path frame images behind the owner's media route."""
+        if not script.owner_profile_id:
+            return
+        changed = False
+        with self._save_lock:
+            owner_dir = self._owner_output_dir(script, "storyboard")
+            for frame in script.frames:
+                image_asset = frame.rendered_image_asset
+                if not image_asset:
+                    continue
+                frame_changed = False
+                for variant in image_asset.variants:
+                    old_key = image_variant_storage_key(variant)
+                    if not old_key or not old_key.startswith("storyboard/"):
+                        continue
+                    try:
+                        source = _safe_resolve_path("output", old_key)
+                    except ValueError:
+                        continue
+                    legacy_root = os.path.realpath(os.path.join("output", "storyboard"))
+                    if (not source.startswith(legacy_root + os.sep)
+                            or not os.path.basename(source).startswith(f"{frame.id}_")
+                            or not os.path.isfile(source)):
+                        continue
+                    destination = os.path.join(owner_dir, os.path.basename(source))
+                    os.makedirs(owner_dir, exist_ok=True)
+                    if not os.path.exists(destination):
+                        shutil.copy2(source, destination)
+                    new_key = os.path.relpath(destination, "output")
+                    variant.url = new_key
+                    variant.storage_key = new_key
+                    variant.media_id = None
+                    if image_asset.selected_id == variant.id:
+                        frame.image_url = new_key
+                        frame.rendered_image_url = new_key
+                    changed = True
+                    frame_changed = True
+                if frame_changed:
+                    self._register_storyboard_frame_media(frame, script.owner_profile_id)
+            if changed:
+                self._save_data()
 
     def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
         """Return the normalized effective assets used by reference pickers."""
@@ -5492,6 +5537,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             script,
             characters=resolved["characters"],
             scenes=resolved["scenes"],
+            output_dir=self._owner_output_dir(script, "storyboard"),
         )
         for frame in script.frames:
             self._register_storyboard_frame_media(frame, script.owner_profile_id)
@@ -5767,7 +5813,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     image_url=source_image_url,
                     prompt=prompt,
                     duration=duration,
-                    audio_url=audio_url
+                    audio_url=audio_url,
+                    owner_profile_id=script.owner_profile_id,
                 )
 
                 if video_result and video_result.get("video_url"):
@@ -6014,6 +6061,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 size=effective_size,
                 model_name=i2i_model,
                 preserve_prompt=preserve_prompt,
+                output_dir=self._owner_output_dir(script, "storyboard"),
             )
             self._register_storyboard_frame_media(frame, script.owner_profile_id)
             

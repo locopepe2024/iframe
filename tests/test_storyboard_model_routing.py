@@ -1,12 +1,15 @@
+import threading
 import time
 from pathlib import Path
 from unittest.mock import Mock
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from src.apps.comic_gen.models import Character, GenerationStatus, ModelSettings, Script, Series, StoryboardFrame
+from src.apps.comic_gen.models import Character, GenerationStatus, ImageAsset, ImageVariant, ModelSettings, Script, Series, StoryboardFrame
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
+from src.apps.studio_access import studio_media_url, studio_owner_key, verify_studio_media
 
 
 @pytest.mark.parametrize("model_name", ["uniart/gpt-image-2"])
@@ -76,6 +79,54 @@ def test_storyboard_render_keeps_local_file_even_when_oss_is_configured(monkeypa
     assert frame.image_url == selected.url
 
 
+def test_storyboard_render_writes_owner_scoped_media(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    generator = StoryboardGenerator()
+    adapter = Mock()
+    adapter.generate.side_effect = lambda _prompt, path, **_kwargs: Path(path).write_bytes(b"image")
+    generator._get_model_for = Mock(return_value=adapter)
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    owner_dir = f"output/users/{studio_owner_key('owner-1')}/studio/storyboard"
+
+    generator.generate_frame(frame, [], None, prompt="A street", output_dir=owner_dir)
+
+    assert frame.image_url.startswith(f"users/{studio_owner_key('owner-1')}/studio/storyboard/")
+    assert (tmp_path / "output" / frame.image_url).read_bytes() == b"image"
+
+
+def test_legacy_storyboard_image_is_migrated_to_owner_media(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    legacy = tmp_path / "output/storyboard/frame-1_variant-1.png"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"existing frame")
+    variant = ImageVariant(id="variant-1", url="storyboard/frame-1_variant-1.png")
+    frame = StoryboardFrame(
+        id="frame-1", scene_id="scene-1", image_url=variant.url,
+        rendered_image_url=variant.url,
+        rendered_image_asset=ImageAsset(selected_id=variant.id, variants=[variant]),
+    )
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    owner_profile_id="owner-1", created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = threading.RLock()
+    pipeline._save_data = Mock()
+
+    pipeline.migrate_legacy_storyboard_media(script)
+
+    assert frame.image_url.startswith(f"users/{studio_owner_key('owner-1')}/studio/storyboard/")
+    assert (tmp_path / "output" / frame.image_url).read_bytes() == b"existing frame"
+    assert legacy.read_bytes() == b"existing frame"
+    assert variant.media_id
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-signing-key")
+    signed = urlsplit(studio_media_url("owner-1", frame.image_url))
+    query = parse_qs(signed.query)
+    assert verify_studio_media(
+        studio_owner_key("owner-1"), "storyboard/frame-1_variant-1.png",
+        int(query["expires"][0]), query["signature"][0],
+    ) == str(tmp_path / "output" / frame.image_url)
+    pipeline._save_data.assert_called_once()
+
+
 def test_legacy_seedream_selection_uses_nsfw_adapter(monkeypatch):
     adapter = Mock()
     monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneImageModel", lambda _config: adapter)
@@ -90,7 +141,7 @@ def test_series_storyboard_render_uses_series_i2i_model(tmp_path):
     script = Script(
         id="episode-1", series_id="series-1", title="Episode", original_text="",
         frames=[frame], model_settings=ModelSettings(i2i_model="uniart/gpt-image-2"),
-        created_at=now, updated_at=now,
+        owner_profile_id="owner-1", created_at=now, updated_at=now,
     )
     series = Series(
         id="series-1", title="Series", model_settings=ModelSettings(
@@ -106,6 +157,9 @@ def test_series_storyboard_render_uses_series_i2i_model(tmp_path):
     pipeline.generate_storyboard_render(script.id, frame.id, None, "A street")
 
     assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["model_name"] == "uniart/gpt-image-2.5-flare-discount"
+    assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["output_dir"] == (
+        f"output/users/{studio_owner_key('owner-1')}/studio/storyboard"
+    )
 
 
 def test_complete_first_frame_prompt_reaches_generator_unchanged():
