@@ -75,7 +75,9 @@ class UserConfigUpdate(BaseModel):
 
 class UserConfigStore:
     def __init__(self, db_path: str | None = None, master_key: str | None = None):
-        self.db_path = db_path or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db"
+        # Bind a configured relative path once. Worker/test cwd changes must
+        # not reopen an unrelated empty DB after this instance creates schema.
+        self.db_path = os.path.abspath(db_path or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db")
         self.master_key = master_key if master_key is not None else os.getenv("LUMENX_CONFIG_MASTER_KEY")
         self._lock = threading.RLock()
         self._ensure_schema()

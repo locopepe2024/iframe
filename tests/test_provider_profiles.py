@@ -106,6 +106,19 @@ def test_explicit_uniart_clear_updates_readiness_without_legacy_fallback(store, 
     assert error.value.status_code == 409
 
 
+def test_store_keeps_configured_database_when_working_directory_changes(tmp_path, owner, monkeypatch):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.chdir(first)
+    store = UserConfigStore("output/users.db")
+    store.update_provider_profile(owner, "nsfw", api_key="key", base_url="https://nsfw.example.test/v1")
+    monkeypatch.chdir(second)
+    assert store.get_runtime_provider(owner, "nsfw")["api_key"] == "key"
+    assert not (second / "output").exists()
+
+
 def test_studio_nsfw_context_uses_current_owners_profile(store, owner, monkeypatch):
     from src.apps.studio_access import set_studio_user, reset_studio_user, studio_nsfw_new_one_config
     monkeypatch.setattr(user_config, "get_user_config_store", lambda: store)
