@@ -6542,11 +6542,13 @@ def get_uniart_models(provider: Optional[Literal["uniart", "greena", "nsfw"]] = 
                 "models": models, "fetched_at": time.time()}
     runtime_config = studio_uniart_config()
     base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
+    from ...utils.provider_catalog import catalog_name, catalog_label, fetch_selected_catalog
     try:
-        models = fetch_uniart_catalog(runtime_config)
+        models = fetch_selected_catalog(runtime_config) if catalog_name(runtime_config) else fetch_uniart_catalog(runtime_config)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    return {"provider": "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
+        logger.warning("%s unavailable (%s)", catalog_label(runtime_config), type(exc).__name__)
+        raise HTTPException(status_code=502, detail=f"{catalog_label(runtime_config)} 模型目录暂时不可用") from None
+    return {"provider": catalog_name(runtime_config) or "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
 # ============================================

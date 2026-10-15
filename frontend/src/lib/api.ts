@@ -358,6 +358,7 @@ export interface EnvConfigPayload {
 }
 
 export interface UserConfigPayload {
+    catalog_name?: 'uniart' | 'greena';
     UNIART_API_KEY?: string;
     UNIART_BASE_URL?: string;
     preferences?: Record<string, unknown>;
