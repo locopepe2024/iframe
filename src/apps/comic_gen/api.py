@@ -236,6 +236,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/config/models"
         or path == "/config/uniart/models"
         or path.startswith("/studio/owned-media/")
+        or path.startswith("/studio/owned-playground-media/")
         or path.startswith("/tasks/")
         # Prompt polishing resolves the model credentials and optional
         # episode/series prompt context from the current Studio owner.  Keep
@@ -428,9 +429,24 @@ def get_owned_studio_media(
     user: UserContext = Depends(require_studio_user),
 ):
     """Serve legacy owner-local asset paths that lack a signed display URL."""
+    return _owned_local_media(owner_key, relative_path, preview, user, "studio")
+
+
+@app.get("/studio/owned-playground-media/{owner_key}/{relative_path:path}")
+def get_owned_playground_media(
+    owner_key: str,
+    relative_path: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Read imported Playground originals through the authenticated owner."""
+    return _owned_local_media(owner_key, relative_path, preview, user, "playground")
+
+
+def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: UserContext, area: str):
     if owner_key != studio_owner_key(user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Media not found")
-    owner_root = os.path.realpath(studio_owner_dir(user.owner_profile_id))
+    owner_root = os.path.realpath(os.path.join("output", "users", owner_key, area))
     path = os.path.realpath(os.path.join(owner_root, relative_path))
     if not path.startswith(owner_root + os.sep) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")

@@ -156,6 +156,15 @@ def verify_provider_media(owner_key: str, relative_path: str, expires: int, sign
 
 def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int = 3600) -> str:
     owner_key = studio_owner_key(owner_profile_id)
+    # Older workbench saves persisted a signed projection rather than a key.
+    # Revalidate its owner and HMAC before issuing a fresh display URL.
+    if stored_path.startswith("/studio/media/") or (
+        stored_path.startswith(("http://", "https://")) and "/studio/media/" in stored_path
+    ):
+        try:
+            stored_path = resolve_studio_reference(stored_path, owner_profile_id)
+        except ValueError:
+            return stored_path
     normalized = stored_path.replace("\\", "/").lstrip("/")
     prefix = f"users/{owner_key}/studio/"
     if not normalized.startswith(prefix):
@@ -232,10 +241,17 @@ def _local_studio_path_for_object_key(
     return os.path.relpath(candidate, "output")
 
 
-def verify_studio_media(owner_key: str, relative_path: str, expires: int, signature: str) -> str:
+def verify_studio_media(
+    owner_key: str,
+    relative_path: str,
+    expires: int,
+    signature: str,
+    *,
+    allow_expired: bool = False,
+) -> str:
     if len(owner_key) != 24 or any(char not in "0123456789abcdef" for char in owner_key):
         raise HTTPException(status_code=404, detail="Media not found")
-    if expires < int(time.time()):
+    if not allow_expired and expires < int(time.time()):
         raise HTTPException(status_code=401, detail="Media URL expired")
     normalized = relative_path.replace("\\", "/").lstrip("/")
     if not normalized or normalized.startswith("../") or "/../" in normalized:
@@ -290,9 +306,37 @@ def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
             raise ValueError("Media reference belongs to another owner")
         query = parse_qs(parsed.query)
         try:
-            candidate = verify_studio_media(parts[0], parts[1], int(query["expires"][0]), query["signature"][0])
+            # Browser URLs are short-lived, but an authenticated Studio user can
+            # keep an editor tab open past their expiry. Re-resolve the original
+            # signature here (still enforcing owner and HMAC checks) so polish
+            # can read the owner's existing local source file. Direct browser
+            # access continues to enforce URL expiry.
+            candidate = verify_studio_media(
+                parts[0],
+                parts[1],
+                int(query["expires"][0]),
+                query["signature"][0],
+                allow_expired=True,
+            )
         except (KeyError, ValueError, HTTPException) as exc:
             raise ValueError("Invalid or expired Studio media reference") from exc
+    elif path.startswith(("/studio/owned-media/", "/studio/owned-playground-media/")):
+        playground = path.startswith("/studio/owned-playground-media/")
+        prefix = "/studio/owned-playground-media/" if playground else "/studio/owned-media/"
+        parts = path.removeprefix(prefix).split("/", 1)
+        if len(parts) != 2 or parts[0] != owner_key:
+            raise ValueError("Media reference belongs to another owner")
+        root = os.path.realpath(os.path.join("output", "users", owner_key, "playground" if playground else "studio"))
+        candidate = os.path.realpath(os.path.join(root, parts[1]))
+        if not candidate.startswith(root + os.sep):
+            raise ValueError("Invalid Studio media reference")
+    elif path.startswith("/files/"):
+        # Studio's compatibility media URLs are rooted at output/. Only
+        # owner-local Studio paths are accepted for vision polishing below.
+        relative = path.removeprefix("/files/")
+        if relative.startswith("output/"):
+            relative = relative.removeprefix("output/")
+        candidate = os.path.realpath(os.path.join("output", relative))
     elif parsed.scheme in ("http", "https") and parsed.netloc and not parsed.username and not parsed.password:
         return value
     elif parsed.scheme or parsed.netloc:

@@ -26,6 +26,7 @@ def test_session_and_history_refresh_owned_reference_previews(tmp_path, monkeypa
     assert 'signature=expired' not in payload['draft']['input_media'][0]
     assert payload['draft']['input_media'][0].startswith('/playground/media/g/o?')
     assert session.draft.input_media[0] == old_url
+    assert payload['draft']['media_names'][payload['draft']['input_media'][0]] == 'Portrait'
     generation.input_media = [str(media)]
     assert api._public_generation(generation, identity)['input_media'][0].startswith('/playground/media/g/o?')
 
@@ -54,3 +55,41 @@ def test_generation_status_is_complete_and_caps_large_errors(tmp_path, monkeypat
     assert payload['mode'] == 't2i'
     assert payload['prompt'] == 'test'
     assert len(payload['error']) == 2003
+
+
+def test_expired_studio_reference_is_refreshed_for_reediting(tmp_path, monkeypatch):
+    from src.apps.studio_access import studio_media_url, studio_owner_key
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    identity = UserContext(user_id='user', owner_profile_id='profile', display_name='', access_token='')
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='profile')
+    monkeypatch.setattr(api, '_storage_for', lambda _: storage)
+    stored = f'users/{studio_owner_key("profile")}/studio/uploads/portrait.jpg'
+    media = Path('output') / stored
+    media.parent.mkdir(parents=True)
+    media.write_bytes(b'image')
+    expired = studio_media_url('profile', stored, ttl_seconds=-3600)
+    generation = PlaygroundGeneration(id='edit', mode='i2i', model_id='test', prompt='test',
+        created_at='2026-09-15', owner_user_id='user', owner_profile_id='profile',
+        input_media=[expired], media_names={expired: 'Portrait'})
+    payload = api._public_generation(generation, identity)
+    assert payload['input_media'][0].startswith('/studio/media/')
+    from urllib.parse import parse_qs, urlsplit
+    from src.apps.studio_access import verify_studio_media
+    parsed = urlsplit(payload['input_media'][0])
+    q = parse_qs(parsed.query)
+    path = verify_studio_media(studio_owner_key('profile'), 'uploads/portrait.jpg',
+                              int(q['expires'][0]), q['signature'][0])
+    assert Path(path).read_bytes() == b'image'
+    assert payload['input_media'][0] != expired
+    assert payload['media_names'][payload['input_media'][0]] == 'Portrait'
+    assert generation.input_media == [expired]
+    # Re-edit and submit resolves a real file, retaining the reference's name.
+    from src.apps.playground.models import GenerateRequest
+    from src.apps.playground.service import PlaygroundService
+    request = GenerateRequest(mode='i2i', model_id='test', prompt='@Portrait',
+                              input_media=payload['input_media'], media_names=payload['media_names'])
+    submitted = PlaygroundService(storage).create_generation(request)
+    assert len(submitted.input_media) == 1
+    assert Path(submitted.input_media[0]).read_bytes() == b'image'
+    assert submitted.media_names[submitted.input_media[0]] == 'Portrait'
