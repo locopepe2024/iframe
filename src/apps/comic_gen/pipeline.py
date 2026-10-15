@@ -8569,17 +8569,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 for episode_id in resource.episode_ids
             }
 
-        ffmpeg_path = get_ffmpeg_path()
-        if not ffmpeg_path:
-            raise RuntimeError(
-                "FFmpeg is required for Assembly rendering. "
-                + get_ffmpeg_install_instructions()
-            )
-        probe_name = "ffprobe.exe" if ffmpeg_path.lower().endswith(".exe") else "ffprobe"
-        ffprobe_path = os.path.join(os.path.dirname(ffmpeg_path), probe_name)
         source_paths: List[str] = []
-        filter_steps: List[str] = []
-        for index, clip in enumerate(clips):
+        for clip in clips:
             project_id = clip.source_project_id or clip.source_episode_id
             source_project = projects.get(project_id)
             if source_project is None:
@@ -8590,6 +8581,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._resolve_assembly_video_source(clip, source_project)
             )
 
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for Assembly rendering. "
+                + get_ffmpeg_install_instructions()
+            )
+        probe_name = "ffprobe.exe" if ffmpeg_path.lower().endswith(".exe") else "ffprobe"
+        ffprobe_path = os.path.join(os.path.dirname(ffmpeg_path), probe_name)
+        filter_steps: List[str] = []
+        for index, clip in enumerate(clips):
             timeline_duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000
             source_start = clip.source_start_ms / 1000
             source_end_ms = (
@@ -8617,7 +8618,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             try:
                 probe = subprocess.run(
                     [ffprobe_path, "-v", "error", "-select_streams", "a:0",
-                     "-show_entries", "stream=index", "-of", "csv=p=0", source_paths[-1]],
+                     "-show_entries", "stream=index", "-of", "csv=p=0", source_paths[index]],
                     check=True, capture_output=True, timeout=20,
                 )
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:

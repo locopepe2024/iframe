@@ -306,7 +306,8 @@ def test_render_rejects_remote_or_escaping_source_before_ffmpeg(
     )
     pipeline.scripts[project.id] = project
 
-    with patch("src.apps.comic_gen.pipeline.subprocess.run") as run:
+    with patch("src.apps.comic_gen.pipeline.get_ffmpeg_path", return_value=None), \
+         patch("src.apps.comic_gen.pipeline.subprocess.run") as run:
         with pytest.raises(AssemblyPlanValidationError, match="local|managed output"):
             pipeline.render_assembly_plan("project", project.id)
     run.assert_not_called()
@@ -466,8 +467,6 @@ def test_real_ffmpeg_source_audio_respects_trim_retiming_and_gain(pipeline):
     project.assembly_plan = _plan("project", [clip], 500)
     levels = []
     for gain in (1, 0.5, 0):
-        clip.gain = gain
-        # Pydantic keeps a validated copy in the plan; edit the actual clip.
         project.assembly_plan.lanes[0].clips[0].gain = gain
         result = pipeline.render_assembly_plan("project", project.id)
         pcm = subprocess.run([
