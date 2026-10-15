@@ -8494,10 +8494,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         resource_id: str,
         owner_profile_id: Optional[str] = None,
     ) -> Any:
-        """Compile a saved Assembly video timeline into one local MP4.
+        """Compile a saved Assembly timeline with source audio into one local MP4.
 
-        This v1 compiler is deliberately explicit and video-only. Saving an
-        edit plan never calls this method, and this method never submits a
+        This compiler preserves source audio; separate audio lanes remain unsupported.
+        Saving an edit plan never calls this method, and this method never submits a
         provider generation task.
         """
         self._assembly_resource_kind(scope)
@@ -8570,8 +8570,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             }
 
         source_paths: List[str] = []
-        filter_steps: List[str] = []
-        for index, clip in enumerate(clips):
+        for clip in clips:
             project_id = clip.source_project_id or clip.source_episode_id
             source_project = projects.get(project_id)
             if source_project is None:
@@ -8582,6 +8581,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._resolve_assembly_video_source(clip, source_project)
             )
 
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for Assembly rendering. "
+                + get_ffmpeg_install_instructions()
+            )
+        probe_name = "ffprobe.exe" if ffmpeg_path.lower().endswith(".exe") else "ffprobe"
+        ffprobe_path = os.path.join(os.path.dirname(ffmpeg_path), probe_name)
+        filter_steps: List[str] = []
+        for index, clip in enumerate(clips):
             timeline_duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000
             source_start = clip.source_start_ms / 1000
             source_end_ms = (
@@ -8606,16 +8615,41 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"[v{index}]"
             )
 
-        ffmpeg_path = get_ffmpeg_path()
-        if not ffmpeg_path:
-            raise RuntimeError(
-                "FFmpeg is required for Assembly rendering. "
-                + get_ffmpeg_install_instructions()
-            )
+            try:
+                probe = subprocess.run(
+                    [ffprobe_path, "-v", "error", "-select_streams", "a:0",
+                     "-show_entries", "stream=index", "-of", "csv=p=0", source_paths[index]],
+                    check=True, capture_output=True, timeout=20,
+                )
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                raise RuntimeError(f"Assembly source audio probe failed for clip {clip.id}") from exc
+            if probe.stdout.strip():
+                # Match the source crop and any existing timeline retiming.
+                tempo = source_duration / timeline_duration
+                tempos = []
+                while tempo > 2:
+                    tempos.append("atempo=2")
+                    tempo /= 2
+                while tempo < 0.5:
+                    tempos.append("atempo=0.5")
+                    tempo /= 0.5
+                tempos.append(f"atempo={tempo:.9f}")
+                filter_steps.append(
+                    f"[{index}:a:0]atrim=start={source_start:.6f}:end={source_end:.6f},"
+                    "asetpts=PTS-STARTPTS," + ",".join(tempos) + ","
+                    "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                    f"volume={clip.gain if clip.gain is not None else 1},"
+                    f"apad,atrim=duration={timeline_duration:.6f}[a{index}]"
+                )
+            else:
+                filter_steps.append(
+                    "anullsrc=r=48000:cl=stereo,"
+                    f"atrim=duration={timeline_duration:.6f}[a{index}]"
+                )
 
         filter_steps.append(
-            "".join(f"[v{index}]" for index in range(len(clips)))
-            + f"concat=n={len(clips)}:v=1:a=0[outv]"
+            "".join(f"[v{index}][a{index}]" for index in range(len(clips)))
+            + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
         )
         output_dir = self._owner_output_dir(resource, "video")
         os.makedirs(output_dir, exist_ok=True)
@@ -8631,7 +8665,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             ";".join(filter_steps),
             "-map",
             "[outv]",
-            "-an",
+            "-map",
+            "[outa]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
             "-c:v",
             "libx264",
             "-crf",
