@@ -146,7 +146,8 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
       : isRuntimeUniArt && publishedMaterialLimit > 0
         ? publishedMaterialLimit
         : Math.max(config?.maxFiles || 0, 16),
-    accept: 'image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.aiff,.aif,.wma,.txt,.md,.csv,.json,.srt,.vtt',
+    accept: 'image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.aiff,.aif,.wma,.txt,.md,.csv,.json,.srt,.vtt' +
+      (agentMode ? ',.pdf,.docx,.pptx' : ''),
   };
 
   // Don't render for t2v mode (no input media needed)

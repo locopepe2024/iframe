@@ -75,6 +75,10 @@ it.each([true, false])('offers audio/video/text uploads with agentMode=%s even w
   const { container } = render(<MediaInput agentMode={agentMode} />);
   const accept = container.querySelector('input[type="file"]')?.getAttribute('accept');
   for (const type of ['image/*', 'video/*', 'audio/*', '.m4a', '.txt', '.srt']) expect(accept).toContain(type);
+  for (const type of ['.pdf', '.docx', '.pptx']) {
+    if (agentMode) expect(accept).toContain(type);
+    else expect(accept).not.toContain(type);
+  }
 });
 it('retains one upload/library panel and appends image-edit references on upload', async () => {
   usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: ['/old.png'] });
