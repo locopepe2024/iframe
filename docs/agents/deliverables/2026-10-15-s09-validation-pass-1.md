@@ -7,6 +7,7 @@
 - Real s09 v2 H3 output SHA-256 `db2523685555076ad069dc1e6efa7d53e036ca9b4a1d63d05a8b13dac0516e39` probes as 90 frames / 24 fps / **3.750 s**, with an audio stream despite `generate_audio=false`. The source motion is 120 frames / 30 fps / **4.000 s**.
 - Calling the production service's `_probe_assembly_media` on that exact output returned `{"duration": 3.75, "audio_streams": 1}`. Its 4-second guard evaluates `3.75 + 0.02 < 4.0` as true. The existing short-output rejection and successful-crop tests both passed (2 selected tests). This verifies the duration guard with the real file plus a synthetic product-task test, not a full product assembly task using the real output.
 - The historical `manifest.json` entry for s09 says `use_output_frames: [0,120]` even though the generated file has only 90 frames. That interval is planning/stale metadata, not a valid output-frame slice. The manifest's source interval `[1085,1205)` remains separately corroborated.
+- The product generation plan permits integer H3 requests of 4–15 seconds (`service.py:756-758`), while its catalog lists 5 seconds as the default (`config/model_catalog/families/uniart.yaml`). Requesting 5 seconds is technically permitted for a 4-second shot; no observed 5-second output in this trial proves its delivered duration or motion timing.
 
 ## Direct implication
 
@@ -22,7 +23,7 @@ Do not send the current s09 v2 output into a 4-second product shot: its visual m
 ## What would verify it next
 
 1. Snapshot the corrected s09 annotation and prompt with hashes. Use a single-view reference containing the deep fold and recovery, with prompt text consistent with that reference; keep the target identity and clean-frame constraints fixed. The existing tail-hold clip may serve as a candidate, but its prompt must not request the removed second view.
-2. Resolve the requested-versus-delivered duration contract before another paid run: probe actual provider output length and choose a generation/assembly policy that can yield at least the target duration. Recheck output-frame bounds and audio policy from the actual file rather than trusting the manifest.
+2. Resolve the requested-versus-delivered duration contract before another paid run. A 5-second request is an allowed candidate for a 4-second shot, but requires an actual output-length probe and normal-speed phase review; the provider might still return a shorter or differently paced result. Recheck output-frame bounds and audio policy from the actual file rather than trusting the manifest.
 3. Only then run one controlled candidate. Compare source and output by deep-fold, recovery, high diagonal, extension and cut-side events plus normal-speed playback; separately score person, spear coherence and UI. Do not expand to a full batch on a prompt-only improvement.
 
 The current result is **stop for generation/assembly promotion** and **go for correcting the evidence and duration contract**.
