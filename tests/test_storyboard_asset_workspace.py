@@ -82,7 +82,10 @@ def test_batch_render_receives_project_assets_only(workspace):
     pipeline.storyboard_generator.generate_storyboard.return_value = script
     pipeline._save_data = Mock()
     pipeline.generate_storyboard(script.id)
-    assert pipeline.storyboard_generator.generate_storyboard.call_args.kwargs == {"characters": [], "scenes": []}
+    storyboard_kwargs = pipeline.storyboard_generator.generate_storyboard.call_args.kwargs
+    assert storyboard_kwargs["characters"] == []
+    assert storyboard_kwargs["scenes"] == []
+    assert storyboard_kwargs["output_dir"].endswith("/studio/storyboard")
 
 
 def test_reviewed_analysis_cannot_bind_names_to_unimported_global_candidates(workspace):

@@ -1955,8 +1955,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             if changed:
                 self._save_data()
 
-    def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
+    def get_asset_reference_index(
+        self,
+        script_id: str,
+        *,
+        scope: str = "available",
+    ) -> AssetReferenceIndex:
         """Return the normalized effective assets used by reference pickers."""
+        if scope not in {"available", "project"}:
+            raise ValueError("Invalid asset reference scope")
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Project not found")
@@ -2006,14 +2013,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             append_scope(asset_type, getattr(script, attr), "episode", script.id, script.title, seen)
             if series:
                 append_scope(asset_type, getattr(series, attr), "series", series.id, series.title, seen)
-            append_scope(
-                asset_type,
-                self._library_list_for_type(asset_type, script.owner_profile_id),
-                "global",
-                None,
-                None,
-                seen,
-            )
+            if scope == "available":
+                append_scope(
+                    asset_type,
+                    self._library_list_for_type(asset_type, script.owner_profile_id),
+                    "global",
+                    None,
+                    None,
+                    seen,
+                )
 
         return AssetReferenceIndex(project_id=script.id, assets=entries)
 
