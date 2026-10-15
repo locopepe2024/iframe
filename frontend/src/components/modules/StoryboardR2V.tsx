@@ -1,4 +1,7 @@
 "use client";
+
+import { createFrameEditQueue } from "@/lib/frameEditQueue";
+import { editShotSettings } from "./storyboard-r2v/shotPromptSettings";
 import { storyboardAudioChoice, storyboardGeneratedAudio } from "./storyboard-r2v/generatedAudio";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
@@ -342,40 +345,38 @@ export default function StoryboardR2V() {
         map.set(shotId, { timer, patch: merged });
     }, [currentProject?.id, updateProject]);
 
-    // Prompt edits hit a different endpoint (POST /frames/update with
-    // action_description) — debounced separately from workbench so a
-    // user typing fast doesn't push 6 PATCH /workbench every keystroke.
-    const promptPendingRef = useRef<Map<string, { timer: number; prompt: string }>>(new Map());
-    const persistPrompt = useCallback((shotId: string, prompt: string) => {
-        if (!currentProject?.id) return;
-        if (shotId.startsWith("shot_")) return;
-        const projectId = currentProject.id;
-        const map = promptPendingRef.current;
-        const existing = map.get(shotId);
-        if (existing) window.clearTimeout(existing.timer);
-        const timer = window.setTimeout(() => {
-            map.delete(shotId);
-            api.updateFrame(projectId, shotId, { action_description: prompt })
-                .then(() => {
-                    const proj = useProjectStore.getState().currentProject;
-                    if (!proj || proj.id !== projectId) return;
-                    const nextFrames = (proj.frames ?? []).map((f: any) =>
-                        f.id === shotId ? { ...f, action_description: prompt } : f,
-                    );
-                    updateProject(projectId, { frames: nextFrames });
-                })
-                .catch((err) => debugLog.warn("Studio", "persistPrompt failed", err));
-        }, 800);
-        map.set(shotId, { timer, prompt });
-    }, [currentProject?.id, updateProject]);
+    // Adopted text, its flag and editable direction share one ordered writer.
+    const frameEdits = useMemo(() => createFrameEditQueue(
+        (projectId, shotId, patch) => api.updateFrame(projectId, shotId, patch),
+        (projectId, shotId, patch, result) => {
+            const proj = useProjectStore.getState().currentProject;
+            if (!proj || proj.id !== projectId) return;
+            const saved = result?.frames?.find((frame: any) => frame.id === shotId);
+            const fields = { ...patch };
+            if (saved && ("style_prompt_override" in patch || "lighting_override" in patch)) {
+                for (const key of ["image_prompt", "image_prompt_en", "image_prompt_cn"]) fields[key] = saved[key];
+            }
+            if (saved && "workbench_prompt_is_optimized" in patch) fields.visual_description = saved.visual_description;
+            updateProject(projectId, { frames: (proj.frames ?? []).map((frame: any) =>
+                frame.id === shotId ? { ...frame, ...fields } : frame) });
+        },
+        (error) => {
+            debugLog.warn("Studio", "Frame edit save failed", error);
+            toast.error(t("shotEditSaveFailed"), { action: {
+                label: t("polishRetry"), onClick: () => { void frameEdits.flush().catch(() => {}); },
+            } });
+        },
+    ), [updateProject]);
+    const persistFrameEdit = useCallback((shotId: string, patch: Parameters<typeof api.updateFrame>[2]) => {
+        if (!currentProject?.id || shotId.startsWith("shot_")) return;
+        frameEdits.enqueue(currentProject.id, shotId, patch);
+    }, [currentProject?.id, frameEdits]);
 
     // Flush all pending writes on unmount (e.g. user switches step tab)
     // so the last keystroke / param change isn't stranded in the debounce
-    // window. All queues (workbench, prompt, field) drain in parallel.
+    // window. Workbench media state remains separate from prompt edits.
     useEffect(() => {
         const wbMap = workbenchPendingRef.current;
-        const pMap = promptPendingRef.current;
-        const fMap = fieldPendingRef.current;
         return () => {
             const projectId = currentProject?.id;
             if (!projectId) return;
@@ -384,29 +385,20 @@ export default function StoryboardR2V() {
                 api.updateFrameWorkbench(projectId, shotId, entry.patch).catch(() => {});
             }
             wbMap.clear();
-            for (const [shotId, entry] of Array.from(pMap.entries())) {
-                window.clearTimeout(entry.timer);
-                api.updateFrame(projectId, shotId, { action_description: entry.prompt }).catch(() => {});
-            }
-            pMap.clear();
-            for (const [shotId, entry] of Array.from(fMap.entries())) {
-                window.clearTimeout(entry.timer);
-                api.updateFrame(projectId, shotId, entry.fields).catch(() => {});
-            }
-            fMap.clear();
+            void frameEdits.flush().catch(() => {});
         };
-    }, [currentProject?.id]);
+    }, [currentProject?.id, frameEdits]);
 
     // beforeunload guard: warn when structured field edits are pending
     useEffect(() => {
         const handler = (e: BeforeUnloadEvent) => {
-            if (fieldPendingRef.current.size > 0 || promptPendingRef.current.size > 0) {
+            if (frameEdits.hasPending()) {
                 e.preventDefault();
             }
         };
         window.addEventListener("beforeunload", handler);
         return () => window.removeEventListener("beforeunload", handler);
-    }, []);
+    }, [frameEdits]);
 
     const characters = currentProject?.characters || [];
     const scenes = currentProject?.scenes || [];
@@ -778,11 +770,11 @@ export default function StoryboardR2V() {
     const updatePrompt = useCallback((index: number, prompt: string, optimized?: boolean) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
-            persistPrompt(s.id, prompt);
-            if (optimized !== undefined) persistWorkbench(s.id, { workbench_prompt_is_optimized: optimized });
+            persistFrameEdit(s.id, { action_description: prompt,
+                workbench_prompt_is_optimized: optimized ?? s.promptIsOptimized ?? false });
             return { ...s, prompt, promptIsOptimized: optimized ?? s.promptIsOptimized };
         }));
-    }, [persistPrompt, persistWorkbench]);
+    }, [persistFrameEdit]);
 
     // Set shot tab mode + persist so the user's last-active tab
     // survives refresh.
@@ -794,8 +786,7 @@ export default function StoryboardR2V() {
         }));
     }, [persistWorkbench]);
 
-    // Structured field updates — local immediate + debounce 3s auto-save
-    const fieldPendingRef = useRef<Map<string, { timer: number; fields: Record<string, any> }>>(new Map());
+    // Structured edits update the visible body and join the ordered frame save.
     const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
@@ -815,43 +806,30 @@ export default function StoryboardR2V() {
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
-            if (field === "stylePromptOverride") return { ...s, stylePromptOverride: typeof value === "string" ? value : null };
-            if (field === "lightingOverride") return { ...s, lightingOverride: typeof value === "string" ? value : null };
+            if (field === "stylePromptOverride" || field === "lightingOverride") {
+                const next = editShotSettings(s, field, typeof value === "string" ? value : null, displayedStyle.positivePrompt);
+                persistFrameEdit(s.id, {
+                    style_prompt_override: next.stylePromptOverride ?? "",
+                    lighting_override: next.lightingOverride ?? "",
+                    ...(next.promptIsOptimized ? { action_description: next.prompt, workbench_prompt_is_optimized: true } : {}),
+                });
+                return next;
+            }
             if (field === "negativePromptOverride") return { ...s, negativePromptOverride: typeof value === "string" ? value : null };
             return s;
         }));
-        // Debounce 3s persist to backend
+        if (field === "stylePromptOverride" || field === "lightingOverride") return;
         const shotId = shots[index]?.id;
-        if (!shotId || shotId.startsWith("shot_") || !currentProject?.id) return;
-        const projectId = currentProject.id;
-        const map = fieldPendingRef.current;
-        const existing = map.get(shotId);
-        if (existing) window.clearTimeout(existing.timer);
+        if (!shotId) return;
         const backendField: Record<string, any> = {};
         if (field === "duration") backendField.duration = typeof value === "number" ? value : undefined;
         if (field === "shotSize") backendField.shot_size = typeof value === "string" ? value : undefined;
         if (field === "cameraAngle") backendField.camera_angle = typeof value === "string" ? value : undefined;
         if (field === "cameraMovement") backendField.camera_movement_description = typeof value === "string" ? value : undefined;
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
-        if (field === "stylePromptOverride") backendField.style_prompt_override = typeof value === "string" ? value : undefined;
-        if (field === "lightingOverride") backendField.lighting_override = typeof value === "string" ? value : undefined;
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
-        const merged = { ...(existing?.fields ?? {}), ...backendField };
-        const timer = window.setTimeout(() => {
-            map.delete(shotId);
-            api.updateFrame(projectId, shotId, merged)
-                .then(() => {
-                    const proj = useProjectStore.getState().currentProject;
-                    if (!proj || proj.id !== projectId) return;
-                    const nextFrames = (proj.frames ?? []).map((f: any) =>
-                        f.id === shotId ? { ...f, ...merged } : f,
-                    );
-                    updateProject(projectId, { frames: nextFrames });
-                })
-                .catch((err) => debugLog.warn("Studio", "persistField failed", err));
-        }, 3000);
-        map.set(shotId, { timer, fields: merged });
-    }, [shots, currentProject?.id, updateProject]);
+        persistFrameEdit(shotId, backendField);
+    }, [shots, persistFrameEdit, displayedStyle.positivePrompt]);
 
     // Duration editor config — derived from active R2V model's catalog entry
     const durationEditorCfg = useMemo(() => {

@@ -2483,6 +2483,7 @@
     "noRefVideosAvailable": "暂无参考视频，请先在素材步骤中生成动态参考。"
   },
   "storyboardR2V": {
+    "shotEditSaveFailed": "镜头修改保存失败，编辑内容已保留，请重试。",
     "generatedAudio": "生成视频音频",
     "shots": "镜头",
     "shot": "镜头",

@@ -5560,11 +5560,45 @@ class ComicGenPipeline(StudioOwnerMixin):
                 and kwargs["character_ids"] != frame.character_ids)
         )
         
+        from .shot_prompt_settings import sync_prompt_settings
+        old_style, old_light = frame.style_prompt_override, frame.lighting_override
+        next_style = kwargs.get("style_prompt_override") if kwargs.get("style_prompt_override") is not None else old_style
+        next_light = kwargs.get("lighting_override") if kwargs.get("lighting_override") is not None else old_light
+        context = frame.director_shot_context or {}
+        shot_context = context.get("shot") if isinstance(context.get("shot"), dict) else {}
+        plan_light = shot_context.get("lighting")
+        inherited_light = "；".join(filter(None, [
+            plan_light.get("key_source"), plan_light.get("color_tone"), plan_light.get("contrast"),
+            *(plan_light.get("practical_sources") or []),
+        ])) if isinstance(plan_light, dict) else str(plan_light or "")
+        direction = self.effective_art_direction(script)
+        inherited_style = direction.style_config.get("positive_prompt", "") if direction else script.style_prompt or ""
+
+        def sync(text):
+            return sync_prompt_settings(text, old_style or inherited_style, old_light or inherited_light,
+                                        next_style or inherited_style, next_light or inherited_light)
+
+        if frame.workbench_prompt_is_optimized and kwargs.get("action_description") is None:
+            frame.action_description = sync(frame.action_description)
+        if frame.image_prompt_en:
+            previous_image = frame.image_prompt_en
+            frame.image_prompt_en = sync(previous_image)
+            if frame.image_prompt == previous_image and kwargs.get("image_prompt") is None:
+                frame.image_prompt = frame.image_prompt_en
+        if frame.image_prompt_cn:
+            frame.image_prompt_cn = sync(frame.image_prompt_cn)
+        if kwargs.get("workbench_prompt_is_optimized") is not None:
+            frame.workbench_prompt_is_optimized = kwargs["workbench_prompt_is_optimized"]
+
         # Update only provided fields
         if kwargs.get('image_prompt') is not None:
             frame.image_prompt = kwargs['image_prompt']
         if kwargs.get('action_description') is not None:
             frame.action_description = kwargs['action_description']
+            if kwargs.get("workbench_prompt_is_optimized") is not None:
+                # Explicit workbench text is the current editable body,
+                # including ordinary drafts, rather than an older rich frame.
+                frame.visual_description = frame.action_description
         if kwargs.get('dialogue') is not None:
             frame.dialogue = kwargs['dialogue']
         if kwargs.get('camera_angle') is not None:
