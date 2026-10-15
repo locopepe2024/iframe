@@ -31,3 +31,22 @@ def fetch_provider_catalog(provider: str, config: Mapping[str, str], *, timeout:
         result.append({**model, "id": f"{namespace}/{raw_id}", "provider": public_id,
                        "description": f"{model['display_name']} via {'GreenA' if public_id == 'greena' else 'UniArt'}"})
     return result
+
+
+def catalog_name(config: Mapping) -> str | None:
+    """Use saved gateway identity or explicit profile identity; never infer it."""
+    name = config.get("provider") or config.get("catalog_name")
+    return "greena" if name in ("greena", "nsfw") else "uniart" if name == "uniart" else None
+
+
+def catalog_label(config: Mapping) -> str:
+    name = catalog_name(config)
+    return {"uniart": "UniArt Catalog", "greena": "GreenA Catalog"}.get(name, "当前 Catalog")
+
+
+def fetch_selected_catalog(config: Mapping[str, str], *, timeout: float = 15) -> list[dict]:
+    name = catalog_name(config)
+    if name:
+        return fetch_provider_catalog(name, {**config, "provider": name}, timeout=timeout)
+    from .uniart_catalog import fetch_uniart_catalog
+    return fetch_uniart_catalog(config, timeout=timeout)
