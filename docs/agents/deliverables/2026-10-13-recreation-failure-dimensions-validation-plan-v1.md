@@ -8,6 +8,8 @@
 
 执行用的[语义 + 时间线标注 v1](2026-10-15-s09-semantic-frame-timeline-v1.md)把源帧事件、输出对应、动作缺失和时机偏移放在同一张表里；精确边界仍待逐帧复核。
 
+复刻先形成 workflow 的阶段闸门与版本化产物，见[语义时间线 workflow 规格](../../specs/2026-10-15-recreation-semantic-timeline-workflow-v1.md)和[s09 试点状态](2026-10-15-s09-workflow-pilot-status-v1.md)。这两份文件区分当前代码事实与待实现的数据/验收边界。
+
 ## 流程及真值边界
 
 | 阶段 | 应沉淀的产物 | 当前状态 |
