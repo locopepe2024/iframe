@@ -51,7 +51,7 @@ function directorShotConstraint(shot: ShotNode): string {
         ["环境音", context.shot?.ambient_sound],
     ];
     const lighting = context.shot?.lighting;
-    if (lighting) {
+    if (lighting && !shot.lightingOverride?.trim()) {
         const parts = [
             lighting.key_source && `主光${lighting.key_source}`,
             lighting.color_tone && `色调${lighting.color_tone}`,

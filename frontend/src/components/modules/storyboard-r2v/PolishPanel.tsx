@@ -14,6 +14,7 @@
  *
  * 视觉寄存于 Studio 现有 chrome-sm / display-sm / status colors token 体系。
  */
+import { syncPromptSettings } from "./shotPromptSettings";
 import { useCallback, useState } from "react";
 import { Loader2, Sparkles, Check, X, RefreshCw, Copy, CornerDownLeft, AlertCircle, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
@@ -53,6 +54,7 @@ interface PolishPanelProps {
     videoModel?: string;
     prompt: string;
     optimizationDraft?: string;
+    shotOverrides?: { style: string; lighting: string };
     tabMode: "t2i_i2v" | "direct_r2v";
     scriptId: string;
     frameId?: string;
@@ -108,6 +110,7 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
 export default function PolishPanel({
     prompt,
     optimizationDraft,
+    shotOverrides,
     videoModel = "",
     generateAudio,
     targetDuration,
@@ -121,7 +124,12 @@ export default function PolishPanel({
     onApply,
 }: PolishPanelProps) {
     const t = useTranslations("storyboardR2V");
-    const [polished, setPolished] = useState<PolishedPrompt | null>(null);
+    const [storedPolished, setPolished] = useState<PolishedPrompt | null>(null);
+    const [polishedSettings, setPolishedSettings] = useState<typeof shotOverrides>();
+    const syncCurrent = (text: string) => shotOverrides && polishedSettings
+        ? syncPromptSettings(text, polishedSettings.style, polishedSettings.lighting, shotOverrides.style, shotOverrides.lighting)
+        : text;
+    const polished = storedPolished ? { cn: syncCurrent(storedPolished.cn), en: syncCurrent(storedPolished.en) } : null;
     const [error, setError] = useState<PolishErrorState | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedback, setFeedback] = useState("");
@@ -151,9 +159,10 @@ export default function PolishPanel({
 
         try {
             const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId);
+                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides)
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides);
             if (res?.prompt_cn && res?.prompt_en) {
+                setPolishedSettings(shotOverrides);
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
                 setFeedback("");
             } else {
@@ -171,12 +180,13 @@ export default function PolishPanel({
             // model_echo 是 warning：仍把后端附带的双语 echo 展示给用户
             // （这样他们能在 feedback 框里参照原文追加要求）
             if (parsed.reason === "model_echo" && parsed.prompt_cn && parsed.prompt_en) {
+                setPolishedSettings(shotOverrides);
                 setPolished({ cn: parsed.prompt_cn, en: parsed.prompt_en });
             }
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, optimizationDraft, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
+    }, [tabMode, prompt, optimizationDraft, shotOverrides, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);

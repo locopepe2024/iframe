@@ -2483,6 +2483,7 @@
     "noRefVideosAvailable": "No reference videos available. Generate Motion References in the Assets step first."
   },
   "storyboardR2V": {
+    "shotEditSaveFailed": "Could not save shot changes. Your edits are retained; please retry.",
     "generatedAudio": "Generated video audio",
     "genShots": "✨ Generate shots",
     "genInFlight": "Generating...",

@@ -29,7 +29,7 @@ import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
-import { buildAssembledPrompt, buildGenerationPrompt } from "./buildAssembledPrompt";
+import { buildGenerationPrompt } from "./buildAssembledPrompt";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
@@ -328,9 +328,9 @@ export default function ShotCard({
         return out;
     }, [shot.prompt, characters])();
 
-    const assembledPromptPreview = useMemo(() => buildAssembledPrompt(shot, false, globalStylePrompt), [
+    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
-        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
+        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
 
     useEffect(() => {
@@ -811,6 +811,7 @@ export default function ShotCard({
                             tabMode={shot.tabMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
+                            shotOverrides={{ style: shot.stylePromptOverride || globalStylePrompt, lighting: shot.lightingOverride || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
                             onApply={(text) => onUpdatePrompt(text, true)}
