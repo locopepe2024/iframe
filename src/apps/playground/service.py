@@ -64,7 +64,7 @@ class PlaygroundService:
         media_names = {}
         for reference, resolved in zip(request.input_media or [], input_media):
             key = urlsplit(reference).path if reference.startswith(("/playground/media/", "/playground/input-media/", "/studio/media/")) else reference
-            name = request.media_names.get(key)
+            name = request.media_names.get(key) or request.media_names.get(reference)
             if name:
                 media_names[resolved] = name
         draft = PlaygroundDraft(

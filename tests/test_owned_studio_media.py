@@ -58,3 +58,58 @@ def test_provider_media_requires_valid_owner_scoped_signature(tmp_path, monkeypa
     assert valid.content == b"reference"
     assert invalid.status_code == 401
     assert other_owner.status_code == 404
+
+
+def test_imported_playground_original_download_checks_owner_and_containment(tmp_path, monkeypatch):
+    from src.apps.comic_gen.api import get_owned_playground_media
+    monkeypatch.chdir(tmp_path)
+    owner = UserContext(user_id="user-a", owner_profile_id="profile-a", display_name="a", access_token="")
+    key = studio_owner_key(owner.owner_profile_id)
+    source = Path("output/users") / key / "playground/images/imported.jpg"
+    source.parent.mkdir(parents=True)
+    Image.new("RGB", (800, 600), "blue").save(source)
+    from src.apps.studio_access import resolve_studio_reference
+    assert resolve_studio_reference(
+        f"/studio/owned-playground-media/{key}/images/imported.jpg", owner.owner_profile_id,
+    ) == source.relative_to("output").as_posix()
+    app = FastAPI()
+    app.add_api_route("/studio/owned-playground-media/{owner_key}/{relative_path:path}", get_owned_playground_media)
+    app.dependency_overrides[require_studio_user] = lambda: owner
+    with TestClient(app) as client:
+        url = f"/studio/owned-playground-media/{key}/images/imported.jpg"
+        original = client.get(url)
+        assert original.status_code == 200
+        assert original.content == source.read_bytes()
+        assert original.headers["content-type"].startswith("image/jpeg")
+        assert client.get(url + "?preview=320").status_code == 200
+        assert client.get(f"/studio/owned-playground-media/{key}/%2E%2E/studio/secret.jpg").status_code == 404
+        assert client.get("/studio/owned-playground-media/000000000000000000000000/images/imported.jpg").status_code == 404
+        app.dependency_overrides[require_studio_user] = lambda: UserContext("other", "other", "Other", "")
+        assert client.get(url).status_code == 404
+
+
+def test_owned_media_routes_require_auth_and_reject_symlink_escape(tmp_path, monkeypatch):
+    from src.apps.comic_gen.api import get_owned_playground_media
+    from src.apps.studio_access import reset_studio_user, set_studio_user
+    monkeypatch.chdir(tmp_path)
+    owner = UserContext("a", "profile-a", "a", "")
+    key = studio_owner_key(owner.owner_profile_id)
+    outside = tmp_path / "outside.jpg"
+    outside.write_bytes(b"outside")
+    app = FastAPI()
+    app.add_api_route("/studio/owned-media/{owner_key}/{relative_path:path}", get_owned_studio_media)
+    app.add_api_route("/studio/owned-playground-media/{owner_key}/{relative_path:path}", get_owned_playground_media)
+    for area in ("studio", "playground"):
+        root = Path("output/users") / key / area
+        root.mkdir(parents=True)
+        (root / "escape.jpg").symlink_to(outside)
+    app.dependency_overrides[require_studio_user] = lambda: owner
+    with TestClient(app) as client:
+        for route in ("owned-media", "owned-playground-media"):
+            assert client.get(f"/studio/{route}/{key}/escape.jpg").status_code == 404
+        app.dependency_overrides.clear()
+        token = set_studio_user(None)
+        try:
+            assert client.get(f"/studio/owned-playground-media/{key}/escape.jpg").status_code == 401
+        finally:
+            reset_studio_user(token)

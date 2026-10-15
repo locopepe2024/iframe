@@ -129,8 +129,17 @@ def test_signed_reference_becomes_stable_owned_path(studio, monkeypatch):
     assert resolve_studio_reference(signed, script.owner_profile_id) == stored
     with pytest.raises(ValueError, match="another owner"):
         resolve_studio_reference(signed, "foreign")
-    with pytest.raises(ValueError, match="expired"):
-        resolve_studio_reference(studio_media_url(script.owner_profile_id, stored, -10), script.owner_profile_id)
+    expired = studio_media_url(script.owner_profile_id, stored, -10)
+    assert resolve_studio_reference(expired, script.owner_profile_id) == stored
+    # Owner reuse does not turn the expired URL into a public download.
+    from urllib.parse import parse_qs, urlsplit
+    from src.apps.studio_access import verify_studio_media, studio_owner_key
+    from fastapi import HTTPException
+    query = parse_qs(urlsplit(expired).query)
+    with pytest.raises(HTTPException) as error:
+        verify_studio_media(studio_owner_key(script.owner_profile_id), urlsplit(expired).path.split("/", 4)[4],
+                            int(query["expires"][0]), query["signature"][0])
+    assert error.value.status_code == 401
 
 
 @pytest.mark.parametrize("kind", ["foreign", "symlink", "traversal"])

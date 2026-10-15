@@ -97,10 +97,8 @@ def _public_reference_fields(payload, identity: UserContext):
     references = []
     for value in payload.get("input_media", []):
         reference = storage.browser_media_reference(value)
-        key = urlsplit(value).path if value.startswith("/playground/") else value
+        key = urlsplit(value).path if value.startswith(("/playground/", "/studio/media/")) else value
         name = names.get(key) or names.get(value)
-        if name:
-            public_names[reference] = name
         if reference.startswith("/playground/media/"):
             parts = reference.removeprefix("/playground/media/").split("/")
             if len(parts) == 2:
@@ -110,6 +108,16 @@ def _public_reference_fields(payload, identity: UserContext):
                     pass
                 else:
                     reference = _media_url(identity, parts[0], parts[1])
+        elif reference.startswith("/studio/media/"):
+            from ..studio_access import studio_media_url, resolve_studio_reference
+            try:
+                resolved = resolve_studio_reference(reference, identity.owner_profile_id)
+            except (ValueError, FileNotFoundError):
+                pass
+            else:
+                reference = studio_media_url(identity.owner_profile_id, resolved)
+        if name:
+            public_names[reference] = name
         references.append(reference)
     payload["input_media"] = references
     payload["media_names"] = public_names
