@@ -800,7 +800,7 @@ export default function SettingsPage() {
             <FieldLabel>UNIART_BASE_URL</FieldLabel>
             <input
               value={config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1"}
-              onChange={(e) => handleChange("OPENAI_BASE_URL", e.target.value)}
+              onChange={(e) => handleChange("UNIART_BASE_URL", e.target.value)}
               placeholder="https://uniart.fun/v1"
               className={settingsInputClass}
             />

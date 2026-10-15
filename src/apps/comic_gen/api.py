@@ -186,7 +186,8 @@ async def add_cache_control_header(request: Request, call_next):
         "/files/videos/",
         "/files/video_inputs/",
     )
-    if request.url.path.startswith(protected_media_prefixes):
+    normalized_path = re.sub(r"/+", "/", request.url.path)
+    if normalized_path.startswith(protected_media_prefixes):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     response = await call_next(request)
     if request.url.path.startswith("/files/"):

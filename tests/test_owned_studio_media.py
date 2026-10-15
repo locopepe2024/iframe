@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from src.apps.comic_gen.api import get_owned_studio_media, get_provider_media
+from src.apps.comic_gen.api import app as studio_app, get_owned_studio_media, get_provider_media
 from src.apps.identity import UserContext
 from src.apps.studio_access import require_studio_user, signed_provider_media_url, studio_owner_key
 
@@ -58,3 +58,14 @@ def test_provider_media_requires_valid_owner_scoped_signature(tmp_path, monkeypa
     assert valid.content == b"reference"
     assert invalid.status_code == 401
     assert other_owner.status_code == 404
+
+
+def test_static_media_guard_rejects_repeated_slash_owner_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = Path("output/users/owner/studio/probe.txt")
+    source.parent.mkdir(parents=True)
+    source.write_text("private reference")
+
+    with TestClient(studio_app) as client:
+        assert client.get("/files/users/owner/studio/probe.txt").status_code == 404
+        assert client.get("/files//users/owner/studio/probe.txt").status_code == 404
