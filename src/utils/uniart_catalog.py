@@ -145,7 +145,7 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         "id": f"{provider}/{model_id}",
         "api_model_id": model_id,
         "display_name": _display_name(model_id),
-        "description": f"{_display_name(model_id)} via {'nsfw New One' if is_nsfw_model else 'UniArt'}",
+        "description": f"{_display_name(model_id)} via {'GreenA' if is_nsfw_model else 'UniArt'}",
         "family": _family(model_id),
         "provider": provider,
         "capabilities": capabilities,

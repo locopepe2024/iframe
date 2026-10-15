@@ -97,7 +97,7 @@ export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): numb
       // capabilities. Do not locally mark a SKU as recommended/default.
       recommended: false,
       order: models.length - index,
-      badges: [model.provider === 'nsfw' ? 'NSFW New One' : 'UniArt'],
+      badges: [(model.provider === 'nsfw' || model.provider === 'greena') ? 'GreenA' : 'UniArt'],
     },
   } as CatalogModel]));
   catalogRevision += 1;

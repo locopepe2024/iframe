@@ -1,4 +1,4 @@
-"""Image and video adapters for the nsfw host's New One gateway."""
+"""GreenA adapters; historical module and model IDs remain compatible."""
 
 from __future__ import annotations
 
@@ -22,20 +22,20 @@ RATIOS = frozenset({"1:1", "3:4", "4:3", "16:9", "9:16", "3:2", "2:3", "21:9"})
 
 
 def gateway_config(owner_config: dict) -> dict:
-    if owner_config.get("provider") == "nsfw":
+    if owner_config.get("provider") in ("greena", "nsfw"):
         from ..apps.user_config import validate_provider_base_url
         base = validate_provider_base_url("nsfw", owner_config.get("base_url", ""))
         key = owner_config.get("api_key")
         if not key:
-            raise RuntimeError("nsfw New One API key is not configured")
+            raise RuntimeError("GreenA API key is not configured")
         return {"base_url": base, "api_key": key}
-    base = os.getenv("NSFW_NEW_ONE_BASE_URL", "").strip().rstrip("/")
+    base = os.getenv("GREENA_BASE_URL", os.getenv("NSFW_NEW_ONE_BASE_URL", "")).strip().rstrip("/")
     parsed = urlsplit(base)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.path.endswith("/v1"):
-        raise RuntimeError("NSFW_NEW_ONE_BASE_URL must be a New One /v1 URL")
+        raise RuntimeError("GREENA_BASE_URL (legacy NSFW_NEW_ONE_BASE_URL) must be a New One /v1 URL")
     key = owner_config.get("api_key") or owner_config.get("UNIART_API_KEY")
     if not key:
-        raise RuntimeError("nsfw New One API key is not configured")
+        raise RuntimeError("GreenA API key is not configured")
     return {"base_url": base, "api_key": key}
 
 
@@ -64,7 +64,7 @@ def _size(value: str | None) -> tuple[str, str | None]:
     raise ValueError("Seedream resolution must be 1K or 2K")
 
 
-class NSFWNewOneImageModel(ImageGenModel):
+class GreenAImageModel(ImageGenModel):
     def __init__(self, owner_config: dict):
         self.config = gateway_config(owner_config)
 
@@ -72,7 +72,7 @@ class NSFWNewOneImageModel(ImageGenModel):
         started = time.time()
         model = kwargs.get("model_name") or f"nsfw/{SEEDREAM_MODEL}"
         if model not in SEEDREAM_IDS:
-            raise ValueError("Unsupported nsfw image model")
+            raise ValueError("Unsupported GreenA image model")
         resolution, inferred_ratio = _size(kwargs.get("size"))
         ratio = kwargs.get("aspect_ratio") or inferred_ratio or "1:1"
         if ratio not in RATIOS:
@@ -122,7 +122,7 @@ def _result_url(result: dict) -> str | None:
     return result.get("image_url") or result.get("result_url")
 
 
-class NSFWNewOneVideoModel(VideoGenModel):
+class GreenAVideoModel(VideoGenModel):
     def __init__(self, owner_config: dict):
         self.config = gateway_config(owner_config)
 
@@ -130,7 +130,7 @@ class NSFWNewOneVideoModel(VideoGenModel):
         started = time.time()
         model_id = kwargs.get("model") or kwargs.get("model_name") or "nsfw/wan3.0"
         if model_id not in WAN_IDS:
-            raise ValueError("Unsupported nsfw video model")
+            raise ValueError("Unsupported GreenA video model")
         base = self.config["base_url"]
         headers = {"Authorization": f"Bearer {self.config['api_key']}"}
         task_id = kwargs.get("resume_task_id")
@@ -192,3 +192,8 @@ class NSFWNewOneVideoModel(VideoGenModel):
                         target.write(chunk)
         os.replace(output_path + ".part", output_path)
         return output_path, time.time() - started
+
+
+# Compatibility for persisted deployments and historical imports.
+NSFWNewOneImageModel = GreenAImageModel
+NSFWNewOneVideoModel = GreenAVideoModel

@@ -20,7 +20,7 @@ def test_explicit_catalog_uses_matching_profile_and_allowlist(provider, monkeypa
     config = {"provider": provider, "api_key": "private-key", "base_url": f"https://{provider}.example.test/v1"}
     models = provider_catalog.fetch_provider_catalog(provider, config)
     assert [model["id"] for model in models] == [f"{provider}/wan3.0"]
-    assert models[0]["provider"] == provider
+    assert models[0]["provider"] == ("greena" if provider == "nsfw" else provider)
     assert calls == [(f"https://{provider}.example.test/v1/models", "Bearer private-key")]
     assert "private-key" not in json.dumps(models)
 
@@ -48,7 +48,7 @@ def test_explicit_endpoint_uses_current_owner_profile_and_redacts_upstream_error
     token = set_studio_user(owner)
     try:
         result = api.get_uniart_models(provider="nsfw")
-        assert result["provider"] == "nsfw"
+        assert result["provider"] == "greena"
         assert result["models"] == [{"id": "nsfw/chat-model"}]
         monkeypatch.setattr(provider_catalog, "fetch_provider_catalog", lambda *a: (_ for _ in ()).throw(RuntimeError("private-key")))
         with pytest.raises(HTTPException) as error:
