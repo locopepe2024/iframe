@@ -25,3 +25,11 @@ Affected paths: backend index/API and tests; frontend API, shot reference helper
 ## Verification
 
 Reproduce broad-index leakage and project/global same-name collision; test explicit project view excludes globals, includes inherited series, preserves local precedence and import behavior. Verify drawer/chips and submission cannot select an unimported global; imported project copies remain usable; selected variant refresh, authoritative empty/deleted entries, legacy compatibility and failed refresh. Run backend index/owner tests, frontend reference and workbench tests, typecheck/build and CI. Submit an independent PR based on merged #119 for administrator review; #120 remains separate.
+
+## Main reconciliation — 2026-10-16
+
+Main `60d6a909` already contains #109/#110 and #122–#127. This branch reapplies the project-index boundary from #121 to that actual baseline. Preserve legacy media migration and owner-specific output paths from #110; preserve adopted prompt/style edits and ordered saves from #124. Replace #109's prompt-name-based global inclusion in the shot editor with explicit project membership, including owning-series inheritance. Candidate/import workbenches retain their wider pool.
+
+Resolved integration conflicts in the index signature, StoryboardR2V index state/reference submission, and CI steps. Keep all owner-poster and style-edit CI coverage alongside asset-scope coverage. Correct two pre-existing integration test assumptions: use the real asset resolver for refinement, and include the owner output directory in batch-render assertions. No runtime weakening or automatic import is introduced.
+
+Review as the current-main replacement for #121; no force push or modification of that branch's unfinished local merge. No production deployment.
