@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindH3MultiReferencePrompt, resolveReferenceSubmission } from "./referenceAssets";
+import { bindH3MultiReferencePrompt, buildReferenceAssets, resolveReferenceSubmission, refreshReferenceSubmission } from "./referenceAssets";
 
 const assets = [
     {
@@ -94,4 +94,55 @@ describe("storyboard multi-reference assets", () => {
         expect(prompt).toContain("穿心莲 (reference asset 1) beside 女主播 (reference asset 2) <Picture 4>");
         expect(prompt).not.toMatch(/<Subject\s+\d+>/);
     });
+});
+
+const uploaded = {
+    asset_type: "character" as const, asset_id: "imported-upload", name: "样片-血狼-天台",
+    source_scope: "episode" as const, selected_variant_id: "latest",
+    variants: [{ id: "old", url: "old.jpg" }, { id: "latest", url: "uploaded.jpg" }],
+};
+it("uses an imported project upload from the normalized index", () => {
+    const references = buildReferenceAssets([uploaded], [], [], []);
+    const result = resolveReferenceSubmission("[character:样片-血狼-天台] [character:样片-血狼-天台]", references);
+    expect(result.urls).toEqual(["uploaded.jpg"]);
+    expect(result.unresolvedNames).toEqual([]);
+});
+it("treats an empty live index as authoritative and preserves absent-index legacy reads", () => {
+    const scene = { id: "room", name: "Room", image_asset: { variants: [{ id: "v", url: "room.jpg" }] } };
+    expect(buildReferenceAssets([], [], [scene], [])).toEqual([]);
+    expect(resolveReferenceSubmission("[scene:Room]", buildReferenceAssets(undefined, [], [scene], [])).urls).toEqual(["room.jpg"]);
+});
+it("reports missing references once even when some other references resolve", () => {
+    const result = resolveReferenceSubmission("[character:女主播] [scene:Missing] [scene:Missing]", assets);
+    expect(result.urls).toEqual(["host.jpg"]);
+    expect(result.unresolvedNames).toEqual(["Missing"]);
+});
+it("refreshes the selected upload before submission and never uses a deleted cached entry", async () => {
+    const fetchIndex = async (projectId: string) => {
+        expect(projectId).toBe("project-a");
+        return { assets: [uploaded] };
+    };
+    const fresh = await refreshReferenceSubmission("project-a", "[character:样片-血狼-天台]", {}, fetchIndex);
+    expect(fresh.submission.urls).toEqual(["uploaded.jpg"]);
+    const deleted = await refreshReferenceSubmission("project-a", "[character:样片-血狼-天台]", {}, async () => ({ assets: [] }));
+    expect(deleted.submission.urls).toEqual([]);
+    expect(deleted.submission.unresolvedNames).toEqual(["样片-血狼-天台"]);
+});
+it("fails a reference refresh without returning stale references", async () => {
+    await expect(refreshReferenceSubmission("project-a", "[character:样片-血狼-天台]", {}, async () => { throw new Error("index offline"); }))
+        .rejects.toThrow("index offline");
+});
+
+it("does not use an unimported global upload even when its name matches a tag", () => {
+    const references = buildReferenceAssets([{ ...uploaded, source_scope: "global" }], [], [], []);
+    const result = resolveReferenceSubmission("[character:样片-血狼-天台]", references);
+    expect(result.urls).toEqual([]);
+    expect(result.unresolvedNames).toEqual(["样片-血狼-天台"]);
+});
+it("does not let a same-name global candidate override a project asset", () => {
+    const references = buildReferenceAssets([
+        uploaded,
+        { ...uploaded, asset_id: "unimported", source_scope: "global", variants: [{ id: "latest", url: "wrong.jpg" }] },
+    ], [], [], []);
+    expect(resolveReferenceSubmission("[character:样片-血狼-天台]", references).urls).toEqual(["uploaded.jpg"]);
 });

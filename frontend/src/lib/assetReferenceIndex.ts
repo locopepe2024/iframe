@@ -37,3 +37,13 @@ export function effectiveReferenceIndex(
 ): AssetReferenceIndexEntry[] {
   return index ?? legacyAssetsToReferenceIndex(characters, scenes, props);
 }
+
+/** Shot pickers consume membership, never the entire reusable candidate pool. */
+export function projectReferenceIndex(
+  index: AssetReferenceIndexEntry[] | undefined,
+  characters: any[], scenes: any[], props: any[],
+): AssetReferenceIndexEntry[] {
+  const localOnly = (items: any[]) => items.filter((item) => item.source !== "global");
+  return effectiveReferenceIndex(index, localOnly(characters), localOnly(scenes), localOnly(props))
+    .filter((entry) => entry.source_scope !== "global");
+}

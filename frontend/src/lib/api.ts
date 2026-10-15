@@ -558,6 +558,14 @@ export const api = {
         return res.data;
     },
 
+    getProjectAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
+        const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`, {
+            params: { scope: "project" },
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
     getAssetLibraryIndex: async (): Promise<AssetReferenceIndex> => {
         const res = await axios.get<AssetReferenceIndex>(`${API_URL}/asset-index`, {
             headers: { "Cache-Control": "no-cache" },

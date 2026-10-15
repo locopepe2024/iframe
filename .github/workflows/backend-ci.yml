@@ -117,6 +117,12 @@ jobs:
         working-directory: frontend
         run: npm run verify:playground
 
+      - name: Verify shot asset workspace boundary
+        working-directory: frontend
+        run: |
+          npm test -- --run src/__tests__/project-asset-index-api.test.ts
+          npm run test:ui -- src/components/modules/storyboard-r2v/referenceAssets.test.tsx src/components/modules/storyboard-r2v/AssetDrawer.test.tsx src/components/modules/storyboard-r2v/AssetChipBar.scope.test.tsx src/components/modules/CharacterWorkbench.test.tsx src/components/modules/cast/CastWorkbenchModal.test.tsx
+
       - name: Build frontend export
         working-directory: frontend
         env:
