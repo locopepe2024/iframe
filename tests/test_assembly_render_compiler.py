@@ -1,5 +1,7 @@
 """Assembly plan render compiler and endpoint contract tests."""
 
+import array
+import math
 import os
 import shutil
 import subprocess
@@ -111,7 +113,8 @@ def _plan(scope: str, clips: list[AssemblyClip], duration_ms: int) -> AssemblyEd
 
 
 def _fake_ffmpeg_run(command, **_kwargs):
-    Path(command[-1]).write_bytes(b"rendered-video")
+    if "-filter_complex" in command:
+        Path(command[-1]).write_bytes(b"rendered-video")
 
     class Result:
         returncode = 0
@@ -204,7 +207,7 @@ def test_series_plan_renders_three_episode_bookend_timeline(pipeline):
     assert Path("output", series.merged_video_url).is_file()
     command = run.call_args.args[0]
     assert command.count("-i") == 3
-    assert "concat=n=3:v=1:a=0[outv]" in command[command.index("-filter_complex") + 1]
+    assert "concat=n=3:v=1:a=1[outv][outa]" in command[command.index("-filter_complex") + 1]
 
 
 def test_render_rejects_resource_owned_by_another_profile(pipeline):
@@ -340,7 +343,11 @@ def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
                 "lavfi",
                 "-i",
                 f"color=c={color}:s=160x90:d=1:r=24",
-                "-an",
+                *(
+                    ["-f", "lavfi", "-i", f"sine=frequency={440 + index * 220}:duration=1",
+                     "-c:a", "aac", "-shortest"]
+                    if index != 1 else ["-an"]
+                ),
                 "-c:v",
                 "libx264",
                 "-pix_fmt",
@@ -420,3 +427,75 @@ def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
     assert samples[0][0] > samples[0][1] + 80
     assert samples[1][1] > samples[1][0] + 60
     assert samples[2][2] > samples[2][1] + 80
+
+    streams = subprocess.run(
+        [ffprobe, "-v", "error", "-select_streams", "a:0",
+         "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(output)],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert streams == "aac", "Assembly must retain source audio"
+
+    # Sound survives on both sides of a silent source, without shifting it.
+    levels = []
+    for start in (0.2, 1.2, 2.2):
+        pcm = subprocess.run([
+            ffmpeg, "-v", "error", "-ss", str(start), "-i", str(output),
+            "-t", "0.5", "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-",
+        ], check=True, capture_output=True).stdout
+        values = array.array("h", pcm)
+        levels.append(math.sqrt(sum(v * v for v in values) / len(values)))
+    assert levels[0] > 100
+    assert levels[1] < 10
+    assert levels[2] > 100
+
+
+def test_real_ffmpeg_source_audio_respects_trim_retiming_and_gain(pipeline):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg and ffprobe are required")
+    source = Path("output/video/audio-controls.mp4")
+    source.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=red:s=160x90:d=2:r=24",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=1.5",
+        "-af", "adelay=500", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(source),
+    ], check=True, capture_output=True)
+    project = _project("audio-controls", "video/audio-controls.mp4")
+    pipeline.scripts[project.id] = project
+    clip = _clip(project.id, 0, 500, source_start_ms=600, source_end_ms=1600)
+    project.assembly_plan = _plan("project", [clip], 500)
+    levels = []
+    for gain in (1, 0.5, 0):
+        clip.gain = gain
+        # Pydantic keeps a validated copy in the plan; edit the actual clip.
+        project.assembly_plan.lanes[0].clips[0].gain = gain
+        result = pipeline.render_assembly_plan("project", project.id)
+        pcm = subprocess.run([
+            ffmpeg, "-v", "error", "-ss", "0.1", "-i", str(Path("output") / result.merged_video_url),
+            "-t", "0.25", "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-",
+        ], check=True, capture_output=True).stdout
+        values = array.array("h", pcm)
+        assert len(values) == pytest.approx(2000, abs=10)
+        levels.append(math.sqrt(sum(v * v for v in values) / len(values)))
+    assert levels[0] > 100
+    assert levels[1] / levels[0] == pytest.approx(0.5, abs=0.05)
+    assert levels[2] < 1
+
+
+@pytest.mark.parametrize("failure", [
+    FileNotFoundError("ffprobe unavailable"),
+    subprocess.TimeoutExpired("ffprobe", 20),
+    subprocess.CalledProcessError(1, "ffprobe"),
+])
+def test_audio_probe_failure_does_not_publish_silent_output(pipeline, failure):
+    source = Path("output/video/probe.mp4")
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"unreadable")
+    project = _project("probe", "video/probe.mp4")
+    project.assembly_plan = _plan("project", [_clip("probe", 0, 1000)], 1000)
+    pipeline.scripts[project.id] = project
+    with patch("src.apps.comic_gen.pipeline.get_ffmpeg_path", return_value="/usr/bin/ffmpeg"), \
+         patch("src.apps.comic_gen.pipeline.subprocess.run", side_effect=failure):
+        with pytest.raises(RuntimeError, match="source audio probe failed"):
+            pipeline.render_assembly_plan("project", project.id)
+    assert not project.merged_video_url
