@@ -4761,7 +4761,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         entities_json = {
             "characters": [{
                 "id": c.id,
@@ -4899,7 +4899,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
@@ -5234,7 +5234,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Frame {frame_id} not found")
 
         frame_idx = script.frames.index(frame)
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
 
@@ -5487,7 +5487,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
             
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         script = self.storyboard_generator.generate_storyboard(
             script,
             characters=resolved["characters"],
@@ -5846,7 +5846,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if polished and polished == prompt.strip():
             return prompt
         projected = append_projected_shot_context(prompt, frame.director_shot_context)
-        characters = self.resolve_episode_assets(script)["characters"]
+        characters = self.resolve_project_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
@@ -5859,7 +5859,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((item for item in script.frames if item.id == frame_id), None)
         if not frame:
             raise ValueError("Frame not found")
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         characters = {item.id: item for item in resolved["characters"]}
         scenes = {item.id: item for item in resolved["scenes"]}
         props = {item.id: item for item in resolved.get("props", [])}
@@ -5982,10 +5982,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Update frame with final prompt
             frame.image_prompt = final_prompt
             
-            # Resolve assets across Episode → Series → Global layers so
-            # shared/global characters & scenes are usable when rendering
-            # this frame (frame id references are left unchanged).
-            resolved = self.resolve_episode_assets(script)
+            # Resolve project membership and its owning series only. Global
+            # candidates require explicit import; frame IDs remain unchanged.
+            resolved = self.resolve_project_assets(script)
             # Find scene for this frame
             scene = next((s for s in resolved["scenes"] if s.id == frame.scene_id), None)
 
@@ -9738,18 +9737,35 @@ class ComicGenPipeline(StudioOwnerMixin):
                 episodes.append(script)
         return episodes
 
-    def resolve_episode_assets(self, episode: Script, series: Optional[Series] = None) -> Dict[str, List]:
+    def resolve_project_assets(self, episode: Script) -> Dict[str, List]:
+        """Project membership only: local assets and its owning series.
+
+        Global-library visibility is an import/reference candidate capability,
+        not implicit membership in storyboard production context.
+        """
+        return self.resolve_episode_assets(episode, include_global=False)
+
+    def resolve_episode_assets(self, episode: Script, series: Optional[Series] = None, *, include_global: bool = True) -> Dict[str, List]:
         """Merge Episode-local assets with Series shared assets and the
         project-independent global asset library. Priority by ID:
         Episode > Series > Global (local always wins). The global library
         is the lowest layer and applies to every project, with or without
         a parent series. When the global library is empty this behaves
-        identically to the previous two-layer (Episode/Series) merge."""
+        identically to the previous two-layer (Episode/Series) merge.
+        Project production consumers use resolve_project_assets to exclude
+        unimported global candidates; the broad default remains compatible.
+        """
         if not series:
             # Auto-lookup series if episode has series_id
             if episode.series_id:
                 series = self.get_series(episode.series_id, episode.owner_profile_id)
         if not series:
+            if not include_global:
+                return {
+                    "characters": list(episode.characters),
+                    "scenes": list(episode.scenes),
+                    "props": list(episode.props),
+                }
             # No parent series — episode-local assets sit on top of the
             # global library (lowest layer). With an empty library this
             # yields the episode's own assets (back-compat).
@@ -9769,6 +9785,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         merged_characters = list(episode.characters) + [c for c in series.characters if c.id not in ep_char_ids]
         merged_scenes = list(episode.scenes) + [s for s in series.scenes if s.id not in ep_scene_ids]
         merged_props = list(episode.props) + [p for p in series.props if p.id not in ep_prop_ids]
+
+        if not include_global:
+            return {"characters": merged_characters, "scenes": merged_scenes, "props": merged_props}
 
         # Fold the global library underneath as the lowest layer — only
         # ids absent from both the Episode and Series layers. No-op when
