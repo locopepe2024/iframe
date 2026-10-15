@@ -80,10 +80,14 @@ def studio_uniart_config() -> Dict[str, str]:
 
 
 def studio_nsfw_new_one_config() -> Dict[str, str]:
-    # Existing owner credentials already authorize the local New One gateway.
-    # Keep credential storage intact while the nsfw node owns its address.
-    config = studio_uniart_config()
-    return {"api_key": config["api_key"]}
+    user = require_studio_user()
+    return runtime_nsfw_for_owner(user.user_id, user.owner_profile_id)
+
+
+def runtime_nsfw_for_owner(owner_user_id: str, owner_profile_id: str) -> Dict[str, str]:
+    from .user_config import get_user_config_store
+    identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
+    return get_user_config_store().get_runtime_nsfw(identity)
 
 
 def studio_owner_key(owner_profile_id: str) -> str:
