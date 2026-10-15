@@ -2,6 +2,8 @@
 
 Date: 2026-10-15. This is a read-only comparison of existing media, with no new generation. Source: `s09-motion.mp4` (120 frames, 30 fps, 4.00 s). Outputs: `s09-action-v2-replacement.mp4` and `s09-precut-hold-v3-replacement.mp4` (each 90 frames, 24 fps, 3.75 s). All are in `../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/`. Source local frame 112 is a hard cut; the table below stops before it.
 
+**Correction after consecutive-frame review:** the source has a first high lift at frames 69–73, a lower/back-turn phase at 74–81, and a second high lift at 82–87. The earlier comparison of output first lift with source frame 87 incorrectly matched different events. See [the source review](2026-10-15-s09-source-sequential-review-v1.md). The first-lift timing and whether either output preserves both lifts require new event pairing; the deep-fold finding remains.
+
 ## Observed
 
 Frames were inspected at a stride of three: source 24–111 (0.10 s per sample), outputs 18–87 (0.125 s per sample). Intervals below are **visible sampled ranges**, not exact action boundaries. Uncertainty is at least one sampling interval on either side, and some prop directions are blurred or cropped.
@@ -10,14 +12,15 @@ Frames were inspected at a stride of three: source 24–111 (0.10 s per sample),
 |---|---|---|---|
 | Marked forward fold with broad near-horizontal shaft | 39–57 / 1.30–1.90 s; deepest around 45–54 | 27–42 / 1.125–1.750 s; torso remains visibly shallower | No comparably deep fold in 18–87; low forward lean around 27–39 only |
 | Recovery toward upright | 60–66 / 2.00–2.20 s | 45–48 / 1.875–2.000 s | Already largely upright around 42–48 / 1.750–2.000 s |
-| Raised or steeply diagonal shaft | clearly at 87 / 2.90 s; intermediate turns and lifts at 69–84 | begins around 51–54 / 2.125–2.250 s and continues through multiple orientations | begins around 42–48 / 1.750–2.000 s |
+| First raised or steeply diagonal shaft | 69–73 / 2.300–2.433 s | candidate around 51–54 / 2.125–2.250 s; equivalence unresolved | candidate around 42–48 / 1.750–2.000 s; equivalence unresolved |
+| Lower/back-turn interval, then second lift | lower/back-turn 74–81 / 2.467–2.700 s; second lift 82–87 / 2.733–2.900 s | corresponding two-event pattern not yet scored | corresponding two-event pattern not yet scored |
 | Broad front extension | visible near 99–111 / 3.30–3.70 s | near 72–81 / 3.000–3.375 s; later view and oversized tip differ | near 72–87 / 3.000–3.625 s; tip and perspective differ |
 
-The source deep-fold sampled interval spans at least 18 frame steps / 0.60 s; v2's shallower low pose spans at least 15 steps / 0.625 s. These are **not equivalent motion phases**, so their similar durations do not establish matching rhythm. At the first clear high-diagonal source sample (2.90 s), the v2 spear has already entered raised orientations by about 2.13–2.25 s. Under a simple 4.00-to-3.75-second duration mapping, 2.90 s would map to 2.72 s, still later than v2's first lift. v3 shows the same broad phase problem. The source cut at 3.733 s has no matching cut in either output.
+The source deep-fold sampled interval spans at least 18 frame steps / 0.60 s; v2's shallower low pose spans at least 15 steps / 0.625 s. These are **not equivalent motion phases**, so their similar durations do not establish matching rhythm. The source's first high lift occurs at 2.300–2.433 s, followed by a lower/back-turn interval and a second lift at 2.733–2.900 s. Output lift candidates cannot be assigned a timing error until these repeated events are matched by semantics and order. The source cut at 3.733 s has no matching cut in either output.
 
 ## Direct implication
 
-The useful temporal unit is an **event interval**: onset, peak/hold, recovery, direction reversal, and cut. A video with fewer encoded frames can preserve the same real-time event intervals; 30 fps versus 24 fps alone does not explain the mismatch. For s09 the visible problem is phase identity plus event allocation: v2's low phase is too shallow, and both outputs allocate visible time to a lifted spear before the source's high-diagonal anchor. Equal-duration screenshots and a single speed multiplier cannot resolve this.
+The useful temporal unit is an **event interval**: onset, peak/hold, recovery, direction reversal, and cut. A video with fewer encoded frames can preserve the same real-time event intervals; 30 fps versus 24 fps alone does not explain the mismatch. For s09, v2's low phase is too shallow, and whether either output preserves the source's two lifts with the intervening lower/back-turn phase remains unresolved. Equal-duration screenshots and a single speed multiplier cannot resolve this.
 
 ## Not yet proven
 
@@ -48,4 +51,4 @@ The user's more specific hypothesis is that fast source actions were editorially
 
 **Validation change:** First detect candidate within-shot compression in the source with consecutive-frame posture, shaft-angle and red-end changes, excluding the cut at frame 112 and marking blur/occlusion. Compare these changes with slower neighboring windows and, ideally, the unedited capture or edit metadata. Then build a local 30-to-24 fps baseline at unchanged real-time duration to see which visible events are lost through ordinary resampling. Finally compare H3 event order and time intervals against both source and baseline. A generation prompt should specify *observed event times and holds* rather than infer an unverified original-speed action between retained frames.
 
-**Local resampling control:** `ffmpeg -i s09-motion.mp4 -vf fps=24` produced 96 frames over the same 4.000 s. At output frames 32, 36 and 44 (1.333, 1.500 and 1.833 s), the marked forward fold remains visible; frame 52 (2.167 s) shows recovery; frame 70 (2.917 s) shows the raised shaft. Thus ordinary 30-to-24 fps conversion at fixed duration retains these coarse s09 anchors. It does not account for the existing H3 outputs' shallower/missing fold and early lift. This control does not test H3's internal sampling, nor prove whether the input was retimed before export.
+**Local resampling control:** `ffmpeg -i s09-motion.mp4 -vf fps=24` produced 96 frames over the same 4.000 s. At output frames 32, 36 and 44 (1.333, 1.500 and 1.833 s), the marked forward fold remains visible; frame 52 (2.167 s) shows recovery; frame 70 (2.917 s) shows the **second** raised shaft. Thus ordinary 30-to-24 fps conversion at fixed duration retains these coarse s09 anchors. It does not account for the existing H3 outputs' shallower/missing fold. This control does not test H3's internal sampling, nor prove whether the input was retimed before export.
