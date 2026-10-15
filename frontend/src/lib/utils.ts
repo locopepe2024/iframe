@@ -8,10 +8,27 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getAssetUrl(path: string | null | undefined): string {
     if (!path) return "";
+    // /files is already rooted at output/. Imported Playground assets retain
+    // filesystem paths, so remove that root once before building the URL.
+    path = path.replace(/^\/?output\//, "");
+    const ownedPlaygroundPath = /^\/?users\/([0-9a-f]{24})\/playground\/(.+)$/.exec(path);
+    if (ownedPlaygroundPath) {
+        return `${API_URL}/studio/owned-playground-media/${ownedPlaygroundPath[1]}/${ownedPlaygroundPath[2].split('/').map(encodeURIComponent).join('/')}`;
+    }
+    if (path.startsWith("/studio/owned-playground-media/")) return `${API_URL}${path}`;
+    // Editor tabs outlive signed display URLs. Same-origin Studio previews
+    // use the authenticated owner route, which checks ownership on every GET.
+    const studioPath = path.startsWith("/") ? path : path.startsWith(`${API_URL}/`) ? path.slice(API_URL.length) : "";
+    const signedStudio = /^\/studio\/media\/([0-9a-f]{24})\/(.+)$/.exec(studioPath.split("?")[0]);
+    if (signedStudio) {
+        const preview = new URLSearchParams(path.split("?")[1] || "").get("preview");
+        return `${API_URL}/studio/owned-media/${signedStudio[1]}/${signedStudio[2]}${preview ? `?preview=${encodeURIComponent(preview)}` : ""}`;
+    }
+    if (path.startsWith("/studio/owned-media/")) return `${API_URL}${path}`;
     if (path.startsWith("/studio/media/") || path.startsWith("/playground/media/") || path.startsWith("/playground/input-media/")) {
         return `${API_URL}${path}`;
     }
-    const ownedStudioPath = /^(?:output\/)?users\/([0-9a-f]{24})\/studio\/(.+)$/.exec(path);
+    const ownedStudioPath = /^\/?(?:output\/)?users\/([0-9a-f]{24})\/studio\/(.+)$/.exec(path);
     if (ownedStudioPath) {
         return `${API_URL}/studio/owned-media/${ownedStudioPath[1]}/${ownedStudioPath[2].split('/').map(encodeURIComponent).join('/')}`;
     }
