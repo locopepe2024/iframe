@@ -38,6 +38,10 @@ Verification: `python3 -m pytest -q tests/test_provider_media_config.py tests/te
 
 ## Open evidence / follow-up
 
+### Adapter naming update — GreenA
+
+The user-facing supplier/adapter name is GreenA. New profile/catalog API calls accept `greena`; `nsfw` remains an alias for existing clients and SQLite profile keys. Both aliases address the same encrypted profile, not independent credentials. Public profile metadata identifies `greena` with display name `GreenA`. Existing `nsfw/<model>` IDs and upstream model names remain stable so saved projects and in-flight task identifiers keep working. Adapter classes expose GreenA names while old imports remain aliases. This is a naming change, not a data/credential migration or task routing change.
+
 Expired historical preview requests have been observed; their relationship to the reported browser `Failed to fetch` is not established. Diagnose the exact failed browser operation separately; do not treat a signing configuration change as proof that this UI error is fixed.
 
 ## Slice 2a — independent owner provider profiles

@@ -21,7 +21,18 @@ from .identity import UserContext, _api_key_context, _set_browser_profile_cookie
 
 
 SECRET_FIELDS = {"UNIART_API_KEY"}
-ProviderId = Literal["uniart", "nsfw"]
+ProviderId = Literal["uniart", "greena", "nsfw"]
+
+
+def provider_storage_id(provider: ProviderId) -> str:
+    """GreenA keeps its historical database key and saved model namespace."""
+    if provider not in ("uniart", "greena", "nsfw"):
+        raise HTTPException(422, "Unknown model provider")
+    return "nsfw" if provider == "greena" else provider
+
+
+def provider_public_id(provider: ProviderId) -> str:
+    return "greena" if provider_storage_id(provider) == "nsfw" else "uniart"
 
 
 def validate_provider_base_url(provider: ProviderId, value: str) -> str:
@@ -33,11 +44,11 @@ def validate_provider_base_url(provider: ProviderId, value: str) -> str:
                  and parsed.username is None and parsed.password is None
                  and not any(c.isspace() or ord(c) < 32 for c in base)
                  and not any(c in base for c in ("?", "#", "\\"))
-                 and (provider != "nsfw" or parsed.path.endswith("/v1")))
+                 and (provider_storage_id(provider) != "nsfw" or parsed.path.endswith("/v1")))
     except ValueError:
         valid = False
     if not valid:
-        raise HTTPException(422, "Provider base URL must be HTTP(S), without credentials, query or fragment; NSFW requires /v1")
+        raise HTTPException(422, "Provider base URL must be HTTP(S), without credentials, query or fragment; GreenA requires /v1")
     return base
 
 
@@ -115,8 +126,7 @@ class UserConfigStore:
             )
 
     def _provider_row(self, identity: UserContext, provider: ProviderId):
-        if provider not in ("uniart", "nsfw"):
-            raise HTTPException(422, "Unknown model provider")
+        provider = provider_storage_id(provider)
         with self._connect() as connection:
             return connection.execute(
                 "SELECT * FROM provider_configs WHERE owner_profile_id = ? AND provider = ?",
@@ -126,7 +136,8 @@ class UserConfigStore:
     def get_provider_profile(self, identity: UserContext, provider: ProviderId) -> dict:
         row = self._provider_row(identity, provider)
         return {
-            "provider": provider,
+            "provider": provider_public_id(provider),
+            "display_name": "GreenA" if provider_public_id(provider) == "greena" else "UniArt",
             "source": "profile" if row else "legacy",
             "base_url": row["base_url"] if row else "",
             "configured": bool(row and json.loads(row["secrets_json"]).get("api_key")),
@@ -137,6 +148,7 @@ class UserConfigStore:
         # Read-modify-write under one lock so concurrent partial saves preserve
         # the other field. This path never derives/replaces workspace identity.
         with self._lock:
+            provider = provider_storage_id(provider)
             row = self._provider_row(identity, provider)
             base = validate_provider_base_url(provider, base_url if base_url is not None else (row["base_url"] if row else ""))
             secrets = json.loads(row["secrets_json"]) if row else {}
@@ -171,7 +183,7 @@ class UserConfigStore:
             key = self._decrypt(secrets["api_key"], identity, data_key)
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
             raise HTTPException(503, "Stored provider credential cannot be decrypted") from exc
-        return {"provider": provider, "api_key": key,
+        return {"provider": provider_public_id(provider), "api_key": key,
                 "base_url": validate_provider_base_url(provider, row["base_url"]),
                 "public_base_url": row["base_url"]}
 

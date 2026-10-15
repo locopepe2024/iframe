@@ -2443,7 +2443,7 @@ export interface UniArtCatalogModelResponse {
   display_name: string;
   description: string;
   family: string;
-  provider: 'uniart' | 'nsfw';
+  provider: 'uniart' | 'greena' | 'nsfw';
   capabilities: string[];
   duration?: {
     type: 'slider' | 'buttons' | 'fixed';

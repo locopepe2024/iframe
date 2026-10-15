@@ -176,7 +176,7 @@ if (typeof window !== 'undefined') {
                 family: entry.family || (image ? 'gpt-image' : 'uniart-video'),
                 status: 'active',
                 capabilities: caps,
-                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: entry.ui?.order ?? 100, recommended: entry.recommended ?? false, badges: [id.startsWith('nsfw/') ? 'NSFW New One' : 'UniArt'] },
+                ui: { selection_group: image ? 'image' : 'i2v', visible_in: image ? ['project_settings','series_settings','global_settings'] : ['project_settings','series_settings','video_sidebar','global_settings'], order: entry.ui?.order ?? 100, recommended: entry.recommended ?? false, badges: [id.startsWith('nsfw/') ? 'GreenA' : 'UniArt'] },
             };
         }
     } catch { /* ignore invalid local snapshot */ }
@@ -228,7 +228,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
                         : ['project_settings', 'series_settings', 'video_sidebar', 'global_settings'],
                     order: models.length - models.indexOf(entry) + 100,
                     recommended: id === 'uniart/seedance-2.5-vip',
-                    badges: [id.startsWith('nsfw/') ? 'NSFW New One' : 'UniArt'],
+                    badges: [id.startsWith('nsfw/') ? 'GreenA' : 'UniArt'],
                 },
             };
         }
@@ -317,9 +317,9 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
         ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
         : null;
     return (
-        (!UNIART_RUNTIME_ACTIVE || (model.provider !== 'uniart' && model.provider !== 'nsfw') || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
+        (!UNIART_RUNTIME_ACTIVE || (model.provider !== 'uniart' && model.provider !== 'nsfw' && model.provider !== 'greena') || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
         model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
-        (!enabled || (model.provider !== 'uniart' && model.provider !== 'nsfw') || enabled.includes(model.id) ||
+        (!enabled || (model.provider !== 'uniart' && model.provider !== 'nsfw' && model.provider !== 'greena') || enabled.includes(model.id) ||
             (model.id === 'nsfw/seedream_5.0Pro_nsfw' && enabled.includes('uniart/seedream_5.0Pro_nsfw'))) &&
         model.status !== 'planned' &&
         model.status !== 'deprecated' &&
