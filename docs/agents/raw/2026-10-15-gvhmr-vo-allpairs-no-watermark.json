@@ -1,0 +1,3015 @@
+{
+  "schema": "gvhmr-simplevo-pair-diagnostic.v1",
+  "source_sha256": "49c73ccaaa2bf36d89c234006417320f7ffd5f9c5d58e6eafd227e38d4fa8602",
+  "focal_length_px": 619.6068232230948,
+  "watermark_check_enabled": false,
+  "notes": "Independent pair diagnostics; RANSAC outcomes can vary between runs",
+  "pairs": [
+    {
+      "pair": [
+        0,
+        1
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            415,
+            369
+          ],
+          "ratio_matches": 203,
+          "median_displacement_px": 3.9708595275878906,
+          "homography_inliers": 153,
+          "essential_inliers": 165,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            102,
+            83
+          ],
+          "ratio_matches": 35,
+          "median_displacement_px": 3.7858784198760986,
+          "homography_inliers": 21,
+          "essential_inliers": 27,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        1,
+        2
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            369,
+            379
+          ],
+          "ratio_matches": 107,
+          "median_displacement_px": 7.772398471832275,
+          "homography_inliers": 43,
+          "essential_inliers": 81,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            83,
+            102
+          ],
+          "ratio_matches": 32,
+          "median_displacement_px": 3.452688217163086,
+          "homography_inliers": 20,
+          "essential_inliers": 26,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        2,
+        3
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            379,
+            354
+          ],
+          "ratio_matches": 84,
+          "median_displacement_px": 5.306685447692871,
+          "homography_inliers": 45,
+          "essential_inliers": 59,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            102,
+            67
+          ],
+          "ratio_matches": 42,
+          "median_displacement_px": 3.2968404293060303,
+          "homography_inliers": 28,
+          "essential_inliers": 31,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        3,
+        4
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            354,
+            175
+          ],
+          "ratio_matches": 49,
+          "median_displacement_px": 8.94786548614502,
+          "homography_inliers": 21,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            67,
+            49
+          ],
+          "ratio_matches": 11,
+          "median_displacement_px": 2.285930633544922,
+          "homography_inliers": 9,
+          "essential_inliers": 10,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        4,
+        5
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            175,
+            128
+          ],
+          "ratio_matches": 41,
+          "median_displacement_px": 4.9047322273254395,
+          "homography_inliers": 23,
+          "essential_inliers": 29,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            49,
+            31
+          ],
+          "ratio_matches": 17,
+          "median_displacement_px": 4.168797016143799,
+          "homography_inliers": 12,
+          "essential_inliers": 14,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        5,
+        6
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            128,
+            130
+          ],
+          "ratio_matches": 44,
+          "median_displacement_px": 2.294888734817505,
+          "homography_inliers": 30,
+          "essential_inliers": 34,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            31,
+            50
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 2.15615177154541,
+          "homography_inliers": 13,
+          "essential_inliers": 14,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        6,
+        7
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            130,
+            247
+          ],
+          "ratio_matches": 53,
+          "median_displacement_px": 3.45569109916687,
+          "homography_inliers": 36,
+          "essential_inliers": 45,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            50,
+            128
+          ],
+          "ratio_matches": 31,
+          "median_displacement_px": 3.2640349864959717,
+          "homography_inliers": 29,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        7,
+        8
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            247,
+            190
+          ],
+          "ratio_matches": 86,
+          "median_displacement_px": 5.546083450317383,
+          "homography_inliers": 58,
+          "essential_inliers": 62,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            128,
+            64
+          ],
+          "ratio_matches": 44,
+          "median_displacement_px": 3.939685583114624,
+          "homography_inliers": 32,
+          "essential_inliers": 38,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        8,
+        9
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            190,
+            229
+          ],
+          "ratio_matches": 78,
+          "median_displacement_px": 6.441936492919922,
+          "homography_inliers": 55,
+          "essential_inliers": 60,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            64,
+            108
+          ],
+          "ratio_matches": 34,
+          "median_displacement_px": 5.8903703689575195,
+          "homography_inliers": 24,
+          "essential_inliers": 33,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        9,
+        10
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            229,
+            260
+          ],
+          "ratio_matches": 78,
+          "median_displacement_px": 6.477917671203613,
+          "homography_inliers": 59,
+          "essential_inliers": 69,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            108,
+            114
+          ],
+          "ratio_matches": 49,
+          "median_displacement_px": 6.6268792152404785,
+          "homography_inliers": 43,
+          "essential_inliers": 46,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        10,
+        11
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            260,
+            278
+          ],
+          "ratio_matches": 139,
+          "median_displacement_px": 2.770543336868286,
+          "homography_inliers": 130,
+          "essential_inliers": 123,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            114,
+            117
+          ],
+          "ratio_matches": 65,
+          "median_displacement_px": 2.8580641746520996,
+          "homography_inliers": 60,
+          "essential_inliers": 62,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        11,
+        12
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            278,
+            293
+          ],
+          "ratio_matches": 101,
+          "median_displacement_px": 5.39939022064209,
+          "homography_inliers": 67,
+          "essential_inliers": 87,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            117,
+            107
+          ],
+          "ratio_matches": 48,
+          "median_displacement_px": 7.057825088500977,
+          "homography_inliers": 40,
+          "essential_inliers": 44,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        12,
+        13
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            293,
+            326
+          ],
+          "ratio_matches": 120,
+          "median_displacement_px": 6.9571027755737305,
+          "homography_inliers": 70,
+          "essential_inliers": 100,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            107,
+            123
+          ],
+          "ratio_matches": 55,
+          "median_displacement_px": 8.217667579650879,
+          "homography_inliers": 49,
+          "essential_inliers": 55,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        13,
+        14
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            326,
+            363
+          ],
+          "ratio_matches": 110,
+          "median_displacement_px": 8.047855377197266,
+          "homography_inliers": 51,
+          "essential_inliers": 85,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            123,
+            152
+          ],
+          "ratio_matches": 49,
+          "median_displacement_px": 9.353004455566406,
+          "homography_inliers": 46,
+          "essential_inliers": 47,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        14,
+        15
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            363,
+            334
+          ],
+          "ratio_matches": 108,
+          "median_displacement_px": 7.816835403442383,
+          "homography_inliers": 64,
+          "essential_inliers": 74,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            152,
+            109
+          ],
+          "ratio_matches": 37,
+          "median_displacement_px": 9.83703327178955,
+          "homography_inliers": 27,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        15,
+        16
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            334,
+            324
+          ],
+          "ratio_matches": 148,
+          "median_displacement_px": 3.7185072898864746,
+          "homography_inliers": 108,
+          "essential_inliers": 114,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            109,
+            126
+          ],
+          "ratio_matches": 34,
+          "median_displacement_px": 6.743127822875977,
+          "homography_inliers": 27,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        16,
+        17
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            324,
+            182
+          ],
+          "ratio_matches": 32,
+          "median_displacement_px": 15.028078079223633,
+          "homography_inliers": 12,
+          "essential_inliers": 20,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            126,
+            55
+          ],
+          "ratio_matches": 8,
+          "median_displacement_px": 23.450729370117188,
+          "homography_inliers": 4,
+          "essential_inliers": 6,
+          "pycolmap_configuration": "1",
+          "pycolmap_pose_available": false
+        }
+      ]
+    },
+    {
+      "pair": [
+        17,
+        18
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            182,
+            212
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 16.816537857055664,
+          "homography_inliers": 7,
+          "essential_inliers": 10,
+          "pycolmap_configuration": "3",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            55,
+            87
+          ],
+          "ratio_matches": 8,
+          "median_displacement_px": 304.8560485839844,
+          "homography_inliers": 4,
+          "essential_inliers": 7,
+          "pycolmap_configuration": "1",
+          "pycolmap_pose_available": false
+        }
+      ]
+    },
+    {
+      "pair": [
+        18,
+        19
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            212,
+            167
+          ],
+          "ratio_matches": 23,
+          "median_displacement_px": 14.241751670837402,
+          "homography_inliers": 9,
+          "essential_inliers": 12,
+          "pycolmap_configuration": "3",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            87,
+            49
+          ],
+          "ratio_matches": 26,
+          "median_displacement_px": 91.58560943603516,
+          "homography_inliers": 10,
+          "essential_inliers": 16,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        19,
+        20
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            167,
+            170
+          ],
+          "ratio_matches": 36,
+          "median_displacement_px": 9.382383346557617,
+          "homography_inliers": 14,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            49,
+            61
+          ],
+          "ratio_matches": 16,
+          "median_displacement_px": 8.283161163330078,
+          "homography_inliers": 9,
+          "essential_inliers": 13,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        20,
+        21
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            170,
+            196
+          ],
+          "ratio_matches": 51,
+          "median_displacement_px": 5.165209770202637,
+          "homography_inliers": 24,
+          "essential_inliers": 32,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            61,
+            60
+          ],
+          "ratio_matches": 25,
+          "median_displacement_px": 5.479648590087891,
+          "homography_inliers": 18,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        21,
+        22
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            196,
+            291
+          ],
+          "ratio_matches": 29,
+          "median_displacement_px": 17.50874137878418,
+          "homography_inliers": 11,
+          "essential_inliers": 17,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            60,
+            86
+          ],
+          "ratio_matches": 13,
+          "median_displacement_px": 8.760591506958008,
+          "homography_inliers": 11,
+          "essential_inliers": 11,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        22,
+        23
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            291,
+            255
+          ],
+          "ratio_matches": 34,
+          "median_displacement_px": 9.591972351074219,
+          "homography_inliers": 22,
+          "essential_inliers": 24,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            86,
+            82
+          ],
+          "ratio_matches": 22,
+          "median_displacement_px": 7.142821788787842,
+          "homography_inliers": 19,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        23,
+        24
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            255,
+            266
+          ],
+          "ratio_matches": 59,
+          "median_displacement_px": 10.052874565124512,
+          "homography_inliers": 31,
+          "essential_inliers": 42,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            82,
+            97
+          ],
+          "ratio_matches": 35,
+          "median_displacement_px": 7.55567741394043,
+          "homography_inliers": 25,
+          "essential_inliers": 29,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        24,
+        25
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            266,
+            200
+          ],
+          "ratio_matches": 56,
+          "median_displacement_px": 12.08338737487793,
+          "homography_inliers": 20,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            97,
+            62
+          ],
+          "ratio_matches": 27,
+          "median_displacement_px": 12.0237398147583,
+          "homography_inliers": 15,
+          "essential_inliers": 18,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        25,
+        26
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            200,
+            202
+          ],
+          "ratio_matches": 73,
+          "median_displacement_px": 7.557858943939209,
+          "homography_inliers": 29,
+          "essential_inliers": 45,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            62,
+            48
+          ],
+          "ratio_matches": 30,
+          "median_displacement_px": 7.129891395568848,
+          "homography_inliers": 18,
+          "essential_inliers": 23,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        26,
+        27
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            202,
+            191
+          ],
+          "ratio_matches": 52,
+          "median_displacement_px": 14.802794456481934,
+          "homography_inliers": 19,
+          "essential_inliers": 27,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            48,
+            41
+          ],
+          "ratio_matches": 23,
+          "median_displacement_px": 14.802794456481934,
+          "homography_inliers": 14,
+          "essential_inliers": 17,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        27,
+        28
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            191,
+            210
+          ],
+          "ratio_matches": 52,
+          "median_displacement_px": 17.03683090209961,
+          "homography_inliers": 20,
+          "essential_inliers": 29,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            41,
+            31
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 16.095666885375977,
+          "homography_inliers": 10,
+          "essential_inliers": 14,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        28,
+        29
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            210,
+            152
+          ],
+          "ratio_matches": 40,
+          "median_displacement_px": 20.60541534423828,
+          "homography_inliers": 13,
+          "essential_inliers": 16,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            31,
+            17
+          ],
+          "ratio_matches": 12,
+          "median_displacement_px": 20.471691131591797,
+          "homography_inliers": 8,
+          "essential_inliers": 9,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        29,
+        30
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            152,
+            154
+          ],
+          "ratio_matches": 44,
+          "median_displacement_px": 14.286855697631836,
+          "homography_inliers": 24,
+          "essential_inliers": 27,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            17,
+            7
+          ],
+          "ratio_matches": 6,
+          "error": "fewer than eight ratio matches"
+        }
+      ]
+    },
+    {
+      "pair": [
+        30,
+        31
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            154,
+            177
+          ],
+          "ratio_matches": 58,
+          "median_displacement_px": 7.172989368438721,
+          "homography_inliers": 28,
+          "essential_inliers": 35,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            7,
+            15
+          ],
+          "ratio_matches": 1,
+          "error": "fewer than eight ratio matches"
+        }
+      ]
+    },
+    {
+      "pair": [
+        31,
+        32
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            177,
+            223
+          ],
+          "ratio_matches": 39,
+          "median_displacement_px": 10.546035766601562,
+          "homography_inliers": 18,
+          "essential_inliers": 23,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            15,
+            33
+          ],
+          "ratio_matches": 3,
+          "error": "fewer than eight ratio matches"
+        }
+      ]
+    },
+    {
+      "pair": [
+        32,
+        33
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            223,
+            267
+          ],
+          "ratio_matches": 67,
+          "median_displacement_px": 7.107014179229736,
+          "homography_inliers": 35,
+          "essential_inliers": 40,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            33,
+            48
+          ],
+          "ratio_matches": 4,
+          "error": "fewer than eight ratio matches"
+        }
+      ]
+    },
+    {
+      "pair": [
+        33,
+        34
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            267,
+            274
+          ],
+          "ratio_matches": 85,
+          "median_displacement_px": 6.709461688995361,
+          "homography_inliers": 45,
+          "essential_inliers": 49,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            48,
+            54
+          ],
+          "ratio_matches": 9,
+          "median_displacement_px": 6.468528747558594,
+          "homography_inliers": 6,
+          "essential_inliers": 8,
+          "pycolmap_configuration": "1",
+          "pycolmap_pose_available": false
+        }
+      ]
+    },
+    {
+      "pair": [
+        34,
+        35
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            274,
+            137
+          ],
+          "ratio_matches": 33,
+          "median_displacement_px": 9.503149032592773,
+          "homography_inliers": 11,
+          "essential_inliers": 17,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            54,
+            33
+          ],
+          "ratio_matches": 10,
+          "median_displacement_px": 15.478401184082031,
+          "homography_inliers": 6,
+          "essential_inliers": 8,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        35,
+        36
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            137,
+            206
+          ],
+          "ratio_matches": 32,
+          "median_displacement_px": 7.126503944396973,
+          "homography_inliers": 15,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            33,
+            55
+          ],
+          "ratio_matches": 6,
+          "error": "fewer than eight ratio matches"
+        }
+      ]
+    },
+    {
+      "pair": [
+        36,
+        37
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            206,
+            260
+          ],
+          "ratio_matches": 66,
+          "median_displacement_px": 7.525938987731934,
+          "homography_inliers": 29,
+          "essential_inliers": 41,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            55,
+            81
+          ],
+          "ratio_matches": 16,
+          "median_displacement_px": 14.888334274291992,
+          "homography_inliers": 9,
+          "essential_inliers": 11,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        37,
+        38
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            260,
+            426
+          ],
+          "ratio_matches": 80,
+          "median_displacement_px": 5.365091323852539,
+          "homography_inliers": 35,
+          "essential_inliers": 45,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            81,
+            135
+          ],
+          "ratio_matches": 17,
+          "median_displacement_px": 9.632146835327148,
+          "homography_inliers": 9,
+          "essential_inliers": 14,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        38,
+        39
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            426,
+            428
+          ],
+          "ratio_matches": 177,
+          "median_displacement_px": 5.043355464935303,
+          "homography_inliers": 109,
+          "essential_inliers": 119,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            135,
+            152
+          ],
+          "ratio_matches": 48,
+          "median_displacement_px": 10.625761032104492,
+          "homography_inliers": 30,
+          "essential_inliers": 39,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        39,
+        40
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            428,
+            509
+          ],
+          "ratio_matches": 209,
+          "median_displacement_px": 2.952528238296509,
+          "homography_inliers": 164,
+          "essential_inliers": 168,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            152,
+            225
+          ],
+          "ratio_matches": 60,
+          "median_displacement_px": 4.804596900939941,
+          "homography_inliers": 42,
+          "essential_inliers": 47,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        40,
+        41
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            509,
+            492
+          ],
+          "ratio_matches": 290,
+          "median_displacement_px": 4.2213521003723145,
+          "homography_inliers": 191,
+          "essential_inliers": 230,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            225,
+            234
+          ],
+          "ratio_matches": 132,
+          "median_displacement_px": 4.70363712310791,
+          "homography_inliers": 107,
+          "essential_inliers": 112,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        41,
+        42
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            492,
+            528
+          ],
+          "ratio_matches": 299,
+          "median_displacement_px": 3.0535953044891357,
+          "homography_inliers": 195,
+          "essential_inliers": 248,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            234,
+            241
+          ],
+          "ratio_matches": 138,
+          "median_displacement_px": 4.913470268249512,
+          "homography_inliers": 117,
+          "essential_inliers": 116,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        42,
+        43
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            528,
+            551
+          ],
+          "ratio_matches": 324,
+          "median_displacement_px": 4.253796577453613,
+          "homography_inliers": 235,
+          "essential_inliers": 278,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            241,
+            247
+          ],
+          "ratio_matches": 155,
+          "median_displacement_px": 5.131105899810791,
+          "homography_inliers": 121,
+          "essential_inliers": 141,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        43,
+        44
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            551,
+            582
+          ],
+          "ratio_matches": 329,
+          "median_displacement_px": 5.39892578125,
+          "homography_inliers": 181,
+          "essential_inliers": 233,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            247,
+            280
+          ],
+          "ratio_matches": 160,
+          "median_displacement_px": 9.951956748962402,
+          "homography_inliers": 125,
+          "essential_inliers": 143,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        44,
+        45
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            582,
+            525
+          ],
+          "ratio_matches": 355,
+          "median_displacement_px": 4.69705867767334,
+          "homography_inliers": 272,
+          "essential_inliers": 308,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            280,
+            260
+          ],
+          "ratio_matches": 180,
+          "median_displacement_px": 6.082697868347168,
+          "homography_inliers": 145,
+          "essential_inliers": 154,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        45,
+        46
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            525,
+            501
+          ],
+          "ratio_matches": 245,
+          "median_displacement_px": 2.508714437484741,
+          "homography_inliers": 151,
+          "essential_inliers": 217,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            260,
+            223
+          ],
+          "ratio_matches": 103,
+          "median_displacement_px": 5.489516735076904,
+          "homography_inliers": 85,
+          "essential_inliers": 91,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        46,
+        47
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            501,
+            503
+          ],
+          "ratio_matches": 300,
+          "median_displacement_px": 2.917236328125,
+          "homography_inliers": 225,
+          "essential_inliers": 265,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            223,
+            239
+          ],
+          "ratio_matches": 136,
+          "median_displacement_px": 5.279299736022949,
+          "homography_inliers": 110,
+          "essential_inliers": 118,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        47,
+        48
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            503,
+            575
+          ],
+          "ratio_matches": 323,
+          "median_displacement_px": 2.311635732650757,
+          "homography_inliers": 276,
+          "essential_inliers": 302,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            239,
+            289
+          ],
+          "ratio_matches": 146,
+          "median_displacement_px": 4.6576995849609375,
+          "homography_inliers": 137,
+          "essential_inliers": 127,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        48,
+        49
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            575,
+            339
+          ],
+          "ratio_matches": 93,
+          "median_displacement_px": 3.28346848487854,
+          "homography_inliers": 53,
+          "essential_inliers": 71,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            289,
+            153
+          ],
+          "ratio_matches": 23,
+          "median_displacement_px": 13.215262413024902,
+          "homography_inliers": 15,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        49,
+        50
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            339,
+            592
+          ],
+          "ratio_matches": 99,
+          "median_displacement_px": 4.3536176681518555,
+          "homography_inliers": 59,
+          "essential_inliers": 88,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            153,
+            312
+          ],
+          "ratio_matches": 27,
+          "median_displacement_px": 5.340930938720703,
+          "homography_inliers": 16,
+          "essential_inliers": 22,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        50,
+        51
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            592,
+            446
+          ],
+          "ratio_matches": 206,
+          "median_displacement_px": 4.594803333282471,
+          "homography_inliers": 150,
+          "essential_inliers": 183,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            312,
+            222
+          ],
+          "ratio_matches": 73,
+          "median_displacement_px": 8.919612884521484,
+          "homography_inliers": 51,
+          "essential_inliers": 65,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        51,
+        52
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            446,
+            514
+          ],
+          "ratio_matches": 278,
+          "median_displacement_px": 3.9504332542419434,
+          "homography_inliers": 222,
+          "essential_inliers": 266,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            222,
+            243
+          ],
+          "ratio_matches": 133,
+          "median_displacement_px": 6.967204570770264,
+          "homography_inliers": 106,
+          "essential_inliers": 125,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        52,
+        53
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            514,
+            424
+          ],
+          "ratio_matches": 252,
+          "median_displacement_px": 4.084049701690674,
+          "homography_inliers": 194,
+          "essential_inliers": 222,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            243,
+            207
+          ],
+          "ratio_matches": 118,
+          "median_displacement_px": 6.624808311462402,
+          "homography_inliers": 83,
+          "essential_inliers": 101,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        53,
+        54
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            424,
+            420
+          ],
+          "ratio_matches": 206,
+          "median_displacement_px": 8.651941299438477,
+          "homography_inliers": 116,
+          "essential_inliers": 184,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            207,
+            213
+          ],
+          "ratio_matches": 115,
+          "median_displacement_px": 14.64391040802002,
+          "homography_inliers": 82,
+          "essential_inliers": 110,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        54,
+        55
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            420,
+            516
+          ],
+          "ratio_matches": 233,
+          "median_displacement_px": 3.56567645072937,
+          "homography_inliers": 187,
+          "essential_inliers": 189,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            213,
+            291
+          ],
+          "ratio_matches": 110,
+          "median_displacement_px": 5.500355243682861,
+          "homography_inliers": 80,
+          "essential_inliers": 103,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        55,
+        56
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            516,
+            547
+          ],
+          "ratio_matches": 304,
+          "median_displacement_px": 3.8465628623962402,
+          "homography_inliers": 196,
+          "essential_inliers": 287,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            291,
+            292
+          ],
+          "ratio_matches": 185,
+          "median_displacement_px": 4.318191051483154,
+          "homography_inliers": 151,
+          "essential_inliers": 174,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        56,
+        57
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            547,
+            617
+          ],
+          "ratio_matches": 280,
+          "median_displacement_px": 2.9505774974823,
+          "homography_inliers": 209,
+          "essential_inliers": 237,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            292,
+            379
+          ],
+          "ratio_matches": 137,
+          "median_displacement_px": 3.182105541229248,
+          "homography_inliers": 99,
+          "essential_inliers": 119,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        57,
+        58
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            617,
+            890
+          ],
+          "ratio_matches": 268,
+          "median_displacement_px": 2.39841890335083,
+          "homography_inliers": 196,
+          "essential_inliers": 246,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            379,
+            619
+          ],
+          "ratio_matches": 158,
+          "median_displacement_px": 2.1964831352233887,
+          "homography_inliers": 111,
+          "essential_inliers": 141,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        58,
+        59
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            890,
+            929
+          ],
+          "ratio_matches": 600,
+          "median_displacement_px": 2.093242883682251,
+          "homography_inliers": 489,
+          "essential_inliers": 567,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            619,
+            673
+          ],
+          "ratio_matches": 443,
+          "median_displacement_px": 2.0084152221679688,
+          "homography_inliers": 416,
+          "essential_inliers": 437,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        59,
+        60
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            929,
+            970
+          ],
+          "ratio_matches": 631,
+          "median_displacement_px": 1.7440664768218994,
+          "homography_inliers": 466,
+          "essential_inliers": 579,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            673,
+            719
+          ],
+          "ratio_matches": 493,
+          "median_displacement_px": 1.6729854345321655,
+          "homography_inliers": 370,
+          "essential_inliers": 466,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        60,
+        61
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            970,
+            1005
+          ],
+          "ratio_matches": 617,
+          "median_displacement_px": 2.2959821224212646,
+          "homography_inliers": 468,
+          "essential_inliers": 599,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            719,
+            718
+          ],
+          "ratio_matches": 493,
+          "median_displacement_px": 2.2322285175323486,
+          "homography_inliers": 452,
+          "essential_inliers": 479,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        61,
+        62
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            1005,
+            1058
+          ],
+          "ratio_matches": 699,
+          "median_displacement_px": 1.478214144706726,
+          "homography_inliers": 469,
+          "essential_inliers": 671,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            718,
+            746
+          ],
+          "ratio_matches": 532,
+          "median_displacement_px": 1.389830470085144,
+          "homography_inliers": 465,
+          "essential_inliers": 506,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        62,
+        63
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            1058,
+            1032
+          ],
+          "ratio_matches": 681,
+          "median_displacement_px": 1.1625540256500244,
+          "homography_inliers": 530,
+          "essential_inliers": 587,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            746,
+            741
+          ],
+          "ratio_matches": 550,
+          "median_displacement_px": 1.0835230350494385,
+          "homography_inliers": 517,
+          "essential_inliers": 529,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        63,
+        64
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            1032,
+            1039
+          ],
+          "ratio_matches": 731,
+          "median_displacement_px": 1.453535556793213,
+          "homography_inliers": 597,
+          "essential_inliers": 651,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            741,
+            724
+          ],
+          "ratio_matches": 565,
+          "median_displacement_px": 1.3722376823425293,
+          "homography_inliers": 542,
+          "essential_inliers": 553,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        64,
+        65
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            1039,
+            1085
+          ],
+          "ratio_matches": 637,
+          "median_displacement_px": 3.075789451599121,
+          "homography_inliers": 535,
+          "essential_inliers": 535,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            724,
+            724
+          ],
+          "ratio_matches": 496,
+          "median_displacement_px": 3.0324478149414062,
+          "homography_inliers": 475,
+          "essential_inliers": 481,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        65,
+        66
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            1085,
+            982
+          ],
+          "ratio_matches": 561,
+          "median_displacement_px": 9.225309371948242,
+          "homography_inliers": 451,
+          "essential_inliers": 475,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            724,
+            667
+          ],
+          "ratio_matches": 432,
+          "median_displacement_px": 9.027759552001953,
+          "homography_inliers": 417,
+          "essential_inliers": 414,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        66,
+        67
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            982,
+            947
+          ],
+          "ratio_matches": 493,
+          "median_displacement_px": 9.648872375488281,
+          "homography_inliers": 425,
+          "essential_inliers": 430,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            667,
+            620
+          ],
+          "ratio_matches": 400,
+          "median_displacement_px": 9.179847717285156,
+          "homography_inliers": 394,
+          "essential_inliers": 381,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        67,
+        68
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            947,
+            852
+          ],
+          "ratio_matches": 439,
+          "median_displacement_px": 10.351712226867676,
+          "homography_inliers": 334,
+          "essential_inliers": 388,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            620,
+            580
+          ],
+          "ratio_matches": 336,
+          "median_displacement_px": 10.00157642364502,
+          "homography_inliers": 312,
+          "essential_inliers": 323,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        68,
+        69
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            852,
+            828
+          ],
+          "ratio_matches": 441,
+          "median_displacement_px": 9.020530700683594,
+          "homography_inliers": 383,
+          "essential_inliers": 394,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            580,
+            585
+          ],
+          "ratio_matches": 321,
+          "median_displacement_px": 8.87082290649414,
+          "homography_inliers": 318,
+          "essential_inliers": 310,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        69,
+        70
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            828,
+            728
+          ],
+          "ratio_matches": 339,
+          "median_displacement_px": 7.848140716552734,
+          "homography_inliers": 301,
+          "essential_inliers": 317,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            585,
+            547
+          ],
+          "ratio_matches": 269,
+          "median_displacement_px": 7.530099868774414,
+          "homography_inliers": 248,
+          "essential_inliers": 263,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        70,
+        71
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            728,
+            674
+          ],
+          "ratio_matches": 313,
+          "median_displacement_px": 5.533988952636719,
+          "homography_inliers": 294,
+          "essential_inliers": 297,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            547,
+            539
+          ],
+          "ratio_matches": 270,
+          "median_displacement_px": 5.541224479675293,
+          "homography_inliers": 204,
+          "essential_inliers": 265,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        71,
+        72
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            674,
+            665
+          ],
+          "ratio_matches": 340,
+          "median_displacement_px": 6.542393684387207,
+          "homography_inliers": 319,
+          "essential_inliers": 322,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            539,
+            508
+          ],
+          "ratio_matches": 318,
+          "median_displacement_px": 6.542393684387207,
+          "homography_inliers": 299,
+          "essential_inliers": 312,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        72,
+        73
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            665,
+            486
+          ],
+          "ratio_matches": 208,
+          "median_displacement_px": 8.749784469604492,
+          "homography_inliers": 165,
+          "essential_inliers": 182,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            508,
+            350
+          ],
+          "ratio_matches": 186,
+          "median_displacement_px": 8.755175590515137,
+          "homography_inliers": 159,
+          "essential_inliers": 173,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        73,
+        74
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            486,
+            222
+          ],
+          "ratio_matches": 38,
+          "median_displacement_px": 7.830484867095947,
+          "homography_inliers": 15,
+          "essential_inliers": 26,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            350,
+            126
+          ],
+          "ratio_matches": 24,
+          "median_displacement_px": 10.524974822998047,
+          "homography_inliers": 10,
+          "essential_inliers": 15,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        74,
+        75
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            222,
+            213
+          ],
+          "ratio_matches": 55,
+          "median_displacement_px": 25.254682540893555,
+          "homography_inliers": 39,
+          "essential_inliers": 44,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            126,
+            88
+          ],
+          "ratio_matches": 44,
+          "median_displacement_px": 25.449764251708984,
+          "homography_inliers": 38,
+          "essential_inliers": 41,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        75,
+        76
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            213,
+            203
+          ],
+          "ratio_matches": 51,
+          "median_displacement_px": 28.122440338134766,
+          "homography_inliers": 26,
+          "essential_inliers": 35,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            88,
+            96
+          ],
+          "ratio_matches": 38,
+          "median_displacement_px": 28.00247573852539,
+          "homography_inliers": 26,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        76,
+        77
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            203,
+            232
+          ],
+          "ratio_matches": 49,
+          "median_displacement_px": 18.915138244628906,
+          "homography_inliers": 23,
+          "essential_inliers": 33,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            96,
+            101
+          ],
+          "ratio_matches": 38,
+          "median_displacement_px": 18.879161834716797,
+          "homography_inliers": 21,
+          "essential_inliers": 32,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        77,
+        78
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            232,
+            228
+          ],
+          "ratio_matches": 40,
+          "median_displacement_px": 13.175647735595703,
+          "homography_inliers": 23,
+          "essential_inliers": 27,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            101,
+            86
+          ],
+          "ratio_matches": 31,
+          "median_displacement_px": 11.236028671264648,
+          "homography_inliers": 22,
+          "essential_inliers": 25,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        78,
+        79
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            228,
+            203
+          ],
+          "ratio_matches": 81,
+          "median_displacement_px": 5.489233493804932,
+          "homography_inliers": 44,
+          "essential_inliers": 55,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            86,
+            78
+          ],
+          "ratio_matches": 47,
+          "median_displacement_px": 3.5787012577056885,
+          "homography_inliers": 34,
+          "essential_inliers": 38,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        79,
+        80
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            203,
+            245
+          ],
+          "ratio_matches": 54,
+          "median_displacement_px": 7.058729648590088,
+          "homography_inliers": 32,
+          "essential_inliers": 43,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            78,
+            115
+          ],
+          "ratio_matches": 45,
+          "median_displacement_px": 7.045596122741699,
+          "homography_inliers": 34,
+          "essential_inliers": 41,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        80,
+        81
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            245,
+            261
+          ],
+          "ratio_matches": 45,
+          "median_displacement_px": 6.352125644683838,
+          "homography_inliers": 31,
+          "essential_inliers": 34,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            115,
+            108
+          ],
+          "ratio_matches": 38,
+          "median_displacement_px": 6.442908763885498,
+          "homography_inliers": 30,
+          "essential_inliers": 31,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        81,
+        82
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            261,
+            237
+          ],
+          "ratio_matches": 45,
+          "median_displacement_px": 7.028435230255127,
+          "homography_inliers": 19,
+          "essential_inliers": 27,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            108,
+            72
+          ],
+          "ratio_matches": 34,
+          "median_displacement_px": 7.6188859939575195,
+          "homography_inliers": 17,
+          "essential_inliers": 22,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        82,
+        83
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            237,
+            200
+          ],
+          "ratio_matches": 43,
+          "median_displacement_px": 12.168546676635742,
+          "homography_inliers": 23,
+          "essential_inliers": 29,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            72,
+            79
+          ],
+          "ratio_matches": 27,
+          "median_displacement_px": 11.738412857055664,
+          "homography_inliers": 15,
+          "essential_inliers": 20,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        83,
+        84
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            200,
+            235
+          ],
+          "ratio_matches": 58,
+          "median_displacement_px": 5.342377662658691,
+          "homography_inliers": 35,
+          "essential_inliers": 43,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            79,
+            71
+          ],
+          "ratio_matches": 33,
+          "median_displacement_px": 4.734421253204346,
+          "homography_inliers": 23,
+          "essential_inliers": 28,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        84,
+        85
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            235,
+            263
+          ],
+          "ratio_matches": 28,
+          "median_displacement_px": 11.311833381652832,
+          "homography_inliers": 17,
+          "essential_inliers": 23,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            71,
+            59
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 11.311833381652832,
+          "homography_inliers": 13,
+          "essential_inliers": 17,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        85,
+        86
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            263,
+            281
+          ],
+          "ratio_matches": 60,
+          "median_displacement_px": 8.130449295043945,
+          "homography_inliers": 23,
+          "essential_inliers": 29,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            59,
+            86
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 7.704227447509766,
+          "homography_inliers": 14,
+          "essential_inliers": 16,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        86,
+        87
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            281,
+            237
+          ],
+          "ratio_matches": 69,
+          "median_displacement_px": 7.406848430633545,
+          "homography_inliers": 33,
+          "essential_inliers": 42,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            86,
+            79
+          ],
+          "ratio_matches": 35,
+          "median_displacement_px": 5.994538307189941,
+          "homography_inliers": 24,
+          "essential_inliers": 30,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        87,
+        88
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            237,
+            234
+          ],
+          "ratio_matches": 48,
+          "median_displacement_px": 9.724653244018555,
+          "homography_inliers": 32,
+          "essential_inliers": 34,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            79,
+            60
+          ],
+          "ratio_matches": 25,
+          "median_displacement_px": 7.472835063934326,
+          "homography_inliers": 15,
+          "essential_inliers": 19,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    },
+    {
+      "pair": [
+        88,
+        89
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            234,
+            243
+          ],
+          "ratio_matches": 66,
+          "median_displacement_px": 7.13359260559082,
+          "homography_inliers": 29,
+          "essential_inliers": 37,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            60,
+            92
+          ],
+          "ratio_matches": 18,
+          "median_displacement_px": 3.9090278148651123,
+          "homography_inliers": 13,
+          "essential_inliers": 15,
+          "pycolmap_configuration": "2",
+          "pycolmap_pose_available": true
+        }
+      ]
+    }
+  ]
+}

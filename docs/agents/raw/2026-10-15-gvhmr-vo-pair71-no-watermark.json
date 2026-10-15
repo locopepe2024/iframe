@@ -1,0 +1,43 @@
+{
+  "schema": "gvhmr-simplevo-pair-diagnostic.v1",
+  "source_sha256": "49c73ccaaa2bf36d89c234006417320f7ffd5f9c5d58e6eafd227e38d4fa8602",
+  "focal_length_px": 619.6068232230948,
+  "watermark_check_enabled": false,
+  "notes": "Independent pair diagnostics; RANSAC outcomes can vary between runs",
+  "pairs": [
+    {
+      "pair": [
+        71,
+        72
+      ],
+      "results": [
+        {
+          "background_only": false,
+          "keypoints": [
+            674,
+            665
+          ],
+          "ratio_matches": 340,
+          "median_displacement_px": 6.541903972625732,
+          "homography_inliers": 318,
+          "essential_inliers": 324,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        },
+        {
+          "background_only": true,
+          "keypoints": [
+            539,
+            508
+          ],
+          "ratio_matches": 317,
+          "median_displacement_px": 6.541913986206055,
+          "homography_inliers": 282,
+          "essential_inliers": 304,
+          "pycolmap_configuration": "4",
+          "pycolmap_pose_available": true
+        }
+      ]
+    }
+  ]
+}
