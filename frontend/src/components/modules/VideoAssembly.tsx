@@ -3,14 +3,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package, ArrowDown, ArrowUp, Save, Plus } from "lucide-react";
+import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package, ArrowDown, ArrowUp, Save, Plus, RefreshCw } from "lucide-react";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { api, type AssemblyClip, type AssemblyEditPlan, type BgmPreset } from "@/lib/api";
 import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
 import { getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
-import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip } from "./assemblyEditPlan";
+import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip, refreshAssemblySelectedTakes } from "./assemblyEditPlan";
 
 type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
@@ -29,6 +29,8 @@ export default function VideoAssembly() {
         currentProject?.assembly_plan ?? null,
     );
     const [isSavingPlan, setIsSavingPlan] = useState(false);
+    const [isRefreshingPlan, setIsRefreshingPlan] = useState(false);
+    const [planNotice, setPlanNotice] = useState<string | null>(null);
     const [planError, setPlanError] = useState<string | null>(null);
     const hasUnsavedAssemblyChanges = hasAssemblyPlanChanges(
         assemblyPlan,
@@ -61,6 +63,7 @@ export default function VideoAssembly() {
         try {
             const updatedProject = await api.selectVideo(currentProject.id, frameId, videoId);
             updateProject(currentProject.id, updatedProject);
+            setAssemblyPlan(updatedProject.assembly_plan ?? null);
         } catch (error) {
             console.error("Failed to select video:", error);
         }
@@ -77,6 +80,15 @@ export default function VideoAssembly() {
                     setMergeError(ta("savePlanBeforeRender"));
                     return;
                 }
+                const fresh = await api.getProject(currentProject.id);
+                const savedPlan = fresh.assembly_plan;
+                if (!savedPlan) throw new Error(ta("refreshPlanConflict"));
+                const refreshed = refreshAssemblySelectedTakes(savedPlan, [fresh]);
+                const readyPlan = hasAssemblyPlanChanges(refreshed, savedPlan)
+                    ? await api.saveAssemblyPlan("project", currentProject.id, refreshed)
+                    : savedPlan;
+                updateProject(currentProject.id, { ...fresh, assembly_plan: readyPlan });
+                setAssemblyPlan(readyPlan);
                 const rendered = await api.renderAssemblyPlan("project", currentProject.id);
                 updateProject(currentProject.id, { merged_video_url: rendered.url });
             } else {
@@ -103,6 +115,28 @@ export default function VideoAssembly() {
         if (!currentProject) return;
         setPlanError(null);
         setAssemblyPlan(buildDraftAssemblyPlan(currentProject));
+    };
+
+    const handleRefreshPlan = async () => {
+        if (!currentProject) return;
+        setIsRefreshingPlan(true);
+        setPlanError(null);
+        setPlanNotice(null);
+        try {
+            const fresh = await api.getProject(currentProject.id);
+            if (hasUnsavedAssemblyChanges && assemblyPlan?.revision !== fresh.assembly_plan?.revision) {
+                throw new Error(ta("refreshPlanConflict"));
+            }
+            const base = hasUnsavedAssemblyChanges ? assemblyPlan : fresh.assembly_plan;
+            const { assembly_plan: _savedPlan, ...projectData } = fresh;
+            updateProject(currentProject.id, projectData);
+            if (base) setAssemblyPlan(refreshAssemblySelectedTakes(base, [fresh]));
+            setPlanNotice(ta("refreshTakesDone"));
+        } catch (error) {
+            setPlanError(extractErrorDetail(error, "Could not refresh shot variants"));
+        } finally {
+            setIsRefreshingPlan(false);
+        }
     };
 
     const handleSavePlan = async () => {
@@ -214,6 +248,9 @@ export default function VideoAssembly() {
                         plan={assemblyPlan}
                         isSaving={isSavingPlan}
                         error={planError}
+                        notice={planNotice}
+                        isRefreshing={isRefreshingPlan}
+                        onRefresh={handleRefreshPlan}
                         onCreate={handleCreatePlan}
                         onChange={setAssemblyPlan}
                         onSave={handleSavePlan}
@@ -455,6 +492,9 @@ export function AssemblyPlanPhase({
     onChange,
     onSave,
     readyCountOverride,
+    onRefresh,
+    isRefreshing,
+    notice,
 }: {
     project: Project | null;
     plan: AssemblyEditPlan | null;
@@ -464,6 +504,9 @@ export function AssemblyPlanPhase({
     onChange: (plan: AssemblyEditPlan | null) => void;
     onSave: () => void;
     readyCountOverride?: number;
+    onRefresh?: () => void;
+    isRefreshing?: boolean;
+    notice?: string | null;
 }) {
     const ta = useTranslations("assembly");
     const readyCount = readyCountOverride ?? (project?.frames ?? []).filter((frame: any) =>
@@ -520,6 +563,13 @@ export function AssemblyPlanPhase({
                     </p>
                 </div>
                 <div className="flex items-end gap-2">
+                    {onRefresh && (
+                        <button type="button" onClick={onRefresh} disabled={isRefreshing || isSaving}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-glass-border px-3 py-2 text-xs text-foreground disabled:opacity-50">
+                            <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} aria-hidden="true" />
+                            {ta("refreshTakes")}
+                        </button>
+                    )}
                     <label className="flex flex-col gap-1 text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
                         {ta("targetSeconds")}
                         <input
@@ -545,6 +595,7 @@ export function AssemblyPlanPhase({
                 </div>
             </div>
 
+            {notice && <p role="status" className="text-xs text-text-secondary">{notice}</p>}
             {error && (
                 <div role="alert" className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/[0.06] px-3 py-2 text-xs text-red-200">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />

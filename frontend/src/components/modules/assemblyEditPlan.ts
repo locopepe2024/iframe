@@ -199,3 +199,26 @@ export function moveAssemblyClip(
         }),
     };
 }
+
+/** Refresh only frame-backed video references; preserve all editorial settings. */
+export function refreshAssemblySelectedTakes(
+    plan: AssemblyEditPlan,
+    projects: Project[],
+): AssemblyEditPlan {
+    return {
+        ...plan,
+        lanes: plan.lanes.map((lane) => lane.kind !== "video" ? lane : {
+            ...lane,
+            clips: lane.clips.map((clip) => {
+                const project = projects.find((item) => item.id === (clip.source_project_id || clip.source_episode_id));
+                const frame = project?.frames?.find((item: any) => item.id === clip.source_frame_id);
+                if (!project || !frame || !(frame as any).selected_video_id) return clip;
+                const selected = project.video_tasks?.find((task: any) => task.id === (frame as any).selected_video_id);
+                if (!selected || selected.status !== "completed" || !selected.video_url) {
+                    throw new Error(`Selected video unavailable: ${clip.label || clip.source_frame_id}`);
+                }
+                return { ...clip, source_task_id: selected.id };
+            }),
+        }),
+    };
+}
