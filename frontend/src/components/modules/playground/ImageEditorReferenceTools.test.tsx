@@ -12,7 +12,7 @@ const references = [{ path: '/playground/input-media/one.png', title: 'One' }, {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.models.mockResolvedValue({ models: [{ id: 'image-model', display_name: 'Image Model', capabilities: ['i2i'], inputs: { reference_images: { max: 4 } } }] });
+  mocks.models.mockResolvedValue({ models: [{ id: 'image-model', display_name: 'Image Model', capabilities: ['i2i', 't2i'], inputs: { reference_images: { max: 4 } } }] });
   mocks.library.mockResolvedValue({ assets: [] });
   mocks.generate.mockResolvedValue({ id: 'generation-1', status: 'completed', outputs: [] });
 });
@@ -21,7 +21,7 @@ it('preserves ordered base and reference inputs in a generation request', async 
   expect(generationInputMedia(source, references)).toEqual([source.reference, references[0].path, references[1].path]);
   render(<ImageEditorReferenceTools source={source} references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Image Model' });
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A quiet room' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: '@1 A quiet room' } });
   fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'i2i', model_id: 'image-model', input_media: [source.reference, references[0].path, references[1].path] })));
 });
@@ -43,7 +43,7 @@ it('imports a selected owner library variant as an ordered reference', async () 
 it('reports a completed generation without an image output', async () => {
   render(<ImageEditorReferenceTools source={source} references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Image Model' });
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A quiet room' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: '@1 A quiet room' } });
   fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('noGeneratedImage');
 });
@@ -52,7 +52,7 @@ it('marks panorama generation as a candidate in the prompt', async () => {
   render(<ImageEditorReferenceTools source={source} references={[]} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   await screen.findByRole('option', { name: 'Image Model' });
   fireEvent.click(screen.getByRole('button', { name: 'panoramaGeneration' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A city square' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: '@1 A city square' } });
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('equirectangular panorama') })));
   expect(screen.getByText('panoramaCandidateNote')).toBeInTheDocument();
@@ -66,4 +66,13 @@ it('can generate a panorama candidate from a blank editor', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A mountain lake' } });
   fireEvent.click(screen.getByRole('button', { name: 'generatePanoramaCandidate' }));
   await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 't2i', model_id: 'text-image-model', input_media: undefined })));
+});
+
+it('omits selected editor source and references when input has no @', async () => {
+  mocks.models.mockResolvedValue({ models: [{ id: 'text-model', display_name: 'Text Model', capabilities: ['t2i'] }] });
+  render(<ImageEditorReferenceTools source={source} references={references} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
+  await screen.findByRole('option', { name: 'Text Model' });
+  fireEvent.change(screen.getByRole('textbox', { name: 'prompt' }), { target: { value: 'A quiet room' } });
+  fireEvent.click(screen.getByRole('button', { name: 'generateImage' }));
+  await waitFor(() => expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: 't2i', input_media: undefined, media_names: {} })));
 });
