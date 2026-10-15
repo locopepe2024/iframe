@@ -704,7 +704,8 @@ def test_generation_worker_rejects_changed_source_before_provider_submission(ser
     provider.assert_not_called()
 
 
-def test_generation_worker_can_use_signed_disk_media_url(service, video, monkeypatch):
+@pytest.mark.parametrize('origin_setting', ['UNIART_MEDIA_BASE_URL', 'PROVIDER_MEDIA_PUBLIC_BASE_URL'])
+def test_generation_worker_can_use_signed_disk_media_url(service, video, monkeypatch, origin_setting):
     project = completed(service, video)
     project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
     reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
@@ -713,13 +714,19 @@ def test_generation_worker_can_use_signed_disk_media_url(service, video, monkeyp
                                 reference['media_id'], None, '', 'Static shot.')
     submitted = service.submit_generation(project['id'], project['revision'],
                                           generation_durations={shot['id']: 5}, accept_cost=True)
-    monkeypatch.setenv('UNIART_MEDIA_BASE_URL', 'https://iframe.example.test')
+    monkeypatch.delenv('UNIART_MEDIA_BASE_URL', raising=False)
+    monkeypatch.delenv('PROVIDER_MEDIA_PUBLIC_BASE_URL', raising=False)
+    monkeypatch.setenv(origin_setting, 'https://iframe.example.test')
+    monkeypatch.setenv('PROVIDER_MEDIA_URL_TTL_SECONDS', '7200')
     monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-only')
 
     def generate(_self, _prompt, output_path, **kwargs):
         assert kwargs['ref_image_urls'][0].startswith('https://iframe.example.test/studio/media/')
         assert kwargs['ref_video_urls'][0].startswith('https://iframe.example.test/studio/media/')
         assert all('signature=' in value for value in kwargs['ref_image_urls'] + kwargs['ref_video_urls'])
+        from urllib.parse import parse_qs, urlsplit
+        assert all(int(parse_qs(urlsplit(value).query)['expires'][0]) > time.time() + 7100
+                   for value in kwargs['ref_image_urls'] + kwargs['ref_video_urls'])
         Path(output_path).write_bytes(b'disk-url-mp4')
         return output_path, 0.1
 

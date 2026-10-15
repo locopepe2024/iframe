@@ -106,12 +106,14 @@ def _studio_media_signature(owner_key: str, relative_path: str, expires: int) ->
     return hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def signed_provider_media_url(path: str, ttl_seconds: int = 1800) -> str:
+def signed_provider_media_url(path: str, ttl_seconds: int | None = None) -> str:
     """Expose a managed local media file to an upstream provider briefly."""
-    base = os.getenv("UNIART_MEDIA_BASE_URL", "").strip().rstrip("/")
-    parsed = urlsplit(base)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
-        raise ValueError("UNIART_MEDIA_BASE_URL must be an HTTP(S) origin")
+    from ..utils.provider_media_config import provider_media_origin, provider_media_ttl_seconds
+    base = provider_media_origin()
+    if base is None:
+        raise ValueError("PROVIDER_MEDIA_PUBLIC_BASE_URL must be configured (legacy: UNIART_MEDIA_BASE_URL)")
+    if ttl_seconds is None:
+        ttl_seconds = provider_media_ttl_seconds()
     root = os.path.realpath("output/users")
     candidate = os.path.realpath(path)
     if not candidate.startswith(root + os.sep) or not os.path.isfile(candidate):

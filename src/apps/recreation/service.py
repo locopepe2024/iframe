@@ -11,7 +11,6 @@ import threading
 import time
 import warnings
 from fractions import Fraction
-from urllib.parse import urlsplit
 
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
@@ -247,21 +246,19 @@ class RecreationService:
 
         With COS/OSS configured the UniArt adapter uploads local paths and
         signs them.  Deployments that intentionally keep media on the iFrame
-        disk may set ``UNIART_MEDIA_BASE_URL`` to the externally reachable
+        disk may set ``PROVIDER_MEDIA_PUBLIC_BASE_URL`` to the externally reachable
         backend origin; in that mode we issue a short-lived owner-signed
         ``/studio/media`` URL.  A bare local path remains an internal worker
         reference and is never treated as a provider URL by the adapter.
         """
         path = self._path(item["storage_path"])
-        base = os.getenv("UNIART_MEDIA_BASE_URL", "").strip()
+        from ...utils.provider_media_config import provider_media_origin, provider_media_ttl_seconds
+        base = provider_media_origin()
         if not base:
             return str(path)
-        parsed = urlsplit(base)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
-            raise ValueError("UNIART_MEDIA_BASE_URL must be an HTTP(S) origin without credentials")
         from ..studio_access import studio_media_url
         try:
-            signed = studio_media_url(self.user.owner_profile_id, item["storage_path"], ttl_seconds=1800)
+            signed = studio_media_url(self.user.owner_profile_id, item["storage_path"], ttl_seconds=provider_media_ttl_seconds())
         except HTTPException as exc:
             raise ValueError("Local disk media requires LUMENX_MEDIA_SIGNING_KEY") from exc
         if not signed.startswith("/studio/media/"):
