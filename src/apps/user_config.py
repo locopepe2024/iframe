@@ -9,7 +9,8 @@ import sqlite3
 import threading
 import base64
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Literal
+from urllib.parse import urlsplit
 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -20,6 +21,32 @@ from .identity import UserContext, _api_key_context, _set_browser_profile_cookie
 
 
 SECRET_FIELDS = {"UNIART_API_KEY"}
+ProviderId = Literal["uniart", "nsfw"]
+
+
+def validate_provider_base_url(provider: ProviderId, value: str) -> str:
+    base = value.strip().rstrip("/")
+    try:
+        parsed = urlsplit(base)
+        _ = parsed.port
+        valid = (parsed.scheme in {"http", "https"} and parsed.hostname
+                 and parsed.username is None and parsed.password is None
+                 and not any(c.isspace() or ord(c) < 32 for c in base)
+                 and not any(c in base for c in ("?", "#", "\\"))
+                 and (provider != "nsfw" or parsed.path.endswith("/v1")))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(422, "Provider base URL must be HTTP(S), without credentials, query or fragment; NSFW requires /v1")
+    return base
+
+
+class ProviderProfileUpdate(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = None
+
+    class Config:
+        extra = "forbid"
 
 
 def _effective_base_url(config: Dict[str, Any]) -> str:
@@ -48,7 +75,9 @@ class UserConfigUpdate(BaseModel):
 
 class UserConfigStore:
     def __init__(self, db_path: str | None = None, master_key: str | None = None):
-        self.db_path = db_path or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db"
+        # Bind a configured relative path once. Worker/test cwd changes must
+        # not reopen an unrelated empty DB after this instance creates schema.
+        self.db_path = os.path.abspath(db_path or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db")
         self.master_key = master_key if master_key is not None else os.getenv("LUMENX_CONFIG_MASTER_KEY")
         self._lock = threading.RLock()
         self._ensure_schema()
@@ -73,6 +102,85 @@ class UserConfigStore:
                 )
                 """
             )
+            connection.execute(
+                """CREATE TABLE IF NOT EXISTS provider_configs (
+                    owner_profile_id TEXT NOT NULL,
+                    owner_user_id TEXT NOT NULL,
+                    provider TEXT NOT NULL CHECK(provider IN ('uniart', 'nsfw')),
+                    base_url TEXT NOT NULL,
+                    secrets_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (owner_profile_id, provider)
+                )"""
+            )
+
+    def _provider_row(self, identity: UserContext, provider: ProviderId):
+        if provider not in ("uniart", "nsfw"):
+            raise HTTPException(422, "Unknown model provider")
+        with self._connect() as connection:
+            return connection.execute(
+                "SELECT * FROM provider_configs WHERE owner_profile_id = ? AND provider = ?",
+                (identity.owner_profile_id, provider),
+            ).fetchone()
+
+    def get_provider_profile(self, identity: UserContext, provider: ProviderId) -> dict:
+        row = self._provider_row(identity, provider)
+        return {
+            "provider": provider,
+            "source": "profile" if row else "legacy",
+            "base_url": row["base_url"] if row else "",
+            "configured": bool(row and json.loads(row["secrets_json"]).get("api_key")),
+        }
+
+    def update_provider_profile(self, identity: UserContext, provider: ProviderId,
+                                *, api_key: str | None = None, base_url: str | None = None) -> dict:
+        # Read-modify-write under one lock so concurrent partial saves preserve
+        # the other field. This path never derives/replaces workspace identity.
+        with self._lock:
+            row = self._provider_row(identity, provider)
+            base = validate_provider_base_url(provider, base_url if base_url is not None else (row["base_url"] if row else ""))
+            secrets = json.loads(row["secrets_json"]) if row else {}
+            if api_key is not None:
+                if api_key.strip():
+                    data_key = self._user_data_key(identity, secrets)
+                    secrets = {"_user_key": self._wrap_user_key(identity, data_key),
+                               "api_key": self._encrypt(api_key.strip(), identity, data_key)}
+                else:
+                    secrets = {}
+            with self._connect() as connection:
+                connection.execute(
+                    """INSERT INTO provider_configs
+                       (owner_profile_id, owner_user_id, provider, base_url, secrets_json, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(owner_profile_id, provider) DO UPDATE SET
+                       base_url=excluded.base_url, secrets_json=excluded.secrets_json,
+                       updated_at=excluded.updated_at""",
+                    (identity.owner_profile_id, identity.user_id, provider, base,
+                     json.dumps(secrets), datetime.now(timezone.utc).isoformat()),
+                )
+            return self.get_provider_profile(identity, provider)
+
+    def get_runtime_provider(self, identity: UserContext, provider: ProviderId) -> Dict[str, str]:
+        """Resolve an explicit provider profile; never use another credential."""
+        row = self._provider_row(identity, provider)
+        secrets = json.loads(row["secrets_json"]) if row else {}
+        if not secrets.get("api_key"):
+            raise HTTPException(409, f"{provider} provider profile API key is not configured")
+        try:
+            data_key = self._user_data_key(identity, secrets)
+            key = self._decrypt(secrets["api_key"], identity, data_key)
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(503, "Stored provider credential cannot be decrypted") from exc
+        return {"provider": provider, "api_key": key,
+                "base_url": validate_provider_base_url(provider, row["base_url"]),
+                "public_base_url": row["base_url"]}
+
+    def get_runtime_nsfw(self, identity: UserContext) -> Dict[str, str]:
+        if self._provider_row(identity, "nsfw") is not None:
+            return self.get_runtime_provider(identity, "nsfw")
+        # Compatibility for installations predating independent profiles.
+        # New explicit catalog/profile APIs never take this legacy path.
+        return {"api_key": self._get_legacy_runtime_uniart(identity)["api_key"]}
 
     def _encryption_key(self, identity: UserContext | None = None) -> bytes:
         # Prefer a per-user key derived from stable owner identity.
@@ -143,6 +251,7 @@ class UserConfigStore:
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}
         personal_uniart_configured = bool(secret_payload.get("UNIART_API_KEY"))
+        profile = self._provider_row(identity, "uniart")
         return {
             **config,
             "secrets_configured": {
@@ -153,7 +262,8 @@ class UserConfigStore:
                 for field in SECRET_FIELDS
             },
             "runtime_uniart_available": bool(
-                personal_uniart_configured or self._shared_uniart_api_key()
+                json.loads(profile["secrets_json"]).get("api_key") if profile is not None
+                else personal_uniart_configured or self._shared_uniart_api_key()
             ),
         }
 
@@ -205,6 +315,11 @@ class UserConfigStore:
         return self.get_public(identity)
 
     def get_runtime_uniart(self, identity: UserContext) -> Dict[str, str]:
+        if self._provider_row(identity, "uniart") is not None:
+            return self.get_runtime_provider(identity, "uniart")
+        return self._get_legacy_runtime_uniart(identity)
+
+    def _get_legacy_runtime_uniart(self, identity: UserContext) -> Dict[str, str]:
         row = self._row(identity.owner_profile_id)
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}
@@ -255,6 +370,18 @@ router = APIRouter(prefix="/user", tags=["user-config"])
 @router.get("/config")
 def get_user_config(identity: UserContext = Depends(require_user_context)):
     return get_user_config_store().get_public(identity)
+
+
+@router.get("/providers/{provider}")
+def get_provider_profile(provider: ProviderId, identity: UserContext = Depends(require_user_context)):
+    return get_user_config_store().get_provider_profile(identity, provider)
+
+
+@router.put("/providers/{provider}")
+def update_provider_profile(provider: ProviderId, update: ProviderProfileUpdate,
+                            identity: UserContext = Depends(require_user_context)):
+    return get_user_config_store().update_provider_profile(
+        identity, provider, **update.model_dump(exclude_unset=True))
 
 
 @router.put("/config")

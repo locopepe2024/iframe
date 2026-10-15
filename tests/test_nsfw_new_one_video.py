@@ -16,7 +16,7 @@ def studio(monkeypatch, tmp_path):
                     updated_at=0, owner_user_id="user", owner_profile_id="profile")
     pipeline.get_script = lambda ident: script if ident == script.id else None
     pipeline._save_data = Mock()
-    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner",
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_nsfw_for_owner",
                         lambda *_args: {"api_key": "test"})
     monkeypatch.setenv("NSFW_NEW_ONE_BASE_URL", "http://172.17.0.1:3000/v1")
     return pipeline, script

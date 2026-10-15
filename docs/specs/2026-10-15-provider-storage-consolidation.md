@@ -39,3 +39,17 @@ Verification: `python3 -m pytest -q tests/test_provider_media_config.py tests/te
 ## Open evidence / follow-up
 
 Expired historical preview requests have been observed; their relationship to the reported browser `Failed to fetch` is not established. Diagnose the exact failed browser operation separately; do not treat a signing configuration change as proof that this UI error is fixed.
+
+## Slice 2a — independent owner provider profiles
+
+Scope: backend configuration, catalog selection and existing image/video credential resolution; no global UI provider selector or default-provider change yet.
+
+- Store one encrypted profile per existing workspace owner and provider (`uniart`, `nsfw`) in a separate SQLite table. An explicit profile has its own API key and base URL. Profile writes do not change browser identity, cookies or asset ownership. Use the existing encryption envelope, with separate keys per record; never mix legacy ciphertext with a new envelope.
+- Expose owner-authenticated `GET/PUT /user/providers/{provider}`. API key is write-only; return readiness, not plaintext or key prefixes. Blank key explicitly clears it; an omitted key preserves it. An explicit empty/unavailable profile must fail rather than use another provider's key.
+- An explicit `/config/models?provider=uniart|nsfw` fetches only that provider profile, namespaces IDs to that provider and applies only its own allowlist. No provider/model-name guessing at this boundary. The existing no-query catalog endpoint retains its legacy behavior until consumers migrate.
+- Existing Studio and Playground image/video operations use their model's provider profile when present. With no explicit profile, preserve the legacy deployment contract and identify it as legacy in profile status. This compatibility does not apply to the new explicit catalog selection API. No cross-owner credential cache.
+- Preserve existing task model/provider IDs. Global selection and endpoint changes for in-flight tasks remain gated on a later task profile/version snapshot slice; this batch does not advertise a global provider switch.
+
+Success criteria: profile writes leave identity and other provider records unchanged; secrets encrypted on disk and absent from public responses; malformed endpoints fail; clear/missing-key profiles fail closed; explicit catalogs use matching credentials, namespacing and allowlists; Studio and Playground NSFW requests use the NSFW profile's endpoint/key, and legacy tests continue passing.
+
+Verification: focused profile/API/catalog tests plus existing multi-user boundaries, model routing, NSFW image/video, Playground recovery and backend CI. No provider network calls in tests, no billable generations, no local Go. Deploy only after reviewing compatibility against the NSFW node's active jobs and unreconciled patches.

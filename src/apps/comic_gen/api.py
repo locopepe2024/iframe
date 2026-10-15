@@ -6507,12 +6507,23 @@ def get_env_config(identity: UserContext = Depends(require_user_context)):
 
 @app.get("/config/models")
 @app.get("/config/uniart/models")
-def get_uniart_models():
+def get_uniart_models(provider: Optional[Literal["uniart", "nsfw"]] = None):
     """Fetch the current owner-scoped gateway model list.
 
     The upstream response is normalized into the capability vocabulary used by
     iFrame selectors; credentials stay server-side.
     """
+    if provider is not None:
+        from ..user_config import get_user_config_store
+        from ...utils.provider_catalog import fetch_provider_catalog
+        runtime_config = get_user_config_store().get_runtime_provider(require_studio_user(), provider)
+        try:
+            models = fetch_provider_catalog(provider, runtime_config)
+        except Exception as exc:
+            logger.warning("Provider catalog unavailable for %s (%s)", provider, type(exc).__name__)
+            raise HTTPException(status_code=502, detail=f"{provider}_models_unavailable") from exc
+        return {"provider": provider, "base_url": runtime_config["public_base_url"],
+                "models": models, "fetched_at": time.time()}
     runtime_config = studio_uniart_config()
     base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
     try:

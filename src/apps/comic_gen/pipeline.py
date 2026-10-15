@@ -74,6 +74,7 @@ from ..studio_access import (
     owned_by,
     reset_studio_uniart_config,
     runtime_uniart_for_owner,
+    runtime_nsfw_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
     resolve_studio_reference,
@@ -7354,7 +7355,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 from ...models.nsfw_new_one import NSFWNewOneVideoModel
                 if not script.owner_user_id or not script.owner_profile_id:
                     raise RuntimeError("Video task has no authenticated owner")
-                adapter = NSFWNewOneVideoModel(runtime_uniart_for_owner(
+                adapter = NSFWNewOneVideoModel(runtime_nsfw_for_owner(
                     script.owner_user_id, script.owner_profile_id,
                 ))
 

@@ -51,6 +51,7 @@ def _storage_for(identity: UserContext) -> PlaygroundStorage:
             service = PlaygroundService(
                 storage,
                 provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+                nsfw_config_loader=lambda: get_user_config_store().get_runtime_nsfw(identity),
             )
             for generation in storage.list_history(limit=1000000):
                 if generation.status == "processing" and generation.provider_tasks:
@@ -68,6 +69,7 @@ def _service_for(identity: UserContext) -> PlaygroundService:
     return PlaygroundService(
         storage,
         provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+        nsfw_config_loader=lambda: get_user_config_store().get_runtime_nsfw(identity),
     )
 
 

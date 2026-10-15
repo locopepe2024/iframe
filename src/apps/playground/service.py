@@ -36,9 +36,11 @@ class PlaygroundService:
         self,
         storage: PlaygroundStorage,
         provider_config_loader: Optional[Callable[[], Dict[str, str]]] = None,
+        nsfw_config_loader: Optional[Callable[[], Dict[str, str]]] = None,
     ):
         self.storage = storage
         self.provider_config_loader = provider_config_loader
+        self.nsfw_config_loader = nsfw_config_loader
         # Lazy-initialised model instances (cached for the lifetime of the service)
         self._wanx_model = None
         self._wanx_image_model = None
@@ -250,11 +252,11 @@ class PlaygroundService:
         from ...models.nsfw_new_one import NSFWNewOneImageModel, SEEDREAM_IDS
         from ...models.uniart import UniArtImageModel
 
-        runtime_config = self._load_provider_config()
         if gen.model_id in SEEDREAM_IDS:
-            model = NSFWNewOneImageModel(runtime_config)
+            model = NSFWNewOneImageModel(self._load_nsfw_config())
             use_uniart = True
         else:
+            runtime_config = self._load_provider_config()
             use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
                 os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
             )
@@ -345,7 +347,7 @@ class PlaygroundService:
         if gen.mode not in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V):
             raise ValueError("Wan 3.0 supports text, image, and image-reference video modes only")
         saved_task = gen.provider_tasks.get(str(batch_index))
-        model = NSFWNewOneVideoModel(self._load_provider_config())
+        model = NSFWNewOneVideoModel(self._load_nsfw_config())
         if saved_task:
             model.generate(gen.prompt, out_path, model=gen.model_id, resume_task_id=saved_task)
             return
@@ -579,6 +581,12 @@ class PlaygroundService:
         if not self.provider_config_loader:
             return {}
         return dict(self.provider_config_loader())
+
+    def _load_nsfw_config(self) -> Dict[str, str]:
+        if self.nsfw_config_loader:
+            return dict(self.nsfw_config_loader())
+        # Retain the explicit loader contract used by desktop/test clients.
+        return self._load_provider_config()
 
     @staticmethod
     def _uses_owner_scoped_provider(model_id: str) -> bool:
