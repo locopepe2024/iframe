@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .managed_media_root import ManagedMediaRoot
+
 
 LOCAL_MEDIA_PREFIXES = (
     "assets/",
@@ -33,12 +35,6 @@ def _output_root(project_root: Optional[str] = None) -> Path:
     return _project_root(project_root) / "output"
 
 
-def _is_under(path: Path, parent: Path) -> bool:
-    resolved = os.path.realpath(str(path))
-    parent_real = os.path.realpath(str(parent))
-    return resolved == parent_real or resolved.startswith(parent_real + os.sep)
-
-
 def _normalized_oss_base_path(oss_base_path: Optional[str] = None) -> str:
     value = oss_base_path if oss_base_path is not None else os.getenv("OSS_BASE_PATH", "lumenx")
     return str(value).strip().strip("'\"/ ")
@@ -49,6 +45,7 @@ def classify_media_ref(
     *,
     oss_base_path: Optional[str] = None,
     project_root: Optional[str] = None,
+    output_root: Optional[str] = None,
 ) -> str:
     """Classify media reference string used in project state."""
     if not isinstance(value, str):
@@ -67,12 +64,13 @@ def classify_media_ref(
     if raw.startswith(("http://", "https://")):
         return MEDIA_REF_REMOTE_URL
 
-    output_root = _output_root(project_root)
-    if os.path.isabs(raw):
-        return MEDIA_REF_LOCAL_PATH if _is_under(Path(raw), output_root) else MEDIA_REF_UNKNOWN
-
+    store = ManagedMediaRoot(output_root if output_root is not None else _output_root(project_root))
     relative = raw.lstrip("/")
-    if relative.startswith(LOCAL_MEDIA_PREFIXES):
+    if os.path.isabs(raw) or relative.startswith(LOCAL_MEDIA_PREFIXES):
+        try:
+            store.resolve(raw)
+        except (ValueError, OSError, RuntimeError):
+            return MEDIA_REF_UNKNOWN
         return MEDIA_REF_LOCAL_PATH
 
     base_path = _normalized_oss_base_path(oss_base_path)
@@ -82,33 +80,17 @@ def classify_media_ref(
     return MEDIA_REF_UNKNOWN
 
 
-def resolve_local_media_path(value: str, *, project_root: Optional[str] = None) -> Optional[str]:
-    """
-    Resolve a local media reference to an absolute filesystem path under output/.
-    Returns None when the input is not a local media reference.
-    """
-    if classify_media_ref(value, project_root=project_root) != MEDIA_REF_LOCAL_PATH:
+def resolve_local_media_path(
+    value: str, *, project_root: Optional[str] = None, output_root: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve recognized local references under the explicit or default media root."""
+    if classify_media_ref(value, project_root=project_root, output_root=output_root) != MEDIA_REF_LOCAL_PATH:
         return None
-
-    raw = value.strip()
-    output_root = os.path.realpath(str(_output_root(project_root)))
-
-    if os.path.isabs(raw):
-        abs_path = os.path.realpath(raw)
-        if abs_path.startswith(output_root + os.sep):
-            return abs_path
+    store = ManagedMediaRoot(output_root if output_root is not None else _output_root(project_root))
+    try:
+        return str(store.resolve(value))
+    except (ValueError, OSError, RuntimeError):
         return None
-
-    relative = raw.lstrip("/")
-    if relative.startswith("output/"):
-        relative = relative[len("output/") :]
-    elif relative.startswith("outputs/"):
-        relative = relative[len("outputs/") :]
-
-    abs_path = os.path.realpath(os.path.join(output_root, relative))
-    if abs_path.startswith(output_root + os.sep):
-        return abs_path
-    return None
 
 
 def is_remote_media_ref(value: str) -> bool:
