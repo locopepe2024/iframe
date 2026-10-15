@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Any
 from .models import StoryboardFrame, GenerationStatus
+from ..studio_access import studio_media_dir
 from ...models.wanx import WanxModel
 from ...utils import get_logger
 
@@ -12,7 +13,8 @@ class VideoGenerator:
         self.model = WanxModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', 'output/video')
 
-    def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None) -> Dict[str, Any]:
+    def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None,
+                     owner_profile_id: str = None) -> Dict[str, Any]:
         """
         Generate Image-to-Video for motion reference.
         
@@ -40,7 +42,8 @@ class VideoGenerator:
         
         try:
             output_filename = f"motion_ref_{uuid.uuid4().hex[:8]}.mp4"
-            output_path = os.path.join(self.output_dir, output_filename)
+            output_dir = studio_media_dir(owner_profile_id, "video") if owner_profile_id else self.output_dir
+            output_path = os.path.join(output_dir, output_filename)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             video_path, _ = self.model.generate(
@@ -116,7 +119,9 @@ class VideoGenerator:
                      img_path = img_url
         
         try:
-            output_path = os.path.join(self.output_dir, f"{frame.id}.mp4")
+            output_dir = studio_media_dir(frame.owner_profile_id, "video") if frame.owner_profile_id else self.output_dir
+            output_path = os.path.join(output_dir, f"{frame.id}.mp4")
+            os.makedirs(output_dir, exist_ok=True)
             
             video_path, _ = self.model.generate(
                 prompt=prompt,

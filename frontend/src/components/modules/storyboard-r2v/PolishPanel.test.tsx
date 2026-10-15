@@ -56,3 +56,18 @@ it("sends assembled constraints before optimization", async () => {
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalled());
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][0]).toBe("原始镜头；黄昏光影；远景");
 });
+
+it("shows and applies current lighting when a polish response finishes after a field edit", async () => {
+    let finish!: (value: any) => void;
+    vi.mocked(api.polishVideoPrompt).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const onApply = vi.fn();
+    const { rerender } = render(<PolishPanel prompt="action" tabMode="t2i_i2v" scriptId="project" shotOverrides={{ style: "", lighting: "old light" }} onApply={onApply} />);
+    fireEvent.click(screen.getByTitle("polish"));
+    await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalled());
+    rerender(<PolishPanel prompt="action" tabMode="t2i_i2v" scriptId="project" shotOverrides={{ style: "", lighting: "current light" }} onApply={onApply} />);
+    finish({ prompt_cn: "detailed_description: old light; 中文动作\noverall_soundscape: N/A", prompt_en: "detailed_description: old light; action\noverall_soundscape: N/A" });
+    await waitFor(() => expect(screen.getAllByText(/current light/).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByText("polishApply")[0]);
+    expect(onApply.mock.calls[0][0]).toContain("current light");
+    expect(onApply.mock.calls[0][0]).not.toContain("old light");
+});

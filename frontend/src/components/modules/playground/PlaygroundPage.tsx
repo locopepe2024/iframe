@@ -211,7 +211,7 @@ function PlaygroundContent() {
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim() || !activeSessionId) return;
-    const submission = normalizePlaygroundSubmission(mode, inputMedia);
+    const submission = normalizePlaygroundSubmission(mode, inputMedia, prompt);
     const durationConfig = getModelDuration(modelId);
     const selectedDuration = typeof parameters.duration === 'number'
       ? parameters.duration

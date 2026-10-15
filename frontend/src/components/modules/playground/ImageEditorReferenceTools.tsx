@@ -53,7 +53,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
     }, 2000);
     return () => { active = false; window.clearInterval(timer); };
   }, [generation?.id, generation?.status, pollFailed, t]);
-  const inputMedia = generationInputMedia(source, references);
+  const inputMedia = prompt.includes('@') ? generationInputMedia(source, references) : [];
   const taskMode = inputMedia.length ? 'i2i' : 't2i';
   const availableModels = useMemo(() => models.filter(model => model.capabilities.includes(taskMode)), [models, taskMode]);
   useEffect(() => setModelId(current => current && availableModels.some(model => model.id === current) ? current : availableModels[0]?.id ?? ''), [availableModels]);
@@ -94,7 +94,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
   };
   const generate = async () => {
     if (!selectedModel || !prompt.trim() || busy || generation?.status === 'processing' || generation?.status === 'pending') return;
-    if (references.length > referenceLimit) { setError(t('modelReferenceLimit')); return; }
+    if ((prompt.includes('@') ? references.length : 0) > referenceLimit) { setError(t('modelReferenceLimit')); return; }
     setBusy(true); setError(''); setGeneration(null); setPollFailed(false);
     const instruction = mode === 'panorama'
       ? `Create a seamless 360-degree equirectangular panorama with a level horizon and a 2:1 composition. The left and right edges must join continuously. ${prompt.trim()}`
@@ -102,7 +102,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
     try {
       setGeneration(await playgroundApi.generate({ mode: taskMode, model_id: modelId, prompt: instruction,
         input_media: inputMedia.length ? inputMedia : undefined,
-        media_names: Object.fromEntries(references.map(reference => [reference.path, reference.title])),
+        media_names: Object.fromEntries(references.filter(reference => inputMedia.includes(reference.path)).map(reference => [reference.path, reference.title])),
         batch_size: 1 }));
     } catch { setError(t('generationFailed')); }
     finally { setBusy(false); }
@@ -145,9 +145,9 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
       </div>
       <label className="block">{t('model')}<select value={modelId} onChange={event => setModelId(event.target.value)} className="mt-1 min-h-9 w-full rounded border border-glass-border bg-surface px-2">{availableModels.map(model => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label>
       {availableModels.length === 0 && <p role="status" className="text-xs text-text-muted">{t('noImageModel')}</p>}
-      {references.length > referenceLimit && <p role="status" className="text-xs text-status-failed-fg">{t('modelReferenceLimit')}</p>}
+      {(prompt.includes('@') ? references.length : 0) > referenceLimit && <p role="status" className="text-xs text-status-failed-fg">{t('modelReferenceLimit')}</p>}
       <label className="block">{t('prompt')}<textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} className="mt-1 w-full rounded border border-glass-border bg-surface p-2"/></label>
-      <button type="button" disabled={!modelId || !prompt.trim() || busy || (generation && ['pending', 'processing'].includes(generation.status)) || references.length > referenceLimit} onClick={() => void generate()} className="min-h-10 w-full rounded bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50">{mode === 'panorama' ? t('generatePanoramaCandidate') : t('generateImage')}</button>
+      <button type="button" disabled={!modelId || !prompt.trim() || busy || (generation && ['pending', 'processing'].includes(generation.status)) || (prompt.includes('@') ? references.length : 0) > referenceLimit} onClick={() => void generate()} className="min-h-10 w-full rounded bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50">{mode === 'panorama' ? t('generatePanoramaCandidate') : t('generateImage')}</button>
       {mode === 'panorama' && <p className="text-xs text-text-muted">{t('panoramaCandidateNote')}</p>}
       {generation && <div role="status" className="space-y-2 border-t border-glass-border pt-2"><strong>{generation.status === 'completed' ? t('generationReady') : generation.status === 'failed' ? t('generationFailed') : t('generating')}</strong>
         {pollFailed && <button type="button" className="min-h-9 rounded border border-glass-border px-2" onClick={() => { setError(''); setPollFailed(false); }}>{t('retryStatus')}</button>}

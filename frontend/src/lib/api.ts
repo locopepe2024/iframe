@@ -358,6 +358,7 @@ export interface EnvConfigPayload {
 }
 
 export interface UserConfigPayload {
+    catalog_name?: 'uniart' | 'greena';
     UNIART_API_KEY?: string;
     UNIART_BASE_URL?: string;
     preferences?: Record<string, unknown>;
@@ -1390,12 +1391,14 @@ export const api = {
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
         frameId: string = "",
+        shotOverrides?: { style: string; lighting: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_prompt`, {
             draft_prompt: draftPrompt,
             feedback: feedback,
             script_id: scriptId,
             frame_id: frameId,
+            shot_overrides: shotOverrides,
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
@@ -1426,6 +1429,7 @@ export const api = {
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
         frameId: string = "",
+        shotOverrides?: { style: string; lighting: string },
     ) => {
         const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
             draft_prompt: draftPrompt,
@@ -1433,6 +1437,7 @@ export const api = {
             feedback: feedback,
             script_id: scriptId,
             frame_id: frameId,
+            shot_overrides: shotOverrides,
             prev_cn: prevCn,
             image_urls: imageUrls,
             polish_model: polishModel,
@@ -1484,6 +1489,7 @@ export const api = {
     updateFrame: async (scriptId: string, frameId: string, data: {
         image_prompt?: string;
         action_description?: string;
+        workbench_prompt_is_optimized?: boolean;
         dialogue?: string;
         camera_angle?: string;
         scene_id?: string;

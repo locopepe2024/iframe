@@ -141,6 +141,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     if (!sessionId || sending.current || remoteBusy || loading || modelsLoading || modelsError || !models.some(m => m.api_model_id === model)) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
+    const inputMedia = snapshot.prompt.includes('@') ? snapshot.inputMedia : [];
     const currentResearch = liveResearchAvailable && requestsCurrentInformation(snapshot.prompt) && model !== 'minimax-h3-ir';
     if (knowledgeSearch && model === 'minimax-h3-ir') {
       setError('H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型');
@@ -153,12 +154,12 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         model, playground_session_id: sessionId,
       });
       const result = await agentRequest<{ user_message: ChatMessage; assistant_message: ChatMessage }>(`/sessions/${session.id}/messages`, 'POST', {
-        content: snapshot.prompt, input_media: snapshot.inputMedia,
+        content: snapshot.prompt, input_media: inputMedia,
         companion_skills: companionSkills,
         knowledge_search: knowledgeSearch || currentResearch,
         live_research: (knowledgeSearch && liveResearch && liveResearchAvailable) || currentResearch,
         knowledge_query: knowledgeSearch && knowledgeQuery.trim() ? knowledgeQuery.trim() : undefined,
-        asset_names: snapshot.inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
+        asset_names: inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
         duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
         ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
       });

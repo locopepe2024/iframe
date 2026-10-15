@@ -14,7 +14,7 @@ from .character_prompts import (
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
-from ..studio_access import studio_owner_dir, studio_uniart_config, studio_nsfw_new_one_config
+from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_new_one_config
 
 logger = get_logger(__name__)
 
@@ -65,7 +65,7 @@ class AssetGenerator:
     def _output_dir_for(self, asset: Any) -> str:
         owner_profile_id = getattr(asset, "owner_profile_id", None)
         if owner_profile_id:
-            return os.path.join(studio_owner_dir(owner_profile_id), "assets")
+            return studio_media_dir(owner_profile_id, "assets")
         return self.output_dir
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":

@@ -1,4 +1,6 @@
 """Authenticated UniArt chat; generation remains an explicit Playground action."""
+from contextvars import ContextVar
+
 import json
 import os
 import re
@@ -23,6 +25,7 @@ from pydantic import BaseModel, Field, ValidationError
 from .identity import UserContext, require_user_context
 from .user_config import get_user_config_store
 from .agent_skills import router as skills_router, creative_guidance, catalog as skill_catalog
+from ..utils.provider_catalog import catalog_label, catalog_name, fetch_selected_catalog
 from ..utils.uniart_catalog import normalize_uniart_catalog
 from ..utils.reference_files import AUDIO_EXTENSIONS, TEXT_EXTENSIONS, chat_audio, read_reference_text
 from .media_reference import normalize_managed_media_reference
@@ -596,18 +599,25 @@ class MemoryPatch(BaseModel):
     content: str = Field(min_length=1, max_length=300)
 
 
+_request_catalog = ContextVar("agent_request_catalog", default=None)
+
+
 def catalog(ctx):
     config = get_user_config_store().get_runtime_uniart(ctx)
-    req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
     try:
-        with urlopen(req, timeout=15) as response:
-            items = normalize_uniart_catalog(json.load(response))
+        if catalog_name(config):
+            items = fetch_selected_catalog(config)
+        else:
+            req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
+            with urlopen(req, timeout=15) as response:
+                items = normalize_uniart_catalog(json.load(response))
     except Exception:
-        raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
+        raise HTTPException(502, f"无法获取 {catalog_label(config)} 模型，请检查连接和用户配置") from None
     return _agent_chat_models(items)
 
 
 CHAT_MODEL_LABELS = {
+    "llm-nf-all": "llm-nf-all",
     "Qwen3.8-27B-Uncensored-Q8_0": "Qwen 3.8 27B Uncensored Q8_0",
     "gpt-5.6-sol": "GPT 5.6 Sol",
     "gpt-5.6-luna": "GPT 5.6 Luna",
@@ -651,12 +661,15 @@ def _agent_chat_models(items):
 
 def asr_available(ctx):
     config = get_user_config_store().get_runtime_uniart(ctx)
-    req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
     try:
-        with urlopen(req, timeout=15) as response:
-            items = normalize_uniart_catalog(json.load(response))
+        if catalog_name(config):
+            items = fetch_selected_catalog(config)
+        else:
+            req = Request(config["base_url"].rstrip("/") + "/models", headers={"Authorization": "Bearer " + config["api_key"]})
+            with urlopen(req, timeout=15) as response:
+                items = normalize_uniart_catalog(json.load(response))
     except Exception:
-        raise HTTPException(502, "无法获取 UniArt 模型，请检查连接和用户配置")
+        raise HTTPException(502, f"无法获取 {catalog_label(config)} 模型，请检查连接和用户配置") from None
     return any(item["api_model_id"] == "asr-1.0" for item in items)
 
 
@@ -694,7 +707,7 @@ def transcribe_audio(file: UploadFile = File(...), ctx: UserContext = Depends(re
 
 def validate_model(ctx, model):
     if model not in {m["api_model_id"] for m in catalog(ctx)}:
-        raise HTTPException(400, "请选择当前 UniArt Catalog 中的 Chat 模型")
+        raise HTTPException(400, f"请选择 {catalog_label(get_user_config_store().get_runtime_uniart(ctx))} 中的 Chat 模型")
 
 
 @router.get("/models")
@@ -976,12 +989,16 @@ def reference_content(ctx, reference):
 
 def complete(ctx, model, history):
     config = get_user_config_store().get_runtime_uniart(ctx)
+    if _request_catalog.get() is not None:
+        _request_catalog.set({"catalog_name": catalog_name(config)})
     # Chat audio is inline per the gateway schema; reject oversized histories
     # before the gateway's default nginx limit, without dropping references.
     # Match the SDK's compact UTF-8 JSON encoding, not escaped Unicode length.
     payload_bytes = len(json.dumps({"model": model, "messages": history}, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     if payload_bytes > 900 * 1024:
         raise HTTPException(422, f"本次对话含历史和素材约 {payload_bytes / 1024:.0f} KB，超过当前网关请求预算 900 KB；不是素材数量上限。请减少音频或文本内容，或新建会话；内容未截断")
+    from ..utils.llm_request_diagnostics import record_llm_request
+    record_llm_request("agent", model, history, stream=True)
     from openai import OpenAI
     with OpenAI(
         api_key=config["api_key"],
@@ -1001,8 +1018,8 @@ def complete(ctx, model, history):
             stream.close()
     answer = "".join(parts)
     if not answer:
-        logger.error("UniArt chat stream completed without text: model=%s", model)
-        raise HTTPException(502, "UniArt 模型未返回有效回复（choices 为空），请检查模型通道")
+        logger.error("%s chat stream completed without text: model=%s", catalog_label(config), model)
+        raise HTTPException(502, f"{catalog_label(config)} 模型未返回有效回复（choices 为空），请检查模型通道")
     return answer
 
 
@@ -1033,6 +1050,8 @@ def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
     """Submit and poll UniArt's asynchronous H3 Context-IR endpoint."""
     from ..models.uniart import complete_context_ir
     config = get_user_config_store().get_runtime_uniart(ctx)
+    if _request_catalog.get() is not None:
+        _request_catalog.set({"catalog_name": catalog_name(config)})
     try:
         return complete_context_ir(
             config,
@@ -1042,11 +1061,15 @@ def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
             idempotency_key=idempotency_key,
         )
     except RuntimeError as exc:
-        raise HTTPException(502, f"H3 Context-IR 失败：{exc}") from exc
+        raise HTTPException(502, f"{catalog_label(config)} H3 Context-IR 失败：{exc}") from exc
 
 
 @router.post("/sessions/{sid}/messages")
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
+    # Selected Playground media is a candidate list, not attachment consent.
+    # Normalize before validation and every dispatch path, including H3/research.
+    if "@" not in body.content:
+        body = body.model_copy(update={"input_media": [], "asset_names": []})
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
         raise HTTPException(400, "消息或素材名称无效")
     # Validate only the references attached to this request. Historical turns
@@ -1077,6 +1100,7 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         request_timeout = h3_ir_timeout_seconds() if session["model"] == "minimax-h3-ir" else chat_timeout_seconds()
         lease = time.time() + request_timeout + 60
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
+    catalog_token = _request_catalog.set({})
     try:
         user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, duration=body.duration, ratio=body.ratio, created_at=time.time(), model=session["model"])
         if body.live_research:
@@ -1155,7 +1179,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                 failure_stage = stage
                 answer = "研究请求未完成，请稍后重试；已保留本次提问。"
                 logger.exception("Research request failed: stage=%s", stage)
-            assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer,
+            user["catalog_name"] = (_request_catalog.get() or {}).get("catalog_name")
+            assistant = dict(catalog_name=user["catalog_name"], id=str(uuid.uuid4()), role="assistant", content=answer,
                              created_at=time.time(), model=session["model"])
             if failure_stage:
                 assistant["research_failure_stage"] = failure_stage
@@ -1283,7 +1308,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                     else match[0],
                     answer,
                 )
-        assistant = dict(id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
+        user["catalog_name"] = (_request_catalog.get() or {}).get("catalog_name")
+        assistant = dict(catalog_name=user["catalog_name"], id=str(uuid.uuid4()), role="assistant", content=answer, created_at=time.time(), model=session["model"], input_media=body.input_media, asset_names=body.asset_names)
         if body.knowledge_search:
             assistant["knowledge_citations"] = citations
         session["messages"].extend([user, assistant])
@@ -1296,25 +1322,27 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
     except HTTPException:
         raise
     except Exception as exc:
+        label = catalog_label(_request_catalog.get() or {})
         if isinstance(exc, (APIStatusError, APIConnectionError)):
             status = getattr(exc, "status_code", None)
-            logger.warning("UniArt chat transport failed: model=%s type=%s status=%s", session["model"], type(exc).__name__, status)
+            logger.warning(f"{label} chat transport failed: model=%s type=%s status=%s", session["model"], type(exc).__name__, status)
             if isinstance(exc, APITimeoutError):
-                detail = "UniArt 对话响应超时，请稍后重试；当前输入已保留"
+                detail = f"{label} 对话响应超时，请稍后重试；当前输入已保留"
             elif status in (401, 403):
-                detail = f"UniArt 对话鉴权或访问权限失败（HTTP {status}），请检查当前用户的密钥和模型权限"
+                detail = f"{label} 对话鉴权或访问权限失败（HTTP {status}），请检查当前用户的密钥和模型权限"
             elif status == 429:
-                detail = "UniArt 对话请求受限（HTTP 429），请检查配额或稍后重试"
+                detail = f"{label} 对话请求受限（HTTP 429），请检查配额或稍后重试"
             elif status is not None and status >= 500:
-                detail = f"UniArt 对话网关返回 HTTP {status}，本次请求未完成；当前输入已保留，请稍后重试"
+                detail = f"{label} 对话网关返回 HTTP {status}，本次请求未完成；当前输入已保留，请稍后重试"
             elif status is not None:
-                detail = f"UniArt 拒绝对话请求（HTTP {status}），请核对模型及参考素材要求"
+                detail = f"{label} 拒绝对话请求（HTTP {status}），请核对模型及参考素材要求"
             else:
-                detail = "无法连接 UniArt 对话服务，请稍后重试；当前输入已保留"
+                detail = f"无法连接 {label} 对话服务，请稍后重试；当前输入已保留"
             raise HTTPException(502, detail) from None
         logger.exception("Agent chat failed: %s", type(exc).__name__)
-        raise HTTPException(502, "UniArt 对话失败，请检查模型和凭据后重试")
+        raise HTTPException(502, f"{label} 对话失败，请检查模型和凭据后重试")
     finally:
+        _request_catalog.reset(catalog_token)
         with database() as db:
             db.execute("UPDATE sessions SET busy=0 WHERE owner=? AND id=? AND busy=?", (owner, sid, lease))
 

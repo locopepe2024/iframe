@@ -79,6 +79,7 @@ def _runtime_base_url(config: Dict[str, Any]) -> str:
 
 
 class UserConfigUpdate(BaseModel):
+    catalog_name: Literal["uniart", "greena"] | None = None
     UNIART_API_KEY: str | None = None
     UNIART_BASE_URL: str | None = None
     preferences: Dict[str, Any] = Field(default_factory=dict)
@@ -188,11 +189,18 @@ class UserConfigStore:
                 "public_base_url": row["base_url"]}
 
     def get_runtime_nsfw(self, identity: UserContext) -> Dict[str, str]:
+        row = self._row(identity.owner_profile_id)
+        config = json.loads(row["config_json"]) if row else {}
+        if config.get("catalog_name") == "greena":
+            return self._get_legacy_runtime_uniart(identity)
         if self._provider_row(identity, "nsfw") is not None:
             return self.get_runtime_provider(identity, "nsfw")
         # Compatibility for installations predating independent profiles.
         # New explicit catalog/profile APIs never take this legacy path.
-        return {"api_key": self._get_legacy_runtime_uniart(identity)["api_key"]}
+        runtime = self._get_legacy_runtime_uniart(identity)
+        if runtime.get("catalog_name") == "greena":
+            return runtime
+        return {"api_key": runtime["api_key"]}
 
     def _encryption_key(self, identity: UserContext | None = None) -> bytes:
         # Prefer a per-user key derived from stable owner identity.
@@ -263,7 +271,7 @@ class UserConfigStore:
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}
         personal_uniart_configured = bool(secret_payload.get("UNIART_API_KEY"))
-        profile = self._provider_row(identity, "uniart")
+        profile = self._provider_row(identity, "uniart") if not config.get("catalog_name") else None
         return {
             **config,
             "secrets_configured": {
@@ -283,6 +291,8 @@ class UserConfigStore:
         row = self._row(identity.owner_profile_id)
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}
+        if update.catalog_name is not None:
+            config["catalog_name"] = update.catalog_name
         if update.UNIART_BASE_URL is not None:
             value = update.UNIART_BASE_URL.strip().rstrip("/")
             if value and not value.startswith(("https://", "http://")):
@@ -327,6 +337,13 @@ class UserConfigStore:
         return self.get_public(identity)
 
     def get_runtime_uniart(self, identity: UserContext) -> Dict[str, str]:
+        # Historical method name; this is the active gateway used by Studio/Agent.
+        row = self._row(identity.owner_profile_id)
+        config = json.loads(row["config_json"]) if row else {}
+        if config.get("catalog_name"):
+            # The saved name belongs to this settings key/URL pair. Independent
+            # explicit profiles must not replace either half of that pair.
+            return self._get_legacy_runtime_uniart(identity)
         if self._provider_row(identity, "uniart") is not None:
             return self.get_runtime_provider(identity, "uniart")
         return self._get_legacy_runtime_uniart(identity)
@@ -355,6 +372,7 @@ class UserConfigStore:
                 "api_key": key,
                 "base_url": _runtime_base_url(config),
                 "public_base_url": _effective_base_url(config),
+                "catalog_name": config.get("catalog_name"),
             }
         key = self._shared_uniart_api_key()
         if key:
@@ -362,6 +380,7 @@ class UserConfigStore:
                 "api_key": key,
                 "base_url": _runtime_base_url(config),
                 "public_base_url": _effective_base_url(config),
+                "catalog_name": config.get("catalog_name"),
             }
         raise HTTPException(status_code=409, detail="UniArt API key is not configured for this user")
 

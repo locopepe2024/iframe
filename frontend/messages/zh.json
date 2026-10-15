@@ -883,6 +883,9 @@
     "secPromptsTitle": "系统提示词配置",
     "secPromptsDesc": "新建项目的默认系统提示词（留空使用内置默认）。",
     "promptPlaceholder": "留空使用系统默认…",
+    "catalogName": "Catalog name",
+    "catalogNameHint": "选择此密钥和网关对应的供应商，用于模型目录与请求提示",
+    "catalogNameRequired": "请选择供应商",
     "secApiTitle": "供应商凭证",
     "secApiDesc": "DashScope 优先；按需开启供应商直连。",
     "loadingConfig": "加载配置中…",
@@ -2483,6 +2486,7 @@
     "noRefVideosAvailable": "暂无参考视频，请先在素材步骤中生成动态参考。"
   },
   "storyboardR2V": {
+    "shotEditSaveFailed": "镜头修改保存失败，编辑内容已保留，请重试。",
     "generatedAudio": "生成视频音频",
     "shots": "镜头",
     "shot": "镜头",

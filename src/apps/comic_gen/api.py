@@ -132,6 +132,7 @@ from ..studio_access import (
     sign_studio_media_paths,
     set_studio_user,
     studio_owner_dir,
+    studio_media_dir,
     studio_owner_key,
     studio_uniart_config,
     verify_studio_media,
@@ -186,7 +187,8 @@ async def add_cache_control_header(request: Request, call_next):
         "/files/videos/",
         "/files/video_inputs/",
     )
-    if request.url.path.startswith(protected_media_prefixes):
+    normalized_path = re.sub(r"/+", "/", request.url.path)
+    if normalized_path.startswith(protected_media_prefixes):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     response = await call_next(request)
     if request.url.path.startswith("/files/"):
@@ -329,6 +331,7 @@ def signed_response(data):
     # Keep immutable history snapshots behind their dedicated revision APIs;
     # embedding them in every project response multiplies long-script payloads.
     if isinstance(data, Script):
+        pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
@@ -460,7 +463,7 @@ def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: U
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
-    upload_dir = os.path.join(studio_owner_dir(user.owner_profile_id), "uploads")
+    upload_dir = studio_media_dir(user.owner_profile_id, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     absolute_path = os.path.join(upload_dir, filename)
     stored_path = os.path.relpath(absolute_path, "output")
@@ -4412,6 +4415,7 @@ class UpdateFrameRequest(BaseModel):
     frame_id: str
     image_prompt: Optional[str] = None
     action_description: Optional[str] = None
+    workbench_prompt_is_optimized: Optional[bool] = None
     dialogue: Optional[str] = None
     camera_angle: Optional[str] = None
     scene_id: Optional[str] = None
@@ -4434,6 +4438,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             request.frame_id,
             image_prompt=request.image_prompt,
             action_description=request.action_description,
+            workbench_prompt_is_optimized=request.workbench_prompt_is_optimized,
             dialogue=request.dialogue,
             camera_angle=request.camera_angle,
             scene_id=request.scene_id,
@@ -5941,14 +5946,15 @@ def _get_custom_prompt(script_id: str, field: str) -> str:
     return effective
 
 
-def _get_director_prompt_context(script_id: str, frame_id: str = "") -> str:
+def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: Optional[Dict[str, str]] = None) -> str:
     if not script_id or not frame_id:
         return ""
     script = pipeline.get_script(script_id)
     frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
     context = frame.director_shot_context if frame else None
-    if not isinstance(context, dict):
+    if frame is None:
         return ""
+    context = context if isinstance(context, dict) else {}
     scene = context.get("scene") if isinstance(context.get("scene"), dict) else {}
     shot = context.get("shot") if isinstance(context.get("shot"), dict) else {}
     selected = {
@@ -5959,6 +5965,18 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "") -> str:
             "visual_intent", "performance_action", "composition", "camera_movement", "lighting", "ambient_sound",
         ) if shot.get(key)},
     }
+    current = overrides if overrides is not None else {
+        "style": frame.style_prompt_override or "",
+        "lighting": frame.lighting_override or "",
+    }
+    selected["shot_overrides"] = {
+        key: str(current[key]).strip()[:160]
+        for key in ("style", "lighting") if current.get(key) and str(current[key]).strip()
+    }
+    if selected["shot_overrides"].get("lighting"):
+        selected["shot"].pop("lighting", None)
+    if not context and not selected["shot_overrides"]:
+        return ""
     baseline = context.get("lighting_baseline")
     if (isinstance(baseline, dict)
             and scene.get("place_continuity_id")
@@ -6028,6 +6046,7 @@ class PolishVideoPromptRequest(BaseModel):
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
     frame_id: str = ""
+    shot_overrides: Optional[Dict[Literal["style", "lighting"], str]] = None
     # 迭代时传入上一次的 CN 作为双语锚点，让模型同步修改双语；首次留空。
     prev_cn: str = ""
     # I2V 模式：首帧图 URL(s)。Vision-capable polish 模型会真正看见图像并
@@ -6306,9 +6325,9 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
         custom = _get_custom_prompt(request.script_id, "video_polish")
-        director = _get_director_prompt_context(request.script_id, request.frame_id)
+        director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
         if director:
-            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+            custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
         selected_skills = _effective_optimization_skills(request)
         contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
@@ -6352,6 +6371,7 @@ class PolishR2VPromptRequest(BaseModel):
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
     script_id: str = ""  # Optional: project ID to load custom prompt config
     frame_id: str = ""
+    shot_overrides: Optional[Dict[Literal["style", "lighting"], str]] = None
     prev_cn: str = ""  # 双语锚点迭代用，首次留空
     # R2V 模式：用户挂载的 character1/2/3 参考图 URL(s)，让 vision 模型
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
@@ -6374,9 +6394,9 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     try:
         from .llm import DEFAULT_R2V_POLISH_PROMPT
         custom = _get_custom_prompt(request.script_id, "r2v_polish")
-        director = _get_director_prompt_context(request.script_id, request.frame_id)
+        director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
         if director:
-            custom = "\n\n".join(filter(None, [custom, "CONFIRMED DIRECTOR PROFILE:\n" + director]))
+            custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
         selected_skills = _effective_optimization_skills(request)
         contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
@@ -6543,11 +6563,13 @@ def get_uniart_models(provider: Optional[Literal["uniart", "greena", "nsfw"]] = 
                 "models": models, "fetched_at": time.time()}
     runtime_config = studio_uniart_config()
     base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
+    from ...utils.provider_catalog import catalog_name, catalog_label, fetch_selected_catalog
     try:
-        models = fetch_uniart_catalog(runtime_config)
+        models = fetch_selected_catalog(runtime_config) if catalog_name(runtime_config) else fetch_uniart_catalog(runtime_config)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
-    return {"provider": "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
+        logger.warning("%s unavailable (%s)", catalog_label(runtime_config), type(exc).__name__)
+        raise HTTPException(status_code=502, detail=f"{catalog_label(runtime_config)} 模型目录暂时不可用") from None
+    return {"provider": catalog_name(runtime_config) or "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
 
 
 # ============================================

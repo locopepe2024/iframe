@@ -29,7 +29,8 @@ class StoryboardGenerator:
             return MuleRouterImageModel({})
         return self.model
 
-    def generate_storyboard(self, script: Any, characters: List[Character] = None, scenes: List[Scene] = None) -> Any:
+    def generate_storyboard(self, script: Any, characters: List[Character] = None, scenes: List[Scene] = None,
+                            output_dir: str = None) -> Any:
         """Generates images for all frames in the storyboard.
 
         ``characters`` / ``scenes`` accept the resolver-merged lists
@@ -50,7 +51,7 @@ class StoryboardGenerator:
             # Find scene for this frame
             scene = next((s for s in resolved_scenes if s.id == frame.scene_id), None)
             
-            self.generate_frame(frame, resolved_characters, scene)
+            self.generate_frame(frame, resolved_characters, scene, output_dir=output_dir)
             
         return script
 
@@ -67,6 +68,7 @@ class StoryboardGenerator:
         model_name: str = None,
         negative_prompt: str = None,
         preserve_prompt: bool = False,
+        output_dir: str = None,
     ) -> StoryboardFrame:
         """Generates a storyboard frame image."""
         frame.status = GenerationStatus.PROCESSING
@@ -198,7 +200,7 @@ class StoryboardGenerator:
             for _ in range(batch_size):
                 variant_id = str(uuid.uuid4())
                 output_filename = f"{frame.id}_{variant_id}.png"
-                output_path = os.path.join(self.output_dir, output_filename)
+                output_path = os.path.join(output_dir or self.output_dir, output_filename)
                 
                 # Ensure output directory exists
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)

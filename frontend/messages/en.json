@@ -883,6 +883,9 @@
     "secPromptsTitle": "System prompt configuration",
     "secPromptsDesc": "Default system prompts for new projects (leave empty to use the built-in default).",
     "promptPlaceholder": "Leave empty to use the system default…",
+    "catalogName": "Catalog name",
+    "catalogNameHint": "Supplier for this key and gateway, used for model catalogs and request messages.",
+    "catalogNameRequired": "Choose a catalog supplier",
     "secApiTitle": "Provider credentials",
     "secApiDesc": "DashScope first; enable direct provider connections as needed.",
     "loadingConfig": "Loading config…",
@@ -2483,6 +2486,7 @@
     "noRefVideosAvailable": "No reference videos available. Generate Motion References in the Assets step first."
   },
   "storyboardR2V": {
+    "shotEditSaveFailed": "Could not save shot changes. Your edits are retained; please retry.",
     "generatedAudio": "Generated video audio",
     "genShots": "✨ Generate shots",
     "genInFlight": "Generating...",

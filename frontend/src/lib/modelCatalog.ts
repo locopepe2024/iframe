@@ -187,7 +187,15 @@ if (typeof window !== 'undefined') {
 export async function refreshUniArtModelCatalog(): Promise<number> {
     if (typeof window === 'undefined') return 0;
     try {
-        const response = await fetch('/config/models', { cache: 'no-store' });
+        const headers = new Headers();
+        const apiKeyIdentity = localStorage.getItem('lumenx-api-key-identity');
+        if (apiKeyIdentity && /^[0-9a-f]{64}$/.test(apiKeyIdentity)) {
+            headers.set('X-iFrame-API-Key-Identity', apiKeyIdentity);
+        } else {
+            const token = localStorage.getItem('lumenx-access-token');
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+        }
+        const response = await fetch('/config/models', { cache: 'no-store', headers });
         if (!response.ok) return 0;
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];

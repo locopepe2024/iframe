@@ -8,9 +8,9 @@ import type { PlaygroundMode } from './usePlaygroundStore';
  * silently changing the selected mode at submit time can route a user request
  * to the edit endpoint.
  */
-export function normalizePlaygroundSubmission(mode: PlaygroundMode, inputMedia: string[]) {
+export function normalizePlaygroundSubmission(mode: PlaygroundMode, inputMedia: string[], prompt: string) {
   return {
     mode,
-    inputMedia: mode === 't2i' ? [] : [...inputMedia],
+    inputMedia: mode === 't2i' || !prompt.includes('@') ? [] : [...inputMedia],
   };
 }

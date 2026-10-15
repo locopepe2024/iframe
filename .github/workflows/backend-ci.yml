@@ -129,6 +129,12 @@ jobs:
           npm test -- --run src/__tests__/asset-url.test.ts src/__tests__/studio-editor-media.test.ts src/__tests__/video-poster-url.test.ts
           npm run test:ui -- src/components/shared/preview/PreviewVideo.test.tsx
 
+      - name: Verify shot style editing and ordered saves
+        working-directory: frontend
+        run: |
+          npm test -- --run src/__tests__/frameEditQueue.test.ts src/__tests__/directorShotPromptRouting.test.ts
+          npm run test:ui -- src/components/modules/storyboard-r2v/shotPromptSettings.test.tsx src/components/modules/storyboard-r2v/ShotCard.polish.test.tsx src/components/modules/storyboard-r2v/PolishPanel.test.tsx src/components/modules/storyboard-r2v/buildAssembledPrompt.test.tsx
+
       - name: Build frontend export
         working-directory: frontend
         env:

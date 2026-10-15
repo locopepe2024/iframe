@@ -343,6 +343,10 @@ export default function SettingsPage() {
   }, [active, systemChecked, systemLoading, loadSystem]);
 
   const handleSaveApiConfig = async () => {
+    if (!config.catalog_name) {
+      toast.error(t("catalogNameRequired"));
+      return;
+    }
     const errors = getValidationErrors(config);
     if (errors.length > 0) {
       toast.error(t("fillRequired"), { body: `- ${errors.join("\n- ")}` });
@@ -354,6 +358,7 @@ export default function SettingsPage() {
         await setApiKeyIdentity(config.UNIART_API_KEY.trim());
       }
       const saved = await api.saveUserConfig({
+        ...(config.catalog_name ? { catalog_name: config.catalog_name } : {}),
         ...(config.UNIART_API_KEY?.trim() ? { UNIART_API_KEY: config.UNIART_API_KEY.trim() } : {}),
         UNIART_BASE_URL: config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1",
       });
@@ -361,11 +366,14 @@ export default function SettingsPage() {
         { ...prev, UNIART_API_KEY: "" },
         {
           UNIART_BASE_URL: saved.UNIART_BASE_URL,
+          catalog_name: saved.catalog_name,
           secrets_configured: saved.secrets_configured,
           secret_prefixes: saved.secret_prefixes,
           preferences: saved.preferences,
         },
       ));
+      await refreshUniArtModelCatalog();
+      window.dispatchEvent(new Event("lumenx:uniart-skus-changed"));
       toast.success(t("saveSuccess"));
     } catch {
       toast.error(t("saveConfigFailed"));
@@ -782,8 +790,17 @@ export default function SettingsPage() {
               <div className="mt-0.5 text-xs text-text-muted">配置、会话和素材仅对当前浏览器生效</div>
             </div>
           </div>
-          <FormRow label="UniArt API Key" hint="用于文字、图片和视频模型调用">
-            <FieldLabel>UNIART_API_KEY *</FieldLabel>
+          <FormRow label={t("catalogName")} hint={t("catalogNameHint")}>
+            <select aria-label="Catalog name" className={settingsInputClass}
+              value={config.catalog_name || ''}
+              onChange={(event) => handleChange('catalog_name', event.target.value)}>
+              <option value="" disabled>{t("catalogNameRequired")}</option>
+              <option value="uniart">UniArt</option>
+              <option value="greena">GreenA</option>
+            </select>
+          </FormRow>
+          <FormRow label={`${config.catalog_name === "greena" ? "GreenA" : config.catalog_name === "uniart" ? "UniArt" : "Catalog"} API Key`} hint="用于文字、图片和视频模型调用">
+            <FieldLabel>API Key *</FieldLabel>
             <KeyField
               value={config.UNIART_API_KEY || ""}
               onChange={(v) => handleChange("UNIART_API_KEY", v)}
@@ -796,11 +813,11 @@ export default function SettingsPage() {
             />
           </FormRow>
 
-          <FormRow label="UniArt Base URL" hint="OpenAI 兼容接口端点">
-            <FieldLabel>UNIART_BASE_URL</FieldLabel>
+          <FormRow label={`${config.catalog_name === "greena" ? "GreenA" : config.catalog_name === "uniart" ? "UniArt" : "Catalog"} Base URL`} hint="OpenAI 兼容接口端点">
+            <FieldLabel>Base URL</FieldLabel>
             <input
               value={config.UNIART_BASE_URL || config.OPENAI_BASE_URL || "https://uniart.fun/v1"}
-              onChange={(e) => handleChange("OPENAI_BASE_URL", e.target.value)}
+              onChange={(e) => handleChange("UNIART_BASE_URL", e.target.value)}
               placeholder="https://uniart.fun/v1"
               className={settingsInputClass}
             />

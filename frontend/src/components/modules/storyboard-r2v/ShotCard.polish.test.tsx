@@ -49,7 +49,7 @@ beforeEach(() => {
 it("sends the selected shot video model when polishing", async () => {
     render(
         <ShotCard
-            shot={shot}
+            shot={{ ...shot, lightingOverride: "current unsaved light", stylePromptOverride: "current style" }}
             videoModel="uniart/minimax-h3-vip"
             index={0}
             totalShots={1}
@@ -80,4 +80,5 @@ it("sends the selected shot video model when polishing", async () => {
         speaker: "女主播",
         line: "今天这款穿心莲分散片，我们决定给大家随机立减！",
     });
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][14]).toEqual({ style: "current style", lighting: "current unsaved light" });
 });
