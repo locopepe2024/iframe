@@ -129,6 +129,12 @@ jobs:
           npm test -- --run src/__tests__/frameEditQueue.test.ts src/__tests__/directorShotPromptRouting.test.ts
           npm run test:ui -- src/components/modules/storyboard-r2v/shotPromptSettings.test.tsx src/components/modules/storyboard-r2v/ShotCard.polish.test.tsx src/components/modules/storyboard-r2v/PolishPanel.test.tsx src/components/modules/storyboard-r2v/buildAssembledPrompt.test.tsx
 
+      - name: Verify shot asset workspace boundary
+        working-directory: frontend
+        run: |
+          npm test -- --run src/__tests__/project-asset-index-api.test.ts
+          npm run test:ui -- src/components/modules/storyboard-r2v/referenceAssets.test.tsx src/components/modules/storyboard-r2v/AssetDrawer.test.tsx src/components/modules/storyboard-r2v/AssetChipBar.scope.test.tsx src/components/modules/CharacterWorkbench.test.tsx src/components/modules/cast/CastWorkbenchModal.test.tsx
+
       - name: Build frontend export
         working-directory: frontend
         env:
