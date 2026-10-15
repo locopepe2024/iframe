@@ -2240,6 +2240,10 @@
     "unknown": "未知"
   },
   "assembly": {
+    "refreshTakes": "刷新分镜变体",
+    "refreshTakesDone": "已按 Shot Design 当前选定变体刷新，请保存计划。原剪辑区间保持不变。",
+    "refreshPlanConflict": "合成计划已在其他操作中更新，请重新打开合成页后再编辑。",
+
     "assemblyTimeline": "组装时间线",
     "framesReady": "帧已就绪",
     "selectVideo": "选择视频",

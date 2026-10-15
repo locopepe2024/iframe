@@ -2240,6 +2240,10 @@
     "unknown": "Unknown"
   },
   "assembly": {
+    "refreshTakes": "Refresh shot variants",
+    "refreshTakesDone": "Refreshed from current Shot Design selections. Save the plan to keep these references. Trims are preserved.",
+    "refreshPlanConflict": "The assembly plan changed elsewhere. Reopen Assembly before editing.",
+
     "assemblyTimeline": "Assembly Timeline",
     "framesReady": "frames ready",
     "selectVideo": "Select Video",
