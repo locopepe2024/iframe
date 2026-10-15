@@ -14,9 +14,9 @@ describe('protected media previews', () => {
         expect(getAssetUrl(path)).toBe(`https://garage.uniart.fun${path}`);
     });
 
-    it('keeps legacy file references on the files endpoint', () => {
+    it('removes the output filesystem root before using the files endpoint', () => {
         expect(getAssetUrl('output/uploads/reference.png')).toBe(
-            'https://garage.uniart.fun/files/output/uploads/reference.png',
+            'https://garage.uniart.fun/files/uploads/reference.png',
         );
     });
 

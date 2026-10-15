@@ -157,9 +157,10 @@ class PlaygroundStorage:
         return None
 
     def resolve_media_reference(self, value: str) -> str:
-        if value.startswith("/studio/media/"):
+        if value.startswith(("/studio/media/", "/studio/owned-media/", "/studio/owned-playground-media/")):
             from ..studio_access import resolve_studio_reference
-            return resolve_studio_reference(value, self.owner_profile_id)
+            stored = resolve_studio_reference(value, self.owner_profile_id)
+            return os.path.join("output", stored)
         if value.startswith(("/playground/media/", "/playground/input-media/")):
             value = urlsplit(value).path
         prefix = "/playground/media/"
