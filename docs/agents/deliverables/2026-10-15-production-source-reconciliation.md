@@ -178,3 +178,22 @@ Verified on main `ae16fa0e` plus PR #121 (`299aa357`) and PR #123 (`271d6f1e`) i
 ### Remaining boundaries
 
 The tests validate code paths and mocked inputs, not production image contents or provider output. All main merges remain administrator actions. Before deployment, verify the full selected PR combination, reconcile the dirty production-compatible source per hunk, and preserve user data and rollback images. Local media-root/locator and explicit Local/COS/OSS work, in-flight task configuration snapshots, and revision-pinned releases remain separate work.
+
+## Integration checkpoint — 2026-10-16
+
+### Observed
+
+- #124 + #125 merge without conflicts on main `ae16fa0e`; focused backend tests 26 passed and frontend tests 11 passed.
+- The six selected runtime PRs (#121, #123, #124, #125, #126, #127) also merge without conflicts. Combined regression initially reproduced one test-double incompatibility: #125 replaced `resolve_episode_assets` with a one-argument lambda, while #123 calls it with the explicit `include_global` policy.
+- #125 now initializes an empty library and uses the real resolver instead of mocking its signature (`f95ae32f`). Its standalone context suite passes, 18 tests. This is a test correction, not a runtime policy change.
+- Final six-PR combined verification: backend CI selection 1238 passed, 5 skipped, 2 deselected; source-local asset index suite 7 passed; frontend 59 passed; typecheck and bootstrap production build passed. No provider generation was requested.
+
+### Additional merge blocker: #110
+
+Code fact: #110 contains four unmerged commits, not only diagnostics: `93a0032b`, `4fd74d68`, `f87258fd`, `43f72e8e`. The latter two change Studio media delivery, write directories and legacy-media migration. Its current description does not describe this full scope. A trial merge conflicts in `pipeline.py` with the project-index signature from #121. The trial merge was aborted; these changes are excluded from the six-PR verification above.
+
+Recommendation: review/split diagnostics and media-layout migration independently before merging #110. Do not resolve this by dropping the project-index scope argument. No PR was closed or main merged automatically.
+
+### Administrator handoff
+
+Recommended runtime order: #121 → #123 → #124 → #125 → #126 → #127. The verified six-PR combination excludes #109 and #110. #109 retains the older, conflicting asset policy noted above. #117 and #122 are documentation reviews. Passing tests establish input/state behavior under test, not production cutover or visual continuity. Deployment still requires reconciliation with the production-compatible dirty source and a rollback-ready release.
