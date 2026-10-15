@@ -460,6 +460,8 @@ export default function SettingsPage() {
       const detail = extractErrorDetail(error, "获取 UniArt 模型失败");
       const message = detail === "UniArt API key is not configured for this user"
         ? "当前浏览器尚未配置 UniArt API Key，请在设置的 API 密钥中保存后重试。电脑端配置不会自动同步到手机。"
+        : detail === "uniart_catalog_credential_rejected"
+          ? "UniArt 拒绝了当前工作区的 API Key。请在这台设备的设置中重新保存有效的个人 Key，并核对 UniArt 地址后重试。"
         : `获取 UniArt 模型失败：${detail}`;
       setSkuModels([]);
       setSkuError(message);

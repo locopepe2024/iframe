@@ -40,6 +40,7 @@ import logging
 import re
 import traceback
 from urllib.parse import unquote, urlparse
+from urllib.error import HTTPError
 from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
@@ -6519,6 +6520,10 @@ def get_uniart_models():
     base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
     try:
         models = fetch_uniart_catalog(runtime_config)
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise HTTPException(status_code=502, detail="uniart_catalog_credential_rejected") from exc
+        raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: HTTP {exc.code}") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
     return {"provider": "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
