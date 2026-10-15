@@ -57,3 +57,9 @@ Scope: backend configuration, catalog selection and existing image/video credent
 Success criteria: profile writes leave identity and other provider records unchanged; secrets encrypted on disk and absent from public responses; malformed endpoints fail; clear/missing-key profiles fail closed; explicit catalogs use matching credentials, namespacing and allowlists; Studio and Playground NSFW requests use the NSFW profile's endpoint/key, and legacy tests continue passing.
 
 Verification: focused profile/API/catalog tests plus existing multi-user boundaries, model routing, NSFW image/video, Playground recovery and backend CI. No provider network calls in tests, no billable generations, no local Go. Deploy only after reviewing compatibility against the NSFW node's active jobs and unreconciled patches.
+
+## Reconciliation checkpoint — 2026-10-15
+
+[Production source audit](../agents/deliverables/2026-10-15-production-source-reconciliation.md) records 724 compared paths: local and remote build-context contents match, while 101 differ from main and 11 main files remain undeployed. This does not assert image contents or all runtime flows match. First review slice is source audio preservation; next slices cover owned-media refresh, prompt/style persistence, and provider integration.
+
+Per the latest user instruction, publish reviewable PRs and leave main merges to the administrator. Production cutover follows integration validation; no wholesale replacement of the current deployment.
