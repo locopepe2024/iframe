@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw, Maximize2, Copy, Check, Play } from "lucide-react";
 import clsx from "clsx";
-import { getAssetUrl } from "@/lib/utils";
+import { getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
@@ -76,7 +76,7 @@ export default function PreviewVideo({
     }, []);
 
     const resolved = getAssetUrl(src);
-    const resolvedPoster = getAssetUrl(poster);
+    const resolvedPoster = getAssetUrl(poster) || getVideoPosterUrl(src);
     const displaySrc = resolved
         ? (retryNonce > 0 ? `${resolved}${resolved.includes("?") ? "&" : "?"}__r=${retryNonce}` : resolved)
         : "";

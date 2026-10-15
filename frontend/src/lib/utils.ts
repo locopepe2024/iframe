@@ -53,6 +53,14 @@ export function getAssetUrl(path: string | null | undefined): string {
     return `${API_URL}/files/${encodeURI(cleanPath)}`;
 }
 
+/** Derive a first-frame still only for backend-local owner media. */
+export function getVideoPosterUrl(path: string | null | undefined): string {
+    const resolved = getAssetUrl(path);
+    if (!resolved.startsWith(`${API_URL}/studio/owned-media/`)
+        && !resolved.startsWith(`${API_URL}/studio/owned-playground-media/`)) return "";
+    return `${resolved.split("?")[0]}?preview=320`;
+}
+
 export function getAssetUrlWithTimestamp(path: string | null | undefined, timestamp?: number): string {
     const baseUrl = getAssetUrl(path);
     if (!baseUrl) return "";
