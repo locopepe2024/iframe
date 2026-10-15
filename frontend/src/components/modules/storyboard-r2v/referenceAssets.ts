@@ -1,3 +1,6 @@
+import type { AssetReferenceIndexEntry } from "@/lib/api";
+import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
+
 export interface ReferenceVariant {
     id: string;
     url: string;
@@ -14,6 +17,29 @@ export interface ReferenceAsset {
     selectedId?: string | null;
 }
 
+export function buildReferenceAssets(
+    index: AssetReferenceIndexEntry[] | undefined,
+    characters: any[], scenes: any[], props: any[],
+): ReferenceAsset[] {
+    return projectReferenceIndex(index, characters, scenes, props).map((asset) => ({
+        id: asset.asset_id, name: asset.name, kind: asset.asset_type,
+        variants: asset.variants, selectedId: asset.selected_variant_id,
+    }));
+}
+
+export async function refreshReferenceSubmission(
+    projectId: string,
+    prompt: string,
+    selections: Record<string, string[]>,
+    fetchIndex: (projectId: string) => Promise<{ assets: AssetReferenceIndexEntry[] }>,
+) {
+    const index = await fetchIndex(projectId);
+    return {
+        index: index.assets,
+        submission: resolveReferenceSubmission(prompt, buildReferenceAssets(index.assets, [], [], []), selections),
+    };
+}
+
 export interface ResolvedReferenceGroup {
     slot: number;
     assetId: string;
@@ -27,6 +53,7 @@ export interface ReferenceSubmission {
     urls: string[];
     groups: ResolvedReferenceGroup[];
     invalidVariantIds: string[];
+    unresolvedNames: string[];
 }
 
 export const H3_MAX_REFERENCE_IMAGES = 9;
@@ -66,9 +93,13 @@ export function resolveReferenceSubmission(
     const urls: string[] = [];
     const groups: ResolvedReferenceGroup[] = [];
     const invalidVariantIds: string[] = [];
+    const unresolvedNames = new Set<string>();
     for (const [slot, name] of Array.from(slots.entries()).sort((a, b) => a[0] - b[0])) {
         const asset = assetByName.get(name);
-        if (!asset) continue;
+        if (!asset) {
+            unresolvedNames.add(name);
+            continue;
+        }
         const explicitIds = selections[asset.id];
         let variants: ReferenceVariant[];
         if (asset.kind === "character") {
@@ -89,7 +120,11 @@ export function resolveReferenceSubmission(
             const primary = primaryVariant(asset);
             variants = primary ? [primary] : [];
         }
-        if (!variants.length) continue;
+        variants = variants.filter((variant) => variant.url?.trim());
+        if (!variants.length) {
+            unresolvedNames.add(name);
+            continue;
+        }
         const firstPicture = urls.length + 1;
         urls.push(...variants.map((variant) => variant.url));
         groups.push({
@@ -101,7 +136,7 @@ export function resolveReferenceSubmission(
             pictureNumbers: variants.map((_, index) => firstPicture + index),
         });
     }
-    return { urls, groups, invalidVariantIds };
+    return { urls, groups, invalidVariantIds, unresolvedNames: Array.from(unresolvedNames) };
 }
 
 function pictureList(group: ResolvedReferenceGroup): string {

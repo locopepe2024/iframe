@@ -5,7 +5,7 @@ import { Check, ChevronDown, Images } from "lucide-react";
 import { useTranslations } from "next-intl";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
-import { effectiveReferenceIndex } from "@/lib/assetReferenceIndex";
+import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
 
 interface AssetChipBarProps {
     characters: any[];
@@ -29,7 +29,7 @@ export default function AssetChipBar({
     const t = useTranslations("storyboardR2V");
     const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
     const colors = { character: "bg-blue-400", scene: "bg-teal-400", prop: "bg-orange-400" };
-    const assets = effectiveReferenceIndex(assetIndex, characters, scenes, props);
+    const assets = projectReferenceIndex(assetIndex, characters, scenes, props);
 
     if (assets.length === 0) return null;
 

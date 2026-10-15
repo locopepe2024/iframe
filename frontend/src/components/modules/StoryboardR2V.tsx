@@ -12,8 +12,6 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
-import { storyboardAssetIndex } from "@/lib/storyboardAssetIndex";
-import { legacyAssetsToReferenceIndex } from "@/lib/assetReferenceIndex";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
@@ -55,6 +53,8 @@ import TaskQueuePanel from "./storyboard-r2v/shot-panel/TaskQueuePanel";
 import { GenerationBanner, type BannerState } from "./storyboard-r2v/GenerationBanner";
 import {
     bindH3MultiReferencePrompt,
+    buildReferenceAssets,
+    refreshReferenceSubmission,
     H3_MAX_REFERENCE_IMAGES,
     resolveReferenceSubmission,
     type ReferenceAsset,
@@ -66,16 +66,10 @@ export default function StoryboardR2V() {
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
-    const [assetIndexState, setAssetIndexState] = useState<{ projectId: string; assets: AssetReferenceIndexEntry[] } | null>(null);
-    const assetIndex = useMemo(() => {
-        if (!currentProject) return undefined;
-        const entries = assetIndexState?.projectId === currentProject.id
-            ? assetIndexState.assets
-            : legacyAssetsToReferenceIndex(
-                currentProject.characters ?? [], currentProject.scenes ?? [], currentProject.props ?? [],
-            );
-        return storyboardAssetIndex(entries, currentProject as any);
-    }, [assetIndexState, currentProject]);
+    const [indexedProject, setIndexedProject] = useState<{
+        projectId: string; assets: AssetReferenceIndexEntry[];
+    }>();
+    const assetIndex = indexedProject?.projectId === currentProject?.id ? indexedProject?.assets : undefined;
     const displayedStyle = currentProject
         ? resolveStoryboardStyle(currentProject, currentSeries)
         : { positivePrompt: "", negativePrompt: "" };
@@ -86,10 +80,10 @@ export default function StoryboardR2V() {
 
     useEffect(() => {
         const projectId = currentProject?.id;
-        if (!projectId || typeof api.getAssetReferenceIndex !== "function") return;
+        if (!projectId || typeof api.getProjectAssetReferenceIndex !== "function") return;
         let active = true;
-        void api.getAssetReferenceIndex(projectId)
-            .then((index) => { if (active) setAssetIndexState({ projectId, assets: index.assets }); })
+        void api.getProjectAssetReferenceIndex(projectId)
+            .then((index) => { if (active) setIndexedProject({ projectId, assets: index.assets }); })
             .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
         return () => { active = false; };
     }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
@@ -841,45 +835,30 @@ export default function StoryboardR2V() {
         return { min: dc.value, max: dc.value, step: 1 };
     }, [videoConfig.r2vModel]);
 
-    const referenceAssets = useMemo<ReferenceAsset[]>(() => {
-        if (assetIndex) {
-            return assetIndex.map((item) => ({
-                id: item.asset_id,
-                name: item.name,
-                kind: item.asset_type,
-                variants: item.variants.map((variant) => ({
-                    id: variant.id,
-                    url: variant.url,
-                    display_name: variant.display_name,
-                    reference_view_role: variant.reference_view_role ?? undefined,
-                    reference_distance: variant.reference_distance ?? undefined,
-                })),
-                selectedId: item.selected_variant_id,
-            }));
+    const referenceAssets = useMemo<ReferenceAsset[]>(() =>
+        buildReferenceAssets(assetIndex, characters, scenes, props),
+    [assetIndex, characters, scenes, props]);
+
+    const loadShotReferences = useCallback(async (shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds">) => {
+        if (!currentProject) return null;
+        try {
+            const fresh = await refreshReferenceSubmission(
+                currentProject.id, shot.prompt, shot.referenceVariantIds ?? {}, api.getProjectAssetReferenceIndex,
+            );
+            // A slow response from the previous project must not populate the
+            // current editor or start a task after the user switched projects.
+            if (useProjectStore.getState().currentProject?.id !== currentProject.id) return null;
+            setIndexedProject({ projectId: currentProject.id, assets: fresh.index });
+            return fresh.submission;
+        } catch (error) {
+            if (useProjectStore.getState().currentProject?.id !== currentProject.id) return null;
+            debugLog.error("Studio", "Asset index verification failed", error);
+            const message = t("assetReferencesUnavailable");
+            setShotErrors(prev => ({ ...prev, [shot.id]: message }));
+            toast.warning(message);
+            return null;
         }
-        const normalize = (item: any, kind: ReferenceAsset["kind"], unit: any): ReferenceAsset => ({
-            id: item.id,
-            name: item.name,
-            kind,
-            variants: (unit?.image_variants ?? unit?.variants ?? []).map((variant: any) => ({
-                id: variant.id,
-                url: variant.url,
-                display_name: variant.display_name,
-                reference_view_role: variant.reference_view_role,
-                reference_distance: variant.reference_distance,
-            })),
-            selectedId: unit?.selected_image_id ?? unit?.selected_id,
-        });
-        return [
-            ...characters.map((item: any) => normalize(
-                item,
-                "character",
-                item.reference_sheet?.image_variants?.length ? item.reference_sheet : item.full_body_asset,
-            )),
-            ...scenes.map((item: any) => normalize(item, "scene", item.image_asset)),
-            ...props.map((item: any) => normalize(item, "prop", item.image_asset)),
-        ];
-    }, [assetIndex, characters, scenes, props]);
+    }, [currentProject, t]);
 
     const resolveShotReferences = useCallback((shot: Pick<ShotNode, "prompt" | "referenceVariantIds">) =>
         resolveReferenceSubmission(shot.prompt, referenceAssets, shot.referenceVariantIds),
@@ -889,24 +868,6 @@ export default function StoryboardR2V() {
     const parseAssetTags = useCallback((prompt: string, selections?: Record<string, string[]>): string[] =>
         resolveReferenceSubmission(prompt, referenceAssets, selections).urls,
     [referenceAssets]);
-
-    const hasAssetTags = useCallback((prompt: string): boolean => {
-        return /\[(?:character\d+|character|scene|prop):[^\]]+\]/.test(prompt);
-    }, []);
-
-    const getUnresolvedAssetNames = useCallback((prompt: string): string[] => {
-        const unresolved: string[] = [];
-        const tagPattern = /\[(?:character\d+|character|scene|prop):([^\]]+)\]/g;
-        let match;
-        while ((match = tagPattern.exec(prompt)) !== null) {
-            const name = match[1];
-            let hasImage = false;
-            // Check character
-            hasImage = !!referenceAssets.find((asset) => asset.name === name)?.variants.length;
-            if (!hasImage) unresolved.push(name);
-        }
-        return unresolved;
-    }, [referenceAssets]);
 
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
     const generateT2I = useCallback(async (index: number) => {
@@ -975,20 +936,34 @@ export default function StoryboardR2V() {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
 
+        const referenceSubmission = shot.tabMode === "direct_r2v" ? await loadShotReferences(shot) : null;
+        if (shot.tabMode === "direct_r2v") {
+            if (!referenceSubmission) return;
+            if (referenceSubmission.unresolvedNames.length || !referenceSubmission.urls.length
+                || referenceSubmission.invalidVariantIds.length) {
+                const message = referenceSubmission.invalidVariantIds.length ? t("invalidProductViews")
+                    : referenceSubmission.unresolvedNames.length
+                        ? t("unresolvedRefImages", { refs: referenceSubmission.unresolvedNames.join("、") })
+                        : missingRefsMessage(videoConfig.r2vModel);
+                setShotErrors(prev => ({ ...prev, [shot.id]: message }));
+                toast.warning(message);
+                return;
+            }
+        }
+
         setShots(prev => prev.map((s, i) =>
             i === index ? { ...s, videoStatus: "pending" } : s
         ));
 
         try {
             const style = await loadGenerationStyle();
-            if (shot.tabMode === "direct_r2v") {
+            if (shot.tabMode === "direct_r2v" && referenceSubmission) {
                 // R2V mode: use reference assets. We prefer the user's
                 // explicit R2V model choice (videoConfig.r2vModel) over
                 // the derived route from the I2V model. The derivation
                 // is kept as a fallback when the explicit r2vModel is
                 // missing or invalid (which can only happen if the
                 // catalog flipped under our feet).
-                const referenceSubmission = resolveShotReferences(shot);
                 const referenceUrls = referenceSubmission.urls;
                 const explicitR2v = videoConfig.r2vModel;
                 const explicitOk = VIDEO_R2V_MODELS.some(m => m.id === explicitR2v);
@@ -1156,7 +1131,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences, loadGenerationStyle]);
+    }, [shots, currentProject, videoConfig, loadShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls
@@ -1181,7 +1156,9 @@ export default function StoryboardR2V() {
             requestedModelId,
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
         );
-        const referenceSubmission = resolveShotReferences(shot);
+        const referenceSubmission = tabMode === "direct_r2v"
+            ? await loadShotReferences(shot) : resolveShotReferences(shot);
+        if (!referenceSubmission) return;
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
             .find(model => model.id === requestedModelId)?.duration;
@@ -1206,11 +1183,10 @@ export default function StoryboardR2V() {
         // here and show inline error in the ParamsSection.
         if (tabMode === "direct_r2v") {
             const refs = referenceSubmission.urls;
-            if (refs.length === 0) {
-                const hasTags = hasAssetTags(shot.prompt);
+            if (refs.length === 0 || referenceSubmission.unresolvedNames.length > 0) {
+                const unresolved = referenceSubmission.unresolvedNames;
                 let errMsg: string;
-                if (hasTags) {
-                    const unresolved = getUnresolvedAssetNames(shot.prompt);
+                if (unresolved.length > 0) {
                     errMsg = t("unresolvedRefImages", { refs: unresolved.join("、") });
                 } else {
                     const r2vModelId = params?.model ?? videoConfig.r2vModel;
@@ -1409,7 +1385,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" as const } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, resolveShotReferences, missingRefsMessage, t, loadGenerationStyle]);
+    }, [shots, currentProject, videoConfig, resolveShotReferences, loadShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
     // Project-level task refresh: when any task on any shot is in
     // flight, refetch the whole project every 5s. The candidates
