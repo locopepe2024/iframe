@@ -20,3 +20,14 @@ def test_catalog_rejected_owner_key_has_actionable_error(monkeypatch):
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail == "uniart_catalog_credential_rejected"
+
+
+def test_catalog_non_ascii_owner_key_has_actionable_error(monkeypatch):
+    monkeypatch.setattr(api, "studio_uniart_config", lambda: {
+        "api_key": "中文错误文本", "base_url": "https://uniart.fun/v1"
+    })
+    with pytest.raises(HTTPException) as exc_info:
+        api.get_uniart_models()
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "uniart_catalog_credential_invalid_encoding"

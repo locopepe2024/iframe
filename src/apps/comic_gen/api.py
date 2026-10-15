@@ -6524,6 +6524,11 @@ def get_uniart_models():
         if exc.code in (401, 403):
             raise HTTPException(status_code=502, detail="uniart_catalog_credential_rejected") from exc
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: HTTP {exc.code}") from exc
+    except UnicodeEncodeError as exc:
+        # urllib encodes HTTP headers as Latin-1. A pasted error message,
+        # full-width character, or other non-ASCII value is not a provider
+        # credential and must not surface as an opaque codec exception.
+        raise HTTPException(status_code=502, detail="uniart_catalog_credential_invalid_encoding") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"uniart_models_unavailable: {exc}")
     return {"provider": "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
