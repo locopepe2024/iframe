@@ -4432,25 +4432,36 @@ class ComicGenPipeline(StudioOwnerMixin):
     @staticmethod
     def _episode_shot_context_prompt(script: Script, frame: StoryboardFrame) -> str:
         """Return the exact confirmed shooting-plan intent for rich-frame refinement."""
+        from .shot_context_projection import PROVENANCE, project_shot_context
+
         if isinstance(frame.director_shot_context, dict):
-            return (
-                "本分镜绑定的已确认拍摄计划镜头上下文（只适用于当前 frame；不要与其他镜头混用）："
-                + json.dumps(frame.director_shot_context, ensure_ascii=False, separators=(",", ":"))[:6000]
-            )
-        context = script.episode_visual_context
-        if not context or not frame.shot_id:
+            payload = project_shot_context(frame.director_shot_context, frame.shot_id, "frame_snapshot")
+        else:
+            context = script.episode_visual_context
+            if not context or not frame.shot_id:
+                return ""
+            shot = next((item for item in context.shots if item.shot_id == frame.shot_id), None)
+            if not shot:
+                return ""
+            scene = next((item for item in context.scenes if item.scene_id == shot.scene_id), None)
+            raw = {
+                "scene": scene.model_dump(exclude_none=True) if scene else {},
+                "shot": shot.model_dump(exclude_none=True),
+                **{key: getattr(context, key, None) for key in PROVENANCE},
+            }
+            place_id = shot.place_continuity_id or (scene.place_continuity_id if scene else None)
+            time_id = shot.time_continuity_id or (scene.time_continuity_id if scene else None)
+            baseline = next((item for item in context.lighting_baselines
+                             if item.place_continuity_id == place_id
+                             and item.time_continuity_id == time_id), None)
+            if baseline:
+                raw["lighting_baseline"] = baseline.model_dump(exclude_none=True)
+            payload = project_shot_context(raw, frame.shot_id, "episode_visual_context")
+        if not payload:
             return ""
-        shot = next((item for item in context.shots if item.shot_id == frame.shot_id), None)
-        if not shot:
-            return ""
-        scene = next((item for item in context.scenes if item.scene_id == shot.scene_id), None)
-        payload = {
-            "scene": scene.model_dump(exclude_none=True) if scene else {},
-            "shot": shot.model_dump(exclude_none=True),
-        }
         return (
-            "本集已确认拍摄计划镜头上下文（只适用于当前 frame 的 shot_id；"
-            "不要与其他镜头混用）：" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:6000]
+            "本分镜已确认拍摄计划镜头上下文（只适用于当前 frame；不要与其他镜头混用）："
+            + payload
         )
 
     def save_director_profile_draft(
