@@ -20,7 +20,7 @@ def provider_media_origin() -> str | None:
         _ = parsed.port  # Validate malformed/out-of-range ports as well.
         valid = (
             parsed.scheme in ("http", "https") and parsed.hostname
-            and not parsed.username and not parsed.password
+            and parsed.username is None and parsed.password is None
             and not parsed.path and not parsed.query and not parsed.fragment
             and not any(c.isspace() or ord(c) < 32 for c in base)
             and "\\" not in base and "?" not in base and "#" not in base

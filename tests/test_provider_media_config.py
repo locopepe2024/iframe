@@ -46,7 +46,7 @@ def test_legacy_origin_and_default_lifetime_remain_supported(media, monkeypatch)
     assert parse_qs(urlsplit(url).query)["expires"] == ["2800"]
 
 
-@pytest.mark.parametrize("origin", ["", "https://user:password@example.test", "https://example.test/path", "https://example.test?x=1", "https://example.test#x", "ftp://example.test", "https://example.test:bad", "https://example.test/a/..", "https://exa mple.test", "https://example.test\n.evil"])
+@pytest.mark.parametrize("origin", ["", "https://user:password@example.test", "https://@example.test", "https://:@example.test", "https://example.test/path", "https://example.test?x=1", "https://example.test#x", "ftp://example.test", "https://example.test:bad", "https://example.test/a/..", "https://exa mple.test", "https://example.test\n.evil"])
 def test_explicit_invalid_origin_never_uses_legacy(origin, media, monkeypatch):
     monkeypatch.setenv("PROVIDER_MEDIA_PUBLIC_BASE_URL", origin)
     monkeypatch.setenv("UNIART_MEDIA_BASE_URL", "https://legacy.example.test")
