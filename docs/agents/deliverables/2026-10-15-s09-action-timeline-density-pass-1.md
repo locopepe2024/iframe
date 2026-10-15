@@ -1,0 +1,39 @@
+# s09 action timeline density: preliminary frame comparison
+
+Date: 2026-10-15. This is a read-only comparison of existing media, with no new generation. Source: `s09-motion.mp4` (120 frames, 30 fps, 4.00 s). Outputs: `s09-action-v2-replacement.mp4` and `s09-precut-hold-v3-replacement.mp4` (each 90 frames, 24 fps, 3.75 s). All are in `../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/`. Source local frame 112 is a hard cut; the table below stops before it.
+
+## Observed
+
+Frames were inspected at a stride of three: source 24–111 (0.10 s per sample), outputs 18–87 (0.125 s per sample). Intervals below are **visible sampled ranges**, not exact action boundaries. Uncertainty is at least one sampling interval on either side, and some prop directions are blurred or cropped.
+
+| Visible phase | Source sampled frames / time | v2 sampled frames / time | v3 sampled frames / time |
+|---|---|---|---|
+| Marked forward fold with broad near-horizontal shaft | 39–57 / 1.30–1.90 s; deepest around 45–54 | 27–42 / 1.125–1.750 s; torso remains visibly shallower | No comparably deep fold in 18–87; low forward lean around 27–39 only |
+| Recovery toward upright | 60–66 / 2.00–2.20 s | 45–48 / 1.875–2.000 s | Already largely upright around 42–48 / 1.750–2.000 s |
+| Raised or steeply diagonal shaft | clearly at 87 / 2.90 s; intermediate turns and lifts at 69–84 | begins around 51–54 / 2.125–2.250 s and continues through multiple orientations | begins around 42–48 / 1.750–2.000 s |
+| Broad front extension | visible near 99–111 / 3.30–3.70 s | near 72–81 / 3.000–3.375 s; later view and oversized tip differ | near 72–87 / 3.000–3.625 s; tip and perspective differ |
+
+The source deep-fold sampled interval spans at least 18 frame steps / 0.60 s; v2's shallower low pose spans at least 15 steps / 0.625 s. These are **not equivalent motion phases**, so their similar durations do not establish matching rhythm. At the first clear high-diagonal source sample (2.90 s), the v2 spear has already entered raised orientations by about 2.13–2.25 s. Under a simple 4.00-to-3.75-second duration mapping, 2.90 s would map to 2.72 s, still later than v2's first lift. v3 shows the same broad phase problem. The source cut at 3.733 s has no matching cut in either output.
+
+## Direct implication
+
+The useful temporal unit is an **event interval**: onset, peak/hold, recovery, direction reversal, and cut. A video with fewer encoded frames can preserve the same real-time event intervals; 30 fps versus 24 fps alone does not explain the mismatch. For s09 the visible problem is phase identity plus event allocation: v2's low phase is too shallow, and both outputs allocate visible time to a lifted spear before the source's high-diagonal anchor. Equal-duration screenshots and a single speed multiplier cannot resolve this.
+
+## Not yet proven
+
+- Whether the source itself was edited with variable speed, and whether high-motion windows have a different *source motion density* from quieter windows. Source frame count alone does not measure motion magnitude.
+- Exact onsets, peaks and directions between sampled frames; full grip and tip trajectories are partly obscured.
+- That denser sampling, a different reference window, or more precise timing language will cause H3 to follow the source. Existing outputs differ in more than timing, including pose depth and prop geometry.
+
+## Hypotheses
+
+- A prompt or reference that marks high-change events and low-motion holds with separate frame spans may reduce phase compression and premature transitions. This needs a controlled generation test.
+- Cutting the source at frame 112 before generation may remove one timing conflict, but cannot by itself explain the earlier deep-fold failure; the pre-cut-hold v3 test did not fix it.
+
+## What would verify it
+
+1. Review every source frame around 33–66 and 75–99, and every output frame around the corresponding low, recovery and lift phases. Mark first/last **observable** evidence plus uncertain boundaries. Track torso inclination, visible shaft orientation, red-end side and occlusion separately.
+2. Register paired event anchors before another generation: fold onset/lowest hold/recovery, lift onset/high diagonal, front extension. Compare adjacent real-time intervals and their ratios with a monotone mapping inside the first view; treat absent or non-equivalent output events as failures, not timing values.
+3. In one controlled single-view trial, keep the identity image, model settings and seed fixed; use a source window and prompt whose event spans agree. Preserve the exact request and output hashes. Accept an improvement only if the same output also passes pose depth, spear continuity and clean-frame checks at normal speed.
+
+This is evidence of **local phase mismatch**, not proof that nonuniform timeline density is its cause.
