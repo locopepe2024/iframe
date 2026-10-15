@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 import subprocess
@@ -77,6 +78,7 @@ from ..studio_access import (
     runtime_nsfw_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
+    studio_media_dir,
     resolve_studio_reference,
 )
 from ..media_registry import register_media
@@ -269,7 +271,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _owner_output_dir(resource: Any, category: str) -> str:
         owner_profile_id = getattr(resource, "owner_profile_id", None)
         if owner_profile_id:
-            return os.path.join(studio_owner_dir(owner_profile_id), category)
+            return studio_media_dir(owner_profile_id, category)
         return os.path.join("output", category)
 
     _ORPHAN_RECOVERY_REASON = (
@@ -1910,10 +1912,51 @@ class ComicGenPipeline(StudioOwnerMixin):
         variants = getattr(image_asset, "variants", []) if image_asset else []
         ComicGenPipeline._register_asset_variant_media(variants, owner_profile_id)
 
-    def get_asset_reference_index(self, script_id: str, scope: str = "available") -> AssetReferenceIndex:
-        """Project membership or the broader owner-authorized candidate pool."""
-        if scope not in ("available", "project"):
-            raise ValueError("Invalid asset index scope")
+    def migrate_legacy_storyboard_media(self, script: Script) -> None:
+        """Move legacy shared-path frame images behind the owner's media route."""
+        if not script.owner_profile_id:
+            return
+        changed = False
+        with self._save_lock:
+            owner_dir = self._owner_output_dir(script, "storyboard")
+            for frame in script.frames:
+                image_asset = frame.rendered_image_asset
+                if not image_asset:
+                    continue
+                frame_changed = False
+                for variant in image_asset.variants:
+                    old_key = image_variant_storage_key(variant)
+                    if not old_key or not old_key.startswith("storyboard/"):
+                        continue
+                    try:
+                        source = _safe_resolve_path("output", old_key)
+                    except ValueError:
+                        continue
+                    legacy_root = os.path.realpath(os.path.join("output", "storyboard"))
+                    if (not source.startswith(legacy_root + os.sep)
+                            or not os.path.basename(source).startswith(f"{frame.id}_")
+                            or not os.path.isfile(source)):
+                        continue
+                    destination = os.path.join(owner_dir, os.path.basename(source))
+                    os.makedirs(owner_dir, exist_ok=True)
+                    if not os.path.exists(destination):
+                        shutil.copy2(source, destination)
+                    new_key = os.path.relpath(destination, "output")
+                    variant.url = new_key
+                    variant.storage_key = new_key
+                    variant.media_id = None
+                    if image_asset.selected_id == variant.id:
+                        frame.image_url = new_key
+                        frame.rendered_image_url = new_key
+                    changed = True
+                    frame_changed = True
+                if frame_changed:
+                    self._register_storyboard_frame_media(frame, script.owner_profile_id)
+            if changed:
+                self._save_data()
+
+    def get_asset_reference_index(self, script_id: str) -> AssetReferenceIndex:
+        """Return the normalized effective assets used by reference pickers."""
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Project not found")
@@ -1963,15 +2006,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             append_scope(asset_type, getattr(script, attr), "episode", script.id, script.title, seen)
             if series:
                 append_scope(asset_type, getattr(series, attr), "series", series.id, series.title, seen)
-            if scope == "available":
-                append_scope(
-                    asset_type,
-                    self._library_list_for_type(asset_type, script.owner_profile_id),
-                    "global",
-                    None,
-                    None,
-                    seen,
-                )
+            append_scope(
+                asset_type,
+                self._library_list_for_type(asset_type, script.owner_profile_id),
+                "global",
+                None,
+                None,
+                seen,
+            )
 
         return AssetReferenceIndex(project_id=script.id, assets=entries)
 
@@ -4435,25 +4477,36 @@ class ComicGenPipeline(StudioOwnerMixin):
     @staticmethod
     def _episode_shot_context_prompt(script: Script, frame: StoryboardFrame) -> str:
         """Return the exact confirmed shooting-plan intent for rich-frame refinement."""
+        from .shot_context_projection import PROVENANCE, project_shot_context
+
         if isinstance(frame.director_shot_context, dict):
-            return (
-                "本分镜绑定的已确认拍摄计划镜头上下文（只适用于当前 frame；不要与其他镜头混用）："
-                + json.dumps(frame.director_shot_context, ensure_ascii=False, separators=(",", ":"))[:6000]
-            )
-        context = script.episode_visual_context
-        if not context or not frame.shot_id:
+            payload = project_shot_context(frame.director_shot_context, frame.shot_id, "frame_snapshot")
+        else:
+            context = script.episode_visual_context
+            if not context or not frame.shot_id:
+                return ""
+            shot = next((item for item in context.shots if item.shot_id == frame.shot_id), None)
+            if not shot:
+                return ""
+            scene = next((item for item in context.scenes if item.scene_id == shot.scene_id), None)
+            raw = {
+                "scene": scene.model_dump(exclude_none=True) if scene else {},
+                "shot": shot.model_dump(exclude_none=True),
+                **{key: getattr(context, key, None) for key in PROVENANCE},
+            }
+            place_id = shot.place_continuity_id or (scene.place_continuity_id if scene else None)
+            time_id = shot.time_continuity_id or (scene.time_continuity_id if scene else None)
+            baseline = next((item for item in context.lighting_baselines
+                             if item.place_continuity_id == place_id
+                             and item.time_continuity_id == time_id), None)
+            if baseline:
+                raw["lighting_baseline"] = baseline.model_dump(exclude_none=True)
+            payload = project_shot_context(raw, frame.shot_id, "episode_visual_context")
+        if not payload:
             return ""
-        shot = next((item for item in context.shots if item.shot_id == frame.shot_id), None)
-        if not shot:
-            return ""
-        scene = next((item for item in context.scenes if item.scene_id == shot.scene_id), None)
-        payload = {
-            "scene": scene.model_dump(exclude_none=True) if scene else {},
-            "shot": shot.model_dump(exclude_none=True),
-        }
         return (
-            "本集已确认拍摄计划镜头上下文（只适用于当前 frame 的 shot_id；"
-            "不要与其他镜头混用）：" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:6000]
+            "本分镜已确认拍摄计划镜头上下文（只适用于当前 frame；不要与其他镜头混用）："
+            + payload
         )
 
     def save_director_profile_draft(
@@ -4764,7 +4817,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         entities_json = {
             "characters": [{
                 "id": c.id,
@@ -4902,7 +4955,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
@@ -5237,7 +5290,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Frame {frame_id} not found")
 
         frame_idx = script.frames.index(frame)
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
 
@@ -5490,11 +5543,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
             
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         script = self.storyboard_generator.generate_storyboard(
             script,
             characters=resolved["characters"],
             scenes=resolved["scenes"],
+            output_dir=self._owner_output_dir(script, "storyboard"),
         )
         for frame in script.frames:
             self._register_storyboard_frame_media(frame, script.owner_profile_id)
@@ -5517,11 +5571,45 @@ class ComicGenPipeline(StudioOwnerMixin):
                 and kwargs["character_ids"] != frame.character_ids)
         )
         
+        from .shot_prompt_settings import sync_prompt_settings
+        old_style, old_light = frame.style_prompt_override, frame.lighting_override
+        next_style = kwargs.get("style_prompt_override") if kwargs.get("style_prompt_override") is not None else old_style
+        next_light = kwargs.get("lighting_override") if kwargs.get("lighting_override") is not None else old_light
+        context = frame.director_shot_context or {}
+        shot_context = context.get("shot") if isinstance(context.get("shot"), dict) else {}
+        plan_light = shot_context.get("lighting")
+        inherited_light = "；".join(filter(None, [
+            plan_light.get("key_source"), plan_light.get("color_tone"), plan_light.get("contrast"),
+            *(plan_light.get("practical_sources") or []),
+        ])) if isinstance(plan_light, dict) else str(plan_light or "")
+        direction = self.effective_art_direction(script)
+        inherited_style = direction.style_config.get("positive_prompt", "") if direction else script.style_prompt or ""
+
+        def sync(text):
+            return sync_prompt_settings(text, old_style or inherited_style, old_light or inherited_light,
+                                        next_style or inherited_style, next_light or inherited_light)
+
+        if frame.workbench_prompt_is_optimized and kwargs.get("action_description") is None:
+            frame.action_description = sync(frame.action_description)
+        if frame.image_prompt_en:
+            previous_image = frame.image_prompt_en
+            frame.image_prompt_en = sync(previous_image)
+            if frame.image_prompt == previous_image and kwargs.get("image_prompt") is None:
+                frame.image_prompt = frame.image_prompt_en
+        if frame.image_prompt_cn:
+            frame.image_prompt_cn = sync(frame.image_prompt_cn)
+        if kwargs.get("workbench_prompt_is_optimized") is not None:
+            frame.workbench_prompt_is_optimized = kwargs["workbench_prompt_is_optimized"]
+
         # Update only provided fields
         if kwargs.get('image_prompt') is not None:
             frame.image_prompt = kwargs['image_prompt']
         if kwargs.get('action_description') is not None:
             frame.action_description = kwargs['action_description']
+            if kwargs.get("workbench_prompt_is_optimized") is not None:
+                # Explicit workbench text is the current editable body,
+                # including ordinary drafts, rather than an older rich frame.
+                frame.visual_description = frame.action_description
         if kwargs.get('dialogue') is not None:
             frame.dialogue = kwargs['dialogue']
         if kwargs.get('camera_angle') is not None:
@@ -5770,7 +5858,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     image_url=source_image_url,
                     prompt=prompt,
                     duration=duration,
-                    audio_url=audio_url
+                    audio_url=audio_url,
+                    owner_profile_id=script.owner_profile_id,
                 )
 
                 if video_result and video_result.get("video_url"):
@@ -5849,7 +5938,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if polished and polished == prompt.strip():
             return prompt
         projected = append_projected_shot_context(prompt, frame.director_shot_context)
-        characters = self.resolve_episode_assets(script)["characters"]
+        characters = self.resolve_project_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
@@ -5862,7 +5951,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((item for item in script.frames if item.id == frame_id), None)
         if not frame:
             raise ValueError("Frame not found")
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         characters = {item.id: item for item in resolved["characters"]}
         scenes = {item.id: item for item in resolved["scenes"]}
         props = {item.id: item for item in resolved.get("props", [])}
@@ -5985,10 +6074,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Update frame with final prompt
             frame.image_prompt = final_prompt
             
-            # Resolve assets across Episode → Series → Global layers so
-            # shared/global characters & scenes are usable when rendering
-            # this frame (frame id references are left unchanged).
-            resolved = self.resolve_episode_assets(script)
+            # Resolve project membership and its owning series only. Global
+            # candidates require explicit import; frame IDs remain unchanged.
+            resolved = self.resolve_project_assets(script)
             # Find scene for this frame
             scene = next((s for s in resolved["scenes"] if s.id == frame.scene_id), None)
 
@@ -6017,6 +6105,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 size=effective_size,
                 model_name=i2i_model,
                 preserve_prompt=preserve_prompt,
+                output_dir=self._owner_output_dir(script, "storyboard"),
             )
             self._register_storyboard_frame_media(frame, script.owner_profile_id)
             
@@ -9741,18 +9830,35 @@ class ComicGenPipeline(StudioOwnerMixin):
                 episodes.append(script)
         return episodes
 
-    def resolve_episode_assets(self, episode: Script, series: Optional[Series] = None) -> Dict[str, List]:
+    def resolve_project_assets(self, episode: Script) -> Dict[str, List]:
+        """Project membership only: local assets and its owning series.
+
+        Global-library visibility is an import/reference candidate capability,
+        not implicit membership in storyboard production context.
+        """
+        return self.resolve_episode_assets(episode, include_global=False)
+
+    def resolve_episode_assets(self, episode: Script, series: Optional[Series] = None, *, include_global: bool = True) -> Dict[str, List]:
         """Merge Episode-local assets with Series shared assets and the
         project-independent global asset library. Priority by ID:
         Episode > Series > Global (local always wins). The global library
         is the lowest layer and applies to every project, with or without
         a parent series. When the global library is empty this behaves
-        identically to the previous two-layer (Episode/Series) merge."""
+        identically to the previous two-layer (Episode/Series) merge.
+        Project production consumers use resolve_project_assets to exclude
+        unimported global candidates; the broad default remains compatible.
+        """
         if not series:
             # Auto-lookup series if episode has series_id
             if episode.series_id:
                 series = self.get_series(episode.series_id, episode.owner_profile_id)
         if not series:
+            if not include_global:
+                return {
+                    "characters": list(episode.characters),
+                    "scenes": list(episode.scenes),
+                    "props": list(episode.props),
+                }
             # No parent series — episode-local assets sit on top of the
             # global library (lowest layer). With an empty library this
             # yields the episode's own assets (back-compat).
@@ -9772,6 +9878,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         merged_characters = list(episode.characters) + [c for c in series.characters if c.id not in ep_char_ids]
         merged_scenes = list(episode.scenes) + [s for s in series.scenes if s.id not in ep_scene_ids]
         merged_props = list(episode.props) + [p for p in series.props if p.id not in ep_prop_ids]
+
+        if not include_global:
+            return {"characters": merged_characters, "scenes": merged_scenes, "props": merged_props}
 
         # Fold the global library underneath as the lowest layer — only
         # ids absent from both the Episode and Series layers. No-op when
