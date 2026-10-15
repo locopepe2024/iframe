@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import threading
 
+from ...utils.system_check import resolve_media_command
+
 from PIL import Image, ImageDraw
 
 MAX_BYTES = 256 * 1024 * 1024
@@ -29,6 +31,7 @@ def fingerprint(path: Path) -> str:
 
 
 def run(command: list[str], timeout: int = 90) -> tuple[str, str]:
+    command = resolve_media_command(command)
     # File-backed capture avoids accumulating decoder output in process memory.
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         try:

@@ -68,7 +68,7 @@ from .export import ExportManager
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
-from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
+from ...utils.system_check import get_ffmpeg_path, get_ffprobe_path, get_ffmpeg_install_instructions
 from ..studio_access import (
     StudioOwnerMixin,
     owned_by,
@@ -8587,8 +8587,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "FFmpeg is required for Assembly rendering. "
                 + get_ffmpeg_install_instructions()
             )
-        probe_name = "ffprobe.exe" if ffmpeg_path.lower().endswith(".exe") else "ffprobe"
-        ffprobe_path = os.path.join(os.path.dirname(ffmpeg_path), probe_name)
+        ffprobe_path = get_ffprobe_path(ffmpeg_path)
+        if not ffprobe_path:
+            raise RuntimeError("FFprobe is required for Assembly source audio inspection")
         filter_steps: List[str] = []
         for index, clip in enumerate(clips):
             timeline_duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000

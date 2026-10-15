@@ -155,6 +155,7 @@ def test_project_plan_renders_contiguous_clips_and_persists_output(pipeline):
     project.assembly_plan = _plan("project", [clips[0]], 20_000)
 
     with patch("src.apps.comic_gen.pipeline.get_ffmpeg_path", return_value="/usr/bin/ffmpeg"), \
+         patch("src.apps.comic_gen.pipeline.get_ffprobe_path", return_value="/usr/bin/ffprobe"), \
          patch("src.apps.comic_gen.pipeline.subprocess.run", side_effect=_fake_ffmpeg_run) as run:
         rendered = pipeline.render_assembly_plan("project", project.id)
 
@@ -199,6 +200,7 @@ def test_series_plan_renders_three_episode_bookend_timeline(pipeline):
     pipeline.series_store[series.id] = series
 
     with patch("src.apps.comic_gen.pipeline.get_ffmpeg_path", return_value="/usr/bin/ffmpeg"), \
+         patch("src.apps.comic_gen.pipeline.get_ffprobe_path", return_value="/usr/bin/ffprobe"), \
          patch("src.apps.comic_gen.pipeline.subprocess.run", side_effect=_fake_ffmpeg_run) as run:
         rendered = pipeline.render_assembly_plan("series", series.id)
 
@@ -494,6 +496,7 @@ def test_audio_probe_failure_does_not_publish_silent_output(pipeline, failure):
     project.assembly_plan = _plan("project", [_clip("probe", 0, 1000)], 1000)
     pipeline.scripts[project.id] = project
     with patch("src.apps.comic_gen.pipeline.get_ffmpeg_path", return_value="/usr/bin/ffmpeg"), \
+         patch("src.apps.comic_gen.pipeline.get_ffprobe_path", return_value="/usr/bin/ffprobe"), \
          patch("src.apps.comic_gen.pipeline.subprocess.run", side_effect=failure):
         with pytest.raises(RuntimeError, match="source audio probe failed"):
             pipeline.render_assembly_plan("project", project.id)
