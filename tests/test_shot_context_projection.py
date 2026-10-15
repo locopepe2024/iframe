@@ -148,7 +148,7 @@ def test_refinement_llm_receives_bounded_current_shot_context():
     script.episode_visual_context = episode_context()
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
-    pipeline.resolve_episode_assets = lambda _: {"characters": [], "scenes": [], "props": []}
+    pipeline.resolve_episode_assets = lambda _, **kwargs: {"characters": [], "scenes": [], "props": []}
     pipeline.script_processor = Mock()
     pipeline.script_processor.refine_frame_to_rich.return_value = None
     assert pipeline.refine_frame(script.id, frame.id) is frame
