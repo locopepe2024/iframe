@@ -10,9 +10,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _configured_tool_path(variable: str):
+    value = os.getenv(variable, "").strip()
+    if not value:
+        return None
+    if not os.path.isabs(value) or not os.path.isfile(value) or not os.access(value, os.X_OK):
+        raise ValueError(f"{variable} must name an existing absolute executable file on the backend")
+    return value
+
+
 def get_ffmpeg_path() -> str:
     """
-    Get path to ffmpeg binary, preferring bundled version.
+    Get FFmpeg: explicit FFMPEG_PATH, bundled version, then system discovery.
 
     For packaged applications (PyInstaller, etc.), this will first look for
     a bundled ffmpeg in the application directory, then fall back to system PATH,
@@ -21,6 +30,10 @@ def get_ffmpeg_path() -> str:
     Returns:
         Path to ffmpeg executable, or None if not found
     """
+    configured = _configured_tool_path("FFMPEG_PATH")
+    if configured:
+        return configured
+
     # For PyInstaller or similar packagers
     if getattr(sys, 'frozen', False):
         # Running in a bundle
@@ -77,35 +90,57 @@ def get_ffmpeg_path() -> str:
     return None
 
 
-def check_ffmpeg() -> Tuple[bool, str]:
-    """
-    Check if ffmpeg is available and get version info.
-    
-    Returns:
-        Tuple of (is_available, message)
-    """
-    ffmpeg_path = get_ffmpeg_path()
-    if not ffmpeg_path:
-        return False, "FFmpeg not found in bundle or system PATH"
-    
+def get_ffprobe_path(ffmpeg_path=None):
+    """Resolve the probe independently, preferring the selected FFmpeg's sibling."""
+    configured = _configured_tool_path("FFPROBE_PATH")
+    if configured:
+        return configured
+    ffmpeg_path = ffmpeg_path or get_ffmpeg_path()
+    if ffmpeg_path:
+        name = "ffprobe.exe" if ffmpeg_path.lower().endswith(".exe") else "ffprobe"
+        sibling = os.path.join(os.path.dirname(ffmpeg_path), name)
+        if os.path.isfile(sibling) and os.access(sibling, os.X_OK):
+            return sibling
+    return shutil.which("ffprobe")
+
+
+def resolve_media_command(command):
+    """Resolve a media executable while preserving every argv boundary."""
+    resolvers = {"ffmpeg": get_ffmpeg_path, "ffprobe": get_ffprobe_path}
+    if not command or command[0] not in resolvers:
+        raise ValueError("Unsupported media tool")
+    executable = resolvers[command[0]]()
+    if not executable:
+        raise ValueError("FFmpeg/FFprobe is unavailable")
+    return [executable, *command[1:]]
+
+
+def _check_media_tool(name, resolver):
     try:
-        result = subprocess.run(
-            [ffmpeg_path, "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        executable = resolver()
+    except ValueError as exc:
+        return False, str(exc)
+    if not executable:
+        return False, f"{name} not found in bundle or system PATH"
+    try:
+        result = subprocess.run([executable, "-version"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             version_line = result.stdout.split('\n')[0] if result.stdout else "Unknown version"
-            return True, f"Found at {ffmpeg_path}: {version_line}"
-        else:
-            return False, f"FFmpeg found at {ffmpeg_path} but returned error code {result.returncode}"
+            return True, f"Found at {executable}: {version_line}"
+        return False, f"{name} found at {executable} but returned error code {result.returncode}"
     except subprocess.TimeoutExpired:
-        return False, f"FFmpeg at {ffmpeg_path} timed out"
-    except Exception as e:
-        # Log details server-side; don't expose exception text to API callers
-        logger.warning(f"FFmpeg check failed at {ffmpeg_path}: {e}")
-        return False, f"FFmpeg found at {ffmpeg_path} but not working ({type(e).__name__})"
+        return False, f"{name} at {executable} timed out"
+    except Exception as exc:
+        logger.warning("%s check failed at %s: %s", name, executable, exc)
+        return False, f"{name} found at {executable} but not working ({type(exc).__name__})"
+
+
+def check_ffmpeg() -> Tuple[bool, str]:
+    return _check_media_tool("FFmpeg", get_ffmpeg_path)
+
+
+def check_ffprobe() -> Tuple[bool, str]:
+    return _check_media_tool("FFprobe", get_ffprobe_path)
 
 
 def get_system_info() -> Dict[str, str]:
@@ -121,24 +156,22 @@ def get_system_info() -> Dict[str, str]:
 
 
 def run_system_checks() -> Dict[str, any]:
-    """
-    Run all system checks and return results.
-    
-    Returns:
-        Dictionary with system info and dependency check results
-    """
-    ffmpeg_ok, ffmpeg_msg = check_ffmpeg()
-    
+    """Report the exact process-local media tool dependencies, including bad config."""
+    dependencies = {}
+    for name, resolver, checker in (
+        ("ffmpeg", get_ffmpeg_path, check_ffmpeg),
+        ("ffprobe", get_ffprobe_path, check_ffprobe),
+    ):
+        available, message = checker()
+        try:
+            executable = resolver()
+        except ValueError:
+            executable = None
+        dependencies[name] = {"available": available, "message": message, "path": executable}
     return {
         "system_info": get_system_info(),
-        "dependencies": {
-            "ffmpeg": {
-                "available": ffmpeg_ok,
-                "message": ffmpeg_msg,
-                "path": get_ffmpeg_path()
-            }
-        },
-        "status": "ok" if ffmpeg_ok else "warning"
+        "dependencies": dependencies,
+        "status": "ok" if all(item["available"] for item in dependencies.values()) else "warning",
     }
 
 

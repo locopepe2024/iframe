@@ -12,6 +12,8 @@ import time
 import warnings
 from fractions import Fraction
 
+from ...utils.system_check import resolve_media_command
+
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
 
@@ -993,6 +995,7 @@ class RecreationService:
 
     @staticmethod
     def _run_media_command(command, timeout=_MEDIA_COMMAND_TIMEOUT_SECONDS):
+        command = resolve_media_command(command)
         try:
             result = subprocess.run(
                 command,
