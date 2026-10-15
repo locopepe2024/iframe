@@ -78,7 +78,7 @@ jobs:
 
       - name: Run FFmpeg tests on media
         run: |
-          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py tests/test_reference_files.py tests/test_assembly_render_compiler.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
+          "$RUNNER_TEMP/recreation-venv/bin/python" -m pytest -q tests/test_recreation.py tests/test_reference_files.py tests/test_assembly_render_compiler.py tests/test_video_posters.py --junitxml="$RUNNER_TEMP/recreation-results.xml"
 
       - name: Verify Blender depth on media
         env:
@@ -116,6 +116,12 @@ jobs:
       - name: Verify playground ratio contract and tests
         working-directory: frontend
         run: npm run verify:playground
+
+      - name: Verify owner media posters
+        working-directory: frontend
+        run: |
+          npm test -- --run src/__tests__/asset-url.test.ts src/__tests__/studio-editor-media.test.ts src/__tests__/video-poster-url.test.ts
+          npm run test:ui -- src/components/shared/preview/PreviewVideo.test.tsx
 
       - name: Build frontend export
         working-directory: frontend
