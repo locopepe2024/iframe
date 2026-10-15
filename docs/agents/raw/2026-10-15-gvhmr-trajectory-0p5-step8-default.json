@@ -1,0 +1,69 @@
+{
+  "schema": "gvhmr-simplevo-trajectory-probe.v1",
+  "source_sha256": "49c73ccaaa2bf36d89c234006417320f7ffd5f9c5d58e6eafd227e38d4fa8602",
+  "source_frames": 90,
+  "scale": 0.5,
+  "step": 8,
+  "sampled_frames": [
+    0,
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88,
+    89
+  ],
+  "watermark_check_enabled": true,
+  "status": "failed",
+  "pairs": [
+    {
+      "frames": [
+        0,
+        8
+      ],
+      "matches": 16,
+      "configuration": "UNCALIBRATED",
+      "rotation_step_deg": 91.08770262775634
+    },
+    {
+      "frames": [
+        8,
+        16
+      ],
+      "matches": 20,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 5.576065712756105
+    },
+    {
+      "frames": [
+        16,
+        24
+      ],
+      "matches": 14,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 91.38088064434798
+    },
+    {
+      "frames": [
+        24,
+        32
+      ],
+      "matches": 4,
+      "configuration": "DEGENERATE",
+      "failure": "ValueError: no_relative_pose"
+    }
+  ],
+  "rotation_step_deg": {
+    "max": 91.38088064434798,
+    "median": 91.08770262775634,
+    "sum": 188.04464898486043
+  },
+  "end_rotation_from_start_deg": null,
+  "note": "Pairwise translation scale is not metric. Completed means only that every sampled pair returned a pose; it does not validate a camera trajectory."
+}

@@ -1,0 +1,911 @@
+{
+  "schema": "gvhmr-simplevo-trajectory-probe.v1",
+  "source_sha256": "49c73ccaaa2bf36d89c234006417320f7ffd5f9c5d58e6eafd227e38d4fa8602",
+  "source_frames": 90,
+  "scale": 1.0,
+  "step": 1,
+  "sampled_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89
+  ],
+  "watermark_check_enabled": false,
+  "status": "completed",
+  "pairs": [
+    {
+      "frames": [
+        0,
+        1
+      ],
+      "matches": 208,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.3782108659240402
+    },
+    {
+      "frames": [
+        1,
+        2
+      ],
+      "matches": 108,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.5222705951206958
+    },
+    {
+      "frames": [
+        2,
+        3
+      ],
+      "matches": 86,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.267871761765345
+    },
+    {
+      "frames": [
+        3,
+        4
+      ],
+      "matches": 52,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.660773583713692
+    },
+    {
+      "frames": [
+        4,
+        5
+      ],
+      "matches": 45,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.4138851918627924
+    },
+    {
+      "frames": [
+        5,
+        6
+      ],
+      "matches": 58,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.9039562954927962
+    },
+    {
+      "frames": [
+        6,
+        7
+      ],
+      "matches": 52,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.671293029192268
+    },
+    {
+      "frames": [
+        7,
+        8
+      ],
+      "matches": 83,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.3645006473362586
+    },
+    {
+      "frames": [
+        8,
+        9
+      ],
+      "matches": 75,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.47333286805949926
+    },
+    {
+      "frames": [
+        9,
+        10
+      ],
+      "matches": 86,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.29208307983949505
+    },
+    {
+      "frames": [
+        10,
+        11
+      ],
+      "matches": 142,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.7172339080262158
+    },
+    {
+      "frames": [
+        11,
+        12
+      ],
+      "matches": 88,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.7669382794601998
+    },
+    {
+      "frames": [
+        12,
+        13
+      ],
+      "matches": 117,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.8012523910513504
+    },
+    {
+      "frames": [
+        13,
+        14
+      ],
+      "matches": 116,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.7150343993495656
+    },
+    {
+      "frames": [
+        14,
+        15
+      ],
+      "matches": 111,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.5621984858987727
+    },
+    {
+      "frames": [
+        15,
+        16
+      ],
+      "matches": 156,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.8627541193742263
+    },
+    {
+      "frames": [
+        16,
+        17
+      ],
+      "matches": 31,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.011053840234597
+    },
+    {
+      "frames": [
+        17,
+        18
+      ],
+      "matches": 15,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 12.538142371934901
+    },
+    {
+      "frames": [
+        18,
+        19
+      ],
+      "matches": 21,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 30.435130013365864
+    },
+    {
+      "frames": [
+        19,
+        20
+      ],
+      "matches": 32,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.0088142917365595
+    },
+    {
+      "frames": [
+        20,
+        21
+      ],
+      "matches": 49,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.9023834557048995
+    },
+    {
+      "frames": [
+        21,
+        22
+      ],
+      "matches": 26,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 7.623390282834787
+    },
+    {
+      "frames": [
+        22,
+        23
+      ],
+      "matches": 40,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.0587862068118656
+    },
+    {
+      "frames": [
+        23,
+        24
+      ],
+      "matches": 63,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 3.1445424280674947
+    },
+    {
+      "frames": [
+        24,
+        25
+      ],
+      "matches": 53,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.177693245343097
+    },
+    {
+      "frames": [
+        25,
+        26
+      ],
+      "matches": 74,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 6.7391538155848325
+    },
+    {
+      "frames": [
+        26,
+        27
+      ],
+      "matches": 49,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.4932818833815396
+    },
+    {
+      "frames": [
+        27,
+        28
+      ],
+      "matches": 45,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.6818502518356742
+    },
+    {
+      "frames": [
+        28,
+        29
+      ],
+      "matches": 42,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 8.795903080265235
+    },
+    {
+      "frames": [
+        29,
+        30
+      ],
+      "matches": 46,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 4.508021094035543
+    },
+    {
+      "frames": [
+        30,
+        31
+      ],
+      "matches": 57,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 3.161647666970289
+    },
+    {
+      "frames": [
+        31,
+        32
+      ],
+      "matches": 38,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.965081324790159
+    },
+    {
+      "frames": [
+        32,
+        33
+      ],
+      "matches": 72,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 3.454454204610908
+    },
+    {
+      "frames": [
+        33,
+        34
+      ],
+      "matches": 88,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.8278818579158918
+    },
+    {
+      "frames": [
+        34,
+        35
+      ],
+      "matches": 32,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 8.98711351563275
+    },
+    {
+      "frames": [
+        35,
+        36
+      ],
+      "matches": 33,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.6870202884085264
+    },
+    {
+      "frames": [
+        36,
+        37
+      ],
+      "matches": 70,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.2314644952153428
+    },
+    {
+      "frames": [
+        37,
+        38
+      ],
+      "matches": 77,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.0234510595567452
+    },
+    {
+      "frames": [
+        38,
+        39
+      ],
+      "matches": 181,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.1110032533825847
+    },
+    {
+      "frames": [
+        39,
+        40
+      ],
+      "matches": 219,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.8511084153693147
+    },
+    {
+      "frames": [
+        40,
+        41
+      ],
+      "matches": 290,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.783971076903121
+    },
+    {
+      "frames": [
+        41,
+        42
+      ],
+      "matches": 305,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 2.8485039289043135
+    },
+    {
+      "frames": [
+        42,
+        43
+      ],
+      "matches": 343,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.059986836362207
+    },
+    {
+      "frames": [
+        43,
+        44
+      ],
+      "matches": 324,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.1018951466215101
+    },
+    {
+      "frames": [
+        44,
+        45
+      ],
+      "matches": 341,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.0930692335727599
+    },
+    {
+      "frames": [
+        45,
+        46
+      ],
+      "matches": 242,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6442216360202667
+    },
+    {
+      "frames": [
+        46,
+        47
+      ],
+      "matches": 305,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6759407751393541
+    },
+    {
+      "frames": [
+        47,
+        48
+      ],
+      "matches": 315,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.9688414651460082
+    },
+    {
+      "frames": [
+        48,
+        49
+      ],
+      "matches": 94,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.7160051664269501
+    },
+    {
+      "frames": [
+        49,
+        50
+      ],
+      "matches": 103,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.3380412803038261
+    },
+    {
+      "frames": [
+        50,
+        51
+      ],
+      "matches": 215,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.14401765375946743
+    },
+    {
+      "frames": [
+        51,
+        52
+      ],
+      "matches": 270,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.2635427830728874
+    },
+    {
+      "frames": [
+        52,
+        53
+      ],
+      "matches": 242,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.17582936122100767
+    },
+    {
+      "frames": [
+        53,
+        54
+      ],
+      "matches": 213,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6633761261833446
+    },
+    {
+      "frames": [
+        54,
+        55
+      ],
+      "matches": 231,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.3250574669850846
+    },
+    {
+      "frames": [
+        55,
+        56
+      ],
+      "matches": 291,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.6376578307010659
+    },
+    {
+      "frames": [
+        56,
+        57
+      ],
+      "matches": 267,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6999750294899696
+    },
+    {
+      "frames": [
+        57,
+        58
+      ],
+      "matches": 268,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 0.6587882546787679
+    },
+    {
+      "frames": [
+        58,
+        59
+      ],
+      "matches": 598,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.1096814802963546
+    },
+    {
+      "frames": [
+        59,
+        60
+      ],
+      "matches": 622,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.2390684512466636
+    },
+    {
+      "frames": [
+        60,
+        61
+      ],
+      "matches": 611,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6661724310003878
+    },
+    {
+      "frames": [
+        61,
+        62
+      ],
+      "matches": 681,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.7190050500554394
+    },
+    {
+      "frames": [
+        62,
+        63
+      ],
+      "matches": 663,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.42220449773052054
+    },
+    {
+      "frames": [
+        63,
+        64
+      ],
+      "matches": 734,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.5950775038538376
+    },
+    {
+      "frames": [
+        64,
+        65
+      ],
+      "matches": 658,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.7372557192691513
+    },
+    {
+      "frames": [
+        65,
+        66
+      ],
+      "matches": 590,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.253982039809391
+    },
+    {
+      "frames": [
+        66,
+        67
+      ],
+      "matches": 508,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 3.294792878770932
+    },
+    {
+      "frames": [
+        67,
+        68
+      ],
+      "matches": 426,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.6666549423868944
+    },
+    {
+      "frames": [
+        68,
+        69
+      ],
+      "matches": 449,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.806344449526517
+    },
+    {
+      "frames": [
+        69,
+        70
+      ],
+      "matches": 339,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.9455134521505715
+    },
+    {
+      "frames": [
+        70,
+        71
+      ],
+      "matches": 315,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.0035645692399697
+    },
+    {
+      "frames": [
+        71,
+        72
+      ],
+      "matches": 321,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.191568868125724
+    },
+    {
+      "frames": [
+        72,
+        73
+      ],
+      "matches": 206,
+      "configuration": "PLANAR",
+      "rotation_step_deg": 1.1437223312670115
+    },
+    {
+      "frames": [
+        73,
+        74
+      ],
+      "matches": 38,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.5743164420996822
+    },
+    {
+      "frames": [
+        74,
+        75
+      ],
+      "matches": 50,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 3.053450186307553
+    },
+    {
+      "frames": [
+        75,
+        76
+      ],
+      "matches": 50,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.3481873740056063
+    },
+    {
+      "frames": [
+        76,
+        77
+      ],
+      "matches": 46,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.8362647934094062
+    },
+    {
+      "frames": [
+        77,
+        78
+      ],
+      "matches": 42,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 6.080250501329002
+    },
+    {
+      "frames": [
+        78,
+        79
+      ],
+      "matches": 76,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.5500287111835502
+    },
+    {
+      "frames": [
+        79,
+        80
+      ],
+      "matches": 51,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.5993782828201408
+    },
+    {
+      "frames": [
+        80,
+        81
+      ],
+      "matches": 52,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.1705266074650762
+    },
+    {
+      "frames": [
+        81,
+        82
+      ],
+      "matches": 46,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.6875422195071994
+    },
+    {
+      "frames": [
+        82,
+        83
+      ],
+      "matches": 41,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.649149774294121
+    },
+    {
+      "frames": [
+        83,
+        84
+      ],
+      "matches": 53,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.6145304692043024
+    },
+    {
+      "frames": [
+        84,
+        85
+      ],
+      "matches": 26,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.5674261226861517
+    },
+    {
+      "frames": [
+        85,
+        86
+      ],
+      "matches": 61,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.3083831923209392
+    },
+    {
+      "frames": [
+        86,
+        87
+      ],
+      "matches": 71,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 0.23490244801451995
+    },
+    {
+      "frames": [
+        87,
+        88
+      ],
+      "matches": 46,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 1.1644927167321324
+    },
+    {
+      "frames": [
+        88,
+        89
+      ],
+      "matches": 56,
+      "configuration": "CALIBRATED",
+      "rotation_step_deg": 2.9730210939961985
+    }
+  ],
+  "rotation_step_deg": {
+    "max": 30.435130013365864,
+    "median": 1.2314644952153428,
+    "sum": 196.79714249605348
+  },
+  "end_rotation_from_start_deg": 20.45669293683616,
+  "note": "Pairwise translation scale is not metric. Completed means only that every sampled pair returned a pose; it does not validate a camera trajectory."
+}
