@@ -1047,6 +1047,10 @@ def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
 
 @router.post("/sessions/{sid}/messages")
 def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
+    # Selected Playground media is a candidate list, not attachment consent.
+    # Normalize before validation and every dispatch path, including H3/research.
+    if "@" not in body.content:
+        body = body.model_copy(update={"input_media": [], "asset_names": []})
     if not body.content.strip() or any(len(n) > 500 for n in body.asset_names):
         raise HTTPException(400, "消息或素材名称无效")
     # Validate only the references attached to this request. Historical turns

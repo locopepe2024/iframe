@@ -133,7 +133,7 @@ def test_multiturn_owner_and_model(setup, monkeypatch):
     assert history[1]['content'] == '一个女孩'
     assert history[2]['content'] == '优化后的提示词'
     assert len(agent.messages(sid, ctx)['messages']) == 4
-    assert agent.messages(sid, ctx)['messages'][0]['asset_names'] == ['参考.png']
+    assert agent.messages(sid, ctx)['messages'][0]['asset_names'] == []
     other = UserContext('other', 'other-profile', 'other', 'other-token')
     for fn in [lambda: agent.messages(sid, other), lambda: agent.delete(sid, other), lambda: agent.patch(sid, agent.SessionPatch(title='x'), other)]:
         with pytest.raises(HTTPException) as exc:
@@ -637,11 +637,11 @@ def test_linked_conversation_and_image_context(setup, monkeypatch):
     monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}})
     complete = Mock(return_value='看见一只小狗')
     monkeypatch.setattr(agent, 'complete', complete)
-    agent.send(first['id'], agent.MessageCreate(content='这是什么？', input_media=['/playground/input-media/a.png']), ctx)
+    agent.send(first['id'], agent.MessageCreate(content='@1 这是什么？', input_media=['/playground/input-media/a.png']), ctx)
     assert complete.call_args.args[2][-1]['content'][2] == {
         'type': 'image_url', 'image_url': {'url': 'https://media.example/image.png'}}
     agent.send(first['id'], agent.MessageCreate(content='它的颜色？'), ctx)
-    assert complete.call_args.args[2][1]['content'] == '这是什么？'
+    assert complete.call_args.args[2][1]['content'] == '@1 这是什么？'
     assert isinstance(complete.call_args.args[2][2]['content'], str)
     assert len(agent.playground_conversation('canvas', ctx)['messages']) == 4
 
@@ -879,14 +879,14 @@ def test_chat_reattaches_only_latest_named_material_not_current_duplicate(setup,
     call = Mock(return_value='answer')
     monkeypatch.setattr(agent, 'complete', call)
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
-    agent.send(sid, agent.MessageCreate(content='第一版', input_media=['/tmp/first.png'],
+    agent.send(sid, agent.MessageCreate(content='第一版 @same.png', input_media=['/tmp/first.png'],
         asset_names=['same.png']), setup)
-    agent.send(sid, agent.MessageCreate(content='第二版', input_media=['/tmp/latest.png'],
+    agent.send(sid, agent.MessageCreate(content='第二版 @same.png', input_media=['/tmp/latest.png'],
         asset_names=['same.png']), setup)
 
     agent.send(sid, agent.MessageCreate(content='继续参考 @same.png'), setup)
     history = call.call_args.args[2]
-    assert history[1]['content'] == '第一版'
+    assert history[1]['content'] == '第一版 @same.png'
     assert history[3]['content'][2]['image_url']['url'] == '/tmp/latest.png'
     assert sum(part['type'] == 'image_url' for message in history for part in
         (message['content'] if isinstance(message['content'], list) else [])) == 1
@@ -894,7 +894,7 @@ def test_chat_reattaches_only_latest_named_material_not_current_duplicate(setup,
     agent.send(sid, agent.MessageCreate(content='继续参考 @same.png',
         input_media=['/tmp/current.png'], asset_names=['same.png']), setup)
     history = call.call_args.args[2]
-    assert history[3]['content'] == '第二版'
+    assert history[3]['content'] == '第二版 @same.png'
     assert history[-1]['content'][2]['image_url']['url'] == '/tmp/current.png'
     assert sum(part['type'] == 'image_url' for message in history for part in
         (message['content'] if isinstance(message['content'], list) else [])) == 1
@@ -955,7 +955,7 @@ def test_current_duplicate_material_names_are_still_rejected(setup, monkeypatch)
         agent.send(
             sid,
             agent.MessageCreate(
-                content='使用素材',
+                content='使用 @1 素材',
                 input_media=['/tmp/a.png', '/tmp/b.png'],
                 asset_names=['same.png', 'same.png'],
             ),
@@ -990,7 +990,7 @@ def test_chat_keeps_more_than_sixteen_references_and_long_text(setup, monkeypatc
     call = Mock(return_value='分析完成')
     monkeypatch.setattr(agent, 'complete', call)
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
-    prompt = '分析素材。' * 4000
+    prompt = '@1 ' + '分析素材。' * 4000
     agent.send(sid, agent.MessageCreate(content=prompt, context=prompt, input_media=references,
         asset_names=[f'{i}.png' for i in range(32)]), setup)
     parts = call.call_args.args[2][-1]['content']
@@ -1017,3 +1017,28 @@ def test_chat_payload_budget_counts_utf8_bytes_not_escaped_chinese(setup, monkey
         model='qwen', messages=[{'role': 'user', 'content': '文' * 200000}], stream=True,
     )
     client.chat.completions.create.return_value.close.assert_called_once()
+
+
+@pytest.mark.parametrize('model', ['qwen', 'minimax-h3-ir'])
+def test_no_mention_ignores_selected_materials_before_any_reference_read(setup, monkeypatch, model):
+    monkeypatch.setattr(agent, 'validate_model', lambda *args: None)
+    sid = agent.create(agent.SessionCreate(model=model), setup)['session']['id']
+    read = Mock(side_effect=AssertionError('Unmentioned materials must not be read'))
+    monkeypatch.setattr(agent, 'reference_content', read)
+    monkeypatch.setattr(agent, '_context_ir_reference_content', read)
+    complete = Mock(return_value='纯文字回答')
+    monkeypatch.setattr(agent, 'complete', complete)
+    monkeypatch.setattr(agent, 'complete_h3_context_ir', complete)
+    body = agent.MessageCreate(content='请分析这段文字', input_media=['/missing/a.png', '/missing/b.png'],
+                               asset_names=['duplicate.png', 'duplicate.png'])
+    result = agent.send(sid, body, setup)
+    assert result['user_message']['input_media'] == []
+    assert result['user_message']['asset_names'] == []
+    assert result['assistant_message']['input_media'] == []
+    assert agent.messages(sid, setup)['messages'][0]['input_media'] == []
+    read.assert_not_called()
+    assert body.input_media == ['/missing/a.png', '/missing/b.png']
+    if model == 'qwen':
+        assert complete.call_args.args[2][-1]['content'] == '请分析这段文字'
+    else:
+        assert complete.call_args.args[1] == [{'type': 'text', 'text': '请分析这段文字'}]

@@ -248,3 +248,18 @@ it('exposes catalog errors and supports an explicit retry without submitting cha
     expect(vi.mocked(agentRequest).mock.calls.every(([, method]) => method !== 'POST')).toBe(true);
     hook.unmount();
 });
+
+it.each(['请分析文字', '请分析 @reference.png'])('gates selected media on explicit @ intent: %s', async prompt => {
+    mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }));
+    usePlaygroundStore.setState({ prompt, inputMedia: ['/reference.png'], mediaNames: { '/reference.png': 'reference.png' } });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    await act(async () => { await hook.result.current.send(); });
+    expect(agentRequest).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        content: prompt,
+        input_media: prompt.includes('@') ? ['/reference.png'] : [],
+        asset_names: prompt.includes('@') ? ['reference.png'] : [],
+    }));
+    expect(usePlaygroundStore.getState().inputMedia).toEqual(['/reference.png']);
+    hook.unmount();
+});
