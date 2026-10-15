@@ -6448,9 +6448,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not video:
             raise ValueError("Video task not found")
 
+        previous_video_id = frame.selected_video_id
         frame.selected_video_id = video_id
         frame.video_url = video.video_url
         frame.is_video_pinned = True
+        self._sync_assembly_selected_take(script, frame_id, previous_video_id, video_id)
 
         self._save_data()
         return script
@@ -6493,12 +6495,50 @@ class ComicGenPipeline(StudioOwnerMixin):
         if frame.selected_video_id == latest.id and frame.video_url == latest.video_url:
             return script  # already selected — no-op
 
+        previous_video_id = frame.selected_video_id
         frame.selected_video_id = latest.id
         frame.video_url = latest.video_url
+        self._sync_assembly_selected_take(script, frame_id, previous_video_id, latest.id)
         # is_video_pinned stays False — this is an auto-select
 
         self._save_data()
         return script
+
+    def _sync_assembly_selected_take(self, script: Script, frame_id: str,
+                                     previous_id: Optional[str], selected_id: str) -> None:
+        """Keep clips following the previous frame take in sync with selection.
+
+        Explicit clips using a different take retain their editorial choice.
+        Revision changes also invalidate renders compiled from the old plan.
+        """
+        if not previous_id or previous_id == selected_id:
+            return
+        with self._save_lock:
+            resources = [script] + [series for series in self.series_store.values()
+                if series.owner_profile_id == script.owner_profile_id]
+            series_changed = False
+            for resource in resources:
+                plan = getattr(resource, "assembly_plan", None)
+                if plan is None:
+                    continue
+                updated = plan.model_copy(deep=True)
+                changed = False
+                for lane in updated.lanes:
+                    if lane.kind != "video":
+                        continue
+                    for clip in lane.clips:
+                        project_id = clip.source_project_id or clip.source_episode_id
+                        if (project_id == script.id and clip.source_frame_id == frame_id
+                                and clip.source_task_id == previous_id):
+                            clip.source_task_id = selected_id
+                            changed = True
+                if changed:
+                    updated.revision += 1
+                    resource.assembly_plan = updated
+                    resource.updated_at = time.time()
+                    series_changed = series_changed or resource is not script
+            if series_changed:
+                self._save_series_data_unlocked()
 
     def unpin_video(self, script_id: str, frame_id: str) -> Script:
         """Clear the manual pin so auto_select_latest_video resumes.
