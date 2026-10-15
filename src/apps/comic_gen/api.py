@@ -411,7 +411,7 @@ def get_studio_media(
         try:
             path = create_media_thumbnail(source_path, owner_root, preview)
         except (OSError, ValueError) as exc:
-            raise HTTPException(status_code=415, detail="A supported still image is required for preview") from exc
+            raise HTTPException(status_code=415, detail="A supported image or video is required for preview") from exc
         headers = {"Cache-Control": "private, max-age=1800"}
     else:
         path = verify_studio_media(owner_key, relative_path, expires, signature)
@@ -454,7 +454,7 @@ def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: U
         try:
             path = create_media_thumbnail(path, owner_root, preview)
         except (OSError, ValueError) as exc:
-            raise HTTPException(status_code=415, detail="A supported still image is required for preview") from exc
+            raise HTTPException(status_code=415, detail="A supported image or video is required for preview") from exc
     return FileResponse(path, media_type="image/webp" if preview else None,
                         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
