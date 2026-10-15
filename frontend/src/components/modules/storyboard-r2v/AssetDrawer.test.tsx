@@ -49,3 +49,16 @@ describe("AssetDrawer product references", () => {
         expect(onToggleVariant).toHaveBeenCalledWith("product", "right", "front");
     });
 });
+
+it("shows only project and inherited series assets, excluding reusable global candidates", () => {
+    const entry = (id: string, source_scope: "episode" | "series" | "global") => ({
+        asset_type: "character" as const, asset_id: id, name: id,
+        source_scope, variants: [],
+    });
+    render(<AssetDrawer isOpen onClose={vi.fn()} characters={[]} scenes={[]} props={[]}
+        assetIndex={[entry("Project actor", "episode"), entry("Series actor", "series"), entry("Global candidate", "global")]}
+        onSelectAsset={vi.fn()} />);
+    expect(screen.getByText("Project actor")).toBeInTheDocument();
+    expect(screen.getByText("Series actor")).toBeInTheDocument();
+    expect(screen.queryByText("Global candidate")).not.toBeInTheDocument();
+});

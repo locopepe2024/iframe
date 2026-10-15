@@ -5,7 +5,7 @@ import { Check, X, User, MapPin, Package } from "lucide-react";
 import { useTranslations } from "next-intl";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
-import { effectiveReferenceIndex } from "@/lib/assetReferenceIndex";
+import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
 
 interface AssetDrawerProps {
     isOpen: boolean;
@@ -37,7 +37,7 @@ export default function AssetDrawer({
     onToggleVariant,
 }: AssetDrawerProps) {
     const t = useTranslations("storyboardR2V");
-    const entries = effectiveReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
+    const entries = projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
     const characters = entries.filter((entry) => entry.asset_type === "character");
     const scenes = entries.filter((entry) => entry.asset_type === "scene");
     const props = entries.filter((entry) => entry.asset_type === "prop");

@@ -249,3 +249,49 @@ def test_asset_reference_index_api_is_owner_scoped(monkeypatch):
             ]
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
+
+
+def test_project_index_excludes_global_candidates_and_keeps_inherited_series():
+    project = Script(id="episode", title="Episode", original_text="text", series_id="series",
+                     characters=[_character("shared", "Local", "local-view")], created_at=0, updated_at=0)
+    series = Series(id="series", title="Series", characters=[
+        _character("shared", "Shadowed", "old-view"), _character("inherited", "Inherited", "series-view")],
+        created_at=0, updated_at=0)
+    library = GlobalAssetLibrary(characters=[_character("global", "Global only", "global-view")])
+    pipeline = _pipeline(project, series, library)
+    available = pipeline.get_asset_reference_index("episode")
+    assert "global" in [entry.asset_id for entry in available.assets]
+    scoped = pipeline.get_asset_reference_index("episode", scope="project")
+    assert [(entry.asset_id, entry.source_scope) for entry in scoped.assets] == [
+        ("shared", "episode"), ("inherited", "series")]
+    assert scoped.assets[0].selected_variant_id == "local-view"
+
+
+def test_project_scope_api_keeps_candidates_separate_and_enforces_owner(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import require_studio_user
+
+    monkeypatch.chdir(tmp_path)
+    owner = UserContext("owner", "owner", "Owner", "")
+    project = Script(id="project", title="Project", original_text="text", owner_profile_id="owner",
+                     characters=[_character("imported-copy", "Uploaded", "upload-view")], created_at=0, updated_at=0)
+    library = GlobalAssetLibrary(characters=[_character("unimported", "Global", "global-view")])
+    library.characters[0].owner_profile_id = "owner"
+    pipeline = _pipeline(project, Series(id="unused", title="Unused", created_at=0, updated_at=0), library)
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    app = FastAPI()
+    app.add_api_route("/projects/{script_id}/asset-index", api.get_project_asset_index)
+    app.dependency_overrides[require_studio_user] = lambda: owner
+    with TestClient(app) as client:
+        available = client.get("/projects/project/asset-index")
+        assert {entry["asset_id"] for entry in available.json()["assets"]} == {"imported-copy", "unimported"}
+        scoped = client.get("/projects/project/asset-index?scope=project")
+        assert scoped.status_code == 200
+        assert scoped.headers["cache-control"] == "private, no-store"
+        assert [entry["asset_id"] for entry in scoped.json()["assets"]] == ["imported-copy"]
+        assert client.get("/projects/project/asset-index?scope=invalid").status_code == 422
+        app.dependency_overrides[require_studio_user] = lambda: UserContext("foreign", "foreign", "Foreign", "")
+        assert client.get("/projects/project/asset-index?scope=project").status_code == 404
