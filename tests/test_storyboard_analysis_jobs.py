@@ -123,7 +123,7 @@ def test_pinned_storyboard_apply_records_lineage_and_rejects_changed_source():
     pipeline._save_lock = RLock()
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.resolve_episode_assets = lambda current: {
+    pipeline.resolve_project_assets = lambda current: {
         "characters": script.characters, "scenes": script.scenes, "props": [],
     }
     pipeline.stamp_owned_children = Mock()
@@ -212,7 +212,7 @@ def test_applying_explicit_storyboard_draft_skips_analysis_model(tmp_path):
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
     pipeline.script_processor = Mock()
-    pipeline.resolve_episode_assets = Mock(return_value={
+    pipeline.resolve_project_assets = Mock(return_value={
         "characters": script.characters, "scenes": script.scenes, "props": [],
     })
     pipeline.get_effective_prompt = Mock(return_value="prompt")
@@ -251,7 +251,7 @@ def test_applying_120_reviewed_shots_preserves_order_without_model_call():
     pipeline.storyboard_analysis_context = lambda project: (
         script, {"characters": [], "scenes": [{"id": "room", "name": "房间"}], "props": []}, "prompt"
     )
-    pipeline.resolve_episode_assets = lambda current: {
+    pipeline.resolve_project_assets = lambda current: {
         "characters": [], "scenes": script.scenes, "props": [],
     }
     pipeline.stamp_owned_children = Mock()
@@ -289,7 +289,7 @@ def test_storyboard_prefers_exact_temporal_character_variant():
         {"characters": [{"id": base.id, "name": base.name}, {"id": college.id, "name": college.name}]},
         "prompt",
     )
-    pipeline.resolve_episode_assets = lambda current: {
+    pipeline.resolve_project_assets = lambda current: {
         "characters": [base, college], "scenes": [scene], "props": [],
     }
     pipeline.stamp_owned_children = Mock()
@@ -363,7 +363,7 @@ def test_storyboard_apply_keeps_confirmed_shot_id_and_asset_context():
         {"characters": [], "scenes": [], "props": [], "episode_visual_context": context.model_dump()},
         "prompt",
     )
-    pipeline.resolve_episode_assets = lambda current: {
+    pipeline.resolve_project_assets = lambda current: {
         "characters": [character], "scenes": [scene], "props": [prop],
     }
     pipeline.stamp_owned_children = Mock()
@@ -773,7 +773,7 @@ def test_rich_frame_pipeline_forwards_style_and_confirmed_continuity():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.resolve_episode_assets = lambda _: {
+    pipeline.resolve_project_assets = lambda _: {
         "characters": [character], "scenes": [scene], "props": [],
     }
     pipeline.script_processor = Mock()
