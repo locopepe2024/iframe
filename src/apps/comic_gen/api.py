@@ -2172,12 +2172,13 @@ def get_project(script_id: str):
 def get_project_asset_index(
     script_id: str,
     user: UserContext = Depends(require_studio_user),
+    scope: Literal["available", "project"] = "available",
 ):
-    """Return the normalized effective asset view used by reference pickers."""
+    """Separate project membership from broader workbench candidates."""
     if not pipeline.get_script(script_id, user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Project not found")
     try:
-        return private_no_store_signed_response(pipeline.get_asset_reference_index(script_id))
+        return private_no_store_signed_response(pipeline.get_asset_reference_index(script_id, scope=scope))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
