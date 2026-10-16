@@ -183,6 +183,7 @@ interface ShotCardProps {
     onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
     onSetVideoMode?: (mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => void;
     onOpenDrawer: () => void;
+    onSelectFrameAsset?: () => void;
     onInsertAsset: (type: string, name: string) => void;
     onToggleReferenceVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     /** Duration editor config derived from model catalog */
@@ -244,6 +245,7 @@ export default function ShotCard({
     onSetTabMode,
     onSetVideoMode,
     onOpenDrawer,
+    onSelectFrameAsset,
     onInsertAsset: _onInsertAsset,
     onToggleReferenceVariant,
     durationEditorConfig,
@@ -694,7 +696,9 @@ export default function ShotCard({
                         <input
                             value={shot.lastFrameUrl ?? ""}
                             onChange={(event) => onUpdateField("lastFrameUrl", event.target.value)}
-                            placeholder="尾帧图片路径或媒体 URL"
+                            placeholder="选择尾帧，或从下方添加素材"
+                            readOnly
+                            onClick={onSelectFrameAsset}
                             className="w-full rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-[12px] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/50"
                         />
                     </div>

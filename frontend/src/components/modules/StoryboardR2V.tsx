@@ -178,7 +178,7 @@ export default function StoryboardR2V() {
     // ParamsSection panels under each ShotCard. handleConfigChange is
     // also gone — model writes now flow through handleShotParamsChange
     // below, which mirrors them to localStorage.)
-    const [drawerState, setDrawerState] = useState<{ isOpen: boolean; targetShotIndex: number | null }>({
+    const [drawerState, setDrawerState] = useState<{ isOpen: boolean; targetShotIndex: number | null; frameSlot?: "first" | "last" }>({
         isOpen: false,
         targetShotIndex: null,
     });
@@ -2181,6 +2181,7 @@ export default function StoryboardR2V() {
                             onSetVideoMode={(mode) => setVideoMode(index, mode)}
                             videoModel={paramsState.model}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
+                            onSelectFrameAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "last" })}
                             onInsertAsset={(type, name) => {
                                 // Direct chip insert (same as chip bar logic, delegated to chip bar)
                                 const tag = `[${type}:${name}]`;
@@ -2367,6 +2368,7 @@ export default function StoryboardR2V() {
                                             return next;
                                         }))}
                                         onGenerate={() => generateT2I(index)}
+                                        onSelectAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "first" })}
                                         onUpload={async (file) => {
                                             // Issue 10: upload an external image as a T2I首帧 candidate.
                                             // Backend appends + auto-selects; we mirror state from the
@@ -2470,6 +2472,7 @@ export default function StoryboardR2V() {
                                                 return { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: nextIndex };
                                             }))}
                                             onGenerate={() => generateT2I(index, "last")}
+                                            onSelectAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "last" })}
                                             onUpload={async (file) => {
                                                 if (!currentProject) return { code: "network", detail: "no current project" };
                                                 try {
@@ -2550,7 +2553,30 @@ export default function StoryboardR2V() {
                 scenes={scenes}
                 props={props}
                 assetIndex={assetIndex}
-                onSelectAsset={insertAssetFromDrawer}
+                onSelectAsset={(type, name) => {
+                    if ((drawerState.frameSlot === "last" || drawerState.frameSlot === "first") && drawerState.targetShotIndex != null) {
+                        const kind = type === "prop" ? "prop" : type === "scene" ? "scene" : "character";
+                        const entry = assetIndex?.find(item => item.name === name && item.asset_type === kind);
+                        const url = entry?.variants.find(v => v.id === entry.selected_variant_id)?.url ?? entry?.variants[0]?.url;
+                        if (url) {
+                            const index = drawerState.targetShotIndex;
+                            const shot = shots[index];
+                            const urls = drawerState.frameSlot === "last"
+                                ? [...(shot?.lastFrameImageUrls ?? []), url].slice(-10)
+                                : [...(shot?.t2iImageUrls ?? []), url].slice(-10);
+                            const selected = urls.length - 1;
+                            setShots(prev => prev.map((item, i) => i === index ? (drawerState.frameSlot === "last"
+                                ? { ...item, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: url }
+                                : { ...item, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: url }) : item));
+                            if (shot) persistWorkbench(shot.id, drawerState.frameSlot === "last"
+                                ? { last_frame_image_urls: urls, last_frame_selected_index: selected }
+                                : { t2i_image_urls: urls, t2i_selected_index: selected });
+                        }
+                        setDrawerState({ isOpen: false, targetShotIndex: null });
+                        return;
+                    }
+                    insertAssetFromDrawer(type, name);
+                }}
                 selectedVariantIds={drawerState.targetShotIndex == null
                     ? {}
                     : (shots[drawerState.targetShotIndex]?.referenceVariantIds ?? {})}

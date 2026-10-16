@@ -73,6 +73,7 @@ interface T2ISubsectionProps {
      *  upload error code (or void if success). Host owns the actual
      *  api.uploadT2IFrame call + state mutation. */
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
     resolveUrl?: (url: string) => string;
 }
 
@@ -87,7 +88,7 @@ export default function T2ISubsection({
     onSelect,
     onRemove,
     onGenerate,
-    onUpload,
+    onUpload, onSelectAsset,
     resolveUrl,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
@@ -111,6 +112,7 @@ export default function T2ISubsection({
                 inFlightStatus={inFlightStatus}
                 onGenerate={onGenerate}
                 onUpload={onUpload}
+                onSelectAsset={onSelectAsset}
             />
         );
     }
@@ -129,6 +131,7 @@ export default function T2ISubsection({
             onRemove={onRemove}
             onGenerate={onGenerate}
             onUpload={onUpload}
+            onSelectAsset={onSelectAsset}
         />
     );
 }
@@ -146,6 +149,7 @@ interface HeroProps {
     inFlightStatus?: "pending" | "processing" | "completed" | "failed";
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
 }
 
 function Hero({
@@ -314,12 +318,13 @@ interface CompactProps {
     onRemove: (index: number) => void;
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
-    onSelect, onRemove, onGenerate, onUpload,
+    onSelect, onRemove, onGenerate, onUpload, onSelectAsset,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -492,6 +497,15 @@ function Compact({
                                 >
                                     <Upload size={12} aria-hidden="true" />
                                     {t("t2iAddMenuUpload")}
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setMenuOpen(false); onSelectAsset?.(); }}
+                                    className="flex w-full min-h-[36px] items-center gap-2 px-3 py-2 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-primary/12 hover:text-primary"
+                                >
+                                    <ImageIcon size={12} aria-hidden="true" />
+                                    选择资产变体
                                 </button>
                             </div>
                         ) : null}
