@@ -512,9 +512,18 @@ export const GLOBAL_R2V_MODELS = getVisibleModels('r2v', 'global_settings').map(
 const NSFW_WAN_VIDEO_IDS = new Set(['nsfw/wan3.0', 'nsfw/wan3.0-Prime']);
 const storyboardVideoModels = (models: I2VModelConfig[]) => {
     const wan = models.filter(model => NSFW_WAN_VIDEO_IDS.has(model.id));
-    return wan.length ? wan : models;
+    return wan.length ? [...wan, ...models.filter(model => !NSFW_WAN_VIDEO_IDS.has(model.id))] : models;
 };
 export const VIDEO_I2V_MODELS = storyboardVideoModels(getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
+
+export function videoModelSupportsMode(modelId: string, mode: 't2v' | 'i2v' | 'first_last_frame' | 'r2v'): boolean {
+    const model = MODEL_CATALOG.models[modelId];
+    const capability = mode === 'first_last_frame' ? 'f2v' : mode;
+    return Boolean(model?.capabilities.includes(capability))
+        && (mode !== 'first_last_frame'
+            || modelId.startsWith('uniart/minimax-h3-')
+            || modelId.startsWith('uniart/seedance-'));
+}
 
 export const T2I_MODELS = PROJECT_T2I_MODELS;
 export const I2I_MODELS = PROJECT_I2I_MODELS;

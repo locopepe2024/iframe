@@ -3,6 +3,7 @@
 import { createFrameEditQueue } from "@/lib/frameEditQueue";
 import { editShotSettings } from "./storyboard-r2v/shotPromptSettings";
 import { storyboardAudioChoice, storyboardGeneratedAudio } from "./storyboard-r2v/generatedAudio";
+import { resolveShotVideoInput } from "./storyboard-r2v/shotVideoInput";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
@@ -16,7 +17,7 @@ import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/s
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
-import { getR2vRouteModelId, isR2vImageBased, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
+import { getR2vRouteModelId, isR2vImageBased, videoModelSupportsMode, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
 
 const preferredVideoModel = (models: { id: string }[], fallback: string) =>
     models.find(model => model.id === 'nsfw/wan3.0')?.id ?? models[0]?.id ?? fallback;
@@ -776,8 +777,9 @@ export default function StoryboardR2V() {
     const setTabMode = useCallback((index: number, mode: "t2i_i2v" | "direct_r2v") => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
-            persistWorkbench(s.id, { workbench_tab_mode: mode });
-            return { ...s, tabMode: mode };
+            const videoMode = mode === "direct_r2v" ? "r2v" : "i2v";
+            persistWorkbench(s.id, { workbench_tab_mode: mode, video_generation_mode: videoMode });
+            return { ...s, tabMode: mode, videoMode };
         }));
     }, [persistWorkbench]);
 
@@ -886,7 +888,9 @@ export default function StoryboardR2V() {
         if (!currentProject || !shot.prompt.trim()) return;
 
         setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, t2iStatus: slot === "first" ? "pending" : s.t2iStatus } : s
+            i === index ? (slot === "first"
+                ? { ...s, t2iStatus: "pending" }
+                : { ...s, lastFrameStatus: "pending" }) : s
         ));
 
         try {
@@ -905,259 +909,36 @@ export default function StoryboardR2V() {
                 "",
                 shot.negativePromptOverride,
             );
-            const result = slot === "last"
-                ? await api.renderFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt)
-                : await api.renderFrame(
-                    currentProject.id,
-                    shot.id,
-                    {},
-                    t2iPrompt,
-                    1,
-                    negativePrompt,
-                    true,
-                );
+            const result = await api.renderFrameCandidate(
+                currentProject.id, shot.id, t2iPrompt, negativePrompt,
+            );
+            if (!result?.image_url) throw new Error("候选生图没有返回图片");
 
-            if (result?.task_id || result?.id) {
-                const taskId = result.task_id || result.id;
-                setShots(prev => prev.map((s, i) =>
-                    i === index ? (slot === "last"
-                        ? { ...s, lastFrameTaskId: taskId }
-                        : { ...s, t2iTaskId: taskId, t2iStatus: "processing" }) : s
-                ));
-            } else if (result?.image_url || result?.rendered_image_url) {
-                // Immediate result (synchronous render). Append to T2I
-                // history + auto-select so the new image becomes the
-                // active首帧 used by downstream I2V generation.
-                const imageUrl = result.image_url || result.rendered_image_url;
-                setShots(prev => prev.map((s, i) => {
-                    if (i !== index) return s;
-                    if (slot === "last") {
-                        const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
-                        const selected = urls.length - 1;
-                        persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: selected });
-                        return { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: imageUrl };
-                    }
-                    const updated = appendT2IImage({ ...s, t2iStatus: "completed" }, imageUrl);
-                    persistWorkbench(s.id, {
-                        t2i_image_urls: updated.t2iImageUrls ?? [],
-                        t2i_selected_index: updated.t2iSelectedIndex ?? 0,
-                    });
-                    return updated;
-                }));
-            }
+            const imageUrl = result.image_url;
+            setShots(prev => prev.map((s, i) => {
+                if (i !== index) return s;
+                if (slot === "last") {
+                    const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
+                    const selected = urls.length - 1;
+                    persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: selected });
+                    return { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: imageUrl, lastFrameStatus: "completed" };
+                }
+                const updated = appendT2IImage({ ...s, t2iStatus: "completed" }, imageUrl);
+                persistWorkbench(s.id, {
+                    t2i_image_urls: updated.t2iImageUrls ?? [],
+                    t2i_selected_index: updated.t2iSelectedIndex ?? 0,
+                });
+                return updated;
+            }));
         } catch (error) {
             debugLog.error("Studio", "Failed to generate T2I for shot:", error);
             setShots(prev => prev.map((s, i) =>
-                i === index ? { ...s, t2iStatus: "failed" } : s
+                i === index ? (slot === "first"
+                    ? { ...s, t2iStatus: "failed" }
+                    : { ...s, lastFrameStatus: "failed" }) : s
             ));
         }
     }, [shots, currentProject, persistWorkbench, loadGenerationStyle]);
-
-    // Generate video for a shot
-    const generateVideo = useCallback(async (index: number) => {
-        const shot = shots[index];
-        if (!currentProject || !shot.prompt.trim()) return;
-
-        const referenceSubmission = shot.tabMode === "direct_r2v" ? await loadShotReferences(shot) : null;
-        if (shot.tabMode === "direct_r2v") {
-            if (!referenceSubmission) return;
-            if (referenceSubmission.unresolvedNames.length || !referenceSubmission.urls.length
-                || referenceSubmission.invalidVariantIds.length) {
-                const message = referenceSubmission.invalidVariantIds.length ? t("invalidProductViews")
-                    : referenceSubmission.unresolvedNames.length
-                        ? t("unresolvedRefImages", { refs: referenceSubmission.unresolvedNames.join("、") })
-                        : missingRefsMessage(videoConfig.r2vModel);
-                setShotErrors(prev => ({ ...prev, [shot.id]: message }));
-                toast.warning(message);
-                return;
-            }
-        }
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, videoStatus: "pending" } : s
-        ));
-
-        try {
-            const style = await loadGenerationStyle();
-            if (shot.tabMode === "direct_r2v" && referenceSubmission) {
-                // R2V mode: use reference assets. We prefer the user's
-                // explicit R2V model choice (videoConfig.r2vModel) over
-                // the derived route from the I2V model. The derivation
-                // is kept as a fallback when the explicit r2vModel is
-                // missing or invalid (which can only happen if the
-                // catalog flipped under our feet).
-                const referenceUrls = referenceSubmission.urls;
-                const explicitR2v = videoConfig.r2vModel;
-                const explicitOk = VIDEO_R2V_MODELS.some(m => m.id === explicitR2v);
-                const routeModelId = explicitOk
-                    ? explicitR2v
-                    : getR2vRouteModelId(videoConfig.model);
-                const imageBased = isR2vImageBased(routeModelId);
-                const generateAudio = storyboardGeneratedAudio(
-                    routeModelId,
-                    storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-                );
-                const basePromptText = buildGenerationPrompt(
-                    shot,
-                    generateAudio,
-                    routeModelId,
-                    style.positivePrompt,
-                );
-                const promptText = routeModelId.toLowerCase().includes("minimax-h3")
-                    ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
-                    : basePromptText;
-                const negativePrompt = resolveNegativePrompt(
-                    style.negativePrompt,
-                    videoConfig.negativePrompt,
-                    shot.negativePromptOverride,
-                );
-
-                const tasks = await api.createVideoTask(
-                    currentProject.id,
-                    "",  // no image_url for R2V
-                    promptText,
-                    videoConfig.duration,
-                    undefined, // seed
-                    videoConfig.resolution,
-                    generateAudio,
-                    "", // audioUrl
-                    videoConfig.promptExtend,
-                    negativePrompt,
-                    1, // batchSize
-                    routeModelId,  // use routed R2V model
-                    shot.id, // frameId
-                    "multi", // shotType
-                    shot.videoMode ?? "r2v", // generationMode
-                    !imageBased ? referenceUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
-                    undefined, undefined, undefined, // kling params
-                    undefined, undefined, // vidu params
-                    imageBased ? referenceUrls : undefined, // referenceImageUrls
-                    videoConfig.ratio,
-                    shot.tabMode,
-                    undefined, // watermark
-                    shot.poseReferenceVariantIds,
-                    shot.directorSnapshotMediaId ?? undefined,
-                    shot.lastFrameUrl,
-                    shot.lastFrameMediaId,
-                );
-                const task = Array.isArray(tasks) ? tasks[0] : tasks;
-
-                if (task && task.id) {
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
-                    ));
-                }
-            } else {
-                // I2V mode: use T2I image as first frame.
-                // Bug A guard: even if videoConfig.model passed the
-                // mount-time check, the catalog can change at runtime
-                // (catalog reload, project setting flip). Last sanity
-                // check right before submit so we never ship an r2v-
-                // only model into the I2V flow.
-                const i2vModelOk = VIDEO_I2V_MODELS.some(m => m.id === videoConfig.model);
-                if (!i2vModelOk) {
-                    debugLog.warn(
-                        "Studio",
-                        `Refusing to submit I2V task with model "${videoConfig.model}" ` +
-                        `which is not in the visible I2V list. Falling back to "${DEFAULT_I2V_MODEL_ID}".`,
-                    );
-                    setVideoConfig(c => ({ ...c, model: DEFAULT_I2V_MODEL_ID }));
-                    if (typeof window !== 'undefined') {
-                        localStorage.removeItem('storyboard-r2v-model');
-                    }
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoStatus: "failed" as const } : s,
-                    ));
-                    return;
-                }
-                // Use the multi-frame-aware accessor so this legacy path
-                // stays in sync with the new ParamsSection batch path
-                // (Issue 15). `shot.t2iImageUrl` (legacy singular) and
-                // `shot.t2iImageUrls[selectedIndex]` should normally agree,
-                // but the singular field has occasionally lagged behind the
-                // plural one (e.g. async upload state mid-flight), causing
-                // HappyHorse to silently submit with no media.
-                const imageUrl = getActiveT2IImageUrl(shot) || shot.imageUrl || "";
-                if (!imageUrl) {
-                    // I2V without a first frame is guaranteed to fail with
-                    // "input.media required" on HappyHorse — surface inline
-                    // instead of letting it 502 mid-generation.
-                    setShotErrors(prev => ({
-                        ...prev,
-                        [shot.id]: t("i2vNeedsFirstFrame") || "请先上传或生成首帧再生成视频。",
-                    }));
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoStatus: undefined } : s,
-                    ));
-                    return;
-                }
-
-                const generateAudio = storyboardGeneratedAudio(
-                    videoConfig.model,
-                    storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-                );
-                const promptText = buildGenerationPrompt(
-                    shot,
-                    generateAudio,
-                    videoConfig.model,
-                    style.positivePrompt,
-                );
-                const negativePrompt = resolveNegativePrompt(
-                    style.negativePrompt,
-                    videoConfig.negativePrompt,
-                    shot.negativePromptOverride,
-                );
-                const tasks = await api.createVideoTask(
-                    currentProject.id,
-                    imageUrl,
-                    promptText,
-                    videoConfig.duration,
-                    undefined, // seed
-                    videoConfig.resolution,
-                    generateAudio,
-                    "", // audioUrl
-                    videoConfig.promptExtend,
-                    negativePrompt,
-                    1, // batchSize
-                    videoConfig.model, // direct I2V model
-                    shot.id, // frameId
-                    "multi", // shotType
-                    shot.videoMode ?? "i2v", // generationMode
-                    undefined, // referenceVideoUrls
-                    // Kling params
-                    videoConfig.mode,
-                    videoConfig.sound,
-                    videoConfig.cfgScale,
-                    // Vidu params
-                    videoConfig.viduAudio,
-                    videoConfig.movementAmplitude,
-                    // HappyHorse
-                    undefined,
-                    videoConfig.ratio,
-                    shot.tabMode,
-                    undefined, // watermark
-                    shot.poseReferenceVariantIds,
-                    shot.directorSnapshotMediaId ?? undefined,
-                    shot.lastFrameUrl,
-                    shot.lastFrameMediaId,
-                );
-                const task = Array.isArray(tasks) ? tasks[0] : tasks;
-
-                if (task && task.id) {
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
-                    ));
-                }
-            }
-        } catch (error: any) {
-            debugLog.error("Studio", "Failed to generate video for shot:", error);
-            const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
-            toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
-            setShots(prev => prev.map((s, i) =>
-                i === index ? { ...s, videoStatus: "failed" } : s
-            ));
-        }
-    }, [shots, currentProject, videoConfig, loadShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls
@@ -1174,6 +955,14 @@ export default function StoryboardR2V() {
         const shot = shots[index];
         if (!currentProject || !shot?.prompt.trim()) return;
         const tabMode = shot.tabMode;
+        const videoInput = resolveShotVideoInput(shot);
+        if (videoInput.error || (videoInput.mode === "r2v" && tabMode !== "direct_r2v")
+            || (videoInput.mode !== "r2v" && tabMode === "direct_r2v")) {
+            const message = videoInput.error || "视频模式与当前工作区不一致，请重新选择视频模式。";
+            setShotErrors(prev => ({ ...prev, [shot.id]: message }));
+            toast.warning(message);
+            return;
+        }
         const effectiveCount = Math.max(1, Math.min(6, count || 1));
         const requestedModelId = params?.model ?? (tabMode === "direct_r2v"
             ? videoConfig.r2vModel
@@ -1236,14 +1025,13 @@ export default function StoryboardR2V() {
                 toast.warning(errMsg);
                 return;
             }
-        } else {
-            const probeImage = getActiveT2IImageUrl(shot) || shot.imageUrl || "";
-            if (!probeImage) {
-                const errMsg = t("i2vNeedsFirstFrame") || "请先上传或生成首帧再生成视频。";
-                setShotErrors(prev => ({ ...prev, [shot.id]: errMsg }));
-                toast.warning(errMsg);
-                return;
-            }
+        }
+
+        if (!videoModelSupportsMode(requestedModelId, videoInput.mode)) {
+            const message = "当前模型不支持所选视频模式，请选择兼容模型。";
+            setShotErrors(prev => ({ ...prev, [shot.id]: message }));
+            toast.warning(message);
+            return;
         }
 
         // Per-shot submission lockout (Issue 17). The earlier in-flight guard
@@ -1334,7 +1122,7 @@ export default function StoryboardR2V() {
                     debugLog.warn("Studio", `Refusing I2V submission with non-I2V model "${i2vModelId}".`);
                     return null;
                 }
-                const imageUrl = getActiveT2IImageUrl(shot) || shot.imageUrl || "";
+                const imageUrl = videoInput.firstFrameUrl;
                 const tasks = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
@@ -1350,7 +1138,7 @@ export default function StoryboardR2V() {
                     i2vModelId,
                     shot.id,
                     params?.shotType ?? "multi",
-                    "i2v",
+                    videoInput.mode,
                     undefined,
                     params?.mode ?? videoConfig.mode,
                     params?.sound ?? videoConfig.sound,
@@ -1363,6 +1151,8 @@ export default function StoryboardR2V() {
                     params?.watermark,
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    videoInput.mode === "first_last_frame" ? videoInput.lastFrameUrl : undefined,
+                    videoInput.mode === "first_last_frame" ? shot.lastFrameMediaId : undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
                 return task?.id ?? null;
@@ -1746,7 +1536,9 @@ export default function StoryboardR2V() {
     //    and uses across all shots in a project.
     const paramsStateForShot = useCallback((shot: ShotNode): ParamsState => {
         const isR2v = shot.tabMode === "direct_r2v";
-        const models = isR2v ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS;
+        const videoMode = resolveShotVideoInput(shot).mode;
+        const models = (isR2v ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
+            .filter(model => videoModelSupportsMode(model.id, videoMode));
         const selected = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
         const modelId = models.some(model => model.id === selected)
             ? selected : preferredVideoModel(models, isR2v ? DEFAULT_R2V_MODEL_ID : DEFAULT_I2V_MODEL_ID);
@@ -2169,7 +1961,8 @@ export default function StoryboardR2V() {
                     ).length;
                     const paramsState = paramsStateForShot(shot);
                     const isI2vTab = shot.tabMode === "t2i_i2v";
-                    const modelList = shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS;
+                    const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
+                        .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
                     /* Plain div (was motion.div) — staggered enter
                        animation re-fired every time the user switched
@@ -2200,7 +1993,7 @@ export default function StoryboardR2V() {
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}
-                            onGenerateVideo={() => generateVideo(index)}
+                            onGenerateVideo={() => generateVideoBatch(index, 1, paramsState)}
                             onDelete={() => deleteShot(index)}
                             onMoveUp={() => moveShot(index, "up")}
                             onMoveDown={() => moveShot(index, "down")}
@@ -2249,11 +2042,7 @@ export default function StoryboardR2V() {
                             } · ${paramsState.duration}s`}
                             canGenerate={
                                 shot.prompt.trim().length > 0
-                                && (
-                                    shot.tabMode === "direct_r2v"
-                                    || !!shot.t2iImageUrl
-                                    || (shot.t2iImageUrls?.length ?? 0) > 0
-                                )
+                                && !resolveShotVideoInput(shot).error
                             }
                             onSetGenerateCount={(n) => handleShotParamsChange(shot, { ...paramsState, count: n })}
                             onGenerateBatch={(n) => generateVideoBatch(index, n, paramsState)}
@@ -2487,9 +2276,9 @@ export default function StoryboardR2V() {
                                             imageUrls={shot.lastFrameImageUrls ?? []}
                                             selectedIndex={shot.lastFrameSelectedIndex ?? 0}
                                             promptIsEmpty={!shot.prompt.trim()}
-                                            generating={Boolean(shot.lastFrameTaskId)}
+                                            generating={shot.lastFrameStatus === "pending" || shot.lastFrameStatus === "processing"}
                                             inFlightTaskId={shot.lastFrameTaskId}
-                                            inFlightStatus={shot.lastFrameTaskId ? "processing" : undefined}
+                                            inFlightStatus={shot.lastFrameStatus}
                                             onSelect={(i) => setShots(prev => prev.map((s, j) => {
                                                 if (j !== index) return s;
                                                 persistWorkbench(s.id, { last_frame_selected_index: i });
@@ -2585,28 +2374,24 @@ export default function StoryboardR2V() {
                 scenes={scenes}
                 props={props}
                 assetIndex={assetIndex}
+                frameSlot={drawerState.frameSlot}
+                onSelectFrameVariant={(entry, variantId) => {
+                    const index = drawerState.targetShotIndex;
+                    if (index == null) return;
+                    const variant = entry.variants.find(item => item.id === variantId);
+                    const shot = shots[index];
+                    if (!variant?.url || !shot) return;
+                    const isLast = drawerState.frameSlot === "last";
+                    const urls = [...(isLast ? shot.lastFrameImageUrls ?? [] : shot.t2iImageUrls ?? []), variant.url].slice(-10);
+                    const selected = urls.length - 1;
+                    setShots(prev => prev.map((item, i) => i === index ? (isLast
+                        ? { ...item, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: variant.url }
+                        : { ...item, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: variant.url }) : item));
+                    persistWorkbench(shot.id, isLast
+                        ? { last_frame_image_urls: urls, last_frame_selected_index: selected }
+                        : { t2i_image_urls: urls, t2i_selected_index: selected });
+                }}
                 onSelectAsset={(type, name) => {
-                    if ((drawerState.frameSlot === "last" || drawerState.frameSlot === "first") && drawerState.targetShotIndex != null) {
-                        const kind = type === "prop" ? "prop" : type === "scene" ? "scene" : "character";
-                        const entry = assetIndex?.find(item => item.name === name && item.asset_type === kind);
-                        const url = entry?.variants.find(v => v.id === entry.selected_variant_id)?.url ?? entry?.variants[0]?.url;
-                        if (url) {
-                            const index = drawerState.targetShotIndex;
-                            const shot = shots[index];
-                            const urls = drawerState.frameSlot === "last"
-                                ? [...(shot?.lastFrameImageUrls ?? []), url].slice(-10)
-                                : [...(shot?.t2iImageUrls ?? []), url].slice(-10);
-                            const selected = urls.length - 1;
-                            setShots(prev => prev.map((item, i) => i === index ? (drawerState.frameSlot === "last"
-                                ? { ...item, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: url }
-                                : { ...item, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: url }) : item));
-                            if (shot) persistWorkbench(shot.id, drawerState.frameSlot === "last"
-                                ? { last_frame_image_urls: urls, last_frame_selected_index: selected }
-                                : { t2i_image_urls: urls, t2i_selected_index: selected });
-                        }
-                        setDrawerState({ isOpen: false, targetShotIndex: null });
-                        return;
-                    }
                     insertAssetFromDrawer(type, name);
                 }}
                 selectedVariantIds={drawerState.targetShotIndex == null

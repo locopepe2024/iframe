@@ -190,6 +190,40 @@ def test_complete_first_frame_prompt_reaches_generator_unchanged():
     assert call.kwargs["negative_prompt"] == "文字、水印"
 
 
+def test_shot_frame_candidate_does_not_replace_storyboard_image(tmp_path):
+    frame = StoryboardFrame(
+        id="frame-1", scene_id="scene-1", image_url="original.png",
+        rendered_image_url="original.png", image_prompt="reviewed storyboard",
+        status=GenerationStatus.COMPLETED,
+    )
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.output_root = str(tmp_path)
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": []})
+    pipeline._owner_output_dir = Mock(return_value=str(tmp_path))
+    pipeline._register_storyboard_frame_media = Mock()
+    pipeline.storyboard_generator = Mock()
+
+    def generate(candidate, *_args, **_kwargs):
+        candidate.rendered_image_asset = ImageAsset(
+            selected_id="candidate", variants=[ImageVariant(id="candidate", url="candidate.png")],
+        )
+        candidate.image_url = "candidate.png"
+        candidate.rendered_image_url = "candidate.png"
+
+    pipeline.storyboard_generator.generate_frame.side_effect = generate
+
+    assert pipeline.generate_storyboard_candidate(script.id, frame.id, "shot input") == "candidate.png"
+    assert frame.image_url == "original.png"
+    assert frame.rendered_image_url == "original.png"
+    assert frame.image_prompt == "reviewed storyboard"
+    assert frame.status == GenerationStatus.COMPLETED
+    assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["preserve_prompt"] is True
+
+
 def test_render_preview_is_the_exact_complete_generator_prompt():
     now = time.time()
     frame = StoryboardFrame(

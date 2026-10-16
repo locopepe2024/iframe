@@ -11,6 +11,20 @@ vi.mock("@/components/shared/AssetIndexPreview", () => ({
 }));
 
 describe("AssetDrawer product references", () => {
+    it("selects a frame variant by asset and variant identity even when names match", () => {
+        const onSelectFrameVariant = vi.fn();
+        const assetIndex = ["actor-a", "actor-b"].map((asset_id) => ({
+            asset_type: "character" as const, asset_id, name: "同名角色",
+            source_scope: "episode" as const,
+            variants: [{ id: `${asset_id}-front`, url: `${asset_id}.png` }],
+        }));
+        render(<AssetDrawer isOpen onClose={vi.fn()} characters={[]} scenes={[]} props={[]}
+            assetIndex={assetIndex} frameSlot="last" onSelectAsset={vi.fn()}
+            onSelectFrameVariant={onSelectFrameVariant} />);
+        fireEvent.click(screen.getByRole("button", { name: "同名角色 变体 actor-b-front" }));
+        expect(onSelectFrameVariant).toHaveBeenCalledWith(assetIndex[1], "actor-b-front");
+    });
+
     it("lets one product expose multiple per-shot view choices", () => {
         const onToggleVariant = vi.fn();
         render(

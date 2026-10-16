@@ -1,6 +1,8 @@
 # Storyboard 与 Shot Design 视频输入契约 v1
 
-状态：提案，作为实现与测试的边界文件。
+状态：分阶段实现中，作为实现与测试的边界文件。
+
+2026-10-17 实现核对：Shot Design 的主生成按钮与失败重试已统一按明确模式提交；首尾帧候选均可从提示词生成、上传或按资产 ID 与变体 ID 选择。工作台候选渲染不改写 Storyboard 主图。当前已保存候选 URL/路径及选中索引，尚未完成完整的 `ShotGenerationInputSnapshot`、Storyboard revision stale 校验及 FPS 快照；这些仍按第 8 节继续实施。
 
 ## 1. 术语和职责
 

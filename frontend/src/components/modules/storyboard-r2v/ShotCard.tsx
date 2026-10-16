@@ -102,6 +102,7 @@ export interface ShotNode {
     lastFrameImageUrls?: string[];
     lastFrameSelectedIndex?: number;
     lastFrameTaskId?: string;
+    lastFrameStatus?: "pending" | "processing" | "completed" | "failed";
 
     // Video stage (shared). The single-task fields stay for "the most
     // recent attempt" but the candidates panel reads from the shot's
