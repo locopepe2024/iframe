@@ -674,7 +674,7 @@ export const api = {
         model: string = DEFAULT_I2V_MODEL_ID,
         frameId?: string,
         shotType: string = "single",  // 'single' or 'multi' (only for wan2.6-i2v)
-        generationMode: string = "i2v",  // 'i2v' or 'r2v'
+        generationMode: string = "i2v",  // 't2v' | 'i2v' | 'first_last_frame' | 'r2v'
         referenceVideoUrls: string[] = [],  // Reference videos for R2V (max 3)
         // Kling params
         mode?: string,
@@ -696,6 +696,8 @@ export const api = {
         watermark?: boolean,
         poseReferenceVariantIds?: Record<string, string[]>,
         directorSnapshotMediaId?: string,
+        lastFrameUrl?: string,
+        lastFrameMediaId?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -727,6 +729,8 @@ export const api = {
             workbench_tab: workbenchTab,
             pose_reference_variant_ids: poseReferenceVariantIds,
             director_snapshot_media_id: directorSnapshotMediaId,
+            last_frame_url: lastFrameUrl,
+            last_frame_media_id: lastFrameMediaId,
         });
         return res.data;
     },
@@ -742,11 +746,11 @@ export const api = {
      *  The caller does cheap front-side checks first to avoid a
      *  round-trip on obvious rejects (file type / size from the File
      *  object) and surfaces backend errors verbatim otherwise. */
-    uploadT2IFrame: async (scriptId: string, frameId: string, file: File) => {
+    uploadT2IFrame: async (scriptId: string, frameId: string, file: File, slot: "first" | "last" = "first") => {
         const formData = new FormData();
         formData.append("file", file);
         const res = await axios.post(
-            `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_t2i`,
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_t2i?slot=${slot}`,
             formData,
             { headers: { "Content-Type": "multipart/form-data" } },
         );
@@ -767,6 +771,9 @@ export const api = {
             workbench_tab_mode?: "t2i_i2v" | "direct_r2v";
             t2i_image_urls?: string[];
             t2i_selected_index?: number;
+            last_frame_image_urls?: string[];
+            last_frame_selected_index?: number;
+            video_generation_mode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
             workbench_generate_count?: number;
             video_model?: string;
             workbench_generate_audio?: boolean;
@@ -1557,6 +1564,17 @@ export const api = {
             batch_size: batchSize,
             prompt_is_complete: promptIsComplete,
             context_token: contextToken,
+        });
+        return res.data;
+    },
+
+    renderFrameCandidate: async (
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+    ): Promise<{ image_url: string }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate`, {
+            frame_id: frameId,
+            prompt,
+            negative_prompt: negativePrompt,
         });
         return res.data;
     },

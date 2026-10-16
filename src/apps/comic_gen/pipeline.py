@@ -10,6 +10,7 @@ import subprocess
 import threading
 import platform
 import tempfile
+import copy
 from urllib.parse import quote
 from .models import (
     Script,
@@ -435,6 +436,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         workbench_tab_mode: Optional[str] = None,
         t2i_image_urls: Optional[List[str]] = None,
         t2i_selected_index: Optional[int] = None,
+        last_frame_image_urls: Optional[List[str]] = None,
+        last_frame_selected_index: Optional[int] = None,
+        video_generation_mode: Optional[str] = None,
         workbench_generate_count: Optional[int] = None,
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
@@ -491,6 +495,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                     frame.t2i_selected_index = 0
                 else:
                     frame.t2i_selected_index = max(0, min(int(t2i_selected_index), len(urls) - 1))
+            if last_frame_image_urls is not None:
+                cleaned_last = [u for u in last_frame_image_urls if isinstance(u, str) and u.strip()]
+                frame.last_frame_image_urls = cleaned_last[-self._T2I_HISTORY_LIMIT:]
+            if last_frame_selected_index is not None:
+                urls = frame.last_frame_image_urls or []
+                frame.last_frame_selected_index = max(0, min(int(last_frame_selected_index), len(urls) - 1)) if urls else 0
+            if video_generation_mode is not None:
+                if video_generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
+                    raise ValueError("invalid video_generation_mode")
+                frame.video_generation_mode = video_generation_mode
             if workbench_generate_count is not None:
                 frame.workbench_generate_count = max(
                     1, min(int(workbench_generate_count), self._MAX_GENERATE_COUNT)
@@ -2631,6 +2645,70 @@ class ComicGenPipeline(StudioOwnerMixin):
             "style_preset": script.style_preset,
             "style_prompt": script.style_prompt,
         }
+
+    def storyboard_frame_prompt_projection(self, script: Script, frame: StoryboardFrame) -> str:
+        """Build the current frame's bounded visual prompt projection.
+
+        This is deliberately per-frame: only the episode/project style baseline
+        is shared. Shot-specific lighting, action, camera and continuity data
+        come from this frame and are never copied from an adjacent shot.
+        """
+        style = self.storyboard_visual_style(script)
+        style_config = style.get("style_config") if isinstance(style, dict) else None
+        style_text = ""
+        if isinstance(style_config, dict):
+            style_text = str(
+                style_config.get("positive_prompt")
+                or style_config.get("style_prompt")
+                or ""
+            ).strip()
+        if not style_text:
+            style_text = str(style.get("style_prompt") or style.get("style_preset") or "").strip()
+        if frame.style_prompt_override and frame.style_prompt_override.strip():
+            style_text = frame.style_prompt_override.strip()
+
+        scene = next((item for item in getattr(script, "scenes", []) if item.id == frame.scene_id), None)
+        if scene is None:
+            try:
+                resolved = self.resolve_project_assets(script)
+                scene = next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
+            except (AttributeError, KeyError, TypeError):
+                scene = None
+
+        lighting_parts: List[str] = []
+        if frame.lighting:
+            lighting_parts.extend(
+                str(value).strip()
+                for value in (
+                    frame.lighting.direction,
+                    frame.lighting.quality,
+                    frame.lighting.color_temp,
+                    frame.lighting.description,
+                )
+                if value and str(value).strip()
+            )
+        if frame.lighting_override and frame.lighting_override.strip():
+            lighting_parts.append(frame.lighting_override.strip())
+
+        parts = [
+            str(frame.visual_description or frame.action_description or "").strip(),
+            f"Location: {scene.name}. {scene.description}" if scene else "",
+            f"Visual style: {style_text}" if style_text else "",
+            f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
+            f"Shot size: {frame.shot_size}" if frame.shot_size else "",
+            f"Camera angle: {frame.camera_angle}" if frame.camera_angle else "",
+            f"Camera movement: {frame.camera_movement}" if frame.camera_movement else "",
+            f"Transition: {frame.transition_hint}" if frame.transition_hint else "",
+        ]
+        return "\n".join(item for item in parts if item)
+
+    def storyboard_render_prompt_projection(self, script: Script, frame: StoryboardFrame, prompt: str) -> str:
+        """Compose a draft render prompt with only this frame's constraints."""
+        projected_context = append_projected_shot_context(prompt.strip(), frame.director_shot_context)
+        frame_projection = self.storyboard_frame_prompt_projection(script, frame)
+        if not frame_projection:
+            return projected_context
+        return "\n\n".join(filter(None, [projected_context, "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection]))
 
     def director_prompt_context(
         self,
@@ -5454,6 +5532,19 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return frame
 
+    def upload_last_frame(self, script_id: str, frame_id: str, file_path: str) -> Optional["StoryboardFrame"]:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            frame = next((f for f in (script.frames if script else []) if f.id == frame_id), None)
+            if not frame:
+                return None
+            urls = list(frame.last_frame_image_urls or []) + [file_path]
+            frame.last_frame_image_urls = urls[-self._T2I_HISTORY_LIMIT:]
+            frame.last_frame_selected_index = len(frame.last_frame_image_urls) - 1
+            frame.updated_at = time.time()
+            self._save_data()
+            return frame
+
     def refine_batch_generator(self, script_id: str):
         """Phase 2: Generator that yields SSE events while refining all frames."""
         script = self.scripts.get(script_id)
@@ -5557,6 +5648,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
             
         resolved = self.resolve_project_assets(script)
+        # Seed each pending frame with its own structured visual projection.
+        # StoryboardGenerator still appends the selected character/scene asset
+        # descriptions; it must not invent a project-wide prompt shared by all
+        # shots.
+        for frame in script.frames:
+            if frame.status != GenerationStatus.COMPLETED or not frame.image_url:
+                if not (frame.image_prompt or "").strip():
+                    frame.image_prompt = self.storyboard_frame_prompt_projection(script, frame)
         script = self.storyboard_generator.generate_storyboard(
             script,
             characters=resolved["characters"],
@@ -5950,7 +6049,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         polished = (frame.image_prompt_en or "").strip()
         if polished and polished == prompt.strip():
             return prompt
-        projected = append_projected_shot_context(prompt, frame.director_shot_context)
+        projected = self.storyboard_render_prompt_projection(script, frame, prompt)
         characters = self.resolve_project_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
@@ -6082,7 +6181,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # receive the current shot projection until preview is migrated.
             polished = (frame.image_prompt_en or "").strip()
             preserve_prompt = prompt_is_complete or bool(polished and polished == prompt.strip())
-            final_prompt = prompt if preserve_prompt else append_projected_shot_context(prompt, frame.director_shot_context)
+            final_prompt = prompt if preserve_prompt else self.storyboard_render_prompt_projection(script, frame, prompt)
             
             # Update frame with final prompt
             frame.image_prompt = final_prompt
@@ -6128,26 +6227,55 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.status = GenerationStatus.FAILED
             self._save_data()
             raise e
-            # 1. Take the composition_data (positions of assets)
-            # 2. Construct a composite image (ControlNet input)
-            # 3. Call Img2Img with the composite + prompt
-            
-            logger.debug(f"Rendering frame {frame_id} with prompt: {prompt}")
-            time.sleep(1.5) # Simulate processing
-            
-            # Mock Result
-            mock_url = f"https://placehold.co/1280x720/2a2a2a/FFF?text=Rendered+Frame+{frame_id}"
-            frame.rendered_image_url = mock_url
-            frame.image_url = mock_url # Update main image too
-            frame.status = GenerationStatus.COMPLETED
-            
-        except Exception as e:
-            logger.error(f"Frame rendering failed: {e}")
-            frame.status = GenerationStatus.FAILED
-            
-        self._save_data()
-        return script
 
+    def generate_storyboard_candidate(
+        self,
+        script_id: str,
+        frame_id: str,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+    ) -> str:
+        """Render an isolated frame candidate for a first/last-frame slot.
+
+        This deliberately does not call ``generate_storyboard_render``: that
+        method owns the Storyboard image and updates ``image_url`` and
+        ``rendered_image_url``. A last-frame candidate is a video input and
+        must never replace the Storyboard's canonical first frame.
+        """
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        source = next((f for f in script.frames if f.id == frame_id), None)
+        if not source:
+            raise ValueError(f"Frame {frame_id} not found")
+        resolved = self.resolve_project_assets(script)
+        scene = next((s for s in resolved["scenes"] if s.id == source.scene_id), None)
+        candidate = copy.deepcopy(source)
+        candidate.id = f"{source.id}_candidate_{uuid.uuid4().hex[:8]}"
+        candidate.rendered_image_asset = None
+        candidate.image_url = None
+        candidate.rendered_image_url = None
+        from .assets import ASPECT_RATIO_TO_SIZE
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        self.storyboard_generator.generate_frame(
+            candidate,
+            resolved["characters"],
+            scene,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            batch_size=1,
+            size=ASPECT_RATIO_TO_SIZE.get(script.model_settings.storyboard_aspect_ratio, "1024*576"),
+            model_name=model,
+            preserve_prompt=True,
+            output_dir=self._owner_output_dir(script, "storyboard"),
+        )
+        self._register_storyboard_frame_media(candidate, script.owner_profile_id)
+        selected = candidate.rendered_image_asset.selected_id if candidate.rendered_image_asset else None
+        variant = next((v for v in (candidate.rendered_image_asset.variants if candidate.rendered_image_asset else []) if v.id == selected), None)
+        if not variant:
+            raise RuntimeError("Storyboard candidate render returned no image")
+        return image_variant_storage_key(variant)
     def generate_video(self, script_id: str) -> Script:
         """Step 4: Generate video clips."""
         script = self.scripts.get(script_id)
@@ -6158,7 +6286,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -6170,6 +6298,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
         is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
+        if generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
+            raise ValueError(f"Unsupported video generation mode: {generation_mode}")
+        if generation_mode == "first_last_frame":
+            if not image_url or not last_frame_url:
+                raise ValueError("First/last-frame video requires both first and last frame images")
+            if image_url == last_frame_url:
+                raise ValueError("First and last frame images must be different")
+            if not is_uniart_video:
+                raise ValueError("First/last-frame mode is currently supported by UniArt Seedance and MiniMax H3")
+        if generation_mode == "t2v" and (image_url or last_frame_url):
+            raise ValueError("Text-to-video cannot accept first/last frame images")
         if generation_mode == "r2v" and not (is_uniart_video or is_nsfw_wan):
             # Skip auto-switch if user already selected an R2V model directly
             if not (model and model.endswith("-r2v")):
@@ -6222,7 +6361,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             references = (reference_image_urls or []) + (reference_video_urls or [])
             if generation_mode == "r2v" and not references and not audio_url:
                 raise ValueError("Reference-to-video requires image, video or audio references")
-            if generation_mode not in ("r2v", "i2v", "t2v"):
+            if generation_mode not in ("r2v", "i2v", "t2v", "first_last_frame"):
                 raise ValueError("Unsupported Studio UniArt generation mode")
             if generation_mode != "r2v" and references:
                 raise ValueError("Reference lists require reference-to-video mode")
@@ -6230,6 +6369,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Use the ordered reference list instead of an additional input image")
             if generation_mode == "i2v" and not image_url:
                 raise ValueError("Image-to-video requires an input image")
+            if generation_mode == "first_last_frame" and (not image_url or not last_frame_url):
+                raise ValueError("First/last-frame video requires both frame images")
             if generation_mode == "i2v" and audio_url:
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
@@ -6240,6 +6381,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in reference_video_urls or []]
             if image_url:
                 image_url = resolve_studio_reference(image_url, script.owner_profile_id, output_root=self.output_root)
+            if last_frame_url:
+                last_frame_url = resolve_studio_reference(last_frame_url, script.owner_profile_id, output_root=self.output_root)
             if audio_url:
                 audio_url = resolve_studio_reference(audio_url, script.owner_profile_id, output_root=self.output_root)
 
@@ -6297,6 +6440,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         source_frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
         input_media_id = None
+        effective_last_frame_media_id = last_frame_media_id
         reference_media_ids: List[str] = []
         storyboard_reference_revision = None
         if source_frame:
@@ -6313,6 +6457,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             selected_id = rendered.selected_id if rendered else None
             selected = next((item for item in (rendered.variants if rendered else []) if item.id == selected_id), None)
             input_media_id = selected.media_id if selected else None
+            effective_last_frame_media_id = effective_last_frame_media_id or package.last_frame_media_id
         else:
             asset_revision_pins = []
 
@@ -6333,6 +6478,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 else None
             ),
             image_url=snapshot_url,
+            last_frame_url=last_frame_url,
+            last_frame_media_id=effective_last_frame_media_id,
             input_media_id=input_media_id,
             prompt=prompt,
             status="pending",
@@ -7548,9 +7695,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
                     prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    first_frame=task.image_url if task.generation_mode == "first_last_frame" else None,
+                    last_frame=task.last_frame_url if task.generation_mode == "first_last_frame" else None,
                     duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model,
-                    mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
+                    mode={"r2v": "reference2video", "i2v": "image2video", "first_last_frame": "frames2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],
                     ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else [],
                     ref_audio_urls=[task.audio_url] if task.audio_url and task.generation_mode == "r2v" else [],

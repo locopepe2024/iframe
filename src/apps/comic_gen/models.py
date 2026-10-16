@@ -351,6 +351,8 @@ class VideoTask(BaseModel):
     frame_id: Optional[str] = Field(None, description="ID of the storyboard frame this video belongs to")
     asset_id: Optional[str] = Field(None, description="ID of the asset this video belongs to")
     image_url: str
+    last_frame_url: Optional[str] = Field(None, description="Stable delivery URL/key for the confirmed last frame in first_last_frame mode")
+    last_frame_media_id: Optional[str] = Field(None, description="Stable media identity of the confirmed last frame")
     input_media_id: Optional[str] = Field(None, description="Stable media identity of the I2V input frame")
     prompt: str
     status: str = "pending"  # pending, processing, completed, failed
@@ -768,6 +770,7 @@ class StoryboardFrame(BaseModel):
         None,
         description="Last-active R2V workbench tab: 't2i_i2v' | 'direct_r2v'",
     )
+    video_generation_mode: Optional[Literal["t2v", "i2v", "first_last_frame", "r2v"]] = None
     t2i_image_urls: List[str] = Field(
         default_factory=list,
         description=(
@@ -779,6 +782,8 @@ class StoryboardFrame(BaseModel):
         0,
         description="Index into t2i_image_urls; the active首帧 fed into I2V.",
     )
+    last_frame_image_urls: List[str] = Field(default_factory=list)
+    last_frame_selected_index: int = Field(0, ge=0)
     workbench_generate_count: int = Field(
         1,
         description="Last-chosen Generate ×N batch size for this shot (1-6).",

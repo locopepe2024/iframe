@@ -68,7 +68,10 @@ class StoryboardGenerator:
             # Find scene for this frame
             scene = next((s for s in resolved_scenes if s.id == frame.scene_id), None)
             
-            self.generate_frame(frame, resolved_characters, scene, output_dir=output_dir)
+            self.generate_frame(
+                frame, resolved_characters, scene,
+                prompt=frame.image_prompt or None, output_dir=output_dir,
+            )
             
         return script
 

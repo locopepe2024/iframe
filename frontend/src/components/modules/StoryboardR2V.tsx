@@ -178,7 +178,7 @@ export default function StoryboardR2V() {
     // ParamsSection panels under each ShotCard. handleConfigChange is
     // also gone — model writes now flow through handleShotParamsChange
     // below, which mirrors them to localStorage.)
-    const [drawerState, setDrawerState] = useState<{ isOpen: boolean; targetShotIndex: number | null }>({
+    const [drawerState, setDrawerState] = useState<{ isOpen: boolean; targetShotIndex: number | null; frameSlot?: "first" | "last" }>({
         isOpen: false,
         targetShotIndex: null,
     });
@@ -781,11 +781,21 @@ export default function StoryboardR2V() {
         }));
     }, [persistWorkbench]);
 
+    const setVideoMode = useCallback((index: number, mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => {
+        setShots(prev => prev.map((s, i) => {
+            if (i !== index) return s;
+            const tabMode = mode === "r2v" ? "direct_r2v" : "t2i_i2v";
+            persistWorkbench(s.id, { workbench_tab_mode: tabMode, video_generation_mode: mode });
+            return { ...s, videoMode: mode, tabMode };
+        }));
+    }, [persistWorkbench]);
+
     // Structured edits update the visible body and join the ordered frame save.
     const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             if (field === "duration") return { ...s, duration: typeof value === "number" ? value : null };
+            if (field === "lastFrameUrl") return { ...s, lastFrameUrl: typeof value === "string" ? value : undefined };
             if (field === "shotSize") return { ...s, shotSize: typeof value === "string" ? value : null };
             if (field === "cameraAngle") return { ...s, cameraAngle: typeof value === "string" ? value : null };
             if (field === "cameraMovement") {
@@ -871,12 +881,12 @@ export default function StoryboardR2V() {
     [referenceAssets]);
 
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
-    const generateT2I = useCallback(async (index: number) => {
+    const generateT2I = useCallback(async (index: number, slot: "first" | "last" = "first") => {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
 
         setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, t2iStatus: "pending" } : s
+            i === index ? { ...s, t2iStatus: slot === "first" ? "pending" : s.t2iStatus } : s
         ));
 
         try {
@@ -890,24 +900,29 @@ export default function StoryboardR2V() {
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
                 .trim();
-            const result = await api.renderFrame(
-                currentProject.id,
-                shot.id,
-                {},  // compositionData (empty for now)
-                t2iPrompt,
-                1,   // batchSize
-                resolveNegativePrompt(
-                    style.negativePrompt,
-                    "",
-                    shot.negativePromptOverride,
-                ),
-                true,
+            const negativePrompt = resolveNegativePrompt(
+                style.negativePrompt,
+                "",
+                shot.negativePromptOverride,
             );
+            const result = slot === "last"
+                ? await api.renderFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt)
+                : await api.renderFrame(
+                    currentProject.id,
+                    shot.id,
+                    {},
+                    t2iPrompt,
+                    1,
+                    negativePrompt,
+                    true,
+                );
 
             if (result?.task_id || result?.id) {
                 const taskId = result.task_id || result.id;
                 setShots(prev => prev.map((s, i) =>
-                    i === index ? { ...s, t2iTaskId: taskId, t2iStatus: "processing" } : s
+                    i === index ? (slot === "last"
+                        ? { ...s, lastFrameTaskId: taskId }
+                        : { ...s, t2iTaskId: taskId, t2iStatus: "processing" }) : s
                 ));
             } else if (result?.image_url || result?.rendered_image_url) {
                 // Immediate result (synchronous render). Append to T2I
@@ -916,6 +931,12 @@ export default function StoryboardR2V() {
                 const imageUrl = result.image_url || result.rendered_image_url;
                 setShots(prev => prev.map((s, i) => {
                     if (i !== index) return s;
+                    if (slot === "last") {
+                        const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
+                        const selected = urls.length - 1;
+                        persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: selected });
+                        return { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: imageUrl };
+                    }
                     const updated = appendT2IImage({ ...s, t2iStatus: "completed" }, imageUrl);
                     persistWorkbench(s.id, {
                         t2i_image_urls: updated.t2iImageUrls ?? [],
@@ -1006,7 +1027,7 @@ export default function StoryboardR2V() {
                     routeModelId,  // use routed R2V model
                     shot.id, // frameId
                     "multi", // shotType
-                    "r2v", // generationMode
+                    shot.videoMode ?? "r2v", // generationMode
                     !imageBased ? referenceUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
@@ -1016,6 +1037,8 @@ export default function StoryboardR2V() {
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    shot.lastFrameUrl,
+                    shot.lastFrameMediaId,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1099,7 +1122,7 @@ export default function StoryboardR2V() {
                     videoConfig.model, // direct I2V model
                     shot.id, // frameId
                     "multi", // shotType
-                    "i2v", // generationMode
+                    shot.videoMode ?? "i2v", // generationMode
                     undefined, // referenceVideoUrls
                     // Kling params
                     videoConfig.mode,
@@ -1115,6 +1138,8 @@ export default function StoryboardR2V() {
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    shot.lastFrameUrl,
+                    shot.lastFrameMediaId,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1430,6 +1455,7 @@ export default function StoryboardR2V() {
         const processingShots = shots.filter(s =>
             (s.videoTaskId && (s.videoStatus === "processing" || s.videoStatus === "pending")) ||
             (s.t2iTaskId && (s.t2iStatus === "processing" || s.t2iStatus === "pending"))
+            || s.lastFrameTaskId
         );
         if (processingShots.length === 0) return;
 
@@ -1501,6 +1527,30 @@ export default function StoryboardR2V() {
                         }
                     } catch (error) {
                         debugLog.error("Studio", "T2I poll failed for shot:", shot.id, error);
+                    }
+                }
+                if (shot.lastFrameTaskId) {
+                    try {
+                        const status = await api.getTaskStatus(shot.lastFrameTaskId);
+                        if (status.status === "completed") {
+                            const imageUrl = status.image_url || status.result_url;
+                            if (imageUrl) {
+                                setShots(prev => prev.map(s => {
+                                    if (s.id !== shot.id) return s;
+                                    const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
+                                    const selected = urls.length - 1;
+                                    persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: selected });
+                                    return { ...s, lastFrameTaskId: undefined, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: imageUrl };
+                                }));
+                            }
+                        } else if (status.status === "failed") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: status.error || t("genFailed") }));
+                            setShots(prev => prev.map(s =>
+                                s.id === shot.id ? { ...s, lastFrameTaskId: undefined } : s,
+                            ));
+                        }
+                    } catch (error) {
+                        debugLog.error("Studio", "Last frame poll failed for shot:", shot.id, error);
                     }
                 }
             }
@@ -2156,8 +2206,10 @@ export default function StoryboardR2V() {
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
+                            onSetVideoMode={(mode) => setVideoMode(index, mode)}
                             videoModel={paramsState.model}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
+                            onSelectFrameAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "last" })}
                             onInsertAsset={(type, name) => {
                                 // Direct chip insert (same as chip bar logic, delegated to chip bar)
                                 const tag = `[${type}:${name}]`;
@@ -2344,6 +2396,7 @@ export default function StoryboardR2V() {
                                             return next;
                                         }))}
                                         onGenerate={() => generateT2I(index)}
+                                        onSelectAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "first" })}
                                         onUpload={async (file) => {
                                             // Issue 10: upload an external image as a T2I首帧 candidate.
                                             // Backend appends + auto-selects; we mirror state from the
@@ -2427,7 +2480,45 @@ export default function StoryboardR2V() {
                                             }
                                         }}
                                         resolveUrl={resolveAssetUrl}
+                                        frameLabel="首帧"
                                     />
+                                    {shot.videoMode === "first_last_frame" ? (
+                                        <T2ISubsection
+                                            imageUrls={shot.lastFrameImageUrls ?? []}
+                                            selectedIndex={shot.lastFrameSelectedIndex ?? 0}
+                                            promptIsEmpty={!shot.prompt.trim()}
+                                            generating={Boolean(shot.lastFrameTaskId)}
+                                            inFlightTaskId={shot.lastFrameTaskId}
+                                            inFlightStatus={shot.lastFrameTaskId ? "processing" : undefined}
+                                            onSelect={(i) => setShots(prev => prev.map((s, j) => {
+                                                if (j !== index) return s;
+                                                persistWorkbench(s.id, { last_frame_selected_index: i });
+                                                return { ...s, lastFrameSelectedIndex: i };
+                                            }))}
+                                            onRemove={(i) => setShots(prev => prev.map((s, j) => {
+                                                if (j !== index) return s;
+                                                const urls = (s.lastFrameImageUrls ?? []).filter((_, k) => k !== i);
+                                                const nextIndex = Math.max(0, Math.min(s.lastFrameSelectedIndex ?? 0, urls.length - 1));
+                                                persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: nextIndex });
+                                                return { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: nextIndex };
+                                            }))}
+                                            onGenerate={() => generateT2I(index, "last")}
+                                            onSelectAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "last" })}
+                                            frameLabel="尾帧"
+                                            onUpload={async (file) => {
+                                                if (!currentProject) return { code: "network", detail: "no current project" };
+                                                try {
+                                                    const updated = await api.uploadT2IFrame(currentProject.id, shot.id, file, "last");
+                                                    const urls = updated?.last_frame_image_urls ?? [];
+                                                    const selected = typeof updated?.last_frame_selected_index === "number" ? updated.last_frame_selected_index : Math.max(0, urls.length - 1);
+                                                    setShots(prev => prev.map((s, j) => j === index ? { ...s, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: urls[selected] } : s));
+                                                    return undefined;
+                                                } catch (error: any) {
+                                                    return { code: "server", detail: error?.response?.data?.detail || error?.message || "upload failed" };
+                                                }
+                                            }}
+                                        />
+                                    ) : null}
                                 </div>
                             ) : null}
                             {/* Step 2 · 生成视频 (ParamsSection) — always shown
@@ -2494,7 +2585,30 @@ export default function StoryboardR2V() {
                 scenes={scenes}
                 props={props}
                 assetIndex={assetIndex}
-                onSelectAsset={insertAssetFromDrawer}
+                onSelectAsset={(type, name) => {
+                    if ((drawerState.frameSlot === "last" || drawerState.frameSlot === "first") && drawerState.targetShotIndex != null) {
+                        const kind = type === "prop" ? "prop" : type === "scene" ? "scene" : "character";
+                        const entry = assetIndex?.find(item => item.name === name && item.asset_type === kind);
+                        const url = entry?.variants.find(v => v.id === entry.selected_variant_id)?.url ?? entry?.variants[0]?.url;
+                        if (url) {
+                            const index = drawerState.targetShotIndex;
+                            const shot = shots[index];
+                            const urls = drawerState.frameSlot === "last"
+                                ? [...(shot?.lastFrameImageUrls ?? []), url].slice(-10)
+                                : [...(shot?.t2iImageUrls ?? []), url].slice(-10);
+                            const selected = urls.length - 1;
+                            setShots(prev => prev.map((item, i) => i === index ? (drawerState.frameSlot === "last"
+                                ? { ...item, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: url }
+                                : { ...item, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: url }) : item));
+                            if (shot) persistWorkbench(shot.id, drawerState.frameSlot === "last"
+                                ? { last_frame_image_urls: urls, last_frame_selected_index: selected }
+                                : { t2i_image_urls: urls, t2i_selected_index: selected });
+                        }
+                        setDrawerState({ isOpen: false, targetShotIndex: null });
+                        return;
+                    }
+                    insertAssetFromDrawer(type, name);
+                }}
                 selectedVariantIds={drawerState.targetShotIndex == null
                     ? {}
                     : (shots[drawerState.targetShotIndex]?.referenceVariantIds ?? {})}

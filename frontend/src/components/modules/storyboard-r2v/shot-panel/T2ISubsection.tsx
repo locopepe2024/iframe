@@ -73,7 +73,9 @@ interface T2ISubsectionProps {
      *  upload error code (or void if success). Host owns the actual
      *  api.uploadT2IFrame call + state mutation. */
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
     resolveUrl?: (url: string) => string;
+    frameLabel?: string;
 }
 
 export default function T2ISubsection({
@@ -87,8 +89,9 @@ export default function T2ISubsection({
     onSelect,
     onRemove,
     onGenerate,
-    onUpload,
+    onUpload, onSelectAsset,
     resolveUrl,
+    frameLabel = "首帧",
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
     // resolveUrl is kept in the prop API (still passed by host for back-compat)
@@ -111,6 +114,8 @@ export default function T2ISubsection({
                 inFlightStatus={inFlightStatus}
                 onGenerate={onGenerate}
                 onUpload={onUpload}
+                onSelectAsset={onSelectAsset}
+                frameLabel={frameLabel}
             />
         );
     }
@@ -129,6 +134,8 @@ export default function T2ISubsection({
             onRemove={onRemove}
             onGenerate={onGenerate}
             onUpload={onUpload}
+            onSelectAsset={onSelectAsset}
+            frameLabel={frameLabel}
         />
     );
 }
@@ -146,10 +153,13 @@ interface HeroProps {
     inFlightStatus?: "pending" | "processing" | "completed" | "failed";
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
+    frameLabel: string;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
+    frameLabel,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -314,12 +324,14 @@ interface CompactProps {
     onRemove: (index: number) => void;
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onSelectAsset?: () => void;
+    frameLabel: string;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
-    onSelect, onRemove, onGenerate, onUpload,
+    onSelect, onRemove, onGenerate, onUpload, onSelectAsset, frameLabel,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -407,7 +419,7 @@ function Compact({
         >
             {/* Header row — Step indicator + count + ▼/+ controls. */}
             <div className="flex items-center gap-2">
-                <StepBadge num={1} done label={t("t2iStepOneDone")} />
+                <StepBadge num={1} done label={`${frameLabel} · ${t("t2iStepOneDone")}`} />
                 <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
                     · {countLabel}
                 </span>
@@ -492,6 +504,15 @@ function Compact({
                                 >
                                     <Upload size={12} aria-hidden="true" />
                                     {t("t2iAddMenuUpload")}
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setMenuOpen(false); onSelectAsset?.(); }}
+                                    className="flex w-full min-h-[36px] items-center gap-2 px-3 py-2 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-primary/12 hover:text-primary"
+                                >
+                                    <ImageIcon size={12} aria-hidden="true" />
+                                    选择资产变体
                                 </button>
                             </div>
                         ) : null}

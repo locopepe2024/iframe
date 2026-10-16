@@ -3580,6 +3580,8 @@ def generate_audio(script_id: str):
 
 class CreateVideoTaskRequest(BaseModel):
     image_url: str
+    last_frame_url: Optional[str] = None
+    last_frame_media_id: Optional[str] = None
     prompt: str
     frame_id: Optional[str] = None
     duration: int = 5
@@ -3592,7 +3594,7 @@ class CreateVideoTaskRequest(BaseModel):
     batch_size: int = 1
     model: str = "wan2.6-i2v"
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
-    generation_mode: str = "i2v"  # 'i2v' (image-to-video) or 'r2v' (reference-to-video)
+    generation_mode: str = "i2v"  # 't2v' | 'i2v' | 'first_last_frame' | 'r2v'
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
     # Kling params
     mode: Optional[str] = None
@@ -3673,6 +3675,9 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_tab_mode: Optional[str] = None  # 't2i_i2v' | 'direct_r2v'
     t2i_image_urls: Optional[List[str]] = None  # full ordered history, server caps at 10 FIFO
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
+    last_frame_image_urls: Optional[List[str]] = None
+    last_frame_selected_index: Optional[int] = None
+    video_generation_mode: Optional[str] = None
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
@@ -3696,6 +3701,9 @@ def update_frame_workbench(
             workbench_tab_mode=request.workbench_tab_mode,
             t2i_image_urls=request.t2i_image_urls,
             t2i_selected_index=request.t2i_selected_index,
+            last_frame_image_urls=request.last_frame_image_urls,
+            last_frame_selected_index=request.last_frame_selected_index,
+            video_generation_mode=request.video_generation_mode,
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
@@ -3743,6 +3751,8 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
             script, task_id = pipeline.create_video_task(
                 script_id=script_id,
                 image_url=request.image_url,
+                last_frame_url=request.last_frame_url,
+                last_frame_media_id=request.last_frame_media_id,
                 prompt=request.prompt,
                 frame_id=request.frame_id,
                 duration=request.duration,
@@ -4880,6 +4890,30 @@ class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
 
+class RenderFrameCandidateRequest(BaseModel):
+    frame_id: str
+    prompt: str
+    negative_prompt: Optional[str] = None
+
+@app.post("/projects/{script_id}/storyboard/render-candidate")
+def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    """Render an isolated first/last-frame candidate without changing the
+    Storyboard frame's canonical image fields."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        url = pipeline.generate_storyboard_candidate(
+            script_id, request.frame_id, request.prompt, request.negative_prompt,
+        )
+        return {"image_url": url}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Error rendering storyboard candidate %s", request.frame_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @app.post("/projects/{script_id}/storyboard/render-preview")
 def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
@@ -5091,6 +5125,7 @@ async def upload_t2i_frame(
     script_id: str,
     frame_id: str,
     file: UploadFile = File(...),
+    slot: Literal["first", "last"] = "first",
     user: UserContext = Depends(require_studio_user),
 ):
     """Upload an external image as a T2I首帧 candidate for an I2V flow.
@@ -5116,7 +5151,7 @@ async def upload_t2i_frame(
 
         # Stream-to-disk with explicit byte cap so we never load >8 MB
         # into memory if a client lies about Content-Length.
-        filename = f"t2i_{uuid.uuid4().hex}{ext}"
+        filename = f"{slot}_frame_{uuid.uuid4().hex}{ext}"
         abs_path, rel_path = _studio_upload_target(user, filename)
         size = 0
         try:
@@ -5149,7 +5184,7 @@ async def upload_t2i_frame(
         loop = asyncio.get_event_loop()
         frame = await loop.run_in_executor(
             None,
-            partial(pipeline.upload_t2i_frame, script_id, frame_id, rel_path),
+            partial(pipeline.upload_last_frame if slot == "last" else pipeline.upload_t2i_frame, script_id, frame_id, rel_path),
         )
         if frame is None:
             # Roll back the file — frame/script gone, no reference will exist

@@ -42,6 +42,10 @@ export interface ShotNode {
     prompt: string;
     promptIsOptimized?: boolean;
     tabMode: "t2i_i2v" | "direct_r2v";
+    /** Concrete video input mode; legacy tabs map to i2v/r2v when absent. */
+    videoMode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
+    lastFrameUrl?: string;
+    lastFrameMediaId?: string;
     /** Optional per-shot video model override. */
     videoModel?: string;
     /** Explicit per-shot generated-audio choice. Undefined inherits the UI default. */
@@ -95,6 +99,9 @@ export interface ShotNode {
      *  localStorage from growing without bound. */
     t2iImageUrls?: string[];
     t2iSelectedIndex?: number;
+    lastFrameImageUrls?: string[];
+    lastFrameSelectedIndex?: number;
+    lastFrameTaskId?: string;
 
     // Video stage (shared). The single-task fields stay for "the most
     // recent attempt" but the candidates panel reads from the shot's
@@ -174,7 +181,9 @@ interface ShotCardProps {
     onMoveDown: () => void;
     onDuplicate: () => void;
     onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
+    onSetVideoMode?: (mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => void;
     onOpenDrawer: () => void;
+    onSelectFrameAsset?: () => void;
     onInsertAsset: (type: string, name: string) => void;
     onToggleReferenceVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     /** Duration editor config derived from model catalog */
@@ -234,7 +243,9 @@ export default function ShotCard({
     onMoveDown,
     onDuplicate,
     onSetTabMode,
+    onSetVideoMode,
     onOpenDrawer,
+    onSelectFrameAsset,
     onInsertAsset: _onInsertAsset,
     onToggleReferenceVariant,
     durationEditorConfig,
@@ -599,6 +610,7 @@ export default function ShotCard({
     };
 
     const isActiveT2I = shot.tabMode === "t2i_i2v";
+    const videoMode = shot.videoMode ?? (isActiveT2I ? "i2v" : "r2v");
 
     return (
         <div
@@ -665,6 +677,17 @@ export default function ShotCard({
                                 {t("tabDirectR2v")}
                             </button>
                         </div>
+                        <select
+                            aria-label="视频生成模式"
+                            value={videoMode}
+                            onChange={(event) => onSetVideoMode?.(event.target.value as typeof videoMode)}
+                            className="h-8 rounded-md border border-glass-border bg-surface-inset px-2 text-[11px] text-text-secondary"
+                        >
+                            <option value="t2v">文生视频</option>
+                            <option value="i2v">首帧 I2V</option>
+                            <option value="first_last_frame">首尾帧</option>
+                            <option value="r2v">全能参考 R2V</option>
+                        </select>
                     </div>
                 </div>
 

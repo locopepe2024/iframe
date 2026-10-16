@@ -1328,6 +1328,7 @@ export function WorkbenchPanel({
 }: any) {
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
+    const currentProject = useProjectStore((state) => state.currentProject);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
     const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
@@ -1567,6 +1568,12 @@ export function WorkbenchPanel({
                             generatingBatchSize={generatingBatchSize}
                             aspectRatio={aspectRatio}
                             className="h-full"
+                            previewLocator={currentProject?.id ? {
+                                scope: asset?.source === "series" && currentProject.series_id ? "series" : "project",
+                                containerId: asset?.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+                                assetType: "character",
+                                assetId: asset?.id,
+                            } : undefined}
                         />
                     )}
                 </div>
