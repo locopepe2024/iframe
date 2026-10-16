@@ -358,7 +358,7 @@ export interface EnvConfigPayload {
     // Secrets from GET are masked (bullets + last 4 chars). This map reports
     // which credential fields are actually configured on the backend.
     secrets_configured?: Record<string, boolean>;
-    [key: string]: string | Record<string, string> | Record<string, boolean> | Record<string, unknown> | boolean | undefined;
+    [key: string]: string | number | Record<string, string> | Record<string, boolean> | Record<string, unknown> | boolean | undefined;
 }
 
 export interface UserConfigPayload {
