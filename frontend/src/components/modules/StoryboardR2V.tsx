@@ -1452,6 +1452,7 @@ export default function StoryboardR2V() {
         const processingShots = shots.filter(s =>
             (s.videoTaskId && (s.videoStatus === "processing" || s.videoStatus === "pending")) ||
             (s.t2iTaskId && (s.t2iStatus === "processing" || s.t2iStatus === "pending"))
+            || s.lastFrameTaskId
         );
         if (processingShots.length === 0) return;
 
@@ -1523,6 +1524,27 @@ export default function StoryboardR2V() {
                         }
                     } catch (error) {
                         debugLog.error("Studio", "T2I poll failed for shot:", shot.id, error);
+                    }
+                }
+                if (shot.lastFrameTaskId) {
+                    try {
+                        const status = await api.getTaskStatus(shot.lastFrameTaskId);
+                        if (status.status === "completed") {
+                            const imageUrl = status.image_url || status.result_url;
+                            if (imageUrl) {
+                                setShots(prev => prev.map(s => {
+                                    if (s.id !== shot.id) return s;
+                                    const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
+                                    const selected = urls.length - 1;
+                                    persistWorkbench(s.id, { last_frame_image_urls: urls, last_frame_selected_index: selected });
+                                    return { ...s, lastFrameTaskId: undefined, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: imageUrl };
+                                }));
+                            }
+                        } else if (status.status === "failed") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: status.error || t("genFailed") }));
+                        }
+                    } catch (error) {
+                        debugLog.error("Studio", "Last frame poll failed for shot:", shot.id, error);
                     }
                 }
             }
