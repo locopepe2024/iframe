@@ -199,7 +199,7 @@ class PlaygroundStorage:
             from ..studio_access import studio_media_url, studio_owner_key
             owner_prefix = f"users/{studio_owner_key(self.owner_profile_id)}/studio/"
             if value.startswith(owner_prefix):
-                return studio_media_url(self.owner_profile_id, value)
+                return studio_media_url(self.owner_profile_id, value, output_root=self.media_root)
         if urlsplit(value).scheme:
             return value
         target = os.path.realpath(value)
