@@ -4,14 +4,25 @@ from .models import StoryboardFrame, GenerationStatus
 from ..studio_access import studio_media_dir
 from ...models.wanx import WanxModel
 from ...utils import get_logger
+from ...utils.managed_media_root import ManagedMediaRoot
 
 logger = get_logger(__name__)
 
 class VideoGenerator:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
+        self.output_root = os.fspath(output_root)
         self.model = WanxModel(self.config.get('model', {}))
-        self.output_dir = self.config.get('output_dir', 'output/video')
+        self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'video'))
+
+    def _local_image_path(self, reference: str) -> str | None:
+        if reference.startswith(("output/", "outputs/")):
+            path = str(ManagedMediaRoot(self.output_root).resolve(reference))
+            return path if os.path.exists(path) else None
+        path = os.path.join(self.output_root, reference)
+        if os.path.exists(path):
+            return os.path.abspath(path)
+        return reference if os.path.exists(reference) else None
 
     def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None,
                      owner_profile_id: str = None) -> Dict[str, Any]:
@@ -32,17 +43,11 @@ class VideoGenerator:
         logger.info(f"Generating I2V motion reference: prompt={prompt[:50]}..., duration={duration}")
         
         # Handle local file paths
-        img_path = None
-        if image_url and not image_url.startswith("http"):
-            potential_path = os.path.join("output", image_url)
-            if os.path.exists(potential_path):
-                img_path = os.path.abspath(potential_path)
-            elif os.path.exists(image_url):
-                img_path = image_url
+        img_path = self._local_image_path(image_url) if image_url and not image_url.startswith("http") else None
         
         try:
             output_filename = f"motion_ref_{uuid.uuid4().hex[:8]}.mp4"
-            output_dir = studio_media_dir(owner_profile_id, "video") if owner_profile_id else self.output_dir
+            output_dir = studio_media_dir(owner_profile_id, "video", output_root=self.output_root) if owner_profile_id else self.output_dir
             output_path = os.path.join(output_dir, output_filename)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
@@ -54,12 +59,12 @@ class VideoGenerator:
             )
             
             # Upload to OSS if configured
-            video_url = os.path.relpath(output_path, "output")
+            video_url = os.path.relpath(output_path, self.output_root)
             try:
                 from ...utils.oss_utils import OSSImageUploader
                 uploader = OSSImageUploader()
                 if uploader.is_configured:
-                    object_key = uploader.upload_file(output_path, sub_path="motion_ref")
+                    object_key = uploader.upload_file(output_path, sub_path="motion_ref", output_root=self.output_root)
                     if object_key:
                         logger.info(f"Uploaded motion ref video to OSS: {object_key}")
                         video_url = object_key
@@ -84,42 +89,15 @@ class VideoGenerator:
         # Use the optimized video prompt if available, otherwise fallback to image prompt or description
         prompt = frame.video_prompt or frame.image_prompt or frame.action_description
         
-        # Convert file:// URL to local path if necessary, or ensure the model can handle it.
-        # Wanx API needs a public URL or OSS URL. 
-        # For this local demo, we might need to assume the user has a way to serve files or upload them.
-        # OR we mock the upload.
-        # For now, let's assume the image_url is accessible to the API (e.g. if we used an OSS URL earlier).
-        # If it's a local file, we can't really call the API unless we upload it.
-        
-        # TODO: Implement file upload to OSS/S3 here if needed.
-        # For the purpose of this demo code, we'll assume the image_url is valid for the API.
-        # If it starts with file://, we strip it, but the API won't be able to read local files.
-        # We will log a warning.
-        
         img_url = frame.image_url
-        img_path = None
-        
-        # Handle local file paths
-        if img_url and not img_url.startswith("http"):
-             # Assuming img_url is a relative path from project root or output dir
-             # We need to resolve it to an absolute path
-             # In this project, image_url is usually relative to 'output' or project root?
-             # assets.py stores "characters/xxx.png" (relative to output dir usually, but let's check)
-             # Wait, assets.py stores `rel_sheet_path = os.path.relpath(sheet_path, "output")`
-             # So it is "characters/xxx.png".
-             # We need to prepend the output directory.
-             
-             # Assuming we are running from project root
-             potential_path = os.path.join("output", img_url)
-             if os.path.exists(potential_path):
-                 img_path = os.path.abspath(potential_path)
-             else:
-                 # Try absolute if it was stored absolute
-                 if os.path.exists(img_url):
-                     img_path = img_url
-        
         try:
-            output_dir = studio_media_dir(frame.owner_profile_id, "video") if frame.owner_profile_id else self.output_dir
+            img_path = self._local_image_path(img_url) if img_url and not img_url.startswith("http") else None
+        except ValueError:
+            frame.status = GenerationStatus.FAILED
+            return frame
+
+        try:
+            output_dir = studio_media_dir(frame.owner_profile_id, "video", output_root=self.output_root) if frame.owner_profile_id else self.output_dir
             output_path = os.path.join(output_dir, f"{frame.id}.mp4")
             os.makedirs(output_dir, exist_ok=True)
             
@@ -131,7 +109,7 @@ class VideoGenerator:
             )
             
             # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, self.output_root)
             frame.video_url = rel_path
             frame.status = GenerationStatus.COMPLETED
             
@@ -140,7 +118,7 @@ class VideoGenerator:
                 from ...utils.oss_utils import OSSImageUploader
                 uploader = OSSImageUploader()
                 if uploader.is_configured:
-                    object_key = uploader.upload_file(output_path, sub_path="video")
+                    object_key = uploader.upload_file(output_path, sub_path="video", output_root=self.output_root)
                     if object_key:
                         logger.info(f"Uploaded video for frame {frame.id} to OSS: {object_key}")
                         # Store Object Key (will be converted to signed URL on API response)

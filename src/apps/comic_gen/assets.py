@@ -14,6 +14,7 @@ from .character_prompts import (
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
+from ...utils.managed_media_root import ManagedMediaRoot
 from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_new_one_config
 
 logger = get_logger(__name__)
@@ -55,17 +56,18 @@ ASPECT_RATIO_TO_SIZE = {
 }
 
 class AssetGenerator:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
+        self.output_root = os.fspath(output_root)
         self.model = WanxImageModel(self.config.get('model', {}))
         self._mulerouter_image_model = None
         self._uniart_image_model = None
-        self.output_dir = self.config.get('output_dir', 'output/assets')
+        self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'assets'))
 
     def _output_dir_for(self, asset: Any) -> str:
         owner_profile_id = getattr(asset, "owner_profile_id", None)
         if owner_profile_id:
-            return studio_media_dir(owner_profile_id, "assets")
+            return studio_media_dir(owner_profile_id, "assets", output_root=self.output_root)
         return self.output_dir
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
@@ -83,24 +85,25 @@ class AssetGenerator:
             return self._mulerouter_image_model
         return self.model
 
-    @staticmethod
-    def _reference_path(reference: str) -> str:
+    def _reference_path(self, reference: str) -> str:
         """Convert a stored asset reference into the adapter's input form.
 
         Asset variants are stored as HTTP URLs, OSS object keys, or paths
-        relative to ``output``. Keep URL/object-key values intact so the
+        relative to the configured media root. Keep URL/object-key values intact so the
         provider adapter can sign or publish them; resolve local paths only at
         the last boundary before the provider call.
         """
         if not reference:
             return reference
+        if reference.startswith(("output/", "outputs/")):
+            return str(ManagedMediaRoot(self.output_root).resolve(reference))
         if (
             reference.startswith(("https://", "http://"))
             or is_object_key(reference)
             or os.path.isfile(reference)
         ):
             return reference
-        return os.path.join("output", reference)
+        return os.path.join(self.output_root, reference)
 
     @staticmethod
     def _reference_metadata(
@@ -249,7 +252,7 @@ class AssetGenerator:
                             **reference_args,
                         )
 
-                        rel_path = os.path.relpath(sheet_path, "output")
+                        rel_path = os.path.relpath(sheet_path, self.output_root)
 
                         if not character.reference_sheet:
                             from .models import AssetUnit
@@ -277,7 +280,7 @@ class AssetGenerator:
                             from ...utils.oss_utils import OSSImageUploader
                             uploader = OSSImageUploader()
                             if uploader.is_configured:
-                                object_key = uploader.upload_file(sheet_path, sub_path="assets/characters")
+                                object_key = uploader.upload_file(sheet_path, sub_path="assets/characters", output_root=self.output_root)
                                 if object_key:
                                     variant.url = object_key
                                     if character.reference_sheet.selected_image_id == variant_id:
@@ -355,7 +358,7 @@ class AssetGenerator:
                                 ref_image_path = ref_url
                                 logger.debug(f"Reverse generation: Using uploaded three_views as reference: {ref_url}")
                             else:
-                                local_path = os.path.join("output", ref_url)
+                                local_path = self._reference_path(ref_url)
                                 if os.path.exists(local_path):
                                     ref_image_path = local_path
                                     logger.debug(f"Reverse generation: Using local three_views as reference: {local_path}")
@@ -372,7 +375,7 @@ class AssetGenerator:
                                 ref_image_path = ref_url
                                 logger.debug(f"Reverse generation: Using uploaded headshot as reference: {ref_url}")
                             else:
-                                local_path = os.path.join("output", ref_url)
+                                local_path = self._reference_path(ref_url)
                                 if os.path.exists(local_path):
                                     ref_image_path = local_path
                                     logger.debug(f"Reverse generation: Using local headshot as reference: {local_path}")
@@ -400,7 +403,7 @@ class AssetGenerator:
                         
                         self._get_model_for(effective_model_name).generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, ref_image_paths=extra_ref_image_paths, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size, image_generation_mode=image_generation_mode)
                         
-                        rel_fullbody_path = os.path.relpath(fullbody_path, "output")
+                        rel_fullbody_path = os.path.relpath(fullbody_path, self.output_root)
                         
                         # Store in ImageAsset
                         if not character.full_body_asset:
@@ -441,7 +444,7 @@ class AssetGenerator:
                         from ...utils.oss_utils import OSSImageUploader
                         uploader = OSSImageUploader()
                         if uploader.is_configured:
-                            object_key = uploader.upload_file(fullbody_path, sub_path="assets/characters")
+                            object_key = uploader.upload_file(fullbody_path, sub_path="assets/characters", output_root=self.output_root)
                             if object_key:
                                 logger.debug(f"Uploaded full body variant {i+1} to OSS: {object_key}")
                                 variant.url = object_key
@@ -545,8 +548,8 @@ class AssetGenerator:
                     fullbody_path = reference_url
                     logger.debug(f"Using OSS Object Key for reference: {reference_url}")
                 else:
-                    # Local relative path - prepend output directory
-                    fullbody_path = os.path.join("output", reference_url)
+                    # Resolve a stored key or an existing physical reference path
+                    fullbody_path = self._reference_path(reference_url)
                     logger.debug(f"Using local path for reference: {fullbody_path}")
             else:
                 fullbody_path = explicit_reference_path
@@ -583,7 +586,7 @@ class AssetGenerator:
                         
                         self._get_model_for(i2i_model_name).generate(effective_generation_prompt, sheet_path, ref_image_path=fullbody_path, negative_prompt=sheet_negative, ref_strength=0.8, model_name=i2i_model_name)
                         
-                        rel_sheet_path = os.path.relpath(sheet_path, "output")
+                        rel_sheet_path = os.path.relpath(sheet_path, self.output_root)
                         
                         if not character.three_view_asset:
                             from .models import ImageAsset
@@ -623,7 +626,7 @@ class AssetGenerator:
                         from ...utils.oss_utils import OSSImageUploader
                         uploader = OSSImageUploader()
                         if uploader.is_configured:
-                            object_key = uploader.upload_file(sheet_path, sub_path="assets/characters")
+                            object_key = uploader.upload_file(sheet_path, sub_path="assets/characters", output_root=self.output_root)
                             if object_key:
                                 logger.debug(f"Uploaded three view variant {i+1} to OSS: {object_key}")
                                 variant.url = object_key
@@ -670,7 +673,7 @@ class AssetGenerator:
                         
                         self._get_model_for(i2i_model_name).generate(effective_generation_prompt, avatar_path, ref_image_path=fullbody_path, negative_prompt=negative_prompt, ref_strength=0.8, model_name=i2i_model_name)
                         
-                        rel_avatar_path = os.path.relpath(avatar_path, "output")
+                        rel_avatar_path = os.path.relpath(avatar_path, self.output_root)
                         
                         if not character.headshot_asset:
                             from .models import ImageAsset
@@ -710,7 +713,7 @@ class AssetGenerator:
                         from ...utils.oss_utils import OSSImageUploader
                         uploader = OSSImageUploader()
                         if uploader.is_configured:
-                            object_key = uploader.upload_file(avatar_path, sub_path="assets/characters")
+                            object_key = uploader.upload_file(avatar_path, sub_path="assets/characters", output_root=self.output_root)
                             if object_key:
                                 logger.debug(f"Uploaded headshot variant {i+1} to OSS: {object_key}")
                                 variant.url = object_key
@@ -800,7 +803,7 @@ class AssetGenerator:
                     **reference_args,
                 )
                 
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = os.path.relpath(output_path, self.output_root)
                 
                 if not scene.image_asset:
                     from .models import ImageAsset
@@ -826,7 +829,7 @@ class AssetGenerator:
                     from ...utils.oss_utils import OSSImageUploader
                     uploader = OSSImageUploader()
                     if uploader.is_configured:
-                        object_key = uploader.upload_file(output_path, sub_path="assets/scenes")
+                        object_key = uploader.upload_file(output_path, sub_path="assets/scenes", output_root=self.output_root)
                         if object_key:
                             logger.debug(f"Uploaded scene variant to OSS: {object_key}")
                             variant.url = object_key
@@ -896,7 +899,7 @@ class AssetGenerator:
                     **reference_args,
                 )
                 
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = os.path.relpath(output_path, self.output_root)
                 
                 if not prop.image_asset:
                     from .models import ImageAsset
@@ -922,7 +925,7 @@ class AssetGenerator:
                     from ...utils.oss_utils import OSSImageUploader
                     uploader = OSSImageUploader()
                     if uploader.is_configured:
-                        object_key = uploader.upload_file(output_path, sub_path="assets/props")
+                        object_key = uploader.upload_file(output_path, sub_path="assets/props", output_root=self.output_root)
                         if object_key:
                             logger.debug(f"Uploaded prop variant to OSS: {object_key}")
                             variant.url = object_key

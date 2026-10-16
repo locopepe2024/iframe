@@ -412,6 +412,7 @@ def test_cast_reference_generation_sends_valid_uniart_portrait_contract(tmp_path
     monkeypatch.chdir(tmp_path)
     p,entity=pipeline('character')
     generator=AssetGenerator.__new__(AssetGenerator)
+    generator.output_root="output"
     monkeypatch.setattr(generator,'_output_dir_for',lambda _:str(tmp_path/'output'))
     monkeypatch.setattr(assets,'studio_uniart_config',lambda:{'api_key':'test'})
     monkeypatch.setattr(oss_utils,'OSSImageUploader',lambda:Mock(is_configured=False))
