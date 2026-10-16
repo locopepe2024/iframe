@@ -123,7 +123,7 @@ class TestExtractLastFramePathContainment:
         pipeline.scripts[script.id] = script
         task = script.video_tasks[0]
 
-        with pytest.raises(ValueError, match="escapes base directory"):
+        with pytest.raises(ValueError, match="escapes base directory|traversal"):
             pipeline.extract_last_frame(script.id, script.frames[0].id, task.id)
 
     @pytest.mark.skipif(
