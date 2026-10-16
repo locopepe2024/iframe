@@ -6,11 +6,11 @@ callers receive an object key and short lived presigned GET URLs.
 import hashlib
 import mimetypes
 import os
-import tempfile
 import time
 from pathlib import Path
 from typing import Optional
 
+from .upload_paths import resolve_upload_file
 from . import get_logger
 
 logger = get_logger(__name__)
@@ -66,14 +66,14 @@ class COSImageUploader:
         parts = [p.strip("/") for p in (self.base_path, sub_path, filename) if p and p.strip("/")]
         return "/".join(parts)
 
-    def upload_file(self, local_path: str, sub_path: str = "", custom_filename: str = None) -> Optional[str]:
+    def upload_file(self, local_path: str, sub_path: str = "", custom_filename: str = None, *, output_root: str = "output") -> Optional[str]:
         if not self.is_configured:
             return None
-        resolved = os.path.realpath(local_path)
-        allowed = (os.path.realpath("output") + os.sep, os.path.realpath(tempfile.gettempdir()) + os.sep)
-        if not any(resolved.startswith(prefix) for prefix in allowed) or not os.path.isfile(resolved):
-            logger.warning("Refusing COS upload outside output/temp: %s", local_path)
+        resolved = resolve_upload_file(local_path, output_root=output_root)
+        if resolved is None:
+            logger.warning("Refusing upload of missing/non-file path or outside media root/temp: %s", local_path)
             return None
+
         key = self._key(sub_path, custom_filename or os.path.basename(resolved))
         content_type = mimetypes.guess_type(resolved)[0] or "application/octet-stream"
         try:
