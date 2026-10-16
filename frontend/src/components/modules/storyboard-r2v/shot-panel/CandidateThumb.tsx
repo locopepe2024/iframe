@@ -123,6 +123,9 @@ export default function CandidateThumb({
                 {videoUrl ? (
                     <PreviewVideo
                         src={videoUrl}
+                        mediaId={dubbedVideoUrl ? undefined : task.video_media_id}
+                        projectId={dubbedVideoUrl ? undefined : task.project_id}
+                        taskId={dubbedVideoUrl ? undefined : task.id}
                         alt={`Take ${task.id}`}
                         className="h-full w-full"
                     />

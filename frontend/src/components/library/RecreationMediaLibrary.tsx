@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { API_URL } from "@/lib/api";
+import PreviewImage from "@/components/shared/preview/PreviewImage";
+import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import { recreationApi, RecreationMedia, RecreationMediaKind, RecreationProject } from "@/lib/recreation";
 
 const videoKinds = new Set<RecreationMediaKind>(["source_video", "generated_video", "final_video"]);
 const kinds: RecreationMediaKind[] = ["source_video", "generated_video", "final_video", "contact_sheet", "evidence_frame", "sample_frame", "reference_image", "replacement_image"];
-const mediaUrl = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
 
 export default function RecreationMediaLibrary() {
   const t = useTranslations("recreationMedia");
@@ -71,8 +71,8 @@ export default function RecreationMediaLibrary() {
     {selected && <div className="glass-panel rounded-xl p-4 mb-5">
       <button type="button" className="glass-button mb-3" onClick={() => setSelected(null)}>{t("close")}</button>
       <h2 className="break-words">{selected.display_name}</h2>
-      {videoKinds.has(selected.kind) ? <video controls preload="metadata" src={mediaUrl(selected.storage_path)} className="max-h-96 w-full" />
-        : <img src={mediaUrl(selected.storage_path)} alt={selected.display_name} className="max-h-96 w-full object-contain" />}
+      {videoKinds.has(selected.kind) ? <PreviewVideo src={selected.storage_path} mediaId={selected.media_id} controls hoverPlay={false} noLightbox className="max-h-96 w-full" />
+        : <PreviewImage src={selected.storage_path} mediaId={selected.media_id} alt={selected.display_name} noLightbox className="max-h-96 w-full object-contain" />}
       <dl className="mt-3 text-sm break-all space-y-1">
         <div><dt>{t("project")}</dt><dd>{sourceName(selected.project_id)}</dd></div>
         <div><dt>{t("identity")}</dt><dd>{selected.media_id}</dd></div>
@@ -82,12 +82,11 @@ export default function RecreationMediaLibrary() {
       </dl>
     </div>}
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-      {items.map(item => <button key={item.media_id} type="button" onClick={() => setSelected(item)} aria-label={t("preview", { name: item.display_name })}
+      {items.map(item => <div key={item.media_id} role="button" tabIndex={0} onClick={() => setSelected(item)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(item); } }} aria-label={t("preview", { name: item.display_name })}
         className="glass-panel min-w-0 rounded-xl overflow-hidden text-left focus-visible:ring-2 focus-visible:ring-primary">
-        {videoKinds.has(item.kind) ? <video muted playsInline preload="metadata" src={mediaUrl(item.storage_path)} aria-hidden="true" className="aspect-video w-full object-contain bg-surface-inset" />
-          : <img loading="lazy" src={mediaUrl(item.storage_path)} alt="" className="aspect-video w-full object-contain bg-surface-inset" />}
+        <PreviewImage src={item.storage_path} mediaId={item.media_id} alt="" noLightbox className="aspect-video w-full object-contain bg-surface-inset" />
         <div className="p-3"><p className="truncate">{item.display_name}</p><p className="text-sm text-text-secondary truncate">{t(item.kind)} · {sourceName(item.project_id)}</p></div>
-      </button>)}
+      </div>)}
     </div>
     {next !== null && !error && <button type="button" disabled={busy} onClick={() => setCursor(next)} className="glass-button mt-5">{t("more")}</button>}
   </section>;

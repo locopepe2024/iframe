@@ -17,11 +17,16 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw, Maximize2, Copy, Check, Play } from "lucide-react";
 import clsx from "clsx";
 import { getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
+import { isManagedMedia, resolveMergedVideoDelivery, resolveRegisteredMediaDelivery, resolveVideoDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { useTranslations } from "next-intl";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
 export interface PreviewVideoProps {
     src?: string;
+    mediaId?: string | null;
+    projectId?: string;
+    taskId?: string;
+    mergedProjectId?: string;
     poster?: string;
     alt?: string;
     className?: string;
@@ -34,14 +39,20 @@ export interface PreviewVideoProps {
     clickToLightbox?: boolean;
     /** Hover-to-play behavior (default on). Disable for autoplay backgrounds. */
     hoverPlay?: boolean;
+    controls?: boolean;
+    autoPlay?: boolean;
+    muted?: boolean;
+    loop?: boolean;
+    onCanPlay?: () => void;
+    onLoadStart?: () => void;
     placeholder?: React.ReactNode;
 }
 
 export default function PreviewVideo({
-    src, poster, alt, className, noLightbox = false,
+    src, mediaId, projectId, taskId, mergedProjectId, poster, alt, className, noLightbox = false,
     groupId, groupIndex, alwaysShowMagnify = false,
     clickToLightbox = false,
-    hoverPlay = true, placeholder,
+    hoverPlay = true, controls = false, autoPlay = false, muted, loop, onCanPlay, onLoadStart, placeholder,
 }: PreviewVideoProps) {
     const { open, openInGroup } = useLightbox();
     const t = useTranslations("preview");
@@ -49,6 +60,8 @@ export default function PreviewVideo({
     const [retryNonce, setRetryNonce] = useState(0);
     const [hasRetriedOnce, setHasRetriedOnce] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [freshSrc, setFreshSrc] = useState<string>();
+    const [freshPoster, setFreshPoster] = useState<string>();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [sizeBucket, setSizeBucket] = useState<"micro" | "mid" | "large">("large");
@@ -57,7 +70,29 @@ export default function PreviewVideo({
         setErrored(false);
         setHasRetriedOnce(false);
         setRetryNonce(0);
+        setFreshSrc(undefined);
+        setFreshPoster(undefined);
     }, [src]);
+
+    useEffect(() => {
+        if (!mediaId && !(projectId && taskId) && !mergedProjectId) return;
+        let active = true;
+        void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320)
+            : projectId && taskId ? resolveVideoTaskDelivery(projectId, taskId, 320)
+            : resolveMergedVideoDelivery(mergedProjectId!, 320))
+            .then(url => { if (active) setFreshPoster(url); })
+            .catch(() => {});
+        return () => { active = false; };
+    }, [mediaId, projectId, taskId, mergedProjectId]);
+
+    useEffect(() => {
+        if (!src || (!mergedProjectId && !mediaId && !(projectId && taskId) && !isManagedMedia(src))) return;
+        let active = true;
+        void resolveVideoDelivery(src, mediaId, projectId, taskId, mergedProjectId)
+            .then(url => { if (active) setFreshSrc(url); })
+            .catch(() => { if (active) setErrored(true); });
+        return () => { active = false; };
+    }, [src, mediaId, projectId, taskId, mergedProjectId]);
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -75,13 +110,20 @@ export default function PreviewVideo({
         return () => ro.disconnect();
     }, []);
 
-    const resolved = getAssetUrl(src);
-    const resolvedPoster = getAssetUrl(poster) || getVideoPosterUrl(src);
+    const resolved = freshSrc || ((mergedProjectId || mediaId || (projectId && taskId) || isManagedMedia(src || "")) ? "" : getAssetUrl(src));
+    const resolvedPoster = freshPoster || ((mediaId || (projectId && taskId) || mergedProjectId) ? "" : getAssetUrl(poster) || getVideoPosterUrl(src));
     const displaySrc = resolved
         ? (retryNonce > 0 ? `${resolved}${resolved.includes("?") ? "&" : "?"}__r=${retryNonce}` : resolved)
         : "";
 
     const handleError = () => {
+        if (src && (mergedProjectId || mediaId || (projectId && taskId) || isManagedMedia(src)) && !hasRetriedOnce) {
+            setHasRetriedOnce(true);
+            void resolveVideoDelivery(src, mediaId, projectId, taskId, mergedProjectId)
+                .then(url => { setFreshSrc(url); setErrored(false); })
+                .catch(() => setErrored(true));
+            return;
+        }
         if (!hasRetriedOnce) {
             setHasRetriedOnce(true);
             setRetryNonce(n => n + 1);
@@ -92,6 +134,11 @@ export default function PreviewVideo({
 
     const handleManualRetry = () => {
         setErrored(false);
+        if (src && (mergedProjectId || mediaId || (projectId && taskId) || isManagedMedia(src))) {
+            void resolveVideoDelivery(src, mediaId, projectId, taskId, mergedProjectId)
+                .then(setFreshSrc).catch(() => setErrored(true));
+            return;
+        }
         setRetryNonce(n => n + 1);
     };
 
@@ -109,7 +156,7 @@ export default function PreviewVideo({
     const handleOpenLightbox = (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
         if (noLightbox || !src) return;
-        const item: LightboxItem = { src, alt, kind: "video" };
+        const item: LightboxItem = { src, mediaId, projectId, taskId, mergedProjectId, alt, kind: "video" };
         if (groupId && typeof groupIndex === "number") openInGroup(groupId, groupIndex);
         else open(item);
     };
@@ -160,12 +207,16 @@ export default function PreviewVideo({
                         ref={videoRef}
                         src={displaySrc}
                         poster={resolvedPoster || undefined}
-                        muted
-                        loop
+                        muted={muted ?? !controls}
+                        loop={loop ?? !controls}
+                        controls={controls}
+                        autoPlay={autoPlay}
                         playsInline
                         preload="metadata"
                         onError={handleError}
-                        className="h-full w-full object-cover"
+                        onCanPlay={onCanPlay}
+                        onLoadStart={onLoadStart}
+                        className={clsx("h-full w-full", controls ? "object-contain" : "object-cover")}
                     />
                     {/* Subtle play indicator when not hovering — signals "this is a video" */}
                     {hoverPlay ? (

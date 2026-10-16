@@ -11,6 +11,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
+import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
 import { debugLog } from "@/lib/debugLog";
@@ -1888,7 +1889,7 @@ export default function StoryboardR2V() {
 
     // Click on a candidate thumb: plain click = preview (open new
     // window for v1), shift-click = toggle compare-selection.
-    const handleCandidateClick = useCallback((task: VideoTask, mods: { shift: boolean; meta: boolean }) => {
+    const handleCandidateClick = useCallback(async (task: VideoTask, mods: { shift: boolean; meta: boolean }) => {
         if (mods.shift) {
             setCompareSelectedIds(prev => {
                 const next = new Set(prev);
@@ -1901,7 +1902,14 @@ export default function StoryboardR2V() {
         const frame = currentProject?.frames?.find((f: any) => f.dubbed_video_task_id === task.id);
         const url = frame?.dubbed_video_url || task.video_url;
         if (url) {
-            window.open(getAssetUrl(url), "_blank", "noopener");
+            try {
+                const fresh = frame?.dubbed_video_url
+                    ? await resolveMediaDelivery(url)
+                    : await resolveVideoTaskDelivery(task.project_id, task.id);
+                window.open(fresh, "_blank", "noopener");
+            } catch {
+                toast.error("视频暂时无法访问，请刷新后重试");
+            }
         }
     }, [currentProject]);
 
@@ -2123,6 +2131,8 @@ export default function StoryboardR2V() {
                         ref={(el) => { shotWrapperRefs.current.set(shot.id, el); }}
                     >
                         <ShotCard
+                            projectId={currentProject?.id}
+                            activeVideoTaskId={currentProject?.frames?.find((frame) => frame.id === shot.id)?.selected_video_id || shot.videoTaskId}
                             referenceImageUrls={isR2vImageBased(paramsState.model)
                                 ? parseAssetTags(shot.prompt, shot.referenceVariantIds)
                                 : []}

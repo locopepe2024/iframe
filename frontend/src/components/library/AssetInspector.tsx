@@ -12,7 +12,9 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
 import { getAssetUrl } from "@/lib/utils";
+import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -150,6 +152,7 @@ export default function AssetInspector({
   const [revisionHistory, setRevisionHistory] = useState<AssetRevisionHistory | null>(null);
   const [checkedVariantIds, setCheckedVariantIds] = useState<string[]>([]);
   const [savingRevision, setSavingRevision] = useState(false);
+  const [heroDelivery, setHeroDelivery] = useState<{ variantId: string; url: string }>();
 
   const variantIds = variants.map((item) => item.id).join("|");
   useEffect(() => {
@@ -206,12 +209,24 @@ export default function AssetInspector({
   }, []);
 
   const activeVariant = variants.find((v) => v.id === activeVariantId) ?? variants[0];
+  useEffect(() => {
+    setHeroDelivery(undefined);
+    if (!activeVariant?.id) return;
+    let active = true;
+    void resolveAssetVariantDelivery({
+      scope: sourceKind, containerId: sourceKind === "global" ? "" : sourceId.replace(/^(project|series)-/, ""),
+      assetType: SINGULAR_TYPE[type] as "character" | "scene" | "prop", assetId: asset.id, variantId: activeVariant.id,
+    }).then(url => { if (active) setHeroDelivery({ variantId: activeVariant.id, url }); });
+    return () => { active = false; };
+  }, [sourceKind, sourceId, type, asset.id, activeVariant?.id]);
   const selectedCoverId = (asset as { cover_variant_id?: string | null }).cover_variant_id
     ?? imageAsset?.selected_id
     ?? baseVariants[0]?.id
     ?? null;
   const activeVariantIsCover = !!activeVariant && activeVariant.id === selectedCoverId;
-  const heroUrl = getAssetUrl(activeVariant?.url ?? fallbackUrl(asset, type));
+  const heroUrl = activeVariant
+    ? (heroDelivery?.variantId === activeVariant.id ? heroDelivery.url : undefined)
+    : getAssetUrl(fallbackUrl(asset, type));
   const prompt = activeVariant?.prompt_used ?? "";
 
   // 元数据行（数据驱动）：先放现有四项，再在字段存在时追加 SEED/MODEL/SIZE。
@@ -229,13 +244,19 @@ export default function AssetInspector({
   if (assetMeta.size) metaRows.push({ label: "SIZE", value: assetMeta.size });
 
   const handleDownload = async () => {
-    if (!heroUrl) return;
+    if (!activeVariant && !heroUrl) return;
     const fileBase = asset.name || "asset";
+    let currentUrl = heroUrl;
     try {
-      const res = await fetch(heroUrl);
+      currentUrl = activeVariant ? await resolveAssetVariantDelivery({
+        scope: sourceKind, containerId: sourceKind === "global" ? "" : sourceId.replace(/^(project|series)-/, ""),
+        assetType: SINGULAR_TYPE[type] as "character" | "scene" | "prop", assetId: asset.id, variantId: activeVariant.id,
+      }) : heroUrl;
+      if (!currentUrl) return;
+      const res = await fetch(currentUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const ext = downloadExt(heroUrl, blob.type);
+      const ext = downloadExt(currentUrl, blob.type);
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -246,7 +267,7 @@ export default function AssetInspector({
       URL.revokeObjectURL(objectUrl);
     } catch {
       // 跨域(CORS)/网络失败：download 属性对跨域 URL 无效，退回到新标签打开。
-      window.open(heroUrl, "_blank", "noopener,noreferrer");
+      if (currentUrl) window.open(currentUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -504,7 +525,8 @@ export default function AssetInspector({
                         on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
                       }`}
                     >
-                      <img src={getAssetUrl(v.url)} alt={t("variantAlt")} className="w-full h-full object-cover" />
+                      <AssetIndexPreview asset={{ source_scope: sourceKind, source_container_id: sourceKind === "global" ? "" : sourceId.replace(/^(project|series)-/, ""),
+                        asset_type: SINGULAR_TYPE[type] as "character" | "scene" | "prop", asset_id: asset.id, variant_id: v.id }} alt={t("variantAlt")} />
                     </button>
                     {sourceKind === "project" && (
                       <label className="absolute bottom-1 right-1 grid place-items-center size-6 rounded bg-black/75 text-white cursor-pointer"

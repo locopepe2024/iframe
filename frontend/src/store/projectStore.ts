@@ -56,6 +56,7 @@ export interface VideoTask {
     prompt: string;
     status: string;
     video_url?: string;
+    video_media_id?: string | null;
     duration?: number;
     created_at: number;
     model?: string;

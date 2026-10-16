@@ -1,10 +1,12 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptInput from './PromptInput';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun' }));
+vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', authenticatedFetch: vi.fn(async () => ({
+    ok: true, json: async () => ({ url: '/studio/media/preview.webp?signature=fresh' }),
+})) }));
 vi.mock('./PromptTemplateModal', () => ({ default: () => null }));
 vi.mock('./PromptHistoryDrawer', () => ({ default: () => null }));
 
@@ -31,13 +33,13 @@ describe('selected reference mentions', () => {
         });
     });
 
-    it('lists selected history and library images in reference order, excluding unselected history', () => {
+    it('lists selected history and library images in reference order, excluding unselected history', async () => {
         render(<PromptInput />);
         openMentions();
         const options = screen.getAllByRole('option');
         expect(options).toHaveLength(2);
-        expect(options.map((option) => option.querySelector('img')?.getAttribute('src')))
-            .toEqual(selected.map((path) => `https://garage.uniart.fun${path}`));
+        await waitFor(() => expect(options.map((option) => option.querySelector('img')?.getAttribute('src')))
+            .toEqual(selected.map(() => 'https://garage.uniart.fun/studio/media/preview.webp?signature=fresh')));
         fireEvent.click(options[1]);
         expect(usePlaygroundStore.getState().prompt).toBe('@Library portrait ');
         expect(screen.getByRole('textbox').querySelector('[data-reference-label]')).toHaveTextContent('@Libra...');

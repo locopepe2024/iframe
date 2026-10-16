@@ -452,6 +452,7 @@ export interface VideoTask {
     prompt: string;
     status: "pending" | "processing" | "completed" | "failed";
     video_url?: string;
+    video_media_id?: string | null;
     duration: number;
     seed?: number;
     resolution: string;

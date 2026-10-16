@@ -145,6 +145,8 @@ from ..user_config import router as user_config_router
 from ..playground.api import _storage_for as playground_storage_for, router as playground_router
 from ...utils.media_thumbnails import create_media_thumbnail
 from ...utils.asset_previews import create_asset_preview
+from ...utils.cos_previews import create_cos_media_preview
+from ...utils.cos_storage import is_cos_configured
 from ..agent_api import router as agent_router
 from ..knowledge.api import router as knowledge_router
 from ..recreation.api import router as recreation_router
@@ -428,6 +430,29 @@ def get_studio_media(
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
     return FileResponse(path, headers=headers, media_type="image/webp" if preview else None)
+
+
+@app.get("/studio/media-delivery")
+def refresh_studio_media_delivery(
+    reference: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Refresh an owned source or WebP cover without trusting URL expiry."""
+    from ..studio_access import resolve_studio_reference, studio_media_url, studio_media_preview_url
+    from ...utils.media_thumbnails import PREVIEW_MAX_EDGES
+
+    if preview and preview not in PREVIEW_MAX_EDGES:
+        raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    try:
+        stored = resolve_studio_reference(reference, user.owner_profile_id, output_root=pipeline.output_root)
+    except (ValueError, FileNotFoundError, HTTPException) as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    if stored.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="External media is not managed Studio media")
+    url = (studio_media_preview_url(user.owner_profile_id, stored, preview)
+           if preview else studio_media_url(user.owner_profile_id, stored, output_root=pipeline.output_root))
+    return private_no_store_signed_response({"url": url, "media_type": "image/webp" if preview else None})
 
 
 @app.get("/studio/owned-media/{owner_key}/{relative_path:path}")
@@ -2282,6 +2307,142 @@ def get_asset_library_preview(
     return FileResponse(preview, media_type="image/webp", headers={
         "Cache-Control": "private, max-age=1800", "X-Content-Type-Options": "nosniff",
     })
+
+
+def _owned_media_delivery_url(stored: str, owner_profile_id: str) -> str:
+    """Resolve only managed local or object storage into a current browser URL."""
+    from ..studio_access import studio_media_url
+
+    uploader = OSSImageUploader()
+    if stored.startswith(("http://", "https://")):
+        stored = managed_object_key_from_url(stored, uploader)
+        if not stored:
+            raise HTTPException(status_code=422, detail="External media is not managed")
+    if is_object_key(stored):
+        url = uploader.sign_url_for_display(stored)
+        if not url:
+            raise HTTPException(status_code=503, detail="Media storage unavailable")
+        return url
+    try:
+        source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    relative = os.path.relpath(source, pipeline.output_root)
+    url = studio_media_url(owner_profile_id, relative, output_root=pipeline.output_root)
+    if url == relative:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return url
+
+
+def _owned_media_cover_url(stored: str, owner_profile_id: str, preview: int) -> str:
+    from ..studio_access import studio_media_preview_url
+    from ...utils.media_thumbnails import PREVIEW_MAX_EDGES
+
+    if preview not in PREVIEW_MAX_EDGES:
+        raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    uploader = OSSImageUploader()
+    if stored.startswith(("http://", "https://")):
+        stored = managed_object_key_from_url(stored, uploader)
+        if not stored:
+            raise HTTPException(status_code=422, detail="External media is not managed")
+    if is_object_key(stored):
+        if not is_cos_configured():
+            raise HTTPException(status_code=422, detail="Cloud media cover is unavailable")
+        owner_root = studio_owner_dir(owner_profile_id, output_root=pipeline.output_root)
+        try:
+            cover = create_cos_media_preview(uploader, stored, owner_root, preview)
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail="COS media preview is unavailable") from exc
+        except Exception as exc:
+            status = exc.get_status_code() if callable(getattr(exc, "get_status_code", None)) else None
+            if status == 404:
+                raise HTTPException(status_code=404, detail="COS media not found") from exc
+            if status == 412:
+                raise HTTPException(status_code=409, detail="COS media changed; retry preview") from exc
+            logger.warning("COS media preview failed: %s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="COS media preview is unavailable") from exc
+        relative = os.path.relpath(cover, owner_root).replace(os.sep, "/")
+        return f"/studio/owned-media/{studio_owner_key(owner_profile_id)}/{relative}"
+    try:
+        source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    relative = os.path.relpath(source, pipeline.output_root)
+    url = studio_media_preview_url(owner_profile_id, relative, preview)
+    if url == relative:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return url
+
+
+@app.get("/asset-index/delivery")
+def get_asset_library_delivery(
+    scope: Literal["global", "series", "project"],
+    asset_type: Literal["character", "scene", "prop"],
+    asset_id: str,
+    variant_id: str,
+    container_id: str = "",
+    user: UserContext = Depends(require_studio_user),
+):
+    """Resolve a current source URL from an owned asset variant identity."""
+    if scope == "global":
+        assets = pipeline._library_list_for_type(asset_type, user.owner_profile_id) if not container_id else []
+    elif scope == "series":
+        series = pipeline.get_series(container_id, user.owner_profile_id)
+        assets = getattr(series, f"{asset_type}s", []) if series else []
+    else:
+        script = pipeline.get_script(container_id, user.owner_profile_id)
+        assets = getattr(script, f"{asset_type}s", []) if script else []
+    asset = next((item for item in assets if item.id == asset_id), None)
+    variant = next((item for item in pipeline._asset_image_variants(asset, asset_type) if item.id == variant_id), None) if asset else None
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Asset variant not found")
+    raw = image_variant_storage_key(variant)
+    if not raw:
+        raise HTTPException(status_code=404, detail="Asset image not found")
+    return JSONResponse({"url": _owned_media_delivery_url(raw, user.owner_profile_id)},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/studio/media-records/{media_id}/delivery")
+def get_registered_media_delivery(
+    media_id: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Resolve a current source URL from an owner-scoped media registry ID."""
+    from ..media_registry import get_media
+    record = get_media(user.owner_profile_id, media_id, output_root=pipeline.output_root)
+    if not record:
+        raise HTTPException(status_code=404, detail="Media not found")
+    if preview:
+        return JSONResponse({"url": _owned_media_cover_url(record["storage_key"], user.owner_profile_id, preview), "media_type": "image/webp"},
+                            headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({"url": _owned_media_delivery_url(record["storage_key"], user.owner_profile_id)},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/projects/{script_id}/video_tasks/{task_id}/delivery")
+def get_video_task_delivery(script_id: str, task_id: str, preview: int = 0, user: UserContext = Depends(require_studio_user)):
+    """Refresh a shot take from its project and task identity, including old tasks without media IDs."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    task = next((item for item in script.video_tasks if item.id == task_id), None) if script else None
+    if not task or task.status != "completed" or not task.video_url:
+        raise HTTPException(status_code=404, detail="Video task not found")
+    url = (_owned_media_cover_url(task.video_url, user.owner_profile_id, preview) if preview
+           else _owned_media_delivery_url(task.video_url, user.owner_profile_id))
+    return JSONResponse({"url": url, "media_type": "image/webp" if preview else None},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/projects/{script_id}/merged-video/delivery")
+def get_merged_video_delivery(script_id: str, preview: int = 0, user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script or not script.merged_video_url:
+        raise HTTPException(status_code=404, detail="Merged video not found")
+    url = (_owned_media_cover_url(script.merged_video_url, user.owner_profile_id, preview) if preview
+           else _owned_media_delivery_url(script.merged_video_url, user.owner_profile_id))
+    return JSONResponse({"url": url, "media_type": "image/webp" if preview else None},
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/projects/{script_id}/assembly-plan")
