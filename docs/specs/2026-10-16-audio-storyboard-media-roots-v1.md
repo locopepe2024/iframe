@@ -31,7 +31,11 @@ No global media-root setting is enabled here. Pipeline assembly/export, HTTP
 factories, library consumers and provider-internal publishing remain separate.
 No prompt/reference selection policy, audio format or paid-provider behavior
 is intentionally changed. Existing SFX/BGM methods remain mock implementations;
-tests of their path handling do not prove real audio generation.
+tests of SFX path handling do not prove real audio generation. The legacy
+mock generate_bgm method assigns frame.bgm_url although StoryboardFrame has no
+such field; its pipeline call is therefore not validated as working. This
+pre-existing schema/feature gap is outside the root-propagation change and
+must be resolved before treating that mock method as a supported BGM workflow.
 
 ## Success criteria
 
@@ -43,3 +47,10 @@ Verify defaults and per-instance root isolation. Run focused tests and backend C
 selection, without network provider requests or production deployment.
 
 Affected paths: src/apps/comic_gen/{audio,storyboard}.py, tests and this spec.
+
+## Local verification result
+
+Two TTS regression tests reproduced the missing initialization and now pass.
+Fourteen root-propagation tests pass with fake TTS/image adapters. Backend CI
+selection after final changes: 1327 passed, 5 skipped, 2 deselected. These are
+local code/test observations, not production deployment or live-provider proof.

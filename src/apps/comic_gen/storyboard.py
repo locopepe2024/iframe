@@ -4,17 +4,34 @@ from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, image_variant_storage_key
 from .prompt_assembly import append_storyboard_character_descriptions
 from ...models.image import WanxImageModel
-from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config
+from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config, studio_media_dir
+from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 
 logger = get_logger(__name__)
 
 class StoryboardGenerator:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
+        self.output_root = os.fspath(output_root)
         self.model = WanxImageModel(self.config.get('model', {}))
-        self.output_dir = self.config.get('output_dir', 'output/storyboard')
+        self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'storyboard'))
+
+    def _output_dir_for(self, frame: StoryboardFrame) -> str:
+        if frame.owner_profile_id:
+            return studio_media_dir(frame.owner_profile_id, "storyboard", output_root=self.output_root)
+        return self.output_dir
+
+    def _reference_path(self, reference: str) -> str:
+        if reference.startswith(("output/", "outputs/")):
+            return str(ManagedMediaRoot(self.output_root).resolve(reference))
+        if reference.startswith(("https://", "http://")) or is_object_key(reference):
+            return reference
+        path = os.path.join(self.output_root, reference)
+        if os.path.exists(path):
+            return os.path.abspath(path)
+        return os.path.abspath(reference) if os.path.exists(reference) else path
 
     def _get_model_for(self, model_name: str):
         """Use the same provider routing as asset generation."""
@@ -89,9 +106,9 @@ class StoryboardGenerator:
         if use_frontend_refs:
             # Use only what frontend provided (already selected by user)
             if ref_image_paths:
-                asset_ref_paths.extend(ref_image_paths)
+                asset_ref_paths.extend(self._reference_path(ref) for ref in ref_image_paths)
             if ref_image_path:
-                asset_ref_paths.append(ref_image_path)
+                asset_ref_paths.append(self._reference_path(ref_image_path))
             logger.info(f"[Storyboard] Using {len(asset_ref_paths)} frontend-provided reference images")
         else:
             # Auto-collect from characters and scene (fallback for batch generation)
@@ -134,11 +151,9 @@ class StoryboardGenerator:
                         if is_object_key(target_url):
                             asset_ref_paths.append(target_url)
                         else:
-                            potential_path = os.path.join("output", target_url)
+                            potential_path = self._reference_path(target_url)
                             if os.path.exists(potential_path):
                                 asset_ref_paths.append(os.path.abspath(potential_path))
-                            elif os.path.exists(target_url):
-                                asset_ref_paths.append(os.path.abspath(target_url))
             
             # Add scene reference image
             scene_url = None
@@ -154,11 +169,9 @@ class StoryboardGenerator:
                     if is_object_key(scene_url):
                         asset_ref_paths.append(scene_url)
                     else:
-                        potential_path = os.path.join("output", scene_url)
+                        potential_path = self._reference_path(scene_url)
                         if os.path.exists(potential_path):
                             asset_ref_paths.append(os.path.abspath(potential_path))
-                        elif os.path.exists(scene_url):
-                            asset_ref_paths.append(os.path.abspath(scene_url))
         
         # Collect character descriptions for prompt building
         for char_id in frame.character_ids:
@@ -200,7 +213,7 @@ class StoryboardGenerator:
             for _ in range(batch_size):
                 variant_id = str(uuid.uuid4())
                 output_filename = f"{frame.id}_{variant_id}.png"
-                output_path = os.path.join(output_dir or self.output_dir, output_filename)
+                output_path = os.path.join(output_dir or self._output_dir_for(frame), output_filename)
                 
                 # Ensure output directory exists
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -219,7 +232,7 @@ class StoryboardGenerator:
                 )
                 
                 # Store relative path for frontend serving
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = os.path.relpath(output_path, self.output_root)
                 
                 # Create Variant
                 variant = ImageVariant(

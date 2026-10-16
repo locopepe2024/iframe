@@ -75,9 +75,10 @@ def dialogue_audio_is_stale(frame: StoryboardFrame, character: Optional[Characte
     return current != frame.dialogue_text_hash
 
 class AudioGenerator:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
-        self.output_dir = self.config.get('output_dir', 'output/audio')
+        self.output_root = os.fspath(output_root)
+        self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'audio'))
 
         # Initialize TTS Processor
         try:
@@ -89,7 +90,7 @@ class AudioGenerator:
 
     def _output_dir_for(self, frame: StoryboardFrame) -> str:
         if frame.owner_profile_id:
-            return studio_media_dir(frame.owner_profile_id, "audio")
+            return studio_media_dir(frame.owner_profile_id, "audio", output_root=self.output_root)
         return self.output_dir
 
     def get_available_voices(self) -> List[Dict[str, Any]]:
@@ -195,7 +196,7 @@ class AudioGenerator:
                 family_override=family_override,
             )
 
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, self.output_root)
             frame.audio_url = rel_path
             frame.audio_error = None
             frame.status = GenerationStatus.COMPLETED
@@ -235,7 +236,7 @@ class AudioGenerator:
                 f.write(b'dummy sfx content')
                 
             # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = os.path.relpath(output_path, self.output_root)
             frame.sfx_url = rel_path
             frame.status = GenerationStatus.COMPLETED
             
@@ -260,7 +261,7 @@ class AudioGenerator:
         with open(output_path, 'wb') as f:
             f.write(b'dummy v2a sfx content')
             
-        frame.sfx_url = os.path.relpath(output_path, "output")
+        frame.sfx_url = os.path.relpath(output_path, self.output_root)
         return frame
 
     def generate_bgm(self, frame: StoryboardFrame) -> StoryboardFrame:
@@ -275,5 +276,5 @@ class AudioGenerator:
         with open(output_path, 'wb') as f:
             f.write(b'dummy bgm content')
             
-        frame.bgm_url = os.path.relpath(output_path, "output")
+        frame.bgm_url = os.path.relpath(output_path, self.output_root)
         return frame
