@@ -232,6 +232,17 @@
 .director3d-root .timeline-actions label { min-height: 44px; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
 .director3d-root .timeline-actions input { min-height: 0; accent-color: var(--primary); }
 .director3d-root .timeline-import-trigger { border-color: rgba(52,211,153,.34); color: #d1fae5; background: rgba(52,211,153,.09); }
+.director3d-root .white-model-video-recorder { display: grid; gap: 8px; }
+.director3d-root .white-model-video-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.director3d-root .white-model-video-actions button, .director3d-root .white-model-video-actions a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: rgba(255,255,255,.045); text-decoration: none; }
+.director3d-root .white-model-video-actions [role="alert"] { color: #fecaca; }
+.director3d-root .white-model-video-actions [role="status"] { color: var(--muted); }
+.director3d-root .white-model-video-overlay { position: fixed; z-index: 200; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.76); }
+.director3d-root .white-model-video-dialog { display: grid; gap: 12px; width: min(760px, 100%); max-height: calc(100dvh - 32px); padding: 14px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); box-shadow: 0 22px 70px rgba(0,0,0,.5); }
+.director3d-root .white-model-video-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.director3d-root .white-model-video-dialog-header button { display: grid; place-items: center; width: 36px; min-height: 36px; padding: 0; }
+.director3d-root .white-model-video-dialog video { display: block; width: 100%; max-height: min(65dvh, 430px); background: #101820; }
+.director3d-root .white-model-video-dialog a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; justify-self: end; min-height: 38px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; }
 .director3d-root .timeline-import-panel { display: grid; gap: 10px; padding: 11px; border: 1px solid rgba(52,211,153,.28); border-radius: 9px; background: rgba(52,211,153,.045); }
 .director3d-root .timeline-import-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .director3d-root .timeline-import-heading > div { min-width: 0; display: grid; gap: 2px; }

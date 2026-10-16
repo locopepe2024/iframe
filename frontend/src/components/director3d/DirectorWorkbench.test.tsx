@@ -114,6 +114,17 @@ it("switches director views without calling the standalone API", () => {
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it("accepts a replacement timeline duration after the number input is cleared", () => {
+  render(<App />);
+  const duration = screen.getByRole("spinbutton", { name: "时长（秒）" });
+  fireEvent.change(duration, { target: { value: "" } });
+  fireEvent.change(duration, { target: { value: "8" } });
+  expect(duration).toHaveValue(8);
+  fireEvent.blur(duration);
+  expect(useWorkbenchStore.getState().dialogueTimeline.durationSeconds).toBe(8);
+  expect(screen.getByText(/有界时间线 · 8\.00s/i)).toBeInTheDocument();
+});
+
 it("moves focus with the view tab keyboard contract", () => {
   render(<App />);
   const directorView = screen.getByRole("tab", { name: "导演视图" });

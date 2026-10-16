@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createIdleLocalAnimationImportState, createLocalAnimationImportErrorState, LOCAL_ANIMATION_MAX_BYTES, parseLocalAnimationManifest } from "../state/local-animation-import";
-import { useWorkbenchStore } from "../state/workbench-store";
+import { minimumTimelineDuration, useWorkbenchStore } from "../state/workbench-store";
 import type { TimelineTrackKind } from "../types";
+import { WhiteModelVideoRecorder } from "../reference/WhiteModelVideoRecorder";
 
 const TRACK_LABELS: Record<TimelineTrackKind, string> = {
   character_transform: "人物变换",
@@ -28,8 +29,9 @@ const PROPERTY_KEYS: Record<TimelineTrackKind, string> = {
   active_camera: "active_camera_id",
 };
 
-export function TimelinePanel() {
+export function TimelinePanel({ recordingVideo = false, setRecordingVideo = () => {} }: { recordingVideo?: boolean; setRecordingVideo?: (value: boolean) => void }) {
   const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
+  const minimumDuration = useWorkbenchStore(minimumTimelineDuration);
   const localAnimationImport = useWorkbenchStore((state) => state.localAnimationImport);
   const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
   const selectedCharacterId = useWorkbenchStore((state) => state.selectedCharacterId);
@@ -57,12 +59,28 @@ export function TimelinePanel() {
   const [loop, setLoop] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [minimized, setMinimized] = useState(false);
+  const [durationDraft, setDurationDraft] = useState<string | null>(null);
+  const [fpsDraft, setFpsDraft] = useState<string | null>(null);
   const [localImportOpen, setLocalImportOpen] = useState(false);
   const [readingLocalAnimation, setReadingLocalAnimation] = useState(false);
   const localAnimationFileInput = useRef<HTMLInputElement>(null);
   const [trackKind, setTrackKind] = useState<TimelineTrackKind>("character_transform");
   const lastTick = useRef<number | null>(null);
   const maximumFrame = Math.max(1, Math.round(timeline.durationSeconds * timeline.fps) + 1);
+  const commitDuration = () => {
+    if (durationDraft !== null && durationDraft.trim() !== "") {
+      const value = Number(durationDraft);
+      if (Number.isFinite(value) && value >= 0.05 && value <= 3600) setTimelineDuration(value);
+    }
+    setDurationDraft(null);
+  };
+  const commitFps = () => {
+    if (fpsDraft !== null && fpsDraft.trim() !== "") {
+      const value = Number(fpsDraft);
+      if (Number.isInteger(value) && value >= 1 && value <= 120) setTimelineFps(value);
+    }
+    setFpsDraft(null);
+  };
 
   const openLocalAnimationPicker = () => localAnimationFileInput.current?.click();
   const closeLocalAnimationImport = () => {
@@ -180,9 +198,10 @@ export function TimelinePanel() {
       </div>}
     </section>}
     <div id="timeline-panel-content" hidden={minimized}>
+      <WhiteModelVideoRecorder recording={recordingVideo} setRecording={setRecordingVideo} stopPlayback={() => setPlaying(false)} />
       <div className="timeline-settings">
-        <label>时长（秒）<input type="number" min="0.05" max="3600" step="0.05" value={timeline.durationSeconds} onChange={(event) => setTimelineDuration(Number(event.target.value))}/></label>
-        <label>FPS<input type="number" min="1" max="120" step="1" value={timeline.fps} onChange={(event) => setTimelineFps(Number(event.target.value))}/></label>
+        <label>时长（秒）<input type="number" min={minimumDuration} max="3600" step="0.05" title={`已有内容结束于 ${minimumDuration.toFixed(2)} 秒`} value={durationDraft ?? timeline.durationSeconds} onChange={(event) => setDurationDraft(event.target.value)} onBlur={commitDuration} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setDurationDraft(null); }}/></label>
+        <label>FPS<input type="number" min="1" max="120" step="1" value={fpsDraft ?? timeline.fps} onChange={(event) => setFpsDraft(event.target.value)} onBlur={commitFps} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setFpsDraft(null); }}/></label>
         <label>缩放<input type="range" min="0.5" max="4" step="0.25" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/></label>
       </div>
       <label className="timeline-scrubber"><span>播放头</span><div style={{ width: `${Math.max(100, zoom * 100)}%` }}><input type="range" min="1" max={maximumFrame} value={Math.min(playheadFrame, maximumFrame)} onChange={(event) => setPlayheadFrame(Number(event.target.value))}/></div><output>{playheadFrame}f · {((playheadFrame - 1) / timeline.fps).toFixed(2)}s</output></label>
