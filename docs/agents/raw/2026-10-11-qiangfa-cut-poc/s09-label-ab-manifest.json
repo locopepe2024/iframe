@@ -11,7 +11,7 @@
   "generate_audio": false,
   "groups": {
     "A": {"task_label": "reference generation", "prompt_file": "s09-label-ab-reference-generation.md", "prompt_sha256": "94f4fa2ac0998b5b7e65a00bb9a6ce61d9478d260641f8d9c60e3bdbc8976459", "provider_mode_expected": "reference2video"},
-    "B": {"task_label": "video editing", "prompt_file": "s09-label-ab-video-editing.md", "prompt_sha256": "55b5abd0f16b1df510d0361843e91df293c1c55249ed1c40c222bc2975fde28b", "provider_mode_expected": "unverified; current UniArt path may still use reference2video"}
+    "B": {"task_label": "video editing", "prompt_file": "s09-label-ab-video-editing.md", "prompt_sha256": "55b5abd0f16b1df510d0361843e91df293c1c55249ed1c40c222bc2975fde28b", "provider_mode_expected": "reference2video"}
   },
   "submission": "not submitted; preserve this manifest only after recording prompt sha256 values"
 }
