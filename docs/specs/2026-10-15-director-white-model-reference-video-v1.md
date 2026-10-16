@@ -90,3 +90,34 @@ valuable for multiple people and ambiguous foreground/background relationships.
 - Not yet proven: the recorded video or static depth output improves downstream
   image/video generation consistency. That requires an explicit reference-input
   integration and comparative generation tests.
+
+## Blender export contract for depth and blocking references
+
+The supplied shot description is a scene manifest, not a free-form prompt to be
+reinterpreted by an image model. Blender should be the source of truth for both
+the blocking PNG and metric EXR:
+
+- camera: frame, transform/matrix, focal length, sensor, FOV, aperture,
+  focus distance, clip planes, target and active-camera identity;
+- blocking: stable object/character IDs, labels, world transforms, dimensions,
+  facing, visibility and occlusion-relevant geometry;
+- lighting: named key/fill/rim/environment lights, direction, energy, color and
+  enabled state;
+- render: aspect, resolution, unit scale, frame range and the exact Blender
+  revision.
+
+Code fact: the current depth exporter records metric depth and a camera record,
+but the browser depth snapshot does not yet carry semantic object or light
+records. Direct implication: a generated prompt that lists sofa/table/bed
+coordinates or light values would currently be partly unsupported. The next
+media slice must export a versioned Blender manifest and derive the prompt,
+blocking PNG and EXR from that same manifest. It must preserve the authored
+coordinate system and never infer missing objects from prompt text.
+
+The example's `35mm`, `f/2.8` and `5m` refer to three distinct physical camera
+parameters. The browser camera's `depthOfField.aperture` is a BokehPass shader
+coefficient, so it must not be presented as an f-number. Blender must record
+its actual lens focal length, f-stop and focus distance independently. Coordinates
+such as the single sofa at `(-75.73, 0.5, -123.54)` should be checked against
+the same scene origin and camera frustum; they may be outside the proposed
+8.5m shot, but are not proof of an error without the camera pose and bounds.

@@ -644,7 +644,7 @@ function timelineTargetLocked(state: WorkbenchState, track: TimelineTrackState):
   return false;
 }
 
-function minimumTimelineDuration(state: WorkbenchState): number {
+export function minimumTimelineDuration(state: WorkbenchState): number {
   const timedEnds = [
     ...state.dialogueTimeline.dialogueBeats.map((item) => item.endSeconds),
     ...state.dialogueTimeline.focusTracks.map((item) => item.endSeconds),
