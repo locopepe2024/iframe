@@ -2277,6 +2277,50 @@ def get_asset_library_preview(
     })
 
 
+def _owned_media_delivery_url(stored: str, owner_profile_id: str) -> str:
+    """Resolve only managed local or object storage into a current browser URL."""
+    from ..studio_access import studio_media_url
+
+    uploader = OSSImageUploader()
+    if stored.startswith(("http://", "https://")):
+        stored = managed_object_key_from_url(stored, uploader)
+        if not stored:
+            raise HTTPException(status_code=422, detail="External media is not managed")
+    if is_object_key(stored):
+        url = uploader.sign_url_for_display(stored)
+        if not url:
+            raise HTTPException(status_code=503, detail="Media storage unavailable")
+        return url
+    try:
+        source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    relative = os.path.relpath(source, pipeline.output_root)
+    url = studio_media_url(owner_profile_id, relative, output_root=pipeline.output_root)
+    if url == relative:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return url
+
+
+def _owned_media_cover_url(stored: str, owner_profile_id: str, preview: int) -> str:
+    from ..studio_access import studio_media_preview_url
+    from ...utils.media_thumbnails import PREVIEW_MAX_EDGES
+
+    if preview not in PREVIEW_MAX_EDGES:
+        raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    if is_object_key(stored):
+        raise HTTPException(status_code=422, detail="Cloud media cover is unavailable")
+    try:
+        source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    relative = os.path.relpath(source, pipeline.output_root)
+    url = studio_media_preview_url(owner_profile_id, relative, preview)
+    if url == relative:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return url
+
+
 @app.get("/asset-index/delivery")
 def get_asset_library_delivery(
     scope: Literal["global", "series", "project"],
@@ -2302,26 +2346,50 @@ def get_asset_library_delivery(
     raw = image_variant_storage_key(variant)
     if not raw:
         raise HTTPException(status_code=404, detail="Asset image not found")
-    uploader = OSSImageUploader()
-    if raw.startswith(("http://", "https://")):
-        raw = managed_object_key_from_url(raw, uploader)
-        if not raw:
-            raise HTTPException(status_code=422, detail="External asset source is unavailable")
-    try:
-        source = pipeline._resolve_stored_reference_value(raw, user.owner_profile_id)
-    except InvalidAssetReference as exc:
-        raise HTTPException(status_code=404, detail="Asset image not found") from exc
-    if is_object_key(source):
-        url = uploader.sign_url_for_display(source)
-        if not url:
-            raise HTTPException(status_code=503, detail="Asset storage unavailable")
-    else:
-        from ..studio_access import studio_media_url
-        stored = os.path.relpath(source, pipeline.output_root)
-        url = studio_media_url(user.owner_profile_id, stored, output_root=pipeline.output_root)
-        if url == stored:
-            raise HTTPException(status_code=404, detail="Asset image not found")
-    return JSONResponse({"url": url}, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({"url": _owned_media_delivery_url(raw, user.owner_profile_id)},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/studio/media-records/{media_id}/delivery")
+def get_registered_media_delivery(
+    media_id: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Resolve a current source URL from an owner-scoped media registry ID."""
+    from ..media_registry import get_media
+    record = get_media(user.owner_profile_id, media_id, output_root=pipeline.output_root)
+    if not record:
+        raise HTTPException(status_code=404, detail="Media not found")
+    if preview:
+        return JSONResponse({"url": _owned_media_cover_url(record["storage_key"], user.owner_profile_id, preview), "media_type": "image/webp"},
+                            headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({"url": _owned_media_delivery_url(record["storage_key"], user.owner_profile_id)},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/projects/{script_id}/video_tasks/{task_id}/delivery")
+def get_video_task_delivery(script_id: str, task_id: str, preview: int = 0, user: UserContext = Depends(require_studio_user)):
+    """Refresh a shot take from its project and task identity, including old tasks without media IDs."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    task = next((item for item in script.video_tasks if item.id == task_id), None) if script else None
+    if not task or task.status != "completed" or not task.video_url:
+        raise HTTPException(status_code=404, detail="Video task not found")
+    url = (_owned_media_cover_url(task.video_url, user.owner_profile_id, preview) if preview
+           else _owned_media_delivery_url(task.video_url, user.owner_profile_id))
+    return JSONResponse({"url": url, "media_type": "image/webp" if preview else None},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/projects/{script_id}/merged-video/delivery")
+def get_merged_video_delivery(script_id: str, preview: int = 0, user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script or not script.merged_video_url:
+        raise HTTPException(status_code=404, detail="Merged video not found")
+    url = (_owned_media_cover_url(script.merged_video_url, user.owner_profile_id, preview) if preview
+           else _owned_media_delivery_url(script.merged_video_url, user.owner_profile_id))
+    return JSONResponse({"url": url, "media_type": "image/webp" if preview else None},
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/projects/{script_id}/assembly-plan")

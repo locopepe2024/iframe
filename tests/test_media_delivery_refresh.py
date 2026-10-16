@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from PIL import Image
 
 from src.apps.identity import UserContext
+from src.apps.media_registry import register_media
 from src.apps.playground import api as playground_api
 from src.apps.playground.models import PlaygroundGeneration, PlaygroundOutput
 from src.apps.playground.storage import PlaygroundStorage
@@ -110,3 +111,106 @@ def test_asset_variant_delivery_refreshes_by_owner_and_variant(tmp_path, monkeyp
     with pytest.raises(HTTPException) as foreign:
         studio_api.get_asset_library_delivery('global', 'character', 'asset', 'v1', '', owner('b'))
     assert foreign.value.status_code == 404
+
+
+def test_registered_video_delivery_uses_owner_media_id(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api as studio_api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    stored = f'users/{studio_owner_key("a")}/studio/video/take.mp4'
+    source = Path('output') / stored
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'video')
+    media_id = register_media('a', stored, kind='video_task', output_root='output')
+    response = studio_api.get_registered_media_delivery(media_id, user=owner('a'))
+    assert '/studio/media/' in response.body.decode()
+    with pytest.raises(HTTPException) as unsupported:
+        studio_api.get_registered_media_delivery(media_id, preview=321, user=owner('a'))
+    assert unsupported.value.status_code == 422
+    with pytest.raises(HTTPException) as foreign:
+        studio_api.get_registered_media_delivery(media_id, user=owner('b'))
+    assert foreign.value.status_code == 404
+    source.unlink()
+    with pytest.raises(HTTPException) as missing:
+        studio_api.get_registered_media_delivery(media_id, user=owner('a'))
+    assert missing.value.status_code == 404
+
+
+def test_registered_image_cover_is_owner_scoped_webp(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api as studio_api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    stored = f'users/{studio_owner_key("a")}/studio/uploads/portrait.png'
+    source = Path('output') / stored
+    source.parent.mkdir(parents=True)
+    Image.new('RGB', (640, 360)).save(source)
+    media_id = register_media('a', stored, kind='image', output_root='output')
+    response = studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+    assert 'preview=320' in response.body.decode()
+    assert 'image/webp' in response.body.decode()
+    with pytest.raises(HTTPException) as foreign:
+        studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('b'))
+    assert foreign.value.status_code == 404
+
+
+def test_video_task_delivery_supports_legacy_task_without_media_id(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api as studio_api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    stored = f'users/{studio_owner_key("a")}/studio/video/legacy.mp4'
+    source = Path('output') / stored
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'video')
+    task = SimpleNamespace(id='task', status='completed', video_url=stored)
+    script = SimpleNamespace(video_tasks=[task])
+    monkeypatch.setattr(studio_api.pipeline, 'get_script', lambda project, profile: script if (project, profile) == ('p', 'a') else None)
+    response = studio_api.get_video_task_delivery('p', 'task', user=owner('a'))
+    assert '/studio/media/' in response.body.decode()
+    cover = studio_api.get_video_task_delivery('p', 'task', preview=320, user=owner('a'))
+    assert 'preview=320' in cover.body.decode()
+    with pytest.raises(HTTPException) as foreign:
+        studio_api.get_video_task_delivery('p', 'task', user=owner('b'))
+    assert foreign.value.status_code == 404
+
+
+def test_assembly_output_delivery_uses_current_project_output(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api as studio_api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    stored = f'users/{studio_owner_key("a")}/studio/export/final.mp4'
+    source = Path('output') / stored
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'video')
+    project = SimpleNamespace(merged_video_url=stored)
+    monkeypatch.setattr(studio_api.pipeline, 'get_script', lambda project_id, profile: project if (project_id, profile) == ('p', 'a') else None)
+    response = studio_api.get_merged_video_delivery('p', user=owner('a'))
+    assert '/studio/media/' in response.body.decode()
+    cover = studio_api.get_merged_video_delivery('p', preview=320, user=owner('a'))
+    assert 'preview=320' in cover.body.decode()
+    with pytest.raises(HTTPException) as foreign:
+        studio_api.get_merged_video_delivery('p', user=owner('b'))
+    assert foreign.value.status_code == 404
+
+
+def test_agent_message_projects_fresh_url_without_mutating_history(tmp_path, monkeypatch):
+    from src.apps import agent_api
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('LUMENX_MEDIA_SIGNING_KEY', 'test-key')
+    storage = PlaygroundStorage(owner_user_id='a', owner_profile_id='a')
+    source = Path(storage.output_dir) / 'images' / 'agent.png'
+    source.parent.mkdir(parents=True)
+    Image.new('RGB', (16, 16)).save(source)
+    generation = PlaygroundGeneration(id='g', mode='t2i', model_id='model', prompt='test',
+        created_at='2026-10-16', owner_user_id='a', owner_profile_id='a',
+        outputs=[PlaygroundOutput(id='o', media_path=str(source), media_type='image')])
+    storage.add_generation(generation)
+    monkeypatch.setattr(playground_api, '_storage_for', lambda _: storage)
+    original = {'role': 'user', 'input_media': ['/playground/media/g/o?expires=1&signature=old']}
+    projected = agent_api.public_media_messages([original], owner('a'))[0]
+    assert 'signature=old' not in projected['input_media'][0]
+    assert original['input_media'][0].endswith('signature=old')
