@@ -56,3 +56,5 @@
 ## Prop correction for a future controlled trial
 
 保留 B 的任务语义时，下一份候选 prompt 应增加可见且可验收的几何约束：`one continuous shaft; exactly one metal spearhead at the active tip; the opposite end is a blunt shaft end with the source red tassel; never create a second spearhead, mirrored tip, duplicate shaft, or two simultaneous weapons.` 这只是待验证的最小修订，不代表已经提交或证明有效。
+
+该修订已准备为 [B2 候选 prompt](../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md)，结构检查通过，尚未提交新任务。
