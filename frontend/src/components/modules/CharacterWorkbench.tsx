@@ -1572,7 +1572,7 @@ export function WorkbenchPanel({
                                 scope: asset?.source === "series" && currentProject.series_id ? "series" : "project",
                                 containerId: asset?.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
                                 assetType: "character",
-                                assetId: asset.id,
+                                assetId: asset?.id,
                             } : undefined}
                         />
                     )}
