@@ -1,10 +1,10 @@
 import os
 import oss2
 import hashlib
-import tempfile
 import time
 from urllib.parse import urlparse
 from typing import Optional, Tuple
+from .upload_paths import resolve_upload_file
 from . import get_logger
 from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJECT_KEY
 
@@ -161,7 +161,7 @@ class OSSImageUploader:
         parts.append(filename)
         return "/".join(parts)
     
-    def upload_file(self, local_path: str, sub_path: str = "", custom_filename: str = None) -> Optional[str]:
+    def upload_file(self, local_path: str, sub_path: str = "", custom_filename: str = None, *, output_root: str = "output") -> Optional[str]:
         """
         Upload a file to OSS and return the Object Key.
         
@@ -169,6 +169,7 @@ class OSSImageUploader:
             local_path: Local file path to upload
             sub_path: Sub-directory path (e.g., "proj_123/assets/characters")
             custom_filename: Optional custom filename, defaults to original filename
+            output_root: Managed local root for this call; system temp also allowed
         
         Returns:
             Object Key (e.g., "lumenx/proj_123/assets/characters/file.png") or None if failed
@@ -181,21 +182,12 @@ class OSSImageUploader:
             logger.warning("OSS not configured, cannot upload file.")
             return None
 
-        # Only allow uploads from the managed output/ tree or the system temp
-        # directory; anything else (e.g. path traversal via a crafted media
-        # ref) is rejected and callers fall back gracefully (data URI / local).
-        resolved = os.path.realpath(local_path)
-        out_base = os.path.realpath("output")
-        tmp_base = os.path.realpath(tempfile.gettempdir())
-        if not resolved.startswith(out_base + os.sep):
-            if not resolved.startswith(tmp_base + os.sep):
-                logger.error(f"Refusing OSS upload outside allowed directories: {local_path}")
-                return None
-
-        if not os.path.exists(resolved):
-            logger.error(f"File not found: {local_path}")
+        # The root is call-scoped; never retain it on this singleton.
+        resolved = resolve_upload_file(local_path, output_root=output_root)
+        if resolved is None:
+            logger.warning("Refusing upload of missing/non-file path or outside media root/temp: %s", local_path)
             return None
-        
+
         try:
             filename = custom_filename or os.path.basename(resolved)
             object_key = self._build_object_key(sub_path, filename)
@@ -276,13 +268,13 @@ class OSSImageUploader:
             return False
     
     # Legacy methods for backward compatibility
-    def upload_image(self, local_image_path: str, sub_path: str = "assets") -> Optional[str]:
+    def upload_image(self, local_image_path: str, sub_path: str = "assets", *, output_root: str = "output") -> Optional[str]:
         """Legacy method: Upload image and return Object Key."""
-        return self.upload_file(local_image_path, sub_path)
+        return self.upload_file(local_image_path, sub_path, output_root=output_root)
     
-    def upload_video(self, local_video_path: str, sub_path: str = "video") -> Optional[str]:
+    def upload_video(self, local_video_path: str, sub_path: str = "video", *, output_root: str = "output") -> Optional[str]:
         """Legacy method: Upload video and return Object Key."""
-        return self.upload_file(local_video_path, sub_path)
+        return self.upload_file(local_video_path, sub_path, output_root=output_root)
     
     def get_oss_url(self, object_key: str, use_public_url: bool = False) -> str:
         """
