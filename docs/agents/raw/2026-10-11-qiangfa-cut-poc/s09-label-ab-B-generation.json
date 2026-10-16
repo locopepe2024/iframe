@@ -1,0 +1,20 @@
+{
+  "timestamp_utc": "2026-10-16T14:06:10.115253+00:00",
+  "status": "completed",
+  "label": "B",
+  "prompt_sha256": "405a3128cd523a2dc0e0f0359e2f129fb5b01f4857d4f90e269c6d9e122d01b8",
+  "source_sha256": "2e4324bd6284878954323fbe9a6c86edd4c178c43cecc168385d44aad3dd2a3c",
+  "identity_sha256": "43c2a7db056c523024c916423f13ad32c093c8410abbbee9c3cef8e0d12aefb8",
+  "model": "minimax-h3-vip",
+  "mode": "reference2video",
+  "duration": 4,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": false,
+  "seed": 20261011,
+  "http_status": 202,
+  "task_id": "task_RGQGiGDm44aTdXtS1fEADsApMyPjWlJh",
+  "last_query_http_status": 200,
+  "output_path": "s09-label-ab-B-replacement.mp4",
+  "output_sha256": "b525c6c9f4413ad5c022888a37a6eb74c00f14342fd4468a51d4881b5cce2c46"
+}
