@@ -6,13 +6,13 @@
 
 - iFrame 当前把源视频作为 `ref_video_urls` 提交，UniArt 模式为 `reference2video`，提示词使用 `[reference generation]`。
 - H3 文章建议：源视频被直接修改时使用 `[video editing]`，并以 `The target video is an edited version of <Video 1>.` 开头。
-- s09 切前单镜头为局部帧 `[0,112)`，帧 112 是硬切；源片有两次独立高举：69–73 与 82–87，中间 74–81 为回落/转背。
+- s09 源片为局部帧 `[0,120)`、4 秒；帧 112（3.733 秒）是硬切。源片有两次独立高举：69–73 与 82–87，中间 74–81 为回落/转背。
 - 现有 `s09-action-v2` 是历史 `reference2video` 结果，不能作为本次 A/B 的同批对照。
 - 文章将 `video editing` 定义为 Ref2VA 的任务类型；它不要求存在一个名为 `video editing` 的独立 provider mode。iFrame 当前用 `reference2video` 传输 Ref2VA 输入，UniArt 的 `v2v` 兼容映射也归入该 mode。
 
 ## Direct implication
 
-本次比较完整的 Ref2VA 任务语义提示词（标签、源视频职责、保留关系与动词）是否改变可观察结果，不能单独归因为方括号标签。两组必须使用同一源视频窗口、人物图、模型、时长、分辨率、比例、静音策略和 seed；不得把 mask、裁剪、动作事实约束或后处理同时改动。
+本次比较完整的 Ref2VA 任务语义提示词（标签、源视频职责、保留关系与动词）是否改变可观察结果，不能单独归因为方括号标签。两组必须使用同一 4 秒源视频窗口、人物图、模型、时长、分辨率、比例、静音策略和 seed；不得把 mask、裁剪、动作事实约束或后处理同时改动。
 
 ## Test matrix
 

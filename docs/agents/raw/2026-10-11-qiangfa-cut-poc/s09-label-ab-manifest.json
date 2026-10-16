@@ -2,7 +2,7 @@
   "status": "offline_draft",
   "source_video": "s09-motion.mp4",
   "source_sha256": "2e4324bd6284878954323fbe9a6c86edd4c178c43cecc168385d44aad3dd2a3c",
-  "source_window": {"local_frames": [0, 112], "fps": 30, "duration_seconds": 3.7333333333},
+  "source_window": {"local_frames": [0, 120], "fps": 30, "duration_seconds": 4.0, "cut_frame": 112, "cut_time_seconds": 3.7333333333},
   "replacement_picture": "<Picture 1>",
   "seed": 20261011,
   "model": "minimax-h3-vip",
@@ -10,8 +10,8 @@
   "ratio": "16:9",
   "generate_audio": false,
   "groups": {
-    "A": {"task_label": "reference generation", "prompt_file": "s09-label-ab-reference-generation.md", "prompt_sha256": "94f4fa2ac0998b5b7e65a00bb9a6ce61d9478d260641f8d9c60e3bdbc8976459", "provider_mode_expected": "reference2video"},
-    "B": {"task_label": "video editing", "prompt_file": "s09-label-ab-video-editing.md", "prompt_sha256": "55b5abd0f16b1df510d0361843e91df293c1c55249ed1c40c222bc2975fde28b", "provider_mode_expected": "reference2video"}
+    "A": {"task_label": "reference generation", "prompt_file": "s09-label-ab-reference-generation.md", "prompt_sha256": "d58a95f6a7c7a94216b3520c6c803729502ce033fa8c55fb07fbfa40e4d6acda", "provider_mode_expected": "reference2video"},
+    "B": {"task_label": "video editing", "prompt_file": "s09-label-ab-video-editing.md", "prompt_sha256": "405a3128cd523a2dc0e0f0359e2f129fb5b01f4857d4f90e269c6d9e122d01b8", "provider_mode_expected": "reference2video"}
   },
-  "submission": "not submitted; preserve this manifest only after recording prompt sha256 values"
+  "submission": "not submitted; paid generation requires explicit cost acceptance"
 }
