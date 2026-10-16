@@ -781,11 +781,21 @@ export default function StoryboardR2V() {
         }));
     }, [persistWorkbench]);
 
+    const setVideoMode = useCallback((index: number, mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => {
+        setShots(prev => prev.map((s, i) => {
+            if (i !== index) return s;
+            const tabMode = mode === "r2v" ? "direct_r2v" : "t2i_i2v";
+            persistWorkbench(s.id, { workbench_tab_mode: tabMode });
+            return { ...s, videoMode: mode, tabMode };
+        }));
+    }, [persistWorkbench]);
+
     // Structured edits update the visible body and join the ordered frame save.
     const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             if (field === "duration") return { ...s, duration: typeof value === "number" ? value : null };
+            if (field === "lastFrameUrl") return { ...s, lastFrameUrl: typeof value === "string" ? value : undefined };
             if (field === "shotSize") return { ...s, shotSize: typeof value === "string" ? value : null };
             if (field === "cameraAngle") return { ...s, cameraAngle: typeof value === "string" ? value : null };
             if (field === "cameraMovement") {
@@ -2160,6 +2170,7 @@ export default function StoryboardR2V() {
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
+                            onSetVideoMode={(mode) => setVideoMode(index, mode)}
                             videoModel={paramsState.model}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
                             onInsertAsset={(type, name) => {
