@@ -8,9 +8,10 @@ from ...utils import get_logger
 logger = get_logger(__name__)
 
 class ExportManager:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
-        self.output_dir = self.config.get('output_dir', 'output/export')
+        self.output_root = os.fspath(output_root)
+        self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'export'))
         os.makedirs(self.output_dir, exist_ok=True)
 
     def render_project(self, script: Script, options: Dict[str, Any]) -> str:
@@ -44,7 +45,7 @@ class ExportManager:
                 f.write(b'dummy video content')
                 
             logger.info(f"Export completed: {output_path}")
-            return os.path.relpath(output_path, "output")
+            return os.path.relpath(output_path, self.output_root)
             
         except Exception as e:
             logger.error(f"Export failed: {e}")

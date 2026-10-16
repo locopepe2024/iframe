@@ -344,7 +344,7 @@ def test_storyboard_render_resolves_signed_studio_references(monkeypatch, tmp_pa
     signed_url = "/studio/media/owner/reference.png?expires=123&signature=test"
     monkeypatch.setattr(
         "src.apps.comic_gen.pipeline.resolve_studio_reference",
-        lambda value, owner: "reference.png" if value == signed_url and owner == "apikey-owner" else None,
+        lambda value, owner, **_kwargs: "reference.png" if value == signed_url and owner == "apikey-owner" else None,
     )
 
     pipeline.generate_storyboard_render(

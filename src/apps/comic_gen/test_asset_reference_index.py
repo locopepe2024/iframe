@@ -152,7 +152,8 @@ def test_asset_media_is_registered_at_write_boundary(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     character = _character("hero", "Hero", "hero-view")
     character.owner_profile_id = "owner"
-    ComicGenPipeline._register_asset_media(character, "owner")
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._register_asset_media(character, "owner")
     variant = character.reference_sheet.image_variants[0]
     assert variant.media_id
     assert media_registry.get_media("owner", variant.media_id)["storage_key"] == "hero-view.png"

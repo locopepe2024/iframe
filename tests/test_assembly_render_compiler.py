@@ -25,8 +25,8 @@ from src.apps.comic_gen.pipeline import AssemblyPlanValidationError, ComicGenPip
 from src.apps.studio_access import studio_owner_dir
 
 
-@pytest.fixture
-def pipeline(tmp_path, monkeypatch):
+@pytest.fixture(params=["output", "custom-media"])
+def pipeline(tmp_path, monkeypatch, request):
     monkeypatch.chdir(tmp_path)
     with patch("src.apps.comic_gen.pipeline.ScriptProcessor"), \
          patch("src.apps.comic_gen.pipeline.AssetGenerator"), \
@@ -34,7 +34,7 @@ def pipeline(tmp_path, monkeypatch):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        result = ComicGenPipeline()
+        result = ComicGenPipeline(output_root=request.param)
     result.data_file = str(tmp_path / "projects.json")
     result.series_data_file = str(tmp_path / "series.json")
     result.library_data_file = str(tmp_path / "library.json")
@@ -131,11 +131,11 @@ def test_project_plan_renders_contiguous_clips_and_persists_output(pipeline):
     for index in range(3):
         project_id = f"episode-{index + 1}"
         relative = os.path.join(
-            os.path.relpath(studio_owner_dir(owner), "output"),
+            os.path.relpath(studio_owner_dir(owner, output_root=pipeline.output_root), pipeline.output_root),
             "video",
             f"source-{index + 1}.mp4",
         )
-        source = Path("output") / relative
+        source = Path(pipeline.output_root) / relative
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(b"source")
         project = _project(project_id, relative, owner_profile_id=owner)
@@ -161,7 +161,7 @@ def test_project_plan_renders_contiguous_clips_and_persists_output(pipeline):
 
     assert rendered is project
     assert project.merged_video_url
-    assert Path("output", project.merged_video_url).read_bytes() == b"rendered-video"
+    assert Path(pipeline.output_root, project.merged_video_url).read_bytes() == b"rendered-video"
     command = run.call_args.args[0]
     assert command.count("-i") == 1
     assert "trim=start=1.000000:end=21.000000" in command[command.index("-filter_complex") + 1]
@@ -174,11 +174,11 @@ def test_series_plan_renders_three_episode_bookend_timeline(pipeline):
     for index in range(3):
         project_id = f"episode-{index + 1}"
         relative = os.path.join(
-            os.path.relpath(studio_owner_dir(owner), "output"),
+            os.path.relpath(studio_owner_dir(owner, output_root=pipeline.output_root), pipeline.output_root),
             "video",
             f"episode-{index + 1}.mp4",
         )
-        source = Path("output") / relative
+        source = Path(pipeline.output_root) / relative
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(b"source")
         pipeline.scripts[project_id] = _project(
@@ -206,7 +206,7 @@ def test_series_plan_renders_three_episode_bookend_timeline(pipeline):
 
     assert rendered is series
     assert series.merged_video_url
-    assert Path("output", series.merged_video_url).is_file()
+    assert Path(pipeline.output_root, series.merged_video_url).is_file()
     command = run.call_args.args[0]
     assert command.count("-i") == 3
     assert "concat=n=3:v=1:a=1[outv][outa]" in command[command.index("-filter_complex") + 1]
@@ -277,7 +277,7 @@ def test_render_rejects_unsupported_or_gapped_plan_before_ffmpeg(
     lanes,
     message,
 ):
-    source = Path("output/video/source.mp4")
+    source = Path(pipeline.output_root) / Path("video/source.mp4")
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"source")
     project = _project("project-1", "video/source.mp4")
@@ -336,7 +336,7 @@ def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
     for index, color in enumerate(("red", "green", "blue")):
         project_id = f"episode-{index + 1}"
         relative = f"video/{color}.mp4"
-        source = Path("output") / relative
+        source = Path(pipeline.output_root) / relative
         source.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
@@ -383,7 +383,7 @@ def test_real_ffmpeg_renders_three_segments_in_timeline_order(pipeline):
     pipeline.series_store[series.id] = series
 
     rendered = pipeline.render_assembly_plan("series", series.id)
-    output = Path("output") / rendered.merged_video_url
+    output = Path(pipeline.output_root) / rendered.merged_video_url
     duration = float(subprocess.run(
         [
             ffprobe,
@@ -456,7 +456,7 @@ def test_real_ffmpeg_source_audio_respects_trim_retiming_and_gain(pipeline):
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg or not shutil.which("ffprobe"):
         pytest.skip("FFmpeg and ffprobe are required")
-    source = Path("output/video/audio-controls.mp4")
+    source = Path(pipeline.output_root) / Path("video/audio-controls.mp4")
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=red:s=160x90:d=2:r=24",
@@ -472,7 +472,7 @@ def test_real_ffmpeg_source_audio_respects_trim_retiming_and_gain(pipeline):
         project.assembly_plan.lanes[0].clips[0].gain = gain
         result = pipeline.render_assembly_plan("project", project.id)
         pcm = subprocess.run([
-            ffmpeg, "-v", "error", "-ss", "0.1", "-i", str(Path("output") / result.merged_video_url),
+            ffmpeg, "-v", "error", "-ss", "0.1", "-i", str(Path(pipeline.output_root) / result.merged_video_url),
             "-t", "0.25", "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-",
         ], check=True, capture_output=True).stdout
         values = array.array("h", pcm)
@@ -489,7 +489,7 @@ def test_real_ffmpeg_source_audio_respects_trim_retiming_and_gain(pipeline):
     subprocess.CalledProcessError(1, "ffprobe"),
 ])
 def test_audio_probe_failure_does_not_publish_silent_output(pipeline, failure):
-    source = Path("output/video/probe.mp4")
+    source = Path(pipeline.output_root) / Path("video/probe.mp4")
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"unreadable")
     project = _project("probe", "video/probe.mp4")

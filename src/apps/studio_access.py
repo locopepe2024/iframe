@@ -440,6 +440,8 @@ def verify_studio_resource_path(
 class StudioOwnerMixin:
     """Owner-aware accessors for legacy process-wide Studio stores."""
 
+    output_root = "output"  # Immutable default for legacy mixin consumers.
+
     @staticmethod
     def _requested_owner_profile_id(owner_profile_id: Optional[str] = None) -> Optional[str]:
         if owner_profile_id:
@@ -468,7 +470,7 @@ class StudioOwnerMixin:
                 projects_changed = True
             if self.stamp_owned_children(script):
                 projects_changed = True
-            if self._migrate_legacy_media_references(script, legacy_profile_id):
+            if self._migrate_legacy_media_references(script, legacy_profile_id, output_root=self.output_root):
                 projects_changed = True
 
         series_changed = False
@@ -479,7 +481,7 @@ class StudioOwnerMixin:
                 series_changed = True
             if self.stamp_owned_children(series):
                 series_changed = True
-            if self._migrate_legacy_media_references(series, legacy_profile_id):
+            if self._migrate_legacy_media_references(series, legacy_profile_id, output_root=self.output_root):
                 series_changed = True
 
         if projects_changed:
@@ -496,13 +498,13 @@ class StudioOwnerMixin:
                         asset.owner_user_id = legacy_user_id
                         asset.owner_profile_id = legacy_profile_id
                         library_changed = True
-                    if self._migrate_legacy_media_references(asset, legacy_profile_id):
+                    if self._migrate_legacy_media_references(asset, legacy_profile_id, output_root=self.output_root):
                         library_changed = True
         if library_changed:
             self._save_library_data()
 
     @classmethod
-    def _migrate_legacy_media_references(cls, value: Any, owner_profile_id: str) -> bool:
+    def _migrate_legacy_media_references(cls, value: Any, owner_profile_id: str, *, output_root: str = "output") -> bool:
         legacy_prefixes = (
             "assets/",
             "audio/",
@@ -522,11 +524,11 @@ class StudioOwnerMixin:
                 if isinstance(item, str):
                     normalized = item.replace("\\", "/").lstrip("/")
                     if normalized.startswith(legacy_prefixes):
-                        migrated = cls._copy_legacy_media(normalized, owner_profile_id)
+                        migrated = cls._copy_legacy_media(normalized, owner_profile_id, output_root=output_root)
                         if migrated:
                             value[index] = migrated
                             changed = True
-                elif cls._migrate_legacy_media_references(item, owner_profile_id):
+                elif cls._migrate_legacy_media_references(item, owner_profile_id, output_root=output_root):
                     changed = True
             return changed
 
@@ -535,11 +537,11 @@ class StudioOwnerMixin:
                 if isinstance(item, str):
                     normalized = item.replace("\\", "/").lstrip("/")
                     if normalized.startswith(legacy_prefixes):
-                        migrated = cls._copy_legacy_media(normalized, owner_profile_id)
+                        migrated = cls._copy_legacy_media(normalized, owner_profile_id, output_root=output_root)
                         if migrated:
                             value[key] = migrated
                             changed = True
-                elif cls._migrate_legacy_media_references(item, owner_profile_id):
+                elif cls._migrate_legacy_media_references(item, owner_profile_id, output_root=output_root):
                     changed = True
             return changed
 
@@ -550,33 +552,34 @@ class StudioOwnerMixin:
                 if isinstance(item, str):
                     normalized = item.replace("\\", "/").lstrip("/")
                     if normalized.startswith(legacy_prefixes):
-                        migrated = cls._copy_legacy_media(normalized, owner_profile_id)
+                        migrated = cls._copy_legacy_media(normalized, owner_profile_id, output_root=output_root)
                         if migrated:
                             setattr(value, field_name, migrated)
                             changed = True
-                elif cls._migrate_legacy_media_references(item, owner_profile_id):
+                elif cls._migrate_legacy_media_references(item, owner_profile_id, output_root=output_root):
                     changed = True
         return changed
 
     @staticmethod
-    def _copy_legacy_media(normalized_path: str, owner_profile_id: str) -> Optional[str]:
-        source_root = os.path.realpath("output")
+    def _copy_legacy_media(normalized_path: str, owner_profile_id: str, *, output_root: str = "output") -> Optional[str]:
+        source_root = os.path.realpath(output_root)
         source = os.path.realpath(os.path.join(source_root, normalized_path))
         if not source.startswith(source_root + os.sep) or not os.path.isfile(source):
             return None
         destination_root = os.path.realpath(
-            os.path.join(studio_owner_dir(owner_profile_id), "legacy")
+            os.path.join(studio_owner_dir(owner_profile_id, output_root=output_root), "legacy")
         )
         destination = os.path.realpath(os.path.join(destination_root, normalized_path))
         if not destination.startswith(destination_root + os.sep):
             return None
+        ManagedMediaRoot(output_root).resolve(destination)
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         if not os.path.exists(destination):
             try:
                 os.link(source, destination)
             except OSError:
                 shutil.copy2(source, destination)
-        return os.path.relpath(destination, "output")
+        return os.path.relpath(destination, output_root)
 
     @staticmethod
     def stamp_owned_children(container: Any) -> bool:
@@ -644,8 +647,8 @@ class StudioOwnerMixin:
 
         # Keep the old tree intact so a failed rollout can be rolled back.
         for legacy_owner_profile_id in legacy_owner_ids:
-            old_dir = os.path.realpath(studio_owner_dir(legacy_owner_profile_id))
-            new_dir = os.path.realpath(studio_owner_dir(owner_profile_id))
+            old_dir = os.path.realpath(studio_owner_dir(legacy_owner_profile_id, output_root=self.output_root))
+            new_dir = os.path.realpath(studio_owner_dir(owner_profile_id, output_root=self.output_root))
             if os.path.isdir(old_dir) and old_dir != new_dir:
                 try:
                     os.makedirs(new_dir, exist_ok=True)

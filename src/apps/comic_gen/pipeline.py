@@ -67,6 +67,7 @@ from .prompt_assembly import append_projected_shot_context, append_storyboard_ch
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
+from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
@@ -210,18 +211,19 @@ class StaleStoryboardDraftError(ValueError):
 
 
 class ComicGenPipeline(StudioOwnerMixin):
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, *, output_root: str = "output"):
         self.config = config or {}
+        self.output_root = os.fspath(output_root)
         self.script_processor = ScriptProcessor()
-        self.asset_generator = AssetGenerator(self.config.get('assets'))
-        self.storyboard_generator = StoryboardGenerator(self.config.get('storyboard'))
-        self.video_generator = VideoGenerator(self.config.get('video'))
-        self.audio_generator = AudioGenerator(self.config.get('audio'))
-        self.export_manager = ExportManager(self.config.get('export'))
+        self.asset_generator = AssetGenerator(self.config.get('assets'), output_root=self.output_root)
+        self.storyboard_generator = StoryboardGenerator(self.config.get('storyboard'), output_root=self.output_root)
+        self.video_generator = VideoGenerator(self.config.get('video'), output_root=self.output_root)
+        self.audio_generator = AudioGenerator(self.config.get('audio'), output_root=self.output_root)
+        self.export_manager = ExportManager(self.config.get('export'), output_root=self.output_root)
         
-        self.data_file = "output/projects.json"
-        self.series_data_file = "output/series.json"
-        self.library_data_file = "output/library_assets.json"
+        self.data_file = os.path.join(self.output_root, "projects.json")
+        self.series_data_file = os.path.join(self.output_root, "series.json")
+        self.library_data_file = os.path.join(self.output_root, "library_assets.json")
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self._unloaded_scripts: Dict[str, Any] = {}
         self._project_load_error = False
@@ -268,12 +270,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("Orphan task recovery failed: %s", exc)
 
-    @staticmethod
-    def _owner_output_dir(resource: Any, category: str) -> str:
+    def _owner_output_dir(self, resource: Any, category: str) -> str:
         owner_profile_id = getattr(resource, "owner_profile_id", None)
         if owner_profile_id:
-            return studio_media_dir(owner_profile_id, category)
-        return os.path.join("output", category)
+            return studio_media_dir(owner_profile_id, category, output_root=self.output_root)
+        return os.path.join(self.output_root, category)
+
+    def _local_output_path(self, value: str) -> str:
+        root = ManagedMediaRoot(self.output_root)
+        if value.startswith(("output/", "outputs/")) or ".." in value.replace("\\", "/").split("/"):
+            return str(root.resolve(value))
+        try:
+            return str(root.resolve(os.path.abspath(value)))
+        except ValueError:
+            return str(root.resolve(value))
 
     _ORPHAN_RECOVERY_REASON = (
         "Backend was restarted while this task was running. Click Retry to run it again."
@@ -1846,8 +1856,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return cover_id
         return None
 
-    @staticmethod
-    def _register_asset_variant_media(variants: List[Any], owner_profile_id: Optional[str]) -> List[Any]:
+    def _register_asset_variant_media(self, variants: List[Any], owner_profile_id: Optional[str]) -> List[Any]:
         """Backfill owner media identities while projecting the asset index."""
         if not owner_profile_id:
             return variants
@@ -1863,11 +1872,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 kind="asset_variant",
                 display_name=f"asset-variant-{getattr(variant, 'id', 'unknown')}",
                 metadata={"variant_id": getattr(variant, "id", "")},
+                output_root=self.output_root,
             )
         return variants
 
-    @staticmethod
-    def _register_asset_media(asset: Any, owner_profile_id: Optional[str]) -> None:
+    def _register_asset_media(self, asset: Any, owner_profile_id: Optional[str]) -> None:
         """Register durable image and video materials at asset write time."""
         if not asset or not owner_profile_id:
             return
@@ -1885,7 +1894,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             image_variants.extend(getattr(container, "variants", None) or [])
             video_variants.extend(getattr(container, "video_variants", None) or [])
         video_variants.extend(getattr(asset, "video_assets", None) or [])
-        ComicGenPipeline._register_asset_variant_media(image_variants, owner_profile_id)
+        self._register_asset_variant_media(image_variants, owner_profile_id)
         for variant in video_variants:
             if getattr(variant, "media_id", None):
                 continue
@@ -1902,16 +1911,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 kind="asset_video_variant",
                 display_name=f"asset-video-{getattr(variant, 'id', 'unknown')}",
                 metadata={"variant_id": getattr(variant, "id", "")},
+                output_root=self.output_root,
             )
 
-    @staticmethod
-    def _register_storyboard_frame_media(frame: StoryboardFrame, owner_profile_id: Optional[str]) -> None:
+    def _register_storyboard_frame_media(self, frame: StoryboardFrame, owner_profile_id: Optional[str]) -> None:
         """Attach owner-scoped media IDs to generated/uploaded storyboard variants."""
         if not owner_profile_id:
             return
         image_asset = getattr(frame, "rendered_image_asset", None)
         variants = getattr(image_asset, "variants", []) if image_asset else []
-        ComicGenPipeline._register_asset_variant_media(variants, owner_profile_id)
+        self._register_asset_variant_media(variants, owner_profile_id)
 
     def migrate_legacy_storyboard_media(self, script: Script) -> None:
         """Move legacy shared-path frame images behind the owner's media route."""
@@ -1930,10 +1939,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     if not old_key or not old_key.startswith("storyboard/"):
                         continue
                     try:
-                        source = _safe_resolve_path("output", old_key)
+                        source = self._local_output_path(old_key)
                     except ValueError:
                         continue
-                    legacy_root = os.path.realpath(os.path.join("output", "storyboard"))
+                    legacy_root = os.path.realpath(os.path.join(self.output_root, "storyboard"))
                     if (not source.startswith(legacy_root + os.sep)
                             or not os.path.basename(source).startswith(f"{frame.id}_")
                             or not os.path.isfile(source)):
@@ -1942,7 +1951,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     os.makedirs(owner_dir, exist_ok=True)
                     if not os.path.exists(destination):
                         shutil.copy2(source, destination)
-                    new_key = os.path.relpath(destination, "output")
+                    new_key = os.path.relpath(destination, self.output_root)
                     variant.url = new_key
                     variant.storage_key = new_key
                     variant.media_id = None
@@ -2058,8 +2067,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         append_container(global_pool, "global", None, None)
         return AssetReferenceIndex(project_id="library", assets=entries)
 
-    @staticmethod
-    def _resolve_stored_reference_value(value: str, owner_profile_id: Optional[str]) -> str:
+    def _resolve_stored_reference_value(self, value: str, owner_profile_id: Optional[str]) -> str:
         """Resolve a persisted variant URL/path for a provider adapter.
 
         HTTP URLs and OSS object keys are already provider-compatible. Local
@@ -2076,19 +2084,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not owner_profile_id:
                 raise InvalidAssetReference("reference media requires an authenticated owner")
             try:
-                return resolve_studio_reference(
+                stored = resolve_studio_reference(
                     value if value.startswith("/") else f"/{value}",
                     owner_profile_id,
+                    output_root=self.output_root,
                 )
+                return self._local_output_path(stored)
             except Exception as exc:
                 raise InvalidAssetReference("reference variant media is invalid or expired") from exc
 
-        candidate = os.path.realpath(
-            value if value.startswith("output/") or os.path.isabs(value)
-            else os.path.join("output", value)
-        )
-        output_root = os.path.realpath("output")
-        if not candidate.startswith(output_root + os.sep) or not os.path.isfile(candidate):
+        try:
+            candidate = self._local_output_path(value)
+        except ValueError as exc:
+            raise InvalidAssetReference("reference variant media is missing") from exc
+        if not os.path.isfile(candidate):
             raise InvalidAssetReference("reference variant media is missing")
         return candidate
 
@@ -6045,23 +6054,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if not url:
                     continue
                 if url.startswith("/studio/media/"):
-                    url = resolve_studio_reference(url, script.owner_profile_id)
+                    url = resolve_studio_reference(url, script.owner_profile_id, output_root=self.output_root)
                 if is_object_key(url) or url.startswith("http"):
                     ref_image_paths.append(url)
                 else:
-                    potential_path = _safe_resolve_path("output", url)
+                    potential_path = self._local_output_path(url)
                     if os.path.exists(potential_path):
                         ref_image_paths.append(potential_path)
             
             # Also handle single path if provided (legacy support)
             if ref_image_url and ref_image_url not in ref_image_urls:
                 if ref_image_url.startswith("/studio/media/"):
-                    ref_image_url = resolve_studio_reference(ref_image_url, script.owner_profile_id)
+                    ref_image_url = resolve_studio_reference(ref_image_url, script.owner_profile_id, output_root=self.output_root)
                 if is_object_key(ref_image_url) or ref_image_url.startswith("http"):
                     if ref_image_url not in ref_image_paths:
                         ref_image_paths.append(ref_image_url)
                 else:
-                    potential_path = _safe_resolve_path("output", ref_image_url)
+                    potential_path = self._local_output_path(ref_image_url)
                     if os.path.exists(potential_path):
                         if potential_path not in ref_image_paths:
                             ref_image_paths.append(potential_path)
@@ -6206,9 +6215,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Wan 3.0 text-to-video cannot accept images")
             if len(reference_image_urls or []) + bool(image_url) > 10:
                 raise ValueError("Wan 3.0 accepts at most 10 reference images")
-            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
+            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in reference_image_urls or []]
             if image_url:
-                image_url = resolve_studio_reference(image_url, script.owner_profile_id)
+                image_url = resolve_studio_reference(image_url, script.owner_profile_id, output_root=self.output_root)
         if is_uniart_video:
             references = (reference_image_urls or []) + (reference_video_urls or [])
             if generation_mode == "r2v" and not references and not audio_url:
@@ -6227,12 +6236,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Text-to-video cannot accept media references")
             if "minimax-h3" in model.lower() and len(reference_image_urls or []) > 9:
                 raise ValueError("MiniMax H3 accepts at most 9 reference images per video request")
-            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_image_urls or []]
-            reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in reference_video_urls or []]
+            reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in reference_image_urls or []]
+            reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in reference_video_urls or []]
             if image_url:
-                image_url = resolve_studio_reference(image_url, script.owner_profile_id)
+                image_url = resolve_studio_reference(image_url, script.owner_profile_id, output_root=self.output_root)
             if audio_url:
-                audio_url = resolve_studio_reference(audio_url, script.owner_profile_id)
+                audio_url = resolve_studio_reference(audio_url, script.owner_profile_id, output_root=self.output_root)
 
         is_r2v_model = isinstance(model, str) and model.endswith("-r2v")
         if is_r2v_model:
@@ -6256,7 +6265,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Resolve source path
             if image_url and not image_url.startswith("http"):
                 # Assume relative to output dir
-                src_path = _safe_resolve_path("output", image_url)
+                src_path = self._local_output_path(image_url)
                 if os.path.exists(src_path) and os.path.isfile(src_path):
                     # Create snapshot dir
                     snapshot_dir = self._owner_output_dir(script, "video_inputs")
@@ -6273,7 +6282,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     shutil.copy2(src_path, snapshot_path)
                     
                     # Update URL to relative path
-                    snapshot_url = os.path.relpath(snapshot_path, "output")
+                    snapshot_url = os.path.relpath(snapshot_path, self.output_root)
         except Exception as e:
             logger.error(f"Failed to snapshot input image: {e}")
             # Fallback to original URL
@@ -6385,12 +6394,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         elif video_path.startswith("/"):
             # Legacy absolute path: must stay inside the managed output/ tree
             resolved = os.path.realpath(video_path)
-            out_base = os.path.realpath("output")
+            out_base = os.path.realpath(self.output_root)
             if not resolved.startswith(out_base + os.sep):
                 raise ValueError(f"Video path outside managed output directory: {video_task.video_url}")
             video_path = resolved
         else:
-            video_path = _safe_resolve_path("output", video_path)
+            video_path = self._local_output_path(video_path)
 
         if not os.path.exists(video_path):
             raise ValueError(f"Video file not found: {video_path}")
@@ -6429,8 +6438,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Upload to OSS if configured
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
-        oss_url = uploader.upload_image(output_path)
-        image_url = oss_url if oss_url else os.path.relpath(output_path, "output")
+        oss_url = uploader.upload_image(output_path, output_root=self.output_root)
+        image_url = oss_url if oss_url else os.path.relpath(output_path, self.output_root)
 
         # Create new variant
         variant = ImageVariant(
@@ -6461,7 +6470,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .models import ImageVariant, ImageAsset
 
         # Validate that image_path is inside the output directory
-        safe_path = _safe_resolve_path("output", os.path.relpath(image_path, "output") if os.path.isabs(image_path) else image_path)
+        safe_path = self._local_output_path(os.path.relpath(image_path, self.output_root) if os.path.isabs(image_path) else image_path)
 
         script = self.get_script(script_id)
         if not script:
@@ -6474,8 +6483,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Upload to OSS if configured
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
-        oss_url = uploader.upload_image(safe_path)
-        image_url = oss_url if oss_url else os.path.relpath(safe_path, "output")
+        oss_url = uploader.upload_image(safe_path, output_root=self.output_root)
+        image_url = oss_url if oss_url else os.path.relpath(safe_path, self.output_root)
 
         # Create new variant
         variant = ImageVariant(
@@ -6507,7 +6516,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         # If it's a local file path (relative to output)
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
+            local_path = self._local_output_path(url)
             if os.path.exists(local_path):
                 return local_path
                 
@@ -6671,7 +6680,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Case 1: Try as local path first
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
+            local_path = self._local_output_path(url)
             if os.path.exists(local_path):
                 return local_path
             # Not found locally — might be an OSS object key
@@ -6689,7 +6698,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Case 2 & 3: Download from HTTP URL
         import hashlib
         url_hash = hashlib.md5(url.split("?")[0].encode()).hexdigest()[:12]
-        cache_dir = os.path.join("output", "cache")
+        cache_dir = os.path.join(self.output_root, "cache")
         os.makedirs(cache_dir, exist_ok=True)
         cached = os.path.join(cache_dir, f"{url_hash}{suffix}")
         if os.path.exists(cached) and os.path.getsize(cached) > 0:
@@ -6792,7 +6801,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if video source changed.
         """
         if frame.bg_audio_url and frame.bg_audio_source_video == video_url:
-            cached_path = _safe_resolve_path("output", frame.bg_audio_url)
+            cached_path = self._local_output_path(frame.bg_audio_url)
             if os.path.exists(cached_path):
                 logger.info(f"[DUB] Background audio cache hit: {frame.bg_audio_url}")
                 return cached_path
@@ -6808,7 +6817,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 return None
 
             cache_filename = f"bg_{frame.id}.wav"
-            cache_path = _safe_resolve_path(os.path.join("output", "audio"), cache_filename)
+            cache_path = _safe_resolve_path(os.path.join(self.output_root, "audio"), cache_filename)
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             shutil.copy2(bg_path, cache_path)
 
@@ -6859,7 +6868,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Delete old preview (lazy cleanup)
         if frame.preview_video_url:
-            old_preview = _safe_resolve_path("output", frame.preview_video_url)
+            old_preview = self._local_output_path(frame.preview_video_url)
             if os.path.exists(old_preview):
                 try:
                     os.remove(old_preview)
@@ -6939,7 +6948,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not os.path.exists(output_path):
             raise RuntimeError("Preview video was not created")
 
-        frame.preview_video_url = os.path.relpath(output_path, "output")
+        frame.preview_video_url = os.path.relpath(output_path, self.output_root)
         frame.dubbed_video_task_id = video_task_id
         frame.dub_offset_ms = offset_ms
         self._save_data()
@@ -6963,7 +6972,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Delete old dubbed file
         if frame.dubbed_video_url:
-            old_path = _safe_resolve_path("output", frame.dubbed_video_url)
+            old_path = self._local_output_path(frame.dubbed_video_url)
             if os.path.exists(old_path):
                 try:
                     os.remove(old_path)
@@ -6991,7 +7000,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         for url_field in ("dubbed_video_url", "preview_video_url"):
             url = getattr(frame, url_field)
             if url:
-                path = _safe_resolve_path("output", url)
+                path = self._local_output_path(url)
                 if os.path.exists(path):
                     try:
                         os.remove(path)
@@ -7049,7 +7058,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
             # Prefer dubbed version (TTS audio already overlaid with lip-sync offset)
             if frame.dubbed_video_url:
-                dubbed_path = _safe_resolve_path("output", frame.dubbed_video_url)
+                dubbed_path = self._local_output_path(frame.dubbed_video_url)
                 if os.path.exists(dubbed_path):
                     logger.debug(f"[MERGE]   -> Using dubbed video: {frame.dubbed_video_url}")
                     video_paths.append(frame.dubbed_video_url)
@@ -7082,14 +7091,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             
         # Create file list for ffmpeg
         # script.id comes from the store (== script_id), keeping ffmpeg args taint-free.
-        list_path = _safe_resolve_path("output", f"merge_list_{script.id}.txt")
+        list_path = self._local_output_path(f"merge_list_{script.id}.txt")
         abs_video_paths = []
 
         with open(list_path, "w") as f:
             for path in video_paths:
                 # Resolve to absolute path
                 if not path.startswith("http"):
-                    abs_path = _safe_resolve_path("output", path)
+                    abs_path = self._local_output_path(path)
                     if os.path.exists(abs_path):
                         f.write(f"file '{abs_path}'\n")
                         abs_video_paths.append(abs_path)
@@ -7145,7 +7154,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             
             # Persist the owner-scoped path; API responses convert it into a
             # short-lived signed media URL for the browser.
-            script.merged_video_url = os.path.relpath(output_path, "output")
+            script.merged_video_url = os.path.relpath(output_path, self.output_root)
 
             # Verify file was created and log details
             if os.path.exists(output_path):
@@ -7215,7 +7224,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         bgm_rel = (script.bgm_url or "").strip()
         if not bgm_rel:
             return None
-        bgm_abs = _safe_resolve_path("output", bgm_rel)
+        bgm_abs = self._local_output_path(bgm_rel)
         if not os.path.exists(bgm_abs):
             logger.info(f"[MERGE/BGM] preset file missing — {bgm_abs}; skipping mux")
             return None
@@ -7430,12 +7439,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             is_nsfw_wan = task.model in WAN_IDS
             is_uniart_task = (task.model or "").startswith(("uniart/minimax-h3-", "uniart/seedance-"))
             if is_uniart_task and not (task.provider_name == "uniart" and task.provider_task_id):
-                task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in task.reference_image_urls]
-                task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id) for ref in task.reference_video_urls]
+                task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_image_urls]
+                task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_video_urls]
                 if task.image_url:
-                    task.image_url = resolve_studio_reference(task.image_url, script.owner_profile_id)
+                    task.image_url = resolve_studio_reference(task.image_url, script.owner_profile_id, output_root=self.output_root)
                 if task.audio_url:
-                    task.audio_url = resolve_studio_reference(task.audio_url, script.owner_profile_id)
+                    task.audio_url = resolve_studio_reference(task.audio_url, script.owner_profile_id, output_root=self.output_root)
             
             # Download image to temp file
             img_path = None
@@ -7644,7 +7653,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     on_provider_ids=_capture_provider_ids,
                 )
             
-            task.video_url = os.path.relpath(output_path, "output")
+            task.video_url = os.path.relpath(output_path, self.output_root)
             task.status = "completed"
             task.error = None
             
@@ -7731,7 +7740,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Try to delete the video file
         try:
             if video_task_to_delete and video_task_to_delete.video_url:
-                video_path = os.path.join("output", video_task_to_delete.video_url)
+                video_path = os.path.join(self.output_root, video_task_to_delete.video_url)
                 if os.path.exists(video_path):
                     os.remove(video_path)
                     logger.info(f"Deleted video file: {video_path}")
@@ -8569,10 +8578,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 relative = resolve_studio_reference(
                     source_ref,
                     source_project.owner_profile_id,
+                    output_root=self.output_root,
                 )
-                source_path = _safe_resolve_path("output", relative)
+                source_path = self._local_output_path(relative)
             else:
-                source_path = _safe_resolve_path("output", source_ref)
+                source_path = self._local_output_path(source_ref)
         except (OSError, ValueError) as exc:
             raise AssemblyPlanValidationError(
                 f"clip {clip.id} source is outside local managed output"
@@ -8814,7 +8824,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "assembly plan changed while rendering",
                     current_revision=(current_plan.revision if current_plan else None),
                 )
-            current.merged_video_url = os.path.relpath(output_path, "output")
+            current.merged_video_url = os.path.relpath(output_path, self.output_root)
             current.updated_at = time.time()
             if scope == "project":
                 self._save_data()
@@ -9754,7 +9764,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         voice_id_str = str(voice_id)
 
-        cache_dir = "output/cache/voice_design_preview"
+        cache_dir = os.path.join(self.output_root, "cache", "voice_design_preview")
         os.makedirs(cache_dir, exist_ok=True)
         cache_key = hashlib.md5(f"{voice_id_str}|{preview_text}".encode("utf-8")).hexdigest()
         cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
