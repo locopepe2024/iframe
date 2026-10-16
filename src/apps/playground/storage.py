@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from .models import PlaygroundDraft, PlaygroundGeneration, PlaygroundSession, PlaygroundTemplate
 from ...utils import get_logger
+from ...utils.managed_media_root import ManagedMediaRoot
 
 logger = get_logger(__name__)
 
@@ -28,12 +29,14 @@ class PlaygroundStorage:
         history_path: Optional[str] = None,
         templates_path: Optional[str] = None,
         sessions_path: Optional[str] = None,
+        output_root: str = "output",
     ):
         if not owner_user_id or not owner_profile_id:
             raise ValueError("PlaygroundStorage requires an authenticated owner")
         self.owner_user_id = owner_user_id
         self.owner_profile_id = owner_profile_id
-        owner_dir = self._owner_dir(owner_profile_id)
+        self.media_root = output_root
+        owner_dir = self._owner_dir(owner_profile_id, output_root=output_root)
         self.history_path = history_path or os.path.join(owner_dir, "playground_history.json")
         self.templates_path = templates_path or os.path.join(owner_dir, "playground_templates.json")
         self.sessions_path = sessions_path or os.path.join(owner_dir, "playground_sessions.json")
@@ -46,9 +49,11 @@ class PlaygroundStorage:
         self._load()
 
     @staticmethod
-    def _owner_dir(owner_profile_id: str) -> str:
+    def _owner_dir(owner_profile_id: str, *, output_root: str = "output") -> str:
         digest = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()[:24]
-        return os.path.join("output", "users", digest)
+        path = os.path.join(output_root, "users", digest)
+        ManagedMediaRoot(output_root).resolve(os.path.abspath(path))
+        return path
 
     # ------------------------------------------------------------------
     # Internal persistence
@@ -159,8 +164,8 @@ class PlaygroundStorage:
     def resolve_media_reference(self, value: str) -> str:
         if value.startswith(("/studio/media/", "/studio/owned-media/", "/studio/owned-playground-media/")):
             from ..studio_access import resolve_studio_reference
-            stored = resolve_studio_reference(value, self.owner_profile_id)
-            return os.path.join("output", stored)
+            stored = resolve_studio_reference(value, self.owner_profile_id, output_root=self.media_root)
+            return os.path.join(self.media_root, stored)
         if value.startswith(("/playground/media/", "/playground/input-media/")):
             value = urlsplit(value).path
         prefix = "/playground/media/"
@@ -171,6 +176,7 @@ class PlaygroundStorage:
                 if not filename or os.path.basename(filename) != filename:
                     raise ValueError("Invalid playground input media reference")
                 path = os.path.join(self.output_dir, "uploads", filename)
+                ManagedMediaRoot(self.media_root).resolve(os.path.abspath(path))
                 if not os.path.isfile(path):
                     raise FileNotFoundError("Playground input media not found")
                 return path

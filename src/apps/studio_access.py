@@ -20,6 +20,7 @@ from urllib.parse import quote, urlsplit, parse_qs, unquote
 from fastapi import HTTPException
 
 from .identity import UserContext
+from ..utils.managed_media_root import ManagedMediaRoot
 
 
 _studio_user: ContextVar[Optional[UserContext]] = ContextVar(
@@ -94,8 +95,10 @@ def studio_owner_key(owner_profile_id: str) -> str:
     return hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()[:24]
 
 
-def studio_owner_dir(owner_profile_id: str) -> str:
-    return os.path.join("output", "users", studio_owner_key(owner_profile_id), "studio")
+def studio_owner_dir(owner_profile_id: str, *, output_root: str = "output") -> str:
+    path = os.path.join(output_root, "users", studio_owner_key(owner_profile_id), "studio")
+    ManagedMediaRoot(output_root).resolve(os.path.abspath(path))
+    return path
 
 
 STUDIO_MEDIA_CATEGORIES = frozenset({
@@ -103,13 +106,15 @@ STUDIO_MEDIA_CATEGORIES = frozenset({
 })
 
 
-def studio_media_dir(owner_profile_id: str, category: str) -> str:
+def studio_media_dir(owner_profile_id: str, category: str, *, output_root: str = "output") -> str:
     """Resolve an authenticated Studio material category under its owner."""
     if not owner_profile_id:
         raise ValueError("Studio media write requires an owner profile")
     if category not in STUDIO_MEDIA_CATEGORIES:
         raise ValueError(f"Unsupported Studio media category: {category}")
-    return os.path.join(studio_owner_dir(owner_profile_id), category)
+    path = os.path.join(studio_owner_dir(owner_profile_id, output_root=output_root), category)
+    ManagedMediaRoot(output_root).resolve(os.path.abspath(path))
+    return path
 
 
 def _studio_media_secret() -> str:
@@ -124,7 +129,7 @@ def _studio_media_signature(owner_key: str, relative_path: str, expires: int) ->
     return hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def signed_provider_media_url(path: str, ttl_seconds: int | None = None) -> str:
+def signed_provider_media_url(path: str, ttl_seconds: int | None = None, *, output_root: str = "output") -> str:
     """Expose a managed local media file to an upstream provider briefly."""
     from ..utils.provider_media_config import provider_media_origin, provider_media_ttl_seconds
     base = provider_media_origin()
@@ -132,8 +137,12 @@ def signed_provider_media_url(path: str, ttl_seconds: int | None = None) -> str:
         raise ValueError("PROVIDER_MEDIA_PUBLIC_BASE_URL must be configured (legacy: UNIART_MEDIA_BASE_URL)")
     if ttl_seconds is None:
         ttl_seconds = provider_media_ttl_seconds()
-    root = os.path.realpath("output/users")
-    candidate = os.path.realpath(path)
+    root = os.path.realpath(os.path.join(output_root, "users"))
+    try:
+        locator = os.path.abspath(path) if path.startswith(str(output_root) + os.sep) else path
+        candidate = str(ManagedMediaRoot(output_root).resolve(locator))
+    except ValueError as exc:
+        raise ValueError("Provider media must be an existing owner-scoped file") from exc
     if not candidate.startswith(root + os.sep) or not os.path.isfile(candidate):
         raise ValueError("Provider media must be an existing owner-scoped file")
     relative = os.path.relpath(candidate, root).replace(os.sep, "/")
@@ -148,13 +157,17 @@ def signed_provider_media_url(path: str, ttl_seconds: int | None = None) -> str:
     return f"{base}/provider/media/{owner_key}/{quote(owner_path)}?expires={expires}&signature={signature}"
 
 
-def verify_provider_media(owner_key: str, relative_path: str, expires: int, signature: str) -> str:
+def verify_provider_media(owner_key: str, relative_path: str, expires: int, signature: str, *, output_root: str = "output") -> str:
     if expires < int(time.time()) or not signature:
         raise HTTPException(status_code=401, detail="Media URL expired or unsigned")
     if len(owner_key) != 24 or any(c not in "0123456789abcdef" for c in owner_key):
         raise HTTPException(status_code=404, detail="Media not found")
-    root = os.path.realpath(os.path.join("output", "users", owner_key))
+    root = os.path.realpath(os.path.join(output_root, "users", owner_key))
     candidate = os.path.realpath(os.path.join(root, relative_path))
+    try:
+        ManagedMediaRoot(output_root).resolve(candidate)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
     if not candidate.startswith(root + os.sep) or not os.path.isfile(candidate):
         raise HTTPException(status_code=404, detail="Media not found")
     owner_path = os.path.relpath(candidate, root).replace(os.sep, "/")
@@ -168,7 +181,7 @@ def verify_provider_media(owner_key: str, relative_path: str, expires: int, sign
     return candidate
 
 
-def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int = 3600) -> str:
+def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int = 3600, *, output_root: str = "output") -> str:
     owner_key = studio_owner_key(owner_profile_id)
     # Older workbench saves persisted a signed projection rather than a key.
     # Revalidate its owner and HMAC before issuing a fresh display URL.
@@ -176,7 +189,7 @@ def studio_media_url(owner_profile_id: str, stored_path: str, ttl_seconds: int =
         stored_path.startswith(("http://", "https://")) and "/studio/media/" in stored_path
     ):
         try:
-            stored_path = resolve_studio_reference(stored_path, owner_profile_id)
+            stored_path = resolve_studio_reference(stored_path, owner_profile_id, output_root=output_root)
         except ValueError:
             return stored_path
     normalized = stored_path.replace("\\", "/").lstrip("/")
@@ -221,6 +234,7 @@ def studio_media_preview_url(
 def _local_studio_path_for_object_key(
     stored_path: str,
     owner_profile_id: str,
+    *, output_root: str = "output",
 ) -> str:
     """Map a legacy object key to the owner's local Studio copy when present.
 
@@ -248,11 +262,11 @@ def _local_studio_path_for_object_key(
         return stored_path
 
     relative = normalized[len(prefix) + 1 :]
-    owner_root = os.path.realpath(studio_owner_dir(owner_profile_id))
+    owner_root = os.path.realpath(studio_owner_dir(owner_profile_id, output_root=output_root))
     candidate = os.path.realpath(os.path.join(owner_root, relative))
     if not candidate.startswith(owner_root + os.sep) or not os.path.isfile(candidate):
         return stored_path
-    return os.path.relpath(candidate, "output")
+    return os.path.relpath(candidate, output_root)
 
 
 def verify_studio_media(
@@ -262,6 +276,7 @@ def verify_studio_media(
     signature: str,
     *,
     allow_expired: bool = False,
+    output_root: str = "output",
 ) -> str:
     if len(owner_key) != 24 or any(char not in "0123456789abcdef" for char in owner_key):
         raise HTTPException(status_code=404, detail="Media not found")
@@ -273,8 +288,12 @@ def verify_studio_media(
     expected = _studio_media_signature(owner_key, normalized, expires)
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid media signature")
-    root = os.path.realpath(os.path.join("output", "users", owner_key, "studio"))
+    root = os.path.realpath(os.path.join(output_root, "users", owner_key, "studio"))
     candidate = os.path.realpath(os.path.join(root, normalized))
+    try:
+        ManagedMediaRoot(output_root).resolve(candidate)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
     if not candidate.startswith(root + os.sep):
         raise HTTPException(status_code=404, detail="Media not found")
     return candidate
@@ -286,6 +305,7 @@ def verify_studio_media_preview(
     max_edge: int,
     expires: int,
     signature: str,
+    *, output_root: str = "output",
 ) -> str:
     if max_edge not in STUDIO_MEDIA_PREVIEW_SIZES:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -300,14 +320,18 @@ def verify_studio_media_preview(
     expected = hmac.new(_studio_media_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid media signature")
-    root = os.path.realpath(os.path.join("output", "users", owner_key, "studio"))
+    root = os.path.realpath(os.path.join(output_root, "users", owner_key, "studio"))
     candidate = os.path.realpath(os.path.join(root, normalized))
+    try:
+        ManagedMediaRoot(output_root).resolve(candidate)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
     if not candidate.startswith(root + os.sep):
         raise HTTPException(status_code=404, detail="Media not found")
     return candidate
 
 
-def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
+def resolve_studio_reference(value: str, owner_profile_id: str, *, output_root: str = "output") -> str:
     """Resolve a submitted reference before any local file can reach a provider."""
     if not owner_profile_id:
         raise ValueError("Media reference requires an authenticated owner")
@@ -331,6 +355,7 @@ def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
                 int(query["expires"][0]),
                 query["signature"][0],
                 allow_expired=True,
+                output_root=output_root,
             )
         except (KeyError, ValueError, HTTPException) as exc:
             raise ValueError("Invalid or expired Studio media reference") from exc
@@ -340,7 +365,7 @@ def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
         parts = path.removeprefix(prefix).split("/", 1)
         if len(parts) != 2 or parts[0] != owner_key:
             raise ValueError("Media reference belongs to another owner")
-        root = os.path.realpath(os.path.join("output", "users", owner_key, "playground" if playground else "studio"))
+        root = os.path.realpath(os.path.join(output_root, "users", owner_key, "playground" if playground else "studio"))
         candidate = os.path.realpath(os.path.join(root, parts[1]))
         if not candidate.startswith(root + os.sep):
             raise ValueError("Invalid Studio media reference")
@@ -350,31 +375,35 @@ def resolve_studio_reference(value: str, owner_profile_id: str) -> str:
         relative = path.removeprefix("/files/")
         if relative.startswith("output/"):
             relative = relative.removeprefix("output/")
-        candidate = os.path.realpath(os.path.join("output", relative))
+        candidate = os.path.realpath(os.path.join(output_root, relative))
     elif parsed.scheme in ("http", "https") and parsed.netloc and not parsed.username and not parsed.password:
         return value
     elif parsed.scheme or parsed.netloc:
         raise ValueError("Unsupported media reference")
     else:
-        candidate = os.path.realpath(value if value.startswith("output/") or os.path.isabs(value)
-                                     else os.path.join("output", value))
-    root = os.path.realpath(os.path.join("output", "users", owner_key))
+        try:
+            locator = os.path.abspath(value) if value.startswith(str(output_root) + os.sep) else value
+            candidate = str(ManagedMediaRoot(output_root).resolve(locator))
+        except ValueError as exc:
+            raise ValueError("Media reference belongs to another owner") from exc
+    root = os.path.realpath(os.path.join(output_root, "users", owner_key))
     if not candidate.startswith(root + os.sep):
         raise ValueError("Media reference belongs to another owner")
+    ManagedMediaRoot(output_root).resolve(candidate)
     if not os.path.isfile(candidate):
         raise ValueError("Media reference file not found")
-    return os.path.relpath(candidate, "output")
+    return os.path.relpath(candidate, output_root)
 
 
-def sign_studio_media_paths(value: Any, owner_profile_id: str) -> Any:
+def sign_studio_media_paths(value: Any, owner_profile_id: str, *, output_root: str = "output") -> Any:
     if isinstance(value, str):
-        local_path = _local_studio_path_for_object_key(value, owner_profile_id)
-        return studio_media_url(owner_profile_id, local_path)
+        local_path = _local_studio_path_for_object_key(value, owner_profile_id, output_root=output_root)
+        return studio_media_url(owner_profile_id, local_path, output_root=output_root)
     if isinstance(value, list):
-        return [sign_studio_media_paths(item, owner_profile_id) for item in value]
+        return [sign_studio_media_paths(item, owner_profile_id, output_root=output_root) for item in value]
     if isinstance(value, dict):
         return {
-            key: item if key == "storage_key" else sign_studio_media_paths(item, owner_profile_id)
+            key: item if key == "storage_key" else sign_studio_media_paths(item, owner_profile_id, output_root=output_root)
             for key, item in value.items()
         }
     return value

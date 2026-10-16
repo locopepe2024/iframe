@@ -10,19 +10,23 @@ import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+from ..utils.managed_media_root import ManagedMediaRoot
 
-def _registry_path(owner_profile_id: str) -> str:
+
+def _registry_path(owner_profile_id: str, output_root: str = "output") -> str:
     digest = hashlib.sha256(owner_profile_id.encode("utf-8")).hexdigest()[:24]
-    return os.path.join("output", "users", digest, "media-registry.sqlite3")
+    path = os.path.join(output_root, "users", digest, "media-registry.sqlite3")
+    ManagedMediaRoot(output_root).resolve(os.path.abspath(path))
+    return path
 
 
 def register_media(owner_profile_id: str, storage_key: str, *, kind: str,
                    display_name: str = "", sha256: str = "", media_id: str | None = None,
-                   metadata: dict | None = None) -> str:
+                   metadata: dict | None = None, output_root: str = "output") -> str:
     """Register one owner-owned material idempotently by storage key."""
     if not owner_profile_id or not storage_key or storage_key.startswith(("http://", "https://")):
         raise ValueError("media registry requires a durable storage key")
-    path = _registry_path(owner_profile_id)
+    path = _registry_path(owner_profile_id, output_root)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     media_id = media_id or uuid4().hex
     with closing(sqlite3.connect(path, timeout=10)) as db:
@@ -41,8 +45,8 @@ def register_media(owner_profile_id: str, storage_key: str, *, kind: str,
     return media_id
 
 
-def get_media(owner_profile_id: str, media_id: str) -> dict | None:
-    path = _registry_path(owner_profile_id)
+def get_media(owner_profile_id: str, media_id: str, *, output_root: str = "output") -> dict | None:
+    path = _registry_path(owner_profile_id, output_root)
     if not os.path.isfile(path):
         return None
     with closing(sqlite3.connect(path, timeout=10)) as db:
@@ -53,9 +57,9 @@ def get_media(owner_profile_id: str, media_id: str) -> dict | None:
 
 
 def list_media(owner_profile_id: str, *, display_name: str | None = None,
-               kind: str | None = None) -> list[dict]:
+               kind: str | None = None, output_root: str = "output") -> list[dict]:
     """List owner-owned media mappings for application-level name lookup."""
-    path = _registry_path(owner_profile_id)
+    path = _registry_path(owner_profile_id, output_root)
     if not os.path.isfile(path):
         return []
     clauses = []
