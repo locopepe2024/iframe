@@ -39,7 +39,7 @@ assembly contract/real-FFmpeg tests over default and custom roots so render,
 source ordering and source audio retain their behavior. Run backend CI selection
 and relevant source-local tests. No local Go or paid model calls.
 
-Local verification: backend CI selection passed 1346 tests (5 skipped,
+Local verification after integration with main fd72a478: backend CI selection passed 1357 tests (5 skipped,
 2 deselected); affected source-local index/owner migration and new root tests
 passed 17 tests. The focused assembly/path/routing suite passed 49 tests,
 including real FFmpeg source ordering and source-audio checks under both roots.
