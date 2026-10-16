@@ -12,7 +12,7 @@
   "groups": {
     "A": {"task_label": "reference generation", "prompt_file": "s09-label-ab-reference-generation.md", "prompt_sha256": "d58a95f6a7c7a94216b3520c6c803729502ce033fa8c55fb07fbfa40e4d6acda", "provider_mode_expected": "reference2video"},
     "B": {"task_label": "video editing", "prompt_file": "s09-label-ab-video-editing.md", "prompt_sha256": "405a3128cd523a2dc0e0f0359e2f129fb5b01f4857d4f90e269c6d9e122d01b8", "provider_mode_expected": "reference2video"},
-    "B2": {"task_label": "video editing + single-spear geometry correction", "prompt_file": "qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md", "prompt_sha256": "27647e517c98139e96d5c9d613d9cf7588393e982787f7dc2dde758fda468739", "provider_mode_expected": "reference2video", "status": "prepared_not_submitted"}
+    "B2": {"task_label": "video editing + single-spear geometry correction", "prompt_file": "qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md", "prompt_sha256": "27647e517c98139e96d5c9d613d9cf7588393e982787f7dc2dde758fda468739", "provider_mode_expected": "reference2video", "status": "completed_invalid_source_geometry", "task_id": "task_n6Rrfh2cSce0A6LzAr76YtL242yA2LNE", "note": "Historical prompt incorrectly places red tassel on the blunt end; do not reuse"}
   },
   "submission": "not submitted; paid generation requires explicit cost acceptance"
 }

@@ -55,14 +55,14 @@
 
 ## Prop correction for a future controlled trial
 
-保留 B 的任务语义时，下一份候选 prompt 应增加可见且可验收的几何约束：`one continuous shaft; exactly one metal spearhead at the active tip; the opposite end is a blunt shaft end with the source red tassel; never create a second spearhead, mirrored tip, duplicate shaft, or two simultaneous weapons.` 这只是待验证的最小修订，不代表已经提交或证明有效。
+**勘误（2026-10-17）：下述 B2 候选的端部定义写反，已撤回作为有效几何修订。** 源帧 65、69、75、87 放大复核显示红缨跟随同一活动端，另一端呈素杆；B2 却把红缨写在钝杆端、金属枪尖写在对侧。枪尖金属细节在部分运动帧模糊，后续提示词应只写源帧可确认的“单杆、单红缨端、对侧素杆端”，必要时另以清晰帧核定枪尖形状。
 
-该修订已准备为 [B2 候选 prompt](../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md)，结构检查通过，尚未提交新任务。
+错误端部定义所在的 [B2 历史 prompt](../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md)保留供失败追溯，不再作为下一轮生成输入。
 
 ## B2 follow-up observation
 
 - B2 task `task_n6Rrfh2cSce0A6LzAr76YtL242yA2LNE` completed with output `s09-label-ab-B2-replacement.mp4` (`ab20e12b700621edbe3c017d27b1029c1e076fabe920fcfbe4f66ad6c503b87d`). Media is again 1344x768, 24 fps, 90 frames, approximately 3.750 s.
 - The dense contact sheet no longer shows the same persistent two-metal-tip appearance seen in B; the single shaft is more often visually continuous. However, both ends still have unstable red/tassel-like blobs in parts of the sequence, so spearhead/blunt-end geometry is not approved.
-- B2 largely reverts to the source performer appearance (long dark hair/skirt silhouette) and does not retain B's observed silver-haired, glasses identity improvement. This is a regression in identity, not an overall pass.
+- B2 largely reverts to the source performer appearance (long dark hair/skirt silhouette) and does not retain B's observed silver-haired, glasses identity improvement. This is a regression in identity, not an overall pass. B2 prompt 同时含有与源帧不符的端部约束，不能把身份回退解释为“几何约束与身份竞争”的证据。
 
-**B2 status:** `prop_geometry: needs_correction`; `identity: regression`; `motion_timeline: unscored`. Do not infer that the added geometry wording caused the regression from one sample; the result only shows that this prompt revision did not jointly satisfy identity and prop constraints.
+**B2 status:** `prop_geometry: needs_correction`; `identity: regression`; `motion_timeline: unscored`; `prompt_source_consistency: failed`。单次样本无法判定失败由端部矛盾、提示词长度或模型随机性中的哪一项造成。
