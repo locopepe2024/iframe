@@ -144,6 +144,8 @@ from ..user_config import router as user_config_router
 from ..playground.api import _storage_for as playground_storage_for, router as playground_router
 from ...utils.media_thumbnails import create_media_thumbnail
 from ...utils.asset_previews import create_asset_preview
+from ...utils.cos_previews import create_cos_media_preview
+from ...utils.cos_storage import is_cos_configured
 from ..agent_api import router as agent_router
 from ..knowledge.api import router as knowledge_router
 from ..recreation.api import router as recreation_router
@@ -472,7 +474,7 @@ def get_owned_playground_media(
 def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: UserContext, area: str):
     if owner_key != studio_owner_key(user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Media not found")
-    owner_root = os.path.realpath(os.path.join("output", "users", owner_key, area))
+    owner_root = os.path.realpath(os.path.join(pipeline.output_root, "users", owner_key, area))
     path = os.path.realpath(os.path.join(owner_root, relative_path))
     if not path.startswith(owner_root + os.sep) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
@@ -2308,8 +2310,29 @@ def _owned_media_cover_url(stored: str, owner_profile_id: str, preview: int) -> 
 
     if preview not in PREVIEW_MAX_EDGES:
         raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    uploader = OSSImageUploader()
+    if stored.startswith(("http://", "https://")):
+        stored = managed_object_key_from_url(stored, uploader)
+        if not stored:
+            raise HTTPException(status_code=422, detail="External media is not managed")
     if is_object_key(stored):
-        raise HTTPException(status_code=422, detail="Cloud media cover is unavailable")
+        if not is_cos_configured():
+            raise HTTPException(status_code=422, detail="Cloud media cover is unavailable")
+        owner_root = studio_owner_dir(owner_profile_id, output_root=pipeline.output_root)
+        try:
+            cover = create_cos_media_preview(uploader, stored, owner_root, preview)
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail="COS media preview is unavailable") from exc
+        except Exception as exc:
+            status = exc.get_status_code() if callable(getattr(exc, "get_status_code", None)) else None
+            if status == 404:
+                raise HTTPException(status_code=404, detail="COS media not found") from exc
+            if status == 412:
+                raise HTTPException(status_code=409, detail="COS media changed; retry preview") from exc
+            logger.warning("COS media preview failed: %s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="COS media preview is unavailable") from exc
+        relative = os.path.relpath(cover, owner_root).replace(os.sep, "/")
+        return f"/studio/owned-media/{studio_owner_key(owner_profile_id)}/{relative}"
     try:
         source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
     except InvalidAssetReference as exc:

@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -153,6 +154,139 @@ def test_registered_image_cover_is_owner_scoped_webp(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as foreign:
         studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('b'))
     assert foreign.value.status_code == 404
+
+
+def test_registered_cos_cover_tracks_object_revision_and_reuses_cached_webp(tmp_path, monkeypatch):
+    from io import BytesIO
+    from src.apps.comic_gen import api as studio_api
+
+    monkeypatch.chdir(tmp_path)
+    key = 'lumenx/users/a/studio/images/portrait.png'
+    image = BytesIO()
+    Image.new('RGB', (640, 360), 'red').save(image, format='PNG')
+
+    class Body:
+        def __init__(self, data):
+            self.data = data
+
+        def get_stream(self, chunk_size=1024):
+            yield self.data
+
+        def get_raw_stream(self):
+            return BytesIO(self.data)
+
+    class Client:
+        def __init__(self):
+            self.content = image.getvalue()
+            self.etag = 'revision-one'
+            self.download_count = 0
+
+        def head_object(self, **kwargs):
+            return {'ETag': self.etag, 'Content-Length': str(len(self.content)),
+                    'Last-Modified': 'Fri, 16 Oct 2026 00:00:00 GMT'}
+
+        def get_object(self, **kwargs):
+            assert kwargs['IfMatch'] == self.etag
+            self.download_count += 1
+            return {'Body': Body(self.content)}
+
+    client = Client()
+    uploader = SimpleNamespace(is_configured=True, client=client, bucket_name='bucket')
+    monkeypatch.setattr(studio_api, 'OSSImageUploader', lambda: uploader)
+    monkeypatch.setattr(studio_api, 'is_cos_configured', lambda: True)
+    monkeypatch.setattr(studio_api, 'is_object_key', lambda value: value == key)
+    media_id = register_media('a', key, kind='image', output_root='output')
+
+    first = studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+    same = studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+    assert first.body == same.body
+    assert client.download_count == 1
+    assert 'image/webp' in first.body.decode()
+    cover_name = first.body.decode().split('/.cos-previews/')[1].split('.webp')[0] + '.webp'
+    cover_path = Path('output') / 'users' / studio_owner_key('a') / 'studio' / '.cos-previews' / cover_name
+    with Image.open(cover_path) as cover:
+        assert cover.format == 'WEBP'
+        assert cover.size == (320, 180)
+    client.etag = 'revision-two'
+    updated = BytesIO()
+    Image.new('RGB', (640, 360), 'blue').save(updated, format='PNG')
+    client.content = updated.getvalue()
+    changed = studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+    assert changed.body != first.body
+    assert client.download_count == 2
+    changed_name = changed.body.decode().split('/.cos-previews/')[1].split('.webp')[0] + '.webp'
+    with Image.open(cover_path.with_name(changed_name)) as cover:
+        assert cover.getpixel((100, 100))[2] > 200
+    with pytest.raises(HTTPException) as foreign:
+        studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('b'))
+    assert foreign.value.status_code == 404
+
+    original_head = client.head_object
+    client.head_object = lambda **kwargs: {**original_head(**kwargs), 'Content-Length': str(600 * 1024 * 1024)}
+    client.etag = 'too-large'
+    with pytest.raises(HTTPException) as oversized:
+        studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+    assert oversized.value.status_code == 415
+    assert client.download_count == 2
+
+    class CosError(Exception):
+        def __init__(self, status):
+            self.status = status
+
+        def get_status_code(self):
+            return self.status
+
+    for status, expected in ((404, 404), (412, 409)):
+        client.head_object = lambda **kwargs: (_ for _ in ()).throw(CosError(status))
+        with pytest.raises(HTTPException) as failed:
+            studio_api.get_registered_media_delivery(media_id, preview=320, user=owner('a'))
+        assert failed.value.status_code == expected
+
+
+def test_cos_cover_refuses_owner_cache_symlink(tmp_path):
+    from src.utils.cos_previews import create_cos_media_preview
+
+    root = tmp_path / 'owner'
+    root.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    (root / '.cos-previews').symlink_to(outside, target_is_directory=True)
+    uploader = SimpleNamespace(is_configured=True)
+    with pytest.raises(ValueError, match='outside its owner'):
+        create_cos_media_preview(uploader, 'lumenx/image.png', str(root), 320)
+    assert not list(outside.iterdir())
+
+
+def test_cos_video_cover_decodes_first_frame(tmp_path):
+    from io import BytesIO
+    from src.utils.cos_previews import create_cos_media_preview
+    from src.utils.system_check import get_ffmpeg_path
+
+    ffmpeg = get_ffmpeg_path()
+    if not ffmpeg:
+        pytest.skip('FFmpeg required')
+    source = tmp_path / 'clip.mp4'
+    subprocess.run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
+                    'color=red:s=640x360:d=0.1', '-threads', '1', '-y', str(source)],
+                   check=True, capture_output=True, timeout=15)
+    content = source.read_bytes()
+
+    class Client:
+        def head_object(self, **kwargs):
+            return {'ETag': 'video-revision', 'Content-Length': str(len(content))}
+
+        def get_object(self, **kwargs):
+            assert kwargs['IfMatch'] == 'video-revision'
+            stream = BytesIO(content)
+            return {'Body': SimpleNamespace(
+                get_stream=lambda chunk_size: iter([content]), get_raw_stream=lambda: stream)}
+
+    uploader = SimpleNamespace(is_configured=True, client=Client(), bucket_name='bucket')
+    cover = create_cos_media_preview(uploader, 'lumenx/clip.mp4', str(tmp_path / 'owner'), 320)
+    with Image.open(cover) as image:
+        assert image.format == 'WEBP'
+        assert image.size == (320, 180)
+        assert image.getpixel((100, 100))[0] > 200
 
 
 def test_video_task_delivery_supports_legacy_task_without_media_id(tmp_path, monkeypatch):
