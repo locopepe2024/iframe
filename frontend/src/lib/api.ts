@@ -1961,13 +1961,6 @@ export const api = {
         return res.data;
     },
 
-    saveEnvConfig: async (config: EnvConfigPayload) => {
-        const res = await axios.post(`${API_URL}/config/env`, config, {
-            timeout: 60000, // 60 seconds timeout
-        });
-        return res.data;
-    },
-
     triggerMulerunLogin: async () => {
         const res = await axios.post(`${API_URL}/config/mulerun-login`);
         return res.data;

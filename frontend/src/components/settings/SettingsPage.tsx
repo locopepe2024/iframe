@@ -74,10 +74,6 @@ const DEFAULT_CONFIG: EnvConfig = {
   OSS_BUCKET_NAME: "",
   OSS_ENDPOINT: "",
   OSS_BASE_PATH: "",
-  IFRAME_MEDIA_ROOT: "output",
-  IFRAME_STORAGE_BACKEND: "local",
-  PROVIDER_MEDIA_PUBLIC_BASE_URL: "",
-  PROVIDER_MEDIA_URL_TTL_SECONDS: 1800,
   KLING_PROVIDER_MODE: "dashscope",
   VIDU_PROVIDER_MODE: "dashscope",
   PIXVERSE_PROVIDER_MODE: "dashscope",
@@ -383,24 +379,6 @@ export default function SettingsPage() {
       await refreshUniArtModelCatalog();
       window.dispatchEvent(new Event("lumenx:uniart-skus-changed"));
       toast.success(t("saveSuccess"));
-    } catch {
-      toast.error(t("saveConfigFailed"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Storage settings are startup-only and independent of model credentials.
-  const handleSaveStorage = async () => {
-    setSaving(true);
-    try {
-      const result = await api.saveEnvConfig({
-        IFRAME_STORAGE_BACKEND: config.IFRAME_STORAGE_BACKEND,
-        IFRAME_MEDIA_ROOT: config.IFRAME_MEDIA_ROOT,
-        PROVIDER_MEDIA_PUBLIC_BASE_URL: config.PROVIDER_MEDIA_PUBLIC_BASE_URL,
-        PROVIDER_MEDIA_URL_TTL_SECONDS: config.PROVIDER_MEDIA_URL_TTL_SECONDS,
-      });
-      toast.success(result.restart_required ? "保存成功，重启服务后生效" : t("saveSuccess"));
     } catch {
       toast.error(t("saveConfigFailed"));
     } finally {
@@ -879,32 +857,23 @@ export default function SettingsPage() {
     </Section>
   );
 
-  const renderStorage = () => (
-    <Section id="storage" title="存储" desc="生成结果默认保存到平台托管的腾讯 COS。">
-      <FormRow label="平台存储">
-        <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-4">
-          <div className="text-sm font-semibold text-foreground">腾讯 COS · {config.MANAGED_COS_CONFIGURED ? "已启用" : "等待服务端接入"}</div>
-          <p className="mt-1 text-xs text-text-secondary">私有对象、签名访问、素材额度和结果代理由平台管理，无需填写 COS 密钥。</p>
-        </div>
-      </FormRow>
-      <FormRow label="存储后端" hint="修改目录或后端后需要重启服务才会切换正在运行的 Pipeline。">
-        <div className="space-y-3">
-          <select value={config.IFRAME_STORAGE_BACKEND || "local"} onChange={(e) => handleChange("IFRAME_STORAGE_BACKEND", e.target.value)} className={settingsInputClass}>
-            <option value="local">本地存储</option>
-            <option value="cos">腾讯 COS</option>
-          </select>
-          <input type="text" value={config.IFRAME_MEDIA_ROOT || "output"} onChange={(e) => handleChange("IFRAME_MEDIA_ROOT", e.target.value)} placeholder="本地素材目录，例如 output" className={settingsInputClass} />
-        </div>
-      </FormRow>
-      <FormRow label="供应商素材公网地址" hint="Wan、GreenA、UniArt 读取本地素材时使用的 HTTPS origin。">
-        <div className="space-y-3">
-          <input type="url" value={config.PROVIDER_MEDIA_PUBLIC_BASE_URL || ""} onChange={(e) => handleChange("PROVIDER_MEDIA_PUBLIC_BASE_URL", e.target.value)} placeholder="https://media.example.com" className={settingsInputClass} />
-          <input type="number" min={1} value={config.PROVIDER_MEDIA_URL_TTL_SECONDS || 1800} onChange={(e) => handleChange("PROVIDER_MEDIA_URL_TTL_SECONDS", e.target.value)} placeholder="URL 有效期（秒）" className={settingsInputClass} />
-        </div>
-      </FormRow>
-      <div className="flex justify-end pt-4"><button type="button" onClick={handleSaveStorage} disabled={saving || loading || !online} className="flex items-center gap-2 px-4 py-2 bg-primary text-on-accent text-sm font-medium rounded-lg disabled:opacity-50"><Save size={16} />保存存储设置</button></div>
-    </Section>
-  );
+  const renderStorage = () => {
+    const backend = config.IFRAME_STORAGE_BACKEND;
+    return (
+      <Section id="storage" title="存储" desc="平台存储由服务端配置。">
+        <FormRow label="当前后端">
+          <div className="border border-glass-border p-4" data-testid="storage-runtime-status">
+            <div className="text-sm font-semibold text-foreground">
+              {loading ? "正在读取" : loadError || !backend ? "暂时无法读取" : backend === "cos" ? "腾讯 COS" : "服务器本地存储"}
+            </div>
+            <p className="mt-1 text-xs text-text-secondary">
+              平台统一管理存储；切换由服务端环境配置，重启后生效。
+            </p>
+          </div>
+        </FormRow>
+      </Section>
+    );
+  };
 
   const renderAbout = () => {
     const ff = system?.ffmpeg;
