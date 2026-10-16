@@ -2632,6 +2632,53 @@ class ComicGenPipeline(StudioOwnerMixin):
             "style_prompt": script.style_prompt,
         }
 
+    def storyboard_frame_prompt_projection(self, script: Script, frame: StoryboardFrame) -> str:
+        """Build the current frame's bounded visual prompt projection.
+
+        This is deliberately per-frame: only the episode/project style baseline
+        is shared. Shot-specific lighting, action, camera and continuity data
+        come from this frame and are never copied from an adjacent shot.
+        """
+        style = self.storyboard_visual_style(script)
+        style_config = style.get("style_config") if isinstance(style, dict) else None
+        style_text = ""
+        if isinstance(style_config, dict):
+            style_text = str(
+                style_config.get("positive_prompt")
+                or style_config.get("style_prompt")
+                or ""
+            ).strip()
+        if not style_text:
+            style_text = str(style.get("style_prompt") or style.get("style_preset") or "").strip()
+        if frame.style_prompt_override and frame.style_prompt_override.strip():
+            style_text = frame.style_prompt_override.strip()
+
+        lighting_parts: List[str] = []
+        if frame.lighting:
+            lighting_parts.extend(
+                str(value).strip()
+                for value in (
+                    frame.lighting.direction,
+                    frame.lighting.quality,
+                    frame.lighting.color_temp,
+                    frame.lighting.description,
+                )
+                if value and str(value).strip()
+            )
+        if frame.lighting_override and frame.lighting_override.strip():
+            lighting_parts.append(frame.lighting_override.strip())
+
+        parts = [
+            str(frame.visual_description or frame.action_description or "").strip(),
+            f"Visual style: {style_text}" if style_text else "",
+            f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
+            f"Shot size: {frame.shot_size}" if frame.shot_size else "",
+            f"Camera angle: {frame.camera_angle}" if frame.camera_angle else "",
+            f"Camera movement: {frame.camera_movement}" if frame.camera_movement else "",
+            f"Transition: {frame.transition_hint}" if frame.transition_hint else "",
+        ]
+        return "\n".join(item for item in parts if item)
+
     def director_prompt_context(
         self,
         script: Script,
@@ -5557,6 +5604,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
             
         resolved = self.resolve_project_assets(script)
+        # Seed each pending frame with its own structured visual projection.
+        # StoryboardGenerator still appends the selected character/scene asset
+        # descriptions; it must not invent a project-wide prompt shared by all
+        # shots.
+        for frame in script.frames:
+            if frame.status != GenerationStatus.COMPLETED or not frame.image_url:
+                if not (frame.image_prompt or "").strip():
+                    frame.image_prompt = self.storyboard_frame_prompt_projection(script, frame)
         script = self.storyboard_generator.generate_storyboard(
             script,
             characters=resolved["characters"],

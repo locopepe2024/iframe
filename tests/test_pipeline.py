@@ -202,3 +202,29 @@ class TestGenerateAudio:
             pitch=speaker.voice_pitch,
             volume=speaker.voice_volume,
         )
+
+
+def test_storyboard_prompt_projection_is_per_frame_and_includes_visual_baseline(pipeline, project):
+    project.style_prompt = "cinematic realism"
+    first = project.frames[0]
+    first.action_description = "Alex enters from the left"
+    first.shot_size = "中景"
+    first.lighting_override = "暮秋残阳从画面右侧照入"
+
+    second = StoryboardFrame(
+        id="frame-second",
+        scene_id=first.scene_id,
+        action_description="Luna turns toward Alex",
+        shot_size="近景",
+        lighting_override="檐下冷阴影",
+    )
+    project.frames.append(second)
+
+    first_prompt = pipeline.storyboard_frame_prompt_projection(project, first)
+    second_prompt = pipeline.storyboard_frame_prompt_projection(project, second)
+
+    assert "cinematic realism" in first_prompt
+    assert "暮秋残阳从画面右侧照入" in first_prompt
+    assert "Alex enters from the left" in first_prompt
+    assert "檐下冷阴影" in second_prompt
+    assert "Alex enters from the left" not in second_prompt
