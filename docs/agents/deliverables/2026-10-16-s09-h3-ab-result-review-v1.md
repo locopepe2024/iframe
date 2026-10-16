@@ -58,3 +58,11 @@
 保留 B 的任务语义时，下一份候选 prompt 应增加可见且可验收的几何约束：`one continuous shaft; exactly one metal spearhead at the active tip; the opposite end is a blunt shaft end with the source red tassel; never create a second spearhead, mirrored tip, duplicate shaft, or two simultaneous weapons.` 这只是待验证的最小修订，不代表已经提交或证明有效。
 
 该修订已准备为 [B2 候选 prompt](../raw/2026-10-11-qiangfa-cut-poc/qiangfa2-gray-full/s09-label-ab-video-editing-prop-b2.md)，结构检查通过，尚未提交新任务。
+
+## B2 follow-up observation
+
+- B2 task `task_n6Rrfh2cSce0A6LzAr76YtL242yA2LNE` completed with output `s09-label-ab-B2-replacement.mp4` (`ab20e12b700621edbe3c017d27b1029c1e076fabe920fcfbe4f66ad6c503b87d`). Media is again 1344x768, 24 fps, 90 frames, approximately 3.750 s.
+- The dense contact sheet no longer shows the same persistent two-metal-tip appearance seen in B; the single shaft is more often visually continuous. However, both ends still have unstable red/tassel-like blobs in parts of the sequence, so spearhead/blunt-end geometry is not approved.
+- B2 largely reverts to the source performer appearance (long dark hair/skirt silhouette) and does not retain B's observed silver-haired, glasses identity improvement. This is a regression in identity, not an overall pass.
+
+**B2 status:** `prop_geometry: needs_correction`; `identity: regression`; `motion_timeline: unscored`. Do not infer that the added geometry wording caused the regression from one sample; the result only shows that this prompt revision did not jointly satisfy identity and prop constraints.
