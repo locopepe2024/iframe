@@ -62,7 +62,8 @@ def h3_ir_timeout_seconds():
 
 @contextmanager
 def database():
-    path = os.getenv("LUMENX_AGENT_DB", "output/agent.sqlite3")
+    from ..utils.storage_config import media_root
+    path = os.getenv("LUMENX_AGENT_DB") or os.path.join(media_root(), "agent.sqlite3")
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     db = sqlite3.connect(path, timeout=10)
     db.row_factory = sqlite3.Row
@@ -914,18 +915,18 @@ def reference_path(ctx, reference):
         root = os.path.realpath(os.path.dirname(storage.output_dir))
     elif parsed.path.startswith("/studio/media/"):
         try:
-            stored = resolve_studio_reference(reference, ctx.owner_profile_id)
+            stored = resolve_studio_reference(reference, ctx.owner_profile_id, output_root=storage.media_root)
         except ValueError as error:
             raise HTTPException(404, "参考素材不存在") from error
-        root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id), "studio"))
-        path = os.path.join("output", stored)
+        root = os.path.realpath(os.path.join(storage.media_root, "users", studio_owner_key(ctx.owner_profile_id), "studio"))
+        path = os.path.join(storage.media_root, stored)
     elif not parsed.scheme and parsed.path.startswith("users/"):
         try:
-            stored = resolve_studio_reference(reference, ctx.owner_profile_id)
+            stored = resolve_studio_reference(reference, ctx.owner_profile_id, output_root=storage.media_root)
         except ValueError as error:
             raise HTTPException(404, "参考素材不存在") from error
-        root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id), "studio"))
-        path = os.path.join("output", stored)
+        root = os.path.realpath(os.path.join(storage.media_root, "users", studio_owner_key(ctx.owner_profile_id), "studio"))
+        path = os.path.join(storage.media_root, stored)
     else:
         raise HTTPException(422, "参考图片地址无效，请重新选择素材")
     path = os.path.realpath(path)
@@ -955,7 +956,7 @@ def owned_library_image_key(ctx, reference):
     candidate = unquote(parsed.path).lstrip("/") if parsed.scheme in ("http", "https") else reference
     if parsed.path.startswith("/studio/media/"):
         try:
-            candidate = resolve_studio_reference(reference, ctx.owner_profile_id)
+            candidate = resolve_studio_reference(reference, ctx.owner_profile_id, output_root=pipeline.output_root)
         except ValueError:
             parts = parsed.path.removeprefix("/studio/media/").split("/", 1)
             expected_owner = studio_owner_key(ctx.owner_profile_id)
@@ -974,8 +975,8 @@ def owned_library_image_key(ctx, reference):
             if stored == reference or stored == candidate or stored.removeprefix("output/") == candidate:
                 return stored
     if parsed.path.startswith("/studio/media/") and candidate.startswith("users/"):
-        local = os.path.realpath(os.path.join("output", candidate))
-        owner_root = os.path.realpath(os.path.join("output", "users", studio_owner_key(ctx.owner_profile_id)))
+        local = os.path.realpath(os.path.join(pipeline.output_root, candidate))
+        owner_root = os.path.realpath(os.path.join(pipeline.output_root, "users", studio_owner_key(ctx.owner_profile_id)))
         if local.startswith(owner_root + os.sep) and os.path.isfile(local):
             return candidate
             stored_parsed = urlsplit(stored)

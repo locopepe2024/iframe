@@ -7,9 +7,10 @@ expansion (including Edge TTS), timeline editing and composition feature
 improvements are deferred. Existing source-audio preservation stays part of the
 reviewed baseline; no new rendering feature is included in this checkpoint.
 
-GitHub observations at this checkpoint: #138, #139 and #140 are merged with
-all three CI checks successful. Current pipeline slice is based on main
-fd72a478. Do not merge directly as the agent.
+GitHub observations: #141, #142 and #143 are merged; main is
+afe4844b. #144 remains open at cccff018 with all three CI checks successful
+at this audit. The remaining-media-consumer slice is based on afe4844b.
+Administrator review and merge remain required.
 
 The Edge TTS worktree contains no implementation changes. Public documentation
 was researched; it has not been added to the product or dependencies.
@@ -31,19 +32,24 @@ was researched; it has not been added to the product or dependencies.
 
 ## Remaining consolidation work
 
-1. Administrator review of the pipeline root propagation slice; no rendering
-   behavior or editing feature change is included.
-2. Remaining HTTP factories/routes, asset-library readers, thumbnails, downloads,
-   registry consumers, recovery and provider-internal media publication. Recheck
-   ownership, range responses and alias compatibility before a global switch.
-3. Administrator root selection and explicit Local/COS/OSS backend selection.
-   Currently root arguments are dependency-injection APIs, not an enabled
-   application-wide setting. Backend readiness and retained locators must work
-   across configuration changes; credentials must not silently select storage.
-4. Reconcile reviewed production-specific changes and external deployment
-   profiles; add revision/image-pinned releases and rollback verification.
-   Earlier local/remote source comparisons are historical evidence only, not a
-   fresh claim that production matches current main or running image contents.
+1. Administrator review of #144: explicit backend upload gates and restart-only
+   storage settings. Its latest observed three CI checks passed.
+2. Review the remaining media-consumer slice: Agent database/references,
+   Recreation database/files/signing, asset preview, polish references and
+   voice-preview cache now carry the selected root. Backend CI selection passed
+   1384 tests (5 skipped, 2 deselected); Agent/Recreation/root-specific selection
+   passed 114 tests (1 skipped), including real FFmpeg fixtures.
+3. Deployment alignment remains outstanding. Read-only malysis observations:
+   frontend/backend container image tags are 99d47bfb; backend bind mounts are
+   /srv/iframe-nsfw/output to /app/output and /srv/iframe-nsfw/home to
+   /root/.iframe. Source directory /srv/iframe-nsfw/source has no Git metadata.
+   Tags alone do not prove image source contents. Production has not been
+   deployed or verified against afe4844b by this slice.
+4. Reconcile production-specific changes before a revision-pinned build/deploy;
+   retain configuration and media mounts and record rollback image IDs. Verify
+   expired COS URL renewal and WebP covers in production after deployment.
+   The existing release helper targets lumenx topology, not malysis; do not
+   execute it unchanged on malysis.
 
 Old open PRs #18, #47–#49, #51, #53, #56, #57, #59 and #63 were observed during
 the audit. They cover other feature/integration branches or CI infrastructure;

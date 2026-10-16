@@ -2297,7 +2297,7 @@ def get_asset_library_preview(
     try:
         preview = create_asset_preview(
             source,
-            studio_owner_dir(user.owner_profile_id),
+            studio_owner_dir(user.owner_profile_id, output_root=pipeline.output_root),
             f"{scope}:{container_id}:{asset_type}:{asset_id}:{variant_id}:{variant.created_at}:{raw}",
             remote=remote,
         )
@@ -4224,7 +4224,7 @@ def voice_preview(request: VoicePreviewRequest):
     model_override = custom.target_model if custom else None
     family_override = custom.family if custom else None
 
-    cache_dir = "output/cache/voice_preview"
+    cache_dir = os.path.join(pipeline.output_root, "cache", "voice_preview")
     os.makedirs(cache_dir, exist_ok=True)
     cache_key = hashlib.md5(
         f"{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
@@ -6483,7 +6483,7 @@ def _polish_image_urls(image_urls: List[str]) -> List[str]:
                     message_en="Reference image could not be read; reselect it before polishing.",
                 )
             try:
-                resolved.append(resolve_studio_reference(value, user.owner_profile_id))
+                resolved.append(resolve_studio_reference(value, user.owner_profile_id, output_root=pipeline.output_root))
             except ValueError as exc:
                 raise PolishError(
                     reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。",
