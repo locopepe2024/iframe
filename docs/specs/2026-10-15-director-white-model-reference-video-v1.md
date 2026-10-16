@@ -188,3 +188,52 @@ render modes (clay/depth/pose), rather than separate ad hoc exports.
    manifest. Do not let prompt text mutate coordinates, lens values or lights.
 5. Add shot-package parity tests: prompt values, viewport capture, Blender
    manifest and camera records must agree for the same frame.
+
+## Capability inventory and usability rules
+
+This is the working capability map for the next director-table slices. Status
+describes iframe implementation, not the reference project's capability.
+
+| Capability | iframe status | Product rule |
+| --- | --- | --- |
+| Empty scene and reusable blocking templates | Partial: validation scenes only | Start with empty, single actor, dialogue, multi-actor and prop layouts; never silently add an actor to an empty scene. |
+| Actor identity, archetype, color and pose | Partial: authored humanoid rig and pose presets | Keep identity/asset binding separate from pose; allow quick pose reset and exact joint edits. |
+| Object placement, facing, scale and visibility | Available in 3D workbench | Make position, facing and depth visible in meters; preserve stable object IDs in exports. |
+| Camera position, target, FOV and lens | Available, split across camera inspector and timeline | Let users align a camera to the current view, then edit physical values without losing the authored target. |
+| Aperture and focus distance | Partial: browser DOF exists; f-number semantics need media contract | Store real f-stop/focus distance separately from post-process aperture. |
+| Shot size, aspect ratio and duration | Available in timeline/camera state | Make shot size and aspect part of the active shot package and use one aspect ratio for blocking and export. |
+| Camera movement presets | Available: path presets and timeline progress | Apply a preset as editable path/keyframes, preview it immediately, and keep manual point editing available. |
+| Actor motion paths | Available: actor paths and timeline evaluation | Draw paths on the ground plane, orient actors to path when requested, and show start/end timing. |
+| Bone animation and keyframes | Available for the browser humanoid rig | Expose bone controls only for actors; keep clip motion and manual bone overrides distinct. |
+| Multi-shot/sequencer organization | Partial: one workbench timeline | Add shot selection and per-shot cameras before attempting a full sequence editor. |
+| Environment/background | Partial: panorama and gray preview background | Make gray preview, panorama and scene geometry explicit modes; do not treat a panorama as measured depth. |
+| Light rig | Partial: viewport lighting, no authored light manifest | Add named key/fill/rim/environment records before emitting lighting text. |
+| Clay/white-model preview | Available: browser reference video | Use a reversible render override and restore the authored viewport after capture. |
+| Pose/depth/normal preview modes | Depth is media-backed; pose/normal are not unified exports | Treat each as an explicit render mode; metric EXR remains Blender-owned. |
+| Camera/object/bone keyframe editing | Available in separate timeline tracks | One visible track per semantic target, with delete/edit/easing actions at the keyframe. |
+| Prompt compilation | Not yet implemented as a shot package | Generate text from authored state with a manifest/checksum; prompt editing may add intent but cannot rewrite geometry. |
+| Save/close/recovery guards | Local draft exists | Block close during output, detect scene changes during capture, and preserve the last valid result. |
+
+### Usability rules to carry over
+
+1. **One active shot context.** The inspector, viewport, timeline and exports
+   must all visibly refer to the same shot and camera. Changing the shot should
+   change the camera and duration context together.
+2. **Progressive disclosure.** Start with Add actor, Add object, Add camera,
+   template, view mode and record/export. Show bones, lens details, light
+   controls and keyframe easing after an object or camera is selected.
+3. **Fast authoring loop.** Template -> place actors -> choose pose -> align
+   camera -> apply movement preset -> scrub -> record white-model video. Each
+   step should be reversible and should not require prompt editing.
+4. **Spatial truth in the viewport.** Show ground-plane paths, camera frustum,
+   target and occlusion in the same coordinate system. Numeric inspectors are
+   for precision; direct manipulation is for speed.
+5. **Output modes are named.** Use labels such as `构图预览`, `白模视频`,
+   `姿态视图`, `深度预览` and `法线视图`; do not hide materially different
+   outputs behind one generic export button.
+6. **No silent state changes.** Applying a camera preset, template or render
+   override must show what changed, support undo, and restore the prior view
+   after capture.
+7. **Truthful boundaries.** Show whether an output is browser reference,
+   metric media render, or prompt-only metadata. A successful PNG preview does
+   not imply metric EXR or downstream generation consistency.
