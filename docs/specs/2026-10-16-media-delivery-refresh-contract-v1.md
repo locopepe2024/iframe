@@ -42,7 +42,7 @@ These are code facts and direct implications, not proof that every entry has fai
 | Shot video | video task/media ID | task response and playback/download |
 | Assembly | immutable clip/task/media IDs | assembly response and playback/download |
 
-Local, COS, and OSS adapters share this identity-to-delivery boundary. Provider
+Local and COS adapters share this identity-to-delivery boundary. Provider
 URLs are not browser identity. Scope, owner, revision pins, and media kind
 checks survive every refresh.
 
@@ -132,8 +132,11 @@ paths. Local cover generation is cached by source file revision.
 Not yet proven: a production session that stays open beyond the signature TTL
 has not been replayed across every screen. Some legacy storyboard/frame and
 dubbed-video records still lack a stable media ID and may use URL-only paths.
-Registry cover delivery for COS/OSS objects currently returns 422; a provider
-cover cache and revision scheme must be implemented before claiming the WebP
-contract for cloud media. Arbitrary provider and external URLs are outside the
-managed refresh contract. These gaps remain release review items, not evidence
-that every consumer is fixed.
+COS registry covers now use owner-scoped WebP cache entries keyed by COS ETag,
+object size, modification time, and preview size. Oversized or unsupported
+objects are rejected before downloading. OSS cover delivery remains outside the
+current requirement. Historical storyboard and dubbed-video records that lack
+stable IDs may be removed and regenerated; no migration is planned for them.
+Arbitrary provider and external URLs are outside the managed refresh contract.
+Production long-open session replay is still required before claiming full
+runtime coverage.
