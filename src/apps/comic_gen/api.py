@@ -475,6 +475,25 @@ def _add_asset_cover_urls(payload: Dict[str, Any], owner_profile_id: str) -> Non
                     asset["cover_url"] = None
 
 
+def _add_storyboard_cover_urls(payload: Dict[str, Any], owner_profile_id: str) -> None:
+    """Expose stable WebP covers for storyboard frames in series views."""
+    for frame in payload.get("frames", []):
+        source = frame.get("rendered_image_url") or frame.get("image_url")
+        if not source:
+            for key in ("rendered_image_asset", "image_asset"):
+                variants = (frame.get(key) or {}).get("variants", [])
+                selected_id = (frame.get(key) or {}).get("selected_id")
+                selected = next((item for item in variants if item.get("id") == selected_id), None)
+                source = (selected or (variants[0] if variants else {})).get("url")
+                if source:
+                    break
+        if source:
+            try:
+                frame["cover_url"] = _owned_media_cover_url(source, owner_profile_id, 320)
+            except HTTPException:
+                frame["cover_url"] = None
+
+
 def private_no_store_signed_response(data):
     """Return owner-scoped mutable data without allowing intermediary caching."""
     response = signed_response(data)
@@ -1172,14 +1191,15 @@ def list_series(user: UserContext = Depends(require_studio_user)):
 
 
 @app.get("/series/{series_id}")
-def get_series(series_id: str):
+def get_series(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get Series details including assets and episode list."""
-    series = pipeline.get_series(series_id)
+    series = pipeline.get_series(series_id, user.owner_profile_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
     # Include episode summaries
     episodes = pipeline.get_series_episodes(series_id)
     result = series.model_dump()
+    _add_asset_cover_urls(result, user.owner_profile_id)
     result["episodes"] = [
         {
             "id": ep.id,
@@ -1325,7 +1345,12 @@ def get_series_episodes(series_id: str, user: UserContext = Depends(require_stud
     """Get all episodes in a Series."""
     try:
         episodes = pipeline.get_series_episodes(series_id)
-        payload = [_script_response_dump(episode) | {"cover_url": _project_cover_url(episode, user.owner_profile_id)} for episode in episodes]
+        payload = []
+        for episode in episodes:
+            item = _script_response_dump(episode) | {"cover_url": _project_cover_url(episode, user.owner_profile_id)}
+            _add_asset_cover_urls(item, user.owner_profile_id)
+            _add_storyboard_cover_urls(item, user.owner_profile_id)
+            payload.append(item)
         return signed_response(payload)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1407,16 +1432,18 @@ def update_series_model_settings(series_id: str, settings: UpdateModelSettingsRe
 # ============================================================
 
 @app.get("/series/{series_id}/assets")
-def get_series_assets(series_id: str):
+def get_series_assets(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get all shared assets from a Series."""
-    series = pipeline.get_series(series_id)
+    series = pipeline.get_series(series_id, user.owner_profile_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
-    return signed_response({
+    payload = {
         "characters": [c.model_dump() for c in series.characters],
         "scenes": [s.model_dump() for s in series.scenes],
         "props": [p.model_dump() for p in series.props],
-    })
+    }
+    _add_asset_cover_urls(payload, user.owner_profile_id)
+    return signed_response(payload)
 
 
 @app.delete("/series/{series_id}/assets/{asset_type}/{asset_id}")

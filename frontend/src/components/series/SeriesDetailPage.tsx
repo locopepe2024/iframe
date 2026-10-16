@@ -639,9 +639,9 @@ function EpisodeContentPanel({
                   className="aspect-video bg-surface rounded-lg border border-glass-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
                   onClick={onOpenEditor}
                 >
-                  {frame.rendered_image_url ? (
+                  {(frame.cover_url || frame.rendered_image_url) ? (
                     <img
-                      src={frame.rendered_image_url}
+                      src={getAssetUrl(frame.cover_url || frame.rendered_image_url)}
                       alt={`#${i + 1}`}
                       className="w-full h-full object-cover"
                     />
