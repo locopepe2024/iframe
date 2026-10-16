@@ -19,7 +19,7 @@ def test_asset_library_preview_is_owner_scoped_and_cached(monkeypatch, tmp_path)
     monkeypatch.setattr(api.pipeline, "_library_list_for_type", lambda kind, profile: [asset] if kind == "scene" and profile == "owner" else [])
     monkeypatch.setattr(api.pipeline, "_asset_image_variants", lambda item, _kind: item.variants)
     monkeypatch.setattr(api.pipeline, "_resolve_stored_reference_value", lambda value, _owner: value)
-    monkeypatch.setattr(api, "studio_owner_dir", lambda profile: str(tmp_path / profile))
+    monkeypatch.setattr(api.pipeline, "output_root", str(tmp_path / "selected"))
     monkeypatch.setattr(api, "_resolve_request_context", lambda *_args: (owner, False))
     api.app.dependency_overrides[require_studio_user] = lambda: owner
     params = {"scope": "global", "asset_type": "scene", "asset_id": "scene-1", "variant_id": "variant-1"}
@@ -56,7 +56,7 @@ def test_episode_asset_preview_works_inside_series(monkeypatch, tmp_path):
     monkeypatch.setattr(api.pipeline, "get_script", lambda project_id, profile: episode if (project_id, profile) == ("episode-1", "owner") else None)
     monkeypatch.setattr(api.pipeline, "_asset_image_variants", lambda item, _kind: item.variants)
     monkeypatch.setattr(api.pipeline, "_resolve_stored_reference_value", lambda value, _owner: value)
-    monkeypatch.setattr(api, "studio_owner_dir", lambda profile: str(tmp_path / profile))
+    monkeypatch.setattr(api.pipeline, "output_root", str(tmp_path / "selected"))
     monkeypatch.setattr(api, "_resolve_request_context", lambda *_args: (owner, False))
     api.app.dependency_overrides[require_studio_user] = lambda: owner
     try:

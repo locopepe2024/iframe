@@ -13,6 +13,7 @@ import warnings
 from fractions import Fraction
 
 from ...utils.system_check import resolve_media_command
+from ...utils.storage_config import media_root
 
 from PIL import Image, UnidentifiedImageError
 from uuid import uuid4
@@ -59,11 +60,12 @@ def _model_option(model):
     }
 
 class RecreationService:
-    def __init__(self, user: UserContext):
+    def __init__(self, user: UserContext, *, output_root: str | None = None):
         if not user.user_id or not user.owner_profile_id:
             raise ValueError("Authenticated owner required")
         self.user = user
-        self.root = (Path(studio_owner_dir(user.owner_profile_id)) / "recreation").resolve()
+        self.output_root = Path(output_root if output_root is not None else media_root()).resolve()
+        self.root = (Path(studio_owner_dir(user.owner_profile_id, output_root=str(self.output_root))) / "recreation").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _live_uniart_models(self):
@@ -163,7 +165,7 @@ class RecreationService:
 
     @contextmanager
     def db(self):
-        connection = sqlite3.connect("output/recreation.sqlite3", timeout=10)
+        connection = sqlite3.connect(self.output_root / "recreation.sqlite3", timeout=10)
         try:
             connection.execute("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS media_records (media_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, kind TEXT NOT NULL, display_name TEXT NOT NULL, storage_path TEXT NOT NULL, sha256 TEXT NOT NULL, metadata TEXT NOT NULL, created_at REAL NOT NULL)")
@@ -197,7 +199,7 @@ class RecreationService:
                    (json.dumps(record), record["id"], self.user.owner_profile_id))
 
     def _path(self, stored):
-        path = (Path("output") / stored).resolve()
+        path = (self.output_root / stored).resolve()
         if not path.is_relative_to(self.root) or not path.is_file():
             raise ValueError("Source is missing or outside the project owner")
         return path
@@ -260,7 +262,7 @@ class RecreationService:
             return str(path)
         from ..studio_access import studio_media_url
         try:
-            signed = studio_media_url(self.user.owner_profile_id, item["storage_path"], ttl_seconds=provider_media_ttl_seconds())
+            signed = studio_media_url(self.user.owner_profile_id, item["storage_path"], ttl_seconds=provider_media_ttl_seconds(), output_root=str(self.output_root))
         except HTTPException as exc:
             raise ValueError("Local disk media requires LUMENX_MEDIA_SIGNING_KEY") from exc
         if not signed.startswith("/studio/media/"):
@@ -288,7 +290,7 @@ class RecreationService:
             record = {"id": project_id, "title": Path(filename).name[:200], "source_media_id": media_id,
                       "owner_user_id": self.user.user_id, "owner_profile_id": self.user.owner_profile_id,
                       "source_asset_id": uuid4().hex,
-                      "source_url": source.relative_to(Path("output").resolve()).as_posix(),
+                      "source_url": source.relative_to(self.output_root).as_posix(),
                       "source_fingerprint": digest, "status": "registered", "revision": 0,
                       "created_at": time.time(), "updated_at": time.time(), "analysis": None,
                       "analysis_id": None, "timeline": None, "error": None, "attempt": 0}
@@ -424,7 +426,7 @@ class RecreationService:
             if parent_media_id:
                 metadata["parent_media_id"] = parent_media_id
             item = {"media_id": media_id, "project_id": project_id, "kind": kind,
-                    "display_name": Path(filename).name[:200], "storage_path": path.relative_to(Path("output").resolve()).as_posix(),
+                    "display_name": Path(filename).name[:200], "storage_path": path.relative_to(self.output_root).as_posix(),
                     "sha256": fingerprint(path), "metadata": metadata, "created_at": time.time()}
             with self.db() as db:
                 self._get(db, project_id)
@@ -598,7 +600,7 @@ class RecreationService:
             item = {
                 "media_id": media_id, "project_id": task["project_id"], "kind": "reference_image",
                 "display_name": f"Corrected keyframe · {task['shot_id'][:8]}",
-                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "storage_path": output.relative_to(self.output_root).as_posix(),
                 "sha256": fingerprint(output),
                 "metadata": {"width": out_width, "height": out_height, "bytes": output.stat().st_size,
                              "mime": Image.MIME[output_format], "parent_media_id": task["reference_media_id"],
@@ -933,7 +935,7 @@ class RecreationService:
             item = {
                 "media_id": uuid4().hex, "project_id": task["project_id"], "kind": "generated_video",
                 "display_name": f"Recreation shot {task['shot_number']} · {task['task_id'][:8]}",
-                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "storage_path": output.relative_to(self.output_root).as_posix(),
                 "sha256": fingerprint(output),
                 "metadata": {"generation_id": task["generation_id"], "task_id": task_id,
                              "shot_id": task["shot_id"], "shot_number": task["shot_number"],
@@ -1252,7 +1254,7 @@ class RecreationService:
             item = {
                 "media_id": uuid4().hex, "project_id": task["project_id"], "kind": "final_video",
                 "display_name": f"Recreation final · {task['generation_id'][:8]}",
-                "storage_path": output.relative_to(Path("output").resolve()).as_posix(),
+                "storage_path": output.relative_to(self.output_root).as_posix(),
                 "sha256": fingerprint(output),
                 "metadata": {"assembly_task_id": task_id, "generation_id": task["generation_id"],
                              "source_media_id": task["source_media_id"], "source_fingerprint": task["source_fingerprint"],
