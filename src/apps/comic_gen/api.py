@@ -2250,7 +2250,7 @@ def update_env_config(
 
 
 @app.get("/projects/{script_id}")
-def get_project(script_id: str):
+def get_project(script_id: str, user: UserContext = Depends(require_studio_user)):
     """Retrieves a project by ID. When the project belongs to a
     Series, the response merges series-shared characters / scenes /
     props on top of the episode-local lists. Each item carries a
@@ -2263,7 +2263,15 @@ def get_project(script_id: str):
     Response model dropped from `Script` because the `source` field
     is a presentation-layer concern (never persisted, derived from
     container membership at read time)."""
-    script = pipeline.get_script(script_id)
+    # FastAPI supplies ``user`` for HTTP requests. Several mutation handlers
+    # reuse this response builder directly, so resolve the active workspace
+    # user when called internally instead of treating Depends as a context.
+    resolved_user = user if isinstance(user, UserContext) else current_studio_user()
+    script = (
+        pipeline.get_script(script_id, resolved_user.owner_profile_id)
+        if resolved_user
+        else pipeline.get_script(script_id)
+    )
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -2323,7 +2331,7 @@ def get_project(script_id: str):
     # Global assets are intentionally opt-in. They enter a series only through
     # the explicit /series/{id}/assets/import-from-library action; merely
     # reading an episode must not make every global asset appear in it.
-    _add_asset_cover_urls(payload, user.owner_profile_id)
+    _add_asset_cover_urls(payload, resolved_user.owner_profile_id if resolved_user else script.owner_profile_id or "")
     return signed_response(payload)
 
 
